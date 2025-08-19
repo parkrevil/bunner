@@ -3,19 +3,21 @@ import { EventEmitter } from "events";
 import { HttpMethod } from './enums';
 import { cors, CorsOptions } from './middlewares/cors';
 import { BunnerResponse } from './response';
-import { BunnerRequest, BunRouteHandler, BunRouteValue, MiddlewareFn, RouteHandler, Routes } from './types';
+import { BunnerRequest, BunnerServerOptions, BunRouteHandler, BunRouteValue, MiddlewareFn, RouteHandler, Routes } from './types';
 
 export class Bunner extends EventEmitter {
   private server: Server;
   private routes: Routes;
   private middlewares: MiddlewareFn[];
   private corsEnabled: boolean;
+  private serverOptions: BunnerServerOptions;
 
-  constructor() {
+  constructor(options?: BunnerServerOptions) {
     super();
 
     this.middlewares = [];
     this.routes = new Map();
+    this.serverOptions = options || {};
   }
 
   /**
@@ -107,11 +109,13 @@ export class Bunner extends EventEmitter {
    * @param port - The port to listen on
    * @param cb - The callback to call when the server is listening
    */
-  listen(port: number, cb?: () => void) {
+  listen(hostname: string, port: number, cb?: () => void) {
     try {
       this.server = Bun.serve({
+        hostname,
         port,
         routes: this.toBunRoutes(),
+        ...this.serverOptions,
       });
     } catch (e) {
       this.emit('error', e);

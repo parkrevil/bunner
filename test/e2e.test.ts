@@ -147,7 +147,9 @@ describe("Bunner E2E Tests", () => {
       res.redirect("/");
     });
 
-    app.listen(PORT);
+    app.listen("0.0.0.0", PORT, () => {
+      console.log(`Server is running on http://localhost:${PORT}`);
+    });
   });
 
   afterAll(async () => {
