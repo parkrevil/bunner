@@ -1,7 +1,8 @@
 import { StatusCodes } from 'http-status-codes';
 import { HttpMethod } from '../../enums';
+import { BunnerRequest } from '../../request';
 import { BunnerResponse } from '../../response';
-import { BunnerRequest, MiddlewareFn } from '../../types';
+import { MiddlewareFn } from '../../types';
 import { CorsOptions } from './interfaces';
 
 async function isOriginAllowed(origin: string, allowedOrigins: CorsOptions['origin']): Promise<boolean> {
@@ -45,7 +46,7 @@ export function cors(options: CorsOptions): MiddlewareFn {
   const normalizedExposedHeaders = exposedHeaders.join(headerSeperator);
 
   return async (req: BunnerRequest, res: BunnerResponse, next: () => void) => {
-    const requestOrigin = req.headers.get('Origin');
+    const requestOrigin = req.headers['origin'];
     const method = req.method.toUpperCase();
     const isPreflight = method === HttpMethod.OPTIONS;
 

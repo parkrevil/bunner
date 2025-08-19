@@ -22,6 +22,10 @@ export class BunnerResponse {
   }
 
   set body(data: any) {
+    if (this._body) {
+      return;
+    }
+
     if (isObject(data)) {
       this.setHeader(HeaderField.CONTENT_TYPE, ContentType.JSON);
       this._body = data;

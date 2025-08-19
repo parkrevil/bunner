@@ -3,6 +3,7 @@ import qs from 'qs';
 
 export class BunnerRequest {
   raw: BunRequest;
+  headers: Record<string, string>;
   query: Record<string, string>;
   hostname: string;
   host: string;
@@ -11,6 +12,11 @@ export class BunnerRequest {
 
   constructor(req: BunRequest) {
     this.raw = req;
+    this.headers = {};
+
+    this.raw.headers.forEach((val: string, key: string) => {
+      this.headers[key.toLowerCase()] = val;
+    });
 
     const parsedUrl = new URL(req.url);
     this.query = qs.parse(parsedUrl.search.slice(1));
@@ -34,14 +40,6 @@ export class BunnerRequest {
    */
   get method() {
     return this.raw.method;
-  }
-
-  /**
-   * Get the headers of the request
-   * @returns The headers of the request
-   */
-  get headers() {
-    return this.raw.headers;
   }
 
   /**
