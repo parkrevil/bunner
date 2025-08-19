@@ -1,29 +1,60 @@
-import { BunRequest } from 'bun';
+import { BunRequest, Server, SocketAddress } from 'bun';
 import qs from 'qs';
+import { BunnerRequestConstructorParams } from './interfaces';
 
 export class BunnerRequest {
-  raw: BunRequest;
-  headers: Record<string, string>;
-  query: Record<string, string>;
-  hostname: string;
-  host: string;
-  protocol: string;
-  path: string;
+  readonly raw: BunRequest;
+  readonly headers: Record<string, string>;
+  readonly body: any;
+  readonly bodyType: 'json' | 'text';
+  readonly query: Record<string, string>;
+  readonly hostname: string;
+  readonly host: string;
+  readonly protocol: string;
+  readonly path: string;
+  readonly ip: string | undefined;
+  readonly socketAddress: SocketAddress | undefined;
 
-  constructor(req: BunRequest) {
-    this.raw = req;
+  constructor(params: BunnerRequestConstructorParams) {
+    /**
+     * Initialize from params
+     */
+    this.raw = params.req;
     this.headers = {};
+    this.body = params.body;
 
-    this.raw.headers.forEach((val: string, key: string) => {
+    params.headers.forEach((val: string, key: string) => {
       this.headers[key.toLowerCase()] = val;
     });
 
-    const parsedUrl = new URL(req.url);
-    this.query = qs.parse(parsedUrl.search.slice(1));
-    this.hostname = parsedUrl.hostname;
-    this.host = parsedUrl.host;
-    this.protocol = parsedUrl.protocol.slice(0, -1);
-    this.path = parsedUrl.pathname;
+    /**
+     * Initialize request information of the request
+     */
+    const parsed = new URL(this.url);
+
+    this.query = qs.parse(parsed.search.slice(1));
+    this.hostname = parsed.hostname;
+    this.host = parsed.host;
+    this.protocol = parsed.protocol.slice(0, -1);
+    this.path = parsed.pathname;
+
+    const xff = this.headers['x-forwarded-for'];
+
+    this.socketAddress = params.server.requestIP(this.raw) || undefined;
+    this.ip = xff ? xff.split(',')[0].trim() : this.raw.headers.get('x-real-ip') || this.socketAddress?.address || undefined;
+  }
+
+  static async fromBunRequest(req: BunRequest, server: Server) {
+    let body: any;
+    const contentType = req.headers.get('content-type') || '';
+
+    if (contentType.includes('application/json')) {
+      body = await req.json();
+    } else {
+      body = await req.text();
+    }
+
+    return new BunnerRequest({ req, server, headers: req.headers, body });
   }
 
   /**
@@ -43,20 +74,6 @@ export class BunnerRequest {
   }
 
   /**
-   * Get the body of the request
-   * @returns The body of the request
-   */
-  get body() {
-    const contentType = this.raw.headers.get('content-type') || '';
-
-    if (contentType.includes('application/json')) {
-      return this.raw.json();
-    }
-
-    return this.raw.text(); // default to text
-  }
-
-  /**
    * Get the params of the request
    * @returns The params of the request
    */
@@ -73,18 +90,18 @@ export class BunnerRequest {
   }
 
   /**
-   * Get the JSON body of the request
-   * @returns The JSON body of the request
+   * Get the port of the request
+   * @returns The port of the request
    */
-  json() {
-    return this.raw.json();
+  get port() {
+    return this.socketAddress?.port;
   }
 
   /**
-   * Get the text body of the request
-   * @returns The text body of the request
+   * Get the family of the request
+   * @returns The family of the request
    */
-  text() {
-    return this.raw.text();
+  get family() {
+    return this.socketAddress?.family;
   }
 }

@@ -28,7 +28,7 @@ describe("Bunner E2E Tests", () => {
     });
 
     app.post("/echo", async (req, res) => {
-      const body = await req.json();
+      const body = req.body;
       res.send({ received: body });
     });
 
@@ -45,7 +45,7 @@ describe("Bunner E2E Tests", () => {
     });
 
     app.post("/return-echo", async (req, res) => {
-      const body = await req.json();
+      const body = req.body;
       return new Response(JSON.stringify({ returned: body }), {
         status: 200,
         headers: { "Content-Type": "application/json" }
@@ -62,7 +62,7 @@ describe("Bunner E2E Tests", () => {
     });
 
     app.post("/return-value-echo", async (req, res) => {
-      const body = await req.json();
+      const body = req.body;
       return { returned: body, method: "return value" };
     });
 
@@ -79,7 +79,7 @@ describe("Bunner E2E Tests", () => {
 
     app.put("/users/:id", async (req, res) => {
       const userId = (req as any).params.id;
-      const body = await req.json();
+      const body = req.body;
       res.send({ userId, updated: body });
     });
 
@@ -99,7 +99,7 @@ describe("Bunner E2E Tests", () => {
 
     app.patch("/posts/:id", async (req, res) => {
       const postId = (req as any).params.id;
-      const body = await req.json();
+      const body = req.body;
       return new Response(JSON.stringify({ postId, patched: body }), {
         status: 200,
         headers: { "Content-Type": "application/json" }
@@ -114,7 +114,7 @@ describe("Bunner E2E Tests", () => {
 
     app.put("/comments/:id", async (req, res) => {
       const commentId = (req as any).params.id;
-      const body = await req.json();
+      const body = req.body;
       return { commentId, updated: body, method: "return value" };
     });
 

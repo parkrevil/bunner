@@ -178,8 +178,8 @@ export class Bunner extends EventEmitter {
       }
 
       methods.forEach((handler, method) => {
-        methodHandlers[method] = async (bunReq: BunRequest) => {
-          const req = new BunnerRequest(bunReq);
+        methodHandlers[method] = async (bunReq: BunRequest, server: Server) => {
+          const req = await BunnerRequest.fromBunRequest(bunReq, server);
           const res = new BunnerResponse();
 
           for (const middleware of this.middlewares) {
