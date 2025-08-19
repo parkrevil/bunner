@@ -49,7 +49,13 @@ export class BunnerRequest {
    * @returns The body of the request
    */
   get body() {
-    return this.raw.body;
+    const contentType = this.raw.headers.get('content-type') || '';
+
+    if (contentType.includes('application/json')) {
+      return this.raw.json();
+    }
+
+    return this.raw.text(); // default to text
   }
 
   /**
