@@ -10,5 +10,8 @@
   "type": "module",
   "dependencies": {
     "http-status-codes": "^2.3.0"
+  },
+  "scripts": {
+    "test": "bun test --watch"
   }
 }

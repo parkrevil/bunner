@@ -2,12 +2,19 @@ import { getReasonPhrase, StatusCodes } from 'http-status-codes';
 import { ContentType, HeaderField } from './enums';
 import { isObject } from './utils';
 
-export class BunResponse {
+export class BunnerResponse {
   private _body: any;
   private _headers: Headers;
   private _status: StatusCodes;
   private _statusText: string;
-  private _contentType: ContentType;
+  private _response: Response;
+
+  constructor() {
+    this._headers = new Headers();
+    this._status = StatusCodes.OK;
+    this._statusText = getReasonPhrase(this._status);
+    this._body = '';
+  }
 
   get status() {
     return this._status;
@@ -15,14 +22,6 @@ export class BunResponse {
 
   get statusText() {
     return this._statusText;
-  }
-
-  get contentType() {
-    return this._contentType;
-  }
-
-  set contentType(contentType: ContentType) {
-    this._contentType = contentType;
   }
 
   get body() {
@@ -34,6 +33,7 @@ export class BunResponse {
       this.setHeader(HeaderField.CONTENT_TYPE, ContentType.JSON);
       this._body = data;
     } else {
+      this.setHeader(HeaderField.CONTENT_TYPE, ContentType.TEXT);
       this._body = data ?? '';
     }
   }
@@ -67,9 +67,20 @@ export class BunResponse {
     return this;
   }
 
-  redirect(url: string, status: StatusCodes) {
+  getContentType() {
+    return this.getHeader(HeaderField.CONTENT_TYPE);
+  }
+
+  setContentType(contentType: ContentType) {
+    this.setHeader(HeaderField.CONTENT_TYPE, contentType);
+  }
+
+  setResponse(response: Response) {
+    this._response = response;
+  }
+
+  redirect(url: string) {
     this.setHeader(HeaderField.LOCATION, url);
-    this.setStatus(status);
 
     return this;
   }
@@ -81,21 +92,31 @@ export class BunResponse {
   }
 
   end(data?: any) {
-    this.body = data;
+    if (data !== undefined) {
+      this.body = data;
+    }
 
     return this.build();
   }
 
   private build() {
-    const response = new Response(this.body, {
-      status: this.status,
-      headers: this._headers,
-    });
-
-    if (this.contentType === ContentType.JSON) {
-      return response.json();
-    } else {
-      return response.text();
+    if (this._response) {
+      return this._response;
     }
+
+    const location = this.getHeader(HeaderField.LOCATION);
+    const contentType = this.getHeader(HeaderField.CONTENT_TYPE);
+    const responseInit: ResponseInit = {
+      status: this._status,
+      headers: this._headers,
+    };
+
+    if (location) {
+      return Response.redirect(location);
+    } else if (contentType === ContentType.JSON) {
+      return Response.json(this.body, responseInit);
+    }
+
+    return new Response(this.body, responseInit);
   }
 }
