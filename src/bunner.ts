@@ -1,18 +1,29 @@
 import { Server } from 'bun';
+import { EventEmitter } from "events";
 import { HttpMethod } from './enums';
 import { cors, CorsOptions } from './middlewares/cors';
 import { BunnerResponse } from './response';
 import { BunnerRequest, BunRouteHandler, BunRouteValue, MiddlewareFn, RouteHandler, Routes } from './types';
 
-export class Bunner {
+export class Bunner extends EventEmitter {
   private server: Server;
   private routes: Routes;
   private middlewares: MiddlewareFn[];
   private corsEnabled: boolean;
 
   constructor() {
+    super();
+
     this.middlewares = [];
     this.routes = new Map();
+  }
+
+  /**
+   * Get the address of the server
+   * @returns The address of the server
+   */
+  address() {
+    return this.server.url;
   }
 
   /**
@@ -102,8 +113,8 @@ export class Bunner {
         port,
         routes: this.toBunRoutes(),
       });
-    } catch (error) {
-      console.error(error);
+    } catch (e) {
+      this.emit('error', e);
     }
 
     if (cb) cb();

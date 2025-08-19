@@ -2,7 +2,7 @@
   "name": "bunner",
   "module": "index.ts",
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "^1.2.0"
   },
   "peerDependencies": {
     "typescript": "^5"
