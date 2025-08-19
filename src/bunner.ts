@@ -1,9 +1,10 @@
-import { Server } from 'bun';
+import { BunRequest, Server } from 'bun';
 import { EventEmitter } from "events";
 import { HttpMethod } from './enums';
 import { cors, CorsOptions } from './middlewares/cors';
+import { BunnerRequest } from './request';
 import { BunnerResponse } from './response';
-import { BunnerRequest, BunnerServerOptions, BunRouteHandler, BunRouteValue, MiddlewareFn, RouteHandler, Routes } from './types';
+import { BunnerServerOptions, BunRouteHandler, BunRouteValue, MiddlewareFn, RouteHandler, Routes } from './types';
 
 export class Bunner extends EventEmitter {
   private server: Server;
@@ -177,7 +178,8 @@ export class Bunner extends EventEmitter {
       }
 
       methods.forEach((handler, method) => {
-        methodHandlers[method] = async (req: BunnerRequest) => {
+        methodHandlers[method] = async (bunReq: BunRequest) => {
+          const req = new BunnerRequest(bunReq);
           const res = new BunnerResponse();
 
           for (const middleware of this.middlewares) {
