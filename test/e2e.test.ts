@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { Bunner } from "../src/bunner";
+import { HttpMethod } from "../src/enums";
 
 describe("Bunner E2E Tests", () => {
   let app: Bunner;
@@ -8,6 +9,14 @@ describe("Bunner E2E Tests", () => {
 
   beforeAll(() => {
     app = new Bunner();
+
+    // CORS 설정
+    app.cors({
+      origin: ["http://localhost:3000", "https://example.com"],
+      methods: [HttpMethod.GET, HttpMethod.POST, HttpMethod.PUT, HttpMethod.DELETE, HttpMethod.PATCH],
+      allowedHeaders: ["Content-Type", "Authorization"],
+      credentials: true
+    });
 
     // send 방식 사용
     app.get("/", (req, res) => {
@@ -518,6 +527,84 @@ describe("Bunner E2E Tests", () => {
       expect(returnValueJsonResponse.headers.get("content-type")).toBe("application/json");
       const returnValueData = await returnValueJsonResponse.json();
       expect(returnValueData).toEqual({ message: "Returned value JSON", type: "object" });
+    });
+  });
+
+  describe("CORS", () => {
+    it("should handle preflight OPTIONS request", async () => {
+      const response = await fetch(`${BASE_URL}/`, {
+        method: "OPTIONS",
+        headers: {
+          "Origin": "http://localhost:3000",
+          "Access-Control-Request-Method": "POST",
+          "Access-Control-Request-Headers": "Content-Type, Authorization"
+        }
+      });
+
+      expect(response.status).toBe(204);
+      expect(response.headers.get("access-control-allow-origin")).toBe("http://localhost:3000");
+      expect(response.headers.get("access-control-allow-methods")).toContain("POST");
+      expect(response.headers.get("access-control-allow-headers")).toContain("Content-Type");
+      expect(response.headers.get("access-control-allow-headers")).toContain("Authorization");
+      expect(response.headers.get("access-control-allow-credentials")).toBe("true");
+    });
+
+    it("should handle actual request with CORS headers", async () => {
+      const response = await fetch(`${BASE_URL}/json`, {
+        method: "GET",
+        headers: {
+          "Origin": "http://localhost:3000"
+        }
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("access-control-allow-origin")).toBe("http://localhost:3000");
+      expect(response.headers.get("access-control-allow-credentials")).toBe("true");
+    });
+
+    it("should handle request from allowed origin", async () => {
+      const response = await fetch(`${BASE_URL}/`, {
+        method: "GET",
+        headers: {
+          "Origin": "https://example.com"
+        }
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("access-control-allow-origin")).toBe("https://example.com");
+    });
+
+    it("should handle request from disallowed origin", async () => {
+      const response = await fetch(`${BASE_URL}/`, {
+        method: "GET",
+        headers: {
+          "Origin": "https://malicious-site.com"
+        }
+      });
+
+      const corsOrigin = response.headers.get("access-control-allow-origin");
+      expect(response.status).toBe(403);
+      expect(corsOrigin === null || corsOrigin === "https://not-allowed.com").toBe(true);
+    });
+
+    it("should handle POST request with CORS", async () => {
+      const testData = { name: "cors test", value: 123 };
+
+      const response = await fetch(`${BASE_URL}/echo`, {
+        method: "POST",
+        headers: {
+          "Origin": "http://localhost:3000",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(testData)
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("access-control-allow-origin")).toBe("http://localhost:3000");
+      expect(response.headers.get("access-control-allow-credentials")).toBe("true");
+
+      const data = await response.json();
+      expect(data).toEqual({ received: testData });
     });
   });
 });

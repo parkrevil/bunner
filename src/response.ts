@@ -1,27 +1,20 @@
-import { getReasonPhrase, StatusCodes } from 'http-status-codes';
+import { StatusCodes } from 'http-status-codes';
 import { ContentType, HeaderField } from './enums';
-import { isObject } from './utils';
+import { isObject } from './helpers';
 
 export class BunnerResponse {
   private _body: any;
   private _headers: Headers;
-  private _status: StatusCodes;
-  private _statusText: string;
+  private _status = StatusCodes.OK;
   private _response: Response;
 
   constructor() {
     this._headers = new Headers();
     this._status = StatusCodes.OK;
-    this._statusText = getReasonPhrase(this._status);
-    this._body = '';
   }
 
   get status() {
     return this._status;
-  }
-
-  get statusText() {
-    return this._statusText;
   }
 
   get body() {
@@ -38,9 +31,8 @@ export class BunnerResponse {
     }
   }
 
-  setStatus(status: StatusCodes, statusText?: string) {
+  setStatus(status: StatusCodes) {
     this._status = status;
-    this._statusText = statusText ?? getReasonPhrase(status.toString());
 
     return this;
   }
@@ -51,6 +43,14 @@ export class BunnerResponse {
 
   setHeader(name: string, value: string) {
     this._headers.set(name, value);
+
+    return this;
+  }
+
+  setHeaders(headers: Record<string, string>) {
+    Object.entries(headers).forEach(([name, value]) => {
+      this._headers.set(name, value);
+    });
 
     return this;
   }
