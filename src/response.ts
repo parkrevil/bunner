@@ -27,7 +27,11 @@ export class BunnerResponse {
       return;
     }
 
-    if (isObject(data)) {
+    const contentType = this.getContentType();
+
+    if (contentType) {
+      this._body = data;
+    } else if (isObject(data)) {
       this.setHeader(HeaderField.CONTENT_TYPE, ContentType.JSON);
       this._body = data;
     } else {
