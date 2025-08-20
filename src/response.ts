@@ -79,10 +79,26 @@ export class BunnerResponse {
 
   setContentType(contentType: ContentType) {
     this.setHeader(HeaderField.CONTENT_TYPE, contentType);
+
+    return this;
+  }
+
+  /**
+   * For express-like syntax
+   * Set the content type of the response
+   * @param contentType - The content type to set
+   * @returns The response object
+   */
+  type(contentType: ContentType) {
+    this.setContentType(contentType);
+
+    return this;
   }
 
   setResponse(response: Response) {
     this._response = response;
+
+    return this;
   }
 
   redirect(url: string) {
