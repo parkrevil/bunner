@@ -2,23 +2,27 @@ import { BunRequest, Server } from 'bun';
 import { EventEmitter } from "events";
 import { ReasonPhrases, StatusCodes } from 'http-status-codes';
 import { HttpMethod } from './enums';
+import { StaticConfig, StaticOptions } from './interfaces';
 import { cors, CorsOptions } from './middlewares/cors';
 import { BunnerRequest } from './request';
 import { BunnerResponse } from './response';
-import { BunnerServerOptions, BunRouteHandler, BunRouteValue, MiddlewareFn, RouteHandler, Routes } from './types';
+import { BunnerServerOptions, BunRouteHandler, BunRouteValue, MiddlewareFn, RouteHandler, Routes, StaticRoutes } from './types';
 
 export class Bunner extends EventEmitter {
   private server: Server;
   private routes: Routes;
+  private staticRoutes: StaticRoutes;
   private middlewares: MiddlewareFn[];
   private corsFn: MiddlewareFn;
   private serverOptions: BunnerServerOptions;
+  private readonly staticPathFilter = /^\/+|\/+$/g;
 
   constructor(options?: BunnerServerOptions) {
     super();
 
     this.middlewares = [];
     this.routes = new Map();
+    this.staticRoutes = new Map();
     this.serverOptions = options || {};
   }
 
@@ -101,6 +105,10 @@ export class Bunner extends EventEmitter {
     this.middlewares.push(middleware);
   }
 
+  /**
+   * Add a CORS middleware
+   * @param options - The options for the CORS middleware
+   */
   cors(options: CorsOptions) {
     this.corsFn = cors(options);
 
@@ -112,12 +120,15 @@ export class Bunner extends EventEmitter {
    * @param port - The port to listen on
    * @param cb - The callback to call when the server is listening
    */
-  listen(hostname: string, port: number, cb?: () => void) {
+  async listen(hostname: string, port: number, cb?: () => void) {
     try {
       this.server = Bun.serve({
         hostname,
         port,
-        routes: this.toBunRoutes(),
+        routes: {
+          ...this.toBunRoutes(),
+          ...await this.toBunStaticRoutes(),
+        },
         ...this.serverOptions,
       });
     } catch (e) {
@@ -166,6 +177,16 @@ export class Bunner extends EventEmitter {
   }
 
   /**
+   * Add a static route
+   * @param urlPath - The path to add the static route to
+   * @param filePath - The file path to add the static route to
+   * @param options - The options for the static route
+   */
+  async static(urlPath: string, filePath: string, options: StaticOptions = {}) {
+    this.staticRoutes.set(urlPath, { filePath, ...options });
+  }
+
+  /**
    * Convert the routes to a format that can be used by Bun
    * @returns The routes in a format that can be used by Bun
    */
@@ -211,20 +232,77 @@ export class Bunner extends EventEmitter {
       routes[path] = methodHandlers;
     });
 
+    const notFound = new Response(ReasonPhrases.NOT_FOUND, { status: StatusCodes.NOT_FOUND });
+
     routes['/*'] = async (bunReq, server) => {
-      const req = await BunnerRequest.fromBunRequest(bunReq, server);
       const res = new BunnerResponse();
 
       if (this.corsFn) {
-        const corsResult = await this.corsFn(req, res, () => { });
+        const corsResult = await this.corsFn(bunReq, res, () => { });
 
         if (corsResult instanceof Response) {
           return corsResult;
         }
       }
 
-      return new Response(ReasonPhrases.NOT_FOUND, { status: StatusCodes.NOT_FOUND });
+      return notFound;
     };
+
+    return routes;
+  }
+
+  /**
+   * Convert the static routes to a format that can be used by Bun
+   * @returns The static routes in a format that can be used by Bun
+   */
+  private toBunStaticRoutes() {
+    const routes: Record<string, BunRouteValue> = {};
+    const forbiddenResponse = new Response(ReasonPhrases.FORBIDDEN, { status: StatusCodes.FORBIDDEN });
+    const makeHandler = (urlPath: string, config: StaticConfig): BunRouteHandler => {
+      return async (bunReq: BunRequest) => {
+        try {
+          const parsed = new URL(bunReq.url);
+          const path = parsed.pathname;
+          const relativePath = path.replace(urlPath ?? '', '').replace(this.staticPathFilter, '');
+          const file = Bun.file(config.filePath + '/' + relativePath);
+          const stat = await file.stat();
+
+          if (stat.isFile()) {
+            return new Response(file);
+          }
+
+          if (config.index === false) {
+            return forbiddenResponse;
+          }
+
+          const indexes = Array.isArray(config.index) ? config.index : [config.index ?? 'index.html'];
+
+          for (const index of indexes) {
+            try {
+              const indexFile = Bun.file(config.filePath + '/' + relativePath + '/' + index);
+              const indexStat = await indexFile.stat();
+
+              if (indexStat.isFile()) {
+                return new Response(indexFile);
+              }
+            } catch (e) {
+              continue;
+            }
+          }
+
+          return forbiddenResponse;
+        } catch (e) {
+          return new Response(ReasonPhrases.NOT_FOUND, { status: StatusCodes.NOT_FOUND });
+        }
+      };
+    }
+
+    for (const [urlPath, staticConfig] of Array.from(this.staticRoutes)) {
+      const handler = makeHandler(urlPath, staticConfig);
+
+      routes[urlPath] = { GET: handler };
+      routes[urlPath.replace(/\/$/, '') + '/*'] = { GET: handler };
+    }
 
     return routes;
   }

@@ -6,3 +6,11 @@ export interface BunnerRequestConstructorParams {
   headers: Headers;
   body: any;
 }
+
+export interface StaticOptions {
+  index?: string | string[] | false;
+}
+
+export interface StaticConfig extends StaticOptions {
+  filePath: string;
+}

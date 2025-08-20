@@ -1,3 +1,4 @@
+import { BunRequest } from 'bun';
 import { StatusCodes } from 'http-status-codes';
 import { HttpMethod } from '../../enums';
 import { BunnerRequest } from '../../request';
@@ -44,7 +45,7 @@ export function cors(options: CorsOptions): MiddlewareFn {
   const normalizedAllowedHeaders = allowedHeaders.join(headerSeperator);
   const normalizedExposedHeaders = exposedHeaders.join(headerSeperator);
 
-  return async (req: BunnerRequest, res: BunnerResponse, next: () => void) => {
+  return async (req: BunRequest | BunnerRequest, res: BunnerResponse, next: () => void) => {
     const requestOrigin = req.headers['origin'];
     const method = req.method.toUpperCase();
     const isPreflight = method === HttpMethod.OPTIONS;
