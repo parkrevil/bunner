@@ -39,7 +39,6 @@ export function cors(options: CorsOptions): MiddlewareFn {
     maxAge = 86400,
     optionsSuccessStatus = 204,
   } = options;
-  const deniedStatusCode = StatusCodes.FORBIDDEN
   const headerSeperator = ', ';
   const normalizedMethods = methods.join(headerSeperator);
   const normalizedAllowedHeaders = allowedHeaders.join(headerSeperator);
@@ -54,18 +53,16 @@ export function cors(options: CorsOptions): MiddlewareFn {
       return next();
     }
 
-    let error: string | undefined;
+    let errorCode: StatusCodes | undefined;
 
     if (!await isOriginAllowed(requestOrigin, origin)) {
-      error = 'Origin not allowed';
+      errorCode = StatusCodes.FORBIDDEN;
+    } else if (!isPreflight && !methods.includes(method as HttpMethod)) {
+      errorCode = StatusCodes.METHOD_NOT_ALLOWED;
     }
 
-    if (!isPreflight && !methods.includes(method as HttpMethod)) {
-      error = 'Method not allowed';
-    }
-
-    if (error) {
-      return res.setHeader('Access-Control-Allow-Origin', 'https://not-allowed.com').setStatus(deniedStatusCode).end(error);
+    if (!!errorCode) {
+      return res.setHeader('Access-Control-Allow-Origin', 'https://not-allowed.com').setStatus(errorCode).end();
     }
 
     res.setHeader('Vary', 'Origin');
@@ -90,7 +87,9 @@ export function cors(options: CorsOptions): MiddlewareFn {
         .end();
     }
 
-    res.setHeader('Access-Control-Expose-Headers', normalizedExposedHeaders!);
+    if (normalizedExposedHeaders.length) {
+      res.setHeader('Access-Control-Expose-Headers', normalizedExposedHeaders!);
+    }
 
     next();
   };

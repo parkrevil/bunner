@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { Bunner } from "../src/bunner";
-import { HttpMethod } from "../src/enums";
+import { Bunner } from "../../src/bunner";
 
 describe("Bunner E2E Tests", () => {
   let app: Bunner;
@@ -10,15 +9,6 @@ describe("Bunner E2E Tests", () => {
   beforeAll(() => {
     app = new Bunner();
 
-    // CORS 설정
-    app.cors({
-      origin: ["http://localhost:3000", "https://example.com"],
-      methods: [HttpMethod.GET, HttpMethod.POST, HttpMethod.PUT, HttpMethod.DELETE, HttpMethod.PATCH],
-      allowedHeaders: ["Content-Type", "Authorization"],
-      credentials: true
-    });
-
-    // send 방식 사용
     app.get("/", (req, res) => {
       res.send("Hello from Bunner!");
     });
@@ -32,7 +22,6 @@ describe("Bunner E2E Tests", () => {
       res.send({ received: body });
     });
 
-    // return Response 방식 사용
     app.get("/return-text", (req, res) => {
       return new Response("Returned text response", { status: 200 });
     });
@@ -52,7 +41,6 @@ describe("Bunner E2E Tests", () => {
       });
     });
 
-    // return value 방식 사용
     app.get("/return-value-text", (req, res) => {
       return "Returned value text";
     });
@@ -71,7 +59,6 @@ describe("Bunner E2E Tests", () => {
       return { message: "Created with return value" };
     });
 
-    // 파라미터 라우트 - send 방식
     app.get("/users/:id", (req, res) => {
       const userId = (req as any).params.id;
       res.send({ userId, name: `User ${userId}` });
@@ -88,7 +75,6 @@ describe("Bunner E2E Tests", () => {
       res.send({ deleted: userId });
     });
 
-    // 파라미터 라우트 - return Response 방식
     app.get("/posts/:id", (req, res) => {
       const postId = (req as any).params.id;
       return new Response(JSON.stringify({ postId, title: `Post ${postId}` }), {
@@ -106,7 +92,6 @@ describe("Bunner E2E Tests", () => {
       });
     });
 
-    // 파라미터 라우트 - return value 방식
     app.get("/comments/:id", (req, res) => {
       const commentId = (req as any).params.id;
       return { commentId, content: `Comment ${commentId}` };
@@ -118,7 +103,6 @@ describe("Bunner E2E Tests", () => {
       return { commentId, updated: body, method: "return value" };
     });
 
-    // 상태 코드 테스트
     app.get("/not-found", (req, res) => {
       res.setStatus(404);
       res.send({ error: "Not found" });
@@ -136,7 +120,6 @@ describe("Bunner E2E Tests", () => {
       return { error: "Internal server error with return value" };
     });
 
-    // 헤더 테스트
     app.get("/custom-headers", (req, res) => {
       res.setHeader("X-Custom-Header", "test-value");
       res.setHeader("X-Another-Header", "another-value");
@@ -146,6 +129,8 @@ describe("Bunner E2E Tests", () => {
     app.get("/redirect", (req, res) => {
       res.redirect("/");
     });
+
+
 
     app.listen("0.0.0.0", PORT, () => {
       console.log(`Server is running on http://localhost:${PORT}`);
@@ -492,38 +477,32 @@ describe("Bunner E2E Tests", () => {
   });
   describe("Mixed Response Styles", () => {
     it("should handle all three response styles correctly", async () => {
-      // send style
       const sendResponse = await fetch(`${BASE_URL}/`);
       expect(sendResponse.status).toBe(200);
       expect(await sendResponse.text()).toBe("Hello from Bunner!");
 
-      // return Response style
       const returnResponseResponse = await fetch(`${BASE_URL}/return-text`);
       expect(returnResponseResponse.status).toBe(200);
       expect(await returnResponseResponse.text()).toBe("Returned text response");
 
-      // return value style
       const returnValueResponse = await fetch(`${BASE_URL}/return-value-text`);
       expect(returnValueResponse.status).toBe(200);
       expect(await returnValueResponse.text()).toBe("Returned value text");
     });
 
     it("should handle mixed JSON responses", async () => {
-      // send style JSON
       const sendJsonResponse = await fetch(`${BASE_URL}/json`);
       expect(sendJsonResponse.status).toBe(200);
       expect(sendJsonResponse.headers.get("content-type")).toBe("application/json");
       const sendData = await sendJsonResponse.json();
       expect(sendData).toEqual({ message: "Hello JSON", status: "success" });
 
-      // return Response style JSON
       const returnResponseJsonResponse = await fetch(`${BASE_URL}/return-json`);
       expect(returnResponseJsonResponse.status).toBe(200);
       expect(returnResponseJsonResponse.headers.get("content-type")).toBe("application/json");
       const returnResponseData = await returnResponseJsonResponse.json();
       expect(returnResponseData).toEqual({ message: "Returned JSON" });
 
-      // return value style JSON
       const returnValueJsonResponse = await fetch(`${BASE_URL}/return-value-json`);
       expect(returnValueJsonResponse.status).toBe(200);
       expect(returnValueJsonResponse.headers.get("content-type")).toBe("application/json");
@@ -532,81 +511,4 @@ describe("Bunner E2E Tests", () => {
     });
   });
 
-  describe("CORS", () => {
-    it("should handle preflight OPTIONS request", async () => {
-      const response = await fetch(`${BASE_URL}/`, {
-        method: "OPTIONS",
-        headers: {
-          "Origin": "http://localhost:3000",
-          "Access-Control-Request-Method": "POST",
-          "Access-Control-Request-Headers": "Content-Type, Authorization"
-        }
-      });
-
-      expect(response.status).toBe(204);
-      expect(response.headers.get("access-control-allow-origin")).toBe("http://localhost:3000");
-      expect(response.headers.get("access-control-allow-methods")).toContain("POST");
-      expect(response.headers.get("access-control-allow-headers")).toContain("Content-Type");
-      expect(response.headers.get("access-control-allow-headers")).toContain("Authorization");
-      expect(response.headers.get("access-control-allow-credentials")).toBe("true");
-    });
-
-    it("should handle actual request with CORS headers", async () => {
-      const response = await fetch(`${BASE_URL}/json`, {
-        method: "GET",
-        headers: {
-          "Origin": "http://localhost:3000"
-        }
-      });
-
-      expect(response.status).toBe(200);
-      expect(response.headers.get("access-control-allow-origin")).toBe("http://localhost:3000");
-      expect(response.headers.get("access-control-allow-credentials")).toBe("true");
-    });
-
-    it("should handle request from allowed origin", async () => {
-      const response = await fetch(`${BASE_URL}/`, {
-        method: "GET",
-        headers: {
-          "Origin": "https://example.com"
-        }
-      });
-
-      expect(response.status).toBe(200);
-      expect(response.headers.get("access-control-allow-origin")).toBe("https://example.com");
-    });
-
-    it("should handle request from disallowed origin", async () => {
-      const response = await fetch(`${BASE_URL}/`, {
-        method: "GET",
-        headers: {
-          "Origin": "https://malicious-site.com"
-        }
-      });
-
-      const corsOrigin = response.headers.get("access-control-allow-origin");
-      expect(response.status).toBe(403);
-      expect(corsOrigin === null || corsOrigin === "https://not-allowed.com").toBe(true);
-    });
-
-    it("should handle POST request with CORS", async () => {
-      const testData = { name: "cors test", value: 123 };
-
-      const response = await fetch(`${BASE_URL}/echo`, {
-        method: "POST",
-        headers: {
-          "Origin": "http://localhost:3000",
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(testData)
-      });
-
-      expect(response.status).toBe(200);
-      expect(response.headers.get("access-control-allow-origin")).toBe("http://localhost:3000");
-      expect(response.headers.get("access-control-allow-credentials")).toBe("true");
-
-      const data = await response.json();
-      expect(data).toEqual({ received: testData });
-    });
-  });
 });

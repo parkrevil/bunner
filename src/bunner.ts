@@ -1,5 +1,6 @@
 import { BunRequest, Server } from 'bun';
 import { EventEmitter } from "events";
+import { ReasonPhrases, StatusCodes } from 'http-status-codes';
 import { HttpMethod } from './enums';
 import { cors, CorsOptions } from './middlewares/cors';
 import { BunnerRequest } from './request';
@@ -10,7 +11,7 @@ export class Bunner extends EventEmitter {
   private server: Server;
   private routes: Routes;
   private middlewares: MiddlewareFn[];
-  private corsEnabled: boolean;
+  private corsFn: MiddlewareFn;
   private serverOptions: BunnerServerOptions;
 
   constructor(options?: BunnerServerOptions) {
@@ -101,8 +102,9 @@ export class Bunner extends EventEmitter {
   }
 
   cors(options: CorsOptions) {
-    this.corsEnabled = true;
-    this.use(cors(options));
+    this.corsFn = cors(options);
+
+    this.use(this.corsFn);
   }
 
   /**
@@ -173,7 +175,7 @@ export class Bunner extends EventEmitter {
     this.routes.forEach((methods, path) => {
       const methodHandlers: Record<string, BunRouteHandler> = {};
 
-      if (this.corsEnabled && !methods.has(HttpMethod.OPTIONS)) {
+      if (!!this.corsFn && !methods.has(HttpMethod.OPTIONS)) {
         this.addRoute(HttpMethod.OPTIONS, path, () => { });
       }
 
@@ -208,6 +210,21 @@ export class Bunner extends EventEmitter {
 
       routes[path] = methodHandlers;
     });
+
+    routes['/*'] = async (bunReq, server) => {
+      const req = await BunnerRequest.fromBunRequest(bunReq, server);
+      const res = new BunnerResponse();
+
+      if (this.corsFn) {
+        const corsResult = await this.corsFn(req, res, () => { });
+
+        if (corsResult instanceof Response) {
+          return corsResult;
+        }
+      }
+
+      return new Response(ReasonPhrases.NOT_FOUND, { status: StatusCodes.NOT_FOUND });
+    };
 
     return routes;
   }

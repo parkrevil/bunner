@@ -1,4 +1,4 @@
-import { StatusCodes } from 'http-status-codes';
+import { getReasonPhrase, StatusCodes } from 'http-status-codes';
 import { ContentType, HeaderField } from './enums';
 import { isObject } from './helpers';
 
@@ -6,6 +6,7 @@ export class BunnerResponse {
   private _body: any;
   private _headers: Headers;
   private _status = StatusCodes.OK;
+  private _statusText = getReasonPhrase(StatusCodes.OK);
   private _response: Response;
 
   constructor() {
@@ -35,8 +36,9 @@ export class BunnerResponse {
     }
   }
 
-  setStatus(status: StatusCodes) {
+  setStatus(status: StatusCodes, statusText?: string) {
     this._status = status;
+    this._statusText = statusText ?? getReasonPhrase(status);
 
     return this;
   }
@@ -112,6 +114,7 @@ export class BunnerResponse {
     const contentType = this.getHeader(HeaderField.CONTENT_TYPE);
     const responseInit: ResponseInit = {
       status: this._status,
+      statusText: this._statusText,
       headers: this._headers,
     };
 
