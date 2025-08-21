@@ -120,7 +120,9 @@ export class Bunner extends EventEmitter {
    * @param port - The port to listen on
    * @param cb - The callback to call when the server is listening
    */
-  async listen(hostname: string, port: number, cb?: () => void) {
+  async listen(hostname: string, port: number, cb?: (...args: any[]) => void) {
+    const cbArgs: any = [];
+
     try {
       this.server = Bun.serve({
         hostname,
@@ -132,10 +134,18 @@ export class Bunner extends EventEmitter {
         ...this.serverOptions,
       });
     } catch (e) {
-      this.emit('error', e);
+      cbArgs.push(e);
+
+      if (this.listeners('error').length > 0) {
+        this.emit('error', e);
+      } else {
+        throw e;
+      }
     }
 
-    if (cb) cb();
+    if (typeof cb === 'function') {
+      cb(...cbArgs);
+    }
   }
 
   /**
