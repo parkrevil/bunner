@@ -1,0 +1,8 @@
+---
+description: API Document UI
+alwaysApply: true
+---
+# Elements 프론트엔드 애플리케이션
+
+## 목적
+OAS JSON 파일을 Elements 를 통해 시각적으로 제공하기 위한 UI
