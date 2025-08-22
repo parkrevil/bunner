@@ -7,10 +7,6 @@ echo "📦 Setting up system..."
 echo "[SYSTEM] Updating packages..."
 sudo apt-get update -qq -y
 
-echo "[SYSTEM] Installing packages..."
-sudo apt-get install -y -qq \
-    protobuf-compiler
-
 echo "[SYSTEM] Upgrading packages..."
 sudo apt-get upgrade -qq -y
 

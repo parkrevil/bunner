@@ -7,8 +7,10 @@
     "--label=com.docker.compose.service=bunner"
   ],
   "features": {
-    "ghcr.io/devcontainers/features/common-utils:2.5.4": {},
-    "ghcr.io/parkrevil/devcontainer-features/bun:latest": {}
+    "ghcr.io/devcontainers/features/common-utils": {},
+    "ghcr.io/parkrevil/devcontainer-features/bun:latest": {
+      "version": "1.2.20"
+    }
   },
   "customizations": {
     "vscode": {
