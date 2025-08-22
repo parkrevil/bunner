@@ -22,24 +22,6 @@ export class BunnerResponse {
     return this._body;
   }
 
-  set body(data: any) {
-    if (this._body) {
-      return;
-    }
-
-    const contentType = this.getContentType();
-
-    if (contentType) {
-      this._body = data;
-    } else if (isObject(data)) {
-      this.setHeader(HeaderField.CONTENT_TYPE, ContentType.JSON);
-      this._body = data;
-    } else {
-      this.setHeader(HeaderField.CONTENT_TYPE, ContentType.TEXT);
-      this._body = data ?? '';
-    }
-  }
-
   setStatus(status: StatusCodes, statusText?: string) {
     this._status = status;
     this._statusText = statusText ?? getReasonPhrase(status);
@@ -99,6 +81,26 @@ export class BunnerResponse {
     return this;
   }
 
+  setBody(data: any) {
+    if (this._body) {
+      return;
+    }
+
+    const contentType = this.getContentType();
+
+    if (contentType) {
+      this._body = data;
+    } else if (isObject(data)) {
+      this.setHeader(HeaderField.CONTENT_TYPE, ContentType.JSON);
+      this._body = data;
+    } else {
+      this.setHeader(HeaderField.CONTENT_TYPE, ContentType.TEXT);
+      this._body = data ?? '';
+    }
+
+    return this;
+  }
+
   setResponse(response: Response) {
     this._response = response;
 
@@ -112,14 +114,14 @@ export class BunnerResponse {
   }
 
   send(data?: any) {
-    this.body = data;
+    this.setBody(data);
 
     return this;
   }
 
   end(data?: any) {
     if (data !== undefined) {
-      this.body = data;
+      this.setBody(data);
     }
 
     return this.build();

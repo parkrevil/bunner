@@ -1,10 +1,10 @@
-import { BunRequest } from 'bun';
+import type { BunRequest } from 'bun';
 import { StatusCodes } from 'http-status-codes';
 import { HttpMethod } from '../../enums';
 import { BunnerRequest } from '../../request';
 import { BunnerResponse } from '../../response';
-import { MiddlewareFn } from '../../types';
-import { CorsOptions } from './interfaces';
+import type { MiddlewareFn } from '../../types';
+import type { CorsOptions } from './interfaces';
 
 async function isOriginAllowed(origin: string, allowedOrigins: CorsOptions['origin']): Promise<boolean> {
   if (allowedOrigins === true || allowedOrigins === '*') {

@@ -1,4 +1,4 @@
-import { BunRequest, Server } from 'bun';
+import type { BunRequest, Server } from 'bun';
 
 export interface BunnerRequestConstructorParams {
   req: BunRequest;
@@ -13,4 +13,14 @@ export interface StaticOptions {
 
 export interface StaticConfig extends StaticOptions {
   filePath: string;
+}
+
+export interface ApiDocumentOptions {
+  useTemplate?: boolean;
+}
+
+export interface ApiDocumentBuildResult {
+  spec: string;
+  parsedSpec: Record<string, any>;
+  fileType: 'json' | 'yaml' | undefined;
 }

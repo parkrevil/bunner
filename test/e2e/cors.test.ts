@@ -10,8 +10,8 @@ describe("CORS Tests", () => {
   beforeAll(() => {
     app = new Bunner();
 
-    app.cors({
-      origin: ["http://localhost:3000", "https://example.com"],
+    app.enableCors({
+      origin: ["http://localhost:4000", "https://example.com"],
       methods: [HttpMethod.GET, HttpMethod.POST, HttpMethod.PUT, HttpMethod.DELETE, HttpMethod.PATCH],
       allowedHeaders: ["Content-Type", "Authorization"],
       credentials: true
@@ -52,14 +52,14 @@ describe("CORS Tests", () => {
       const response = await fetch(`${BASE_URL}/cors-test`, {
         method: "OPTIONS",
         headers: {
-          "Origin": "http://localhost:3000",
+          "Origin": "http://localhost:4000",
           "Access-Control-Request-Method": "POST",
           "Access-Control-Request-Headers": "Content-Type, Authorization"
         }
       });
 
       expect(response.status).toBe(204);
-      expect(response.headers.get("access-control-allow-origin")).toBe("http://localhost:3000");
+      expect(response.headers.get("access-control-allow-origin")).toBe("http://localhost:4000");
       expect(response.headers.get("access-control-allow-methods")).toContain("POST");
       expect(response.headers.get("access-control-allow-headers")).toContain("Content-Type");
       expect(response.headers.get("access-control-allow-headers")).toContain("Authorization");
@@ -71,12 +71,12 @@ describe("CORS Tests", () => {
       const response = await fetch(`${BASE_URL}/json`, {
         method: "GET",
         headers: {
-          "Origin": "http://localhost:3000"
+          "Origin": "http://localhost:4000"
         }
       });
 
       expect(response.status).toBe(200);
-      expect(response.headers.get("access-control-allow-origin")).toBe("http://localhost:3000");
+      expect(response.headers.get("access-control-allow-origin")).toBe("http://localhost:4000");
       expect(response.headers.get("access-control-allow-credentials")).toBe("true");
       expect(response.headers.get("vary")).toBe("Origin");
     });
@@ -99,14 +99,14 @@ describe("CORS Tests", () => {
       const response = await fetch(`${BASE_URL}/echo`, {
         method: "POST",
         headers: {
-          "Origin": "http://localhost:3000",
+          "Origin": "http://localhost:4000",
           "Content-Type": "application/json"
         },
         body: JSON.stringify(testData)
       });
 
       expect(response.status).toBe(200);
-      expect(response.headers.get("access-control-allow-origin")).toBe("http://localhost:3000");
+      expect(response.headers.get("access-control-allow-origin")).toBe("http://localhost:4000");
       expect(response.headers.get("access-control-allow-credentials")).toBe("true");
 
       const data = await response.json();
@@ -141,7 +141,7 @@ describe("CORS Tests", () => {
       const response = await fetch(`${BASE_URL}/cors-test`, {
         method: "OPTIONS",
         headers: {
-          "Origin": "http://localhost:3000",
+          "Origin": "http://localhost:4000",
           "Access-Control-Request-Method": "POST",
           "Access-Control-Request-Headers": "Content-Type, Authorization, X-Custom-Header"
         }
@@ -156,7 +156,7 @@ describe("CORS Tests", () => {
       const response = await fetch(`${BASE_URL}/json`, {
         method: "GET",
         headers: {
-          "Origin": "http://localhost:3000"
+          "Origin": "http://localhost:4000"
         }
       });
 
@@ -168,12 +168,12 @@ describe("CORS Tests", () => {
       const response = await fetch(`${BASE_URL}/`, {
         method: "GET",
         headers: {
-          "Origin": "http://localhost:3000"
+          "Origin": "http://localhost:4000"
         }
       });
 
       expect(response.status).toBe(200);
-      expect(response.headers.get("access-control-allow-origin")).toBe("http://localhost:3000");
+      expect(response.headers.get("access-control-allow-origin")).toBe("http://localhost:4000");
       expect(response.headers.get("access-control-allow-credentials")).toBe("true");
     });
   });

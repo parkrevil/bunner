@@ -1,7 +1,18 @@
 {
   "compilerOptions": {
+    "lib": [
+      "ESNext"
+    ],
+    "target": "ESNext",
+    "module": "Preserve",
+    "moduleDetection": "force",
+    "moduleResolution": "bundler",
+    "verbatimModuleSyntax": true,
     "strict": true,
-    "strictPropertyInitialization": false,
-    "noImplicitAny": false
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noImplicitAny": false,
+    "strictPropertyInitialization": false
   }
 }

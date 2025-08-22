@@ -1,25 +1,28 @@
-import { BunRequest, Server } from 'bun';
+import type { BunRequest, Server } from 'bun';
 import { EventEmitter } from "events";
 import { ReasonPhrases, StatusCodes } from 'http-status-codes';
-import { HttpMethod } from './enums';
-import { StaticConfig, StaticOptions } from './interfaces';
-import { cors, CorsOptions } from './middlewares/cors';
+import { ApiDocumentBuilder } from './api-document-builder';
+import { ContentType, HeaderField, HttpMethod } from './enums';
+import type { ApiDocumentOptions, StaticConfig, StaticOptions } from './interfaces';
+import { cors, type CorsOptions } from './middlewares/cors';
 import { BunnerRequest } from './request';
 import { BunnerResponse } from './response';
-import { BunnerServerOptions, BunRouteHandler, BunRouteValue, MiddlewareFn, RouteHandler, Routes, StaticRoutes } from './types';
+import type { BunnerServerOptions, BunRouteHandler, BunRouteValue, MiddlewareFn, RouteHandler, Routes, StaticRoutes } from './types';
 
 export class Bunner extends EventEmitter {
+  private readonly staticPathFilter = /^\/+|\/+$/g;
+  private apiDocumentBuilder: ApiDocumentBuilder;
   private server: Server;
   private routes: Routes;
   private staticRoutes: StaticRoutes;
   private middlewares: MiddlewareFn[];
   private corsFn: MiddlewareFn;
   private serverOptions: BunnerServerOptions;
-  private readonly staticPathFilter = /^\/+|\/+$/g;
 
   constructor(options?: BunnerServerOptions) {
     super();
 
+    this.apiDocumentBuilder = new ApiDocumentBuilder();
     this.middlewares = [];
     this.routes = new Map();
     this.staticRoutes = new Map();
@@ -106,10 +109,10 @@ export class Bunner extends EventEmitter {
   }
 
   /**
-   * Add a CORS middleware
+   * Enable CORS middleware
    * @param options - The options for the CORS middleware
    */
-  cors(options: CorsOptions) {
+  enableCors(options: CorsOptions) {
     this.corsFn = cors(options);
 
     this.use(this.corsFn);
@@ -227,12 +230,16 @@ export class Bunner extends EventEmitter {
             }
           }
 
+          if (handler instanceof Response) {
+            return handler;
+          }
+
           const result = await handler(req, res);
 
           if (result instanceof Response) {
             res.setResponse(result);
           } else if (result !== undefined) {
-            res.body = result;
+            res.setBody(result);
           }
 
           return res.end();
@@ -315,5 +322,37 @@ export class Bunner extends EventEmitter {
     }
 
     return routes;
+  }
+
+  /**
+   * Enable API Document
+   * @param path - The path to serve the API Document interface
+   * @param value - The API description (URL, file path, or content)
+   */
+  async enableApiDocument(path: string, value: string, options?: ApiDocumentOptions) {
+    const { useTemplate = true } = options || {};
+    const { spec: text, parsedSpec, fileType } = await this.apiDocumentBuilder.build(value);
+    const filteredPath = '/' + path.replace(this.staticPathFilter, '').replace(/\/$/, '');
+    const specPath = `${filteredPath}/spec.${fileType}`;
+
+    this.get(specPath, () => new Response(text, {
+      headers: {
+        [HeaderField.CONTENT_TYPE]: fileType === 'json' ? ContentType.JSON : ContentType.YAML,
+        [HeaderField.CONTENT_LENGTH]: text.length.toString(),
+      },
+    }));
+
+    if (!useTemplate) {
+      return;
+    }
+
+    const template = await this.apiDocumentBuilder.getTemplate(parsedSpec, specPath);
+
+    this.get(filteredPath, () => new Response(template, {
+      headers: {
+        [HeaderField.CONTENT_TYPE]: ContentType.HTML,
+        [HeaderField.CONTENT_LENGTH]: template.length.toString(),
+      },
+    }));
   }
 }

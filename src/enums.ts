@@ -1,5 +1,6 @@
 export enum ContentType {
   JSON = 'application/json',
+  YAML = 'application/yaml',
   TEXT = 'text/plain',
   HTML = 'text/html',
   CSS = 'text/css',
@@ -7,8 +8,9 @@ export enum ContentType {
 }
 
 export enum HeaderField {
-  CONTENT_TYPE = 'Content-Type',
   LOCATION = 'Location',
+  CONTENT_TYPE = 'Content-Type',
+  CONTENT_LENGTH = 'Content-Length',
 }
 
 export enum HttpMethod {

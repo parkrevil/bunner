@@ -1,0 +1,11 @@
+{
+  "name": "bunner-api-doc-example",
+  "version": "1.0.0",
+  "description": "Bunner Framework API Documentation Example",
+  "scripts": {
+    "start": "bun main.ts"
+  },
+  "dependencies": {
+    "bunner": "file:../../"
+  }
+}

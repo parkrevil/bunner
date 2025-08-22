@@ -1,6 +1,6 @@
-import { BunRequest, Server, SocketAddress } from 'bun';
+import type { BunRequest, Server, SocketAddress } from 'bun';
 import qs from 'qs';
-import { BunnerRequestConstructorParams } from './interfaces';
+import type { BunnerRequestConstructorParams } from './interfaces';
 
 export class BunnerRequest {
   readonly raw: BunRequest;
@@ -41,7 +41,7 @@ export class BunnerRequest {
     const xff = this.headers['x-forwarded-for'];
 
     this.socketAddress = params.server.requestIP(this.raw) || undefined;
-    this.ip = xff ? xff.split(',')[0].trim() : this.raw.headers.get('x-real-ip') || this.socketAddress?.address || undefined;
+    this.ip = xff ? xff?.split(',')[0]?.trim() : this.raw.headers.get('x-real-ip') || this.socketAddress?.address || undefined;
   }
 
   static async fromBunRequest(req: BunRequest, server: Server) {

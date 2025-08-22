@@ -2,7 +2,7 @@ import { HttpMethod } from '../../enums';
 
 export interface CorsOptions {
   origin?: boolean | string | RegExp | (string | RegExp)[] | ((origin: string) => boolean | Promise<boolean>);
-  methods?: HttpMethod[];
+  methods?: HttpMethod[] | string[];
   allowedHeaders?: string[];
   exposedHeaders?: string[];
   credentials?: boolean;
