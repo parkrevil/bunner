@@ -16,18 +16,8 @@ export class BunnerWebServer {
    * @returns A promise that resolves to true if the server started successfully
    */
   start(options: BunnerWebServerStartOptions) {
-    console.log('start');
     this.server = Bun.serve({
-      routes: {
-        '/': {
-          GET: (req, server) => {
-            return new Response('Hello World');
-          },
-        },
-      },
-      fetch: (req, server) => {
-        return new Response('Hello World');
-      },
+      routes: this.router.getRoutes(),
       ...options,
     });
   }

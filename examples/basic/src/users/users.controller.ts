@@ -1,7 +1,9 @@
 import { Delete, Get, Post, RestController } from '../../../../src';
 import { UsersService } from './users.service';
 
-@RestController({})
+@RestController('users', {
+  version: 'v1',
+})
 export class UsersController {
   constructor(private readonly usersService: UsersService) { }
 
@@ -10,7 +12,9 @@ export class UsersController {
     return this.usersService.getList();
   }
 
-  @Get(':id')
+  @Get(':id', {
+    version: 'v2',
+  })
   getById() {
     return this.usersService.getById(1);
   }

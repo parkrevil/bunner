@@ -1,6 +1,6 @@
 import { container } from '../core/container';
 import { HttpMethod, HttpMethodDecorator, RestControllerDecorator } from './constants';
-import type { RestControllerDecoratorOptions, RouteDecoratorOptions } from './interfaces';
+import type { HttpMethodDecoratorMetadata, HttpMethodDecoratorOptions, RestControllerDecoratorMetadata, RestControllerDecoratorOptions } from './interfaces';
 import type { HttpMethodType } from './types';
 
 /**
@@ -11,11 +11,12 @@ import type { HttpMethodType } from './types';
  * @param options 
  * @returns 
  */
-export function RestController(options: RestControllerDecoratorOptions = {}): ClassDecorator {
+export function RestController(path?: string, options?: RestControllerDecoratorOptions): ClassDecorator {
   return function (target: any) {
     Reflect.defineMetadata(RestControllerDecorator, {
-      path: options.path || '',
-    }, target);
+      path,
+      ...options,
+    } as RestControllerDecoratorMetadata, target);
 
     container.registerController(target);
   };
@@ -30,7 +31,7 @@ export function RestController(options: RestControllerDecoratorOptions = {}): Cl
  * @param options - Route options (optional)
  * @returns MethodDecorator
  */
-export function Get(path?: string, options?: RouteDecoratorOptions): MethodDecorator {
+export function Get(path?: string, options?: HttpMethodDecoratorOptions): MethodDecorator {
   return defineHttpMethodDecorator(HttpMethod.GET, path, options);
 }
 
@@ -40,7 +41,7 @@ export function Get(path?: string, options?: RouteDecoratorOptions): MethodDecor
  * @param options - Route options (optional)
  * @returns MethodDecorator
  */
-export function Post(path?: string, options?: RouteDecoratorOptions): MethodDecorator {
+export function Post(path?: string, options?: HttpMethodDecoratorOptions): MethodDecorator {
   return defineHttpMethodDecorator(HttpMethod.POST, path, options);
 }
 
@@ -50,7 +51,7 @@ export function Post(path?: string, options?: RouteDecoratorOptions): MethodDeco
  * @param options - Route options (optional)
  * @returns MethodDecorator
  */
-export function Put(path?: string, options?: RouteDecoratorOptions): MethodDecorator {
+export function Put(path?: string, options?: HttpMethodDecoratorOptions): MethodDecorator {
   return defineHttpMethodDecorator(HttpMethod.PUT, path, options);
 }
 
@@ -60,7 +61,7 @@ export function Put(path?: string, options?: RouteDecoratorOptions): MethodDecor
  * @param options - Route options (optional)
  * @returns MethodDecorator
  */
-export function Patch(path?: string, options?: RouteDecoratorOptions): MethodDecorator {
+export function Patch(path?: string, options?: HttpMethodDecoratorOptions): MethodDecorator {
   return defineHttpMethodDecorator(HttpMethod.PATCH, path, options);
 }
 
@@ -70,7 +71,7 @@ export function Patch(path?: string, options?: RouteDecoratorOptions): MethodDec
  * @param options - Route options (optional)
  * @returns MethodDecorator
  */
-export function Delete(path?: string, options?: RouteDecoratorOptions): MethodDecorator {
+export function Delete(path?: string, options?: HttpMethodDecoratorOptions): MethodDecorator {
   return defineHttpMethodDecorator(HttpMethod.DELETE, path, options);
 }
 
@@ -80,7 +81,7 @@ export function Delete(path?: string, options?: RouteDecoratorOptions): MethodDe
  * @param options - Route options (optional)
  * @returns MethodDecorator
  */
-export function Options(path?: string, options?: RouteDecoratorOptions): MethodDecorator {
+export function Options(path?: string, options?: HttpMethodDecoratorOptions): MethodDecorator {
   return defineHttpMethodDecorator(HttpMethod.OPTIONS, path, options);
 }
 
@@ -90,24 +91,23 @@ export function Options(path?: string, options?: RouteDecoratorOptions): MethodD
  * @param options - Route options (optional)
  * @returns MethodDecorator
  */
-export function Head(path?: string, options?: RouteDecoratorOptions): MethodDecorator {
+export function Head(path?: string, options?: HttpMethodDecoratorOptions): MethodDecorator {
   return defineHttpMethodDecorator(HttpMethod.HEAD, path, options);
 }
 
 /**
  * Define HTTP Method Decorator
- * @param method - HTTP Method
+ * @param httpMethod - HTTP Method
  * @param path - Route path or options
  * @param options - Route options
  * @returns MethodDecorator
  */
-function defineHttpMethodDecorator(method: HttpMethodType, path?: string, options?: RouteDecoratorOptions): MethodDecorator {
-  return function (target: any, propertyKey: string | symbol, descriptor: PropertyDescriptor) {
+function defineHttpMethodDecorator(httpMethod: HttpMethodType, path?: string, options?: HttpMethodDecoratorOptions): MethodDecorator {
+  return function (target: any, propertyKey: string | symbol) {
     Reflect.defineMetadata(HttpMethodDecorator, {
-      method: method,
-      path: path ?? '',
-      options: options ?? {},
-      handler: propertyKey
-    }, target, propertyKey);
+      httpMethod,
+      path,
+      ...options,
+    } as HttpMethodDecoratorMetadata, target, propertyKey);
   };
 }

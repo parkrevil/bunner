@@ -1,6 +1,5 @@
-import type { HttpMethodType } from '../types';
+import type { BunRouteHandler, HttpMethodType } from '../types';
 
-export interface Route {
-  path: string;
-  method: HttpMethodType;
+export interface BunRoute {
+  [httpMethod: HttpMethodType]: BunRouteHandler;
 }
