@@ -1,4 +1,5 @@
 import type { BunRequest, Server } from 'bun';
+import type { ClassType } from './types';
 
 export interface IBunnerApplication {
   start(options?: any): void | Promise<void>;
@@ -6,10 +7,12 @@ export interface IBunnerApplication {
 }
 
 export interface BunnerCreateApplicationOptions {
-  name: string;
+  name?: string;
 }
 
-export interface BunnerCreateWebApplicationOptions extends BunnerCreateApplicationOptions { }
+export interface BunnerCreateWebApplicationOptions extends BunnerCreateApplicationOptions {
+  controllers?: ClassType<any>[];
+}
 
 export interface BunnerRequestConstructorParams {
   req: BunRequest;

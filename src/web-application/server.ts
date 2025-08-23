@@ -1,10 +1,14 @@
 import type { Server } from 'bun';
 import type { BunnerWebServerStartOptions } from './interfaces';
+import { Router } from './router';
 
 export class BunnerWebServer {
+  private readonly router: Router;
   private server: Server;
 
-  constructor() { }
+  constructor() {
+    this.router = new Router();
+  }
 
   /**
    * Start the server
@@ -12,7 +16,15 @@ export class BunnerWebServer {
    * @returns A promise that resolves to true if the server started successfully
    */
   start(options: BunnerWebServerStartOptions) {
+    console.log('start');
     this.server = Bun.serve({
+      routes: {
+        '/': {
+          GET: (req, server) => {
+            return new Response('Hello World');
+          },
+        },
+      },
       fetch: (req, server) => {
         return new Response('Hello World');
       },

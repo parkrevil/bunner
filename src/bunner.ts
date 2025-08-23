@@ -16,7 +16,7 @@ export class Bunner {
    * @param options - The options for the application
    * @returns The Bunner application
    */
-  static createWebApplication(options: BunnerCreateWebApplicationOptions) {
+  static createWebApplication(options?: BunnerCreateWebApplicationOptions) {
     const {
       name = this.generateApplicationDefaultName('web'),
     } = options ?? {};

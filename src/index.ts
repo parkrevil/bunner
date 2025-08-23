@@ -1,4 +1,4 @@
-import 'reflect-metadata/lite';
+import 'reflect-metadata';
 
 export * from './bunner';
 export * from './core';
@@ -8,5 +8,5 @@ export * from './middlewares/cors';
 export * from './request';
 export * from './response';
 export * from './types';
-export * from './web-application/bunner-web-application';
+export * from './web-application';
 

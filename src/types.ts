@@ -14,3 +14,6 @@ export type RouteHandler = ((req: BunnerRequest, res: BunnerResponse) => any | P
 export type Routes = Map<string, Map<HttpMethod, RouteHandler>>;
 export type StaticRoutes = Map<string, StaticConfig>;
 export type MiddlewareFn = (req: BunRequest | BunnerRequest, res: BunnerResponse, next: () => any) => any | Promise<any>;
+
+
+export type ClassType<T> = new (...args: any[]) => T;
