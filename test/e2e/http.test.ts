@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { Bunner } from "../../src/bunner";
+import { Bunner } from "../../src/web-application/bunner-web-application";
 
 describe("Bunner E2E Tests", () => {
   let app: Bunner;

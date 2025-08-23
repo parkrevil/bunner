@@ -1,4 +1,4 @@
-import { Bunner } from '../../src/bunner';
+import { Bunner } from '../../src/web-application/bunner-web-application';
 
 /**
  * Bunner Framework API Documentation Example

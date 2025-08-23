@@ -1,0 +1,14 @@
+{
+  "execMap": {
+    "ts": "bun"
+  },
+  "watch": [
+    "src/**",
+    "package.json",
+    "tsconfig.json"
+  ],
+  "delay": 500,
+  "env": {
+    "NODE_ENV": "local"
+  }
+}

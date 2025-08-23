@@ -1,5 +1,16 @@
 import type { BunRequest, Server } from 'bun';
 
+export interface IBunnerApplication {
+  start(options?: any): void | Promise<void>;
+  stop(force?: boolean): void | Promise<void>;
+}
+
+export interface BunnerCreateApplicationOptions {
+  name: string;
+}
+
+export interface BunnerCreateWebApplicationOptions extends BunnerCreateApplicationOptions { }
+
 export interface BunnerRequestConstructorParams {
   req: BunRequest;
   server: Server;

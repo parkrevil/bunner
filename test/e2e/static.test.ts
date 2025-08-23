@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { join } from "path";
-import { Bunner } from "../../src/bunner";
+import { Bunner } from "../../src/web-application/bunner-web-application";
 
 describe("Static File Serving Tests", () => {
   let app: Bunner;

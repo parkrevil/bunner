@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { Bunner } from "../../src/bunner";
 import { HttpMethod } from "../../src/enums";
+import { Bunner } from "../../src/web-application/bunner-web-application";
 
 describe("CORS Tests", () => {
   let app: Bunner;

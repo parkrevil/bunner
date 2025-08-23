@@ -4,6 +4,8 @@ import type { StaticConfig } from './interfaces';
 import { BunnerRequest } from './request';
 import { BunnerResponse } from './response';
 
+export type BunnerApplicationType = 'web' | 'standalone';
+
 export type BunRouteValue = RouterTypes.RouteValue<string>;
 export type BunRouteHandler = RouterTypes.RouteHandler<string>;
 export type BunRouteHandlerObject = RouterTypes.RouteHandlerObject<string>;

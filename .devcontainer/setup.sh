@@ -11,7 +11,8 @@ echo "[SYSTEM] Upgrading packages..."
 sudo apt-get upgrade -qq -y
 
 echo "🔧 Install project dependencies..."
-bun install
+bun add -g nodemon
+bun i
 
 echo ""
 echo "🎉 Bunner Development Environment setup completed!"
