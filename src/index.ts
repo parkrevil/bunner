@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 
 export * from './bunner';
-export * from './core';
+export * from './core/injector';
 export * from './enums';
 export * from './helpers';
 export * from './interfaces';

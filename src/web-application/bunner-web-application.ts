@@ -2,7 +2,7 @@ import type { BunRequest, Server } from 'bun';
 import { ReasonPhrases, StatusCodes } from 'http-status-codes';
 import { BunnerWebServer, type BunnerWebServerStartOptions } from '.';
 import { ApiDocumentBuilder } from '../api-document-builder';
-import { container } from '../core';
+import { container } from '../core/injector';
 import { ContentType, HeaderField, HttpMethod } from '../enums';
 import type { ApiDocumentOptions, IBunnerApplication, StaticConfig, StaticOptions } from '../interfaces';
 import { cors, type CorsOptions } from '../middlewares/cors';
@@ -138,39 +138,6 @@ export class BunnerWebApplication implements IBunnerApplication {
     this.corsFn = cors(options);
 
     this.use(this.corsFn);
-  }
-
-  /**
-   * Listen for requests on the given port
-   * @param port - The port to listen on
-   * @param cb - The callback to call when the server is listening
-   */
-  async listen(hostname: string, port: number, cb?: (...args: any[]) => void) {
-    const cbArgs: any = [];
-
-    try {
-      this.__server = Bun.serve({
-        hostname,
-        port,
-        routes: {
-          ...this.toBunRoutes(),
-          ...await this.toBunStaticRoutes(),
-        },
-        ...this.serverOptions,
-      });
-    } catch (e) {
-      cbArgs.push(e);
-
-      if (this.listeners('error').length > 0) {
-        this.emit('error', e);
-      } else {
-        throw e;
-      }
-    }
-
-    if (typeof cb === 'function') {
-      cb(...cbArgs);
-    }
   }
 
   /**

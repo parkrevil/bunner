@@ -1,4 +1,4 @@
-import { container } from './core';
+import { container } from './core/injector';
 import type { BunnerCreateWebApplicationOptions, IBunnerApplication } from './interfaces';
 import type { BunnerApplicationType } from './types';
 import { BunnerWebApplication } from './web-application';
