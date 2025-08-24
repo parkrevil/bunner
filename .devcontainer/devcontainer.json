@@ -14,9 +14,6 @@
   },
   "customizations": {
     "vscode": {
-      "extensions": [
-        "dsznajder.es7-react-js-snippets"
-      ],
       "settings": {
         "typescript.preferences.includePackageJsonAutoImports": "on",
         "typescript.suggest.autoImports": true,
