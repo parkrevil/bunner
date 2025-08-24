@@ -1,6 +1,7 @@
 import type { Server } from 'bun';
 import type { BunnerWebServerStartOptions } from './interfaces';
 import { Router } from './router';
+import type { HttpMethodType } from './types';
 
 export class BunnerWebServer {
   private readonly router: Router;
@@ -16,8 +17,20 @@ export class BunnerWebServer {
    * @returns A promise that resolves to true if the server started successfully
    */
   start(options: BunnerWebServerStartOptions) {
+    this.router.build();
+
     this.server = Bun.serve({
-      routes: this.router.getRoutes(),
+      fetch: async (req: Request) => {
+        const route = this.router.find(req.method as HttpMethodType, req.url);
+
+        if (!route) {
+          return new Response('Not Found', { status: 404 });
+        }
+
+        const result = await route.handler(req as any, {} as any, route.params, {}, route.searchParams);
+
+        return new Response(result);
+      },
       ...options,
     });
   }

@@ -1,34 +1,28 @@
-import type { BunRequest, Server } from 'bun';
+import findMyWay from 'find-my-way';
+import qs from 'qs';
 import { container } from '../../core/injector';
 import { HttpMethodDecorator, RestControllerDecorator } from '../constants';
 import type { HttpMethodDecoratorMetadata, RestControllerDecoratorMetadata } from '../interfaces';
-import type { BunRoutes } from './types';
+import type { HttpMethodType } from '../types';
 
 export class Router {
   private readonly pathFilterRegexp = /^\/+|\/+$/g;
-  private readonly invalidPathCharsRegexp = /[ \t\n\r\f\v<>#?`{}\\[\]]/;
-  private readonly invalidParamCharsRegexp = /[:?!]/;
-  private routes: BunRoutes;
+  private readonly router: findMyWay.Instance<any>;
 
   constructor() {
-    this.routes = {};
-  }
-
-  /**
-   * Get routes
-   * @returns 
-   */
-  getRoutes() {
-    this.build();
-    return this.routes;
+    this.router = findMyWay({
+      querystringParser: qs.parse,
+      caseSensitive: true,
+      ignoreTrailingSlash: true,
+      ignoreDuplicateSlashes: true,
+      allowUnsafeRegex: true,
+    });
   }
 
   /**
    * Build routes
    */
   build() {
-    this.routes = {} as BunRoutes;
-
     const controllers = container.getControllers();
 
     controllers.forEach((controllerInstance, controllerConstructor) => {
@@ -56,33 +50,22 @@ export class Router {
           return;
         }
 
-        const builtPath = this.buildPath(
-          methodVersion ?? controllerVersion ?? '',
-          controllerPath ?? '',
-          methodPath ?? '',
-        );
-
-        if (!this.validatePath(builtPath)) {
-          throw new Error(`Invalid path: ${builtPath}`);
-        }
-
-        if (!this.routes[builtPath]) {
-          this.routes[builtPath] = {};
-        } else if (this.routes[builtPath][httpMethod]) {
-          throw new Error(`Route already exists: ${httpMethod} ${builtPath}`);
-        }
-
-        this.routes[builtPath][httpMethod] = async (bunReq: BunRequest, server: Server) => {
-          const result = await controllerInstance[handlerName]();
-
-          if (!result) {
-            return new Response();
-          }
-
-          return new Response(JSON.stringify(result));
-        };
+        this.router.on(
+          httpMethod,
+          '/' + [
+            methodVersion ?? controllerVersion ?? '',
+            controllerPath ?? '',
+            methodPath ?? '',
+          ].join('/'),
+          (req, res, params, store, searchParams) => {
+            return controllerInstance[handlerName]();
+          });
       });
     });
+  }
+
+  find(method: HttpMethodType, path: string) {
+    return this.router.find(method, path);
   }
 
   /**
@@ -95,36 +78,5 @@ export class Router {
       .map(path => path.trim().replace(this.pathFilterRegexp, ''))
       .filter(Boolean)
       .join('/');
-  }
-
-  /**
-   * Validate path
-   * @param path 
-   * @returns 
-   */
-  private validatePath(path: string): boolean {
-    if (this.invalidPathCharsRegexp.test(path)) {
-      return false;
-    }
-
-    if (path.includes('//') || path.includes('/./') || path.includes('/../')) {
-      return false;
-    }
-
-    const segments = path.split('/').filter(Boolean);
-
-    for (const segment of segments) {
-      if (segment.startsWith(':')) {
-        if (segment.length === 1) {
-          return false;
-        }
-
-        if (this.invalidParamCharsRegexp.test(segment.substring(1))) {
-          return false;
-        }
-      }
-    }
-
-    return true;
   }
 }
