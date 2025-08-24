@@ -19,7 +19,7 @@ export class BunnerWebServer {
    * @returns A promise that resolves to true if the server started successfully
    */
   start(options: BunnerWebServerStartOptions) {
-    this.router.build();
+    this.router.register();
 
     this.server = Bun.serve({
       fetch: async (rawReq: Request, server: Server) => {

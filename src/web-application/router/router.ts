@@ -8,7 +8,6 @@ import type { BunnerResponse } from '../response';
 import type { HttpMethodType } from '../types';
 
 export class Router {
-  private readonly pathFilterRegexp = /^\/+|\/+$/g;
   private readonly router: findMyWay.Instance<any>;
 
   constructor() {
@@ -22,9 +21,9 @@ export class Router {
   }
 
   /**
-   * Build routes
+   * Register routes
    */
-  build() {
+  register() {
     const controllers = container.getControllers();
 
     controllers.forEach((controllerInstance, controllerConstructor) => {
@@ -68,19 +67,13 @@ export class Router {
     });
   }
 
+  /**
+   * Find a route
+   * @param method - The method of the request
+   * @param path - The path of the request
+   * @returns The route
+   */
   find(method: HttpMethodType, path: string) {
     return this.router.find(method, path);
-  }
-
-  /**
-   * Build path
-   * @param paths 
-   * @returns 
-   */
-  private buildPath(...paths: string[]) {
-    return '/' + paths
-      .map(path => path.trim().replace(this.pathFilterRegexp, ''))
-      .filter(Boolean)
-      .join('/');
   }
 }
