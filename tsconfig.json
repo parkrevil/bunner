@@ -13,6 +13,18 @@
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
     "noImplicitAny": false,
-    "strictPropertyInitialization": false
-  }
+    "strictPropertyInitialization": false,
+    "types": [
+      "bun",
+      "node",
+    ],
+    "typeRoots": [
+      "./types",
+      "./node_modules/@types"
+    ],
+  },
+  "include": [
+    "./src/**/*.ts",
+    "./types/**/*.d.ts"
+  ]
 }

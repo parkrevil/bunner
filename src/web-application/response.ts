@@ -1,6 +1,6 @@
 import { getReasonPhrase, StatusCodes } from 'http-status-codes';
-import { ContentType, HeaderField } from './enums';
-import { isObject } from './helpers';
+import { ContentType, HeaderField } from '../enums';
+import { isObject } from '../helpers';
 
 export class BunnerResponse {
   private _body: any;

@@ -3,6 +3,8 @@ import qs from 'qs';
 import { container } from '../../core/injector';
 import { HttpMethodDecorator, RestControllerDecorator } from '../constants';
 import type { HttpMethodDecoratorMetadata, RestControllerDecoratorMetadata } from '../interfaces';
+import type { BunnerRequest } from '../request';
+import type { BunnerResponse } from '../response';
 import type { HttpMethodType } from '../types';
 
 export class Router {
@@ -57,9 +59,11 @@ export class Router {
             controllerPath ?? '',
             methodPath ?? '',
           ].join('/'),
-          (req, res, params, store, searchParams) => {
+          (req: BunnerRequest, res: BunnerResponse) => {
+            console.log(req);
             return controllerInstance[handlerName]();
-          });
+          }
+        );
       });
     });
   }

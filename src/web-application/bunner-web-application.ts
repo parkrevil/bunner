@@ -6,9 +6,9 @@ import { container } from '../core/injector';
 import { ContentType, HeaderField, HttpMethod } from '../enums';
 import type { ApiDocumentOptions, IBunnerApplication, StaticConfig, StaticOptions } from '../interfaces';
 import { cors, type CorsOptions } from '../middlewares/cors';
-import { BunnerRequest } from '../request';
-import { BunnerResponse } from '../response';
 import type { BunnerServerOptions, BunRouteHandler, BunRouteValue, MiddlewareFn, RouteHandler, Routes, StaticRoutes } from '../types';
+import { BunnerRequest } from './request';
+import { BunnerResponse } from './response';
 
 export class BunnerWebApplication implements IBunnerApplication {
   private readonly server: BunnerWebServer;

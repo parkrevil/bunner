@@ -1,8 +1,9 @@
 import type { BunRequest, RouterTypes } from 'bun';
 import { HttpMethod } from './enums';
 import type { StaticConfig } from './interfaces';
-import { BunnerRequest } from './request';
-import { BunnerResponse } from './response';
+import { BunnerRequest } from './web-application/request';
+import { BunnerResponse } from './web-application/response';
+
 
 export type BunnerApplicationType = 'web' | 'standalone';
 

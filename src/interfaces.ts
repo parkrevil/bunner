@@ -1,4 +1,4 @@
-import type { BunRequest, Server } from 'bun';
+import type { Server } from 'bun';
 import type { ClassType } from './types';
 
 export interface IBunnerApplication {
@@ -15,10 +15,10 @@ export interface BunnerCreateWebApplicationOptions extends BunnerCreateApplicati
 }
 
 export interface BunnerRequestConstructorParams {
-  req: BunRequest;
+  request: Request;
   server: Server;
-  headers: Headers;
-  body: any;
+  params: Record<string, any>;
+  queryParams: Record<string, any>;
 }
 
 export interface StaticOptions {
