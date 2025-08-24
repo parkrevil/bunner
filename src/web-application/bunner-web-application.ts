@@ -2,6 +2,7 @@ import type { BunRequest, Server } from 'bun';
 import { ReasonPhrases, StatusCodes } from 'http-status-codes';
 import { BunnerWebServer, type BunnerWebServerStartOptions } from '.';
 import { ApiDocumentBuilder } from '../api-document-builder';
+import { container } from '../core';
 import { ContentType, HeaderField, HttpMethod } from '../enums';
 import type { ApiDocumentOptions, IBunnerApplication, StaticConfig, StaticOptions } from '../interfaces';
 import { cors, type CorsOptions } from '../middlewares/cors';
@@ -22,6 +23,14 @@ export class BunnerWebApplication implements IBunnerApplication {
 
   constructor() {
     this.server = new BunnerWebServer();
+  }
+
+  /**
+   * Register a module with the application
+   * @param moduleClass - The module class to register
+   */
+  registerModule(moduleClass: any) {
+    container.registerModule(moduleClass);
   }
 
   /**

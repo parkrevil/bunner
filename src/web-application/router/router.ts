@@ -1,5 +1,5 @@
 import type { BunRequest, Server } from 'bun';
-import { container } from '../../core/container';
+import { container } from '../../core/injector';
 import { HttpMethodDecorator, RestControllerDecorator } from '../constants';
 import type { HttpMethodDecoratorMetadata, RestControllerDecoratorMetadata } from '../interfaces';
 import type { BunRoutes } from './types';
@@ -8,12 +8,10 @@ export class Router {
   private readonly pathFilterRegexp = /^\/+|\/+$/g;
   private readonly invalidPathCharsRegexp = /[ \t\n\r\f\v<>#?`{}\\[\]]/;
   private readonly invalidParamCharsRegexp = /[:?!]/;
-  private readonly routes: BunRoutes;
+  private routes: BunRoutes;
 
   constructor() {
     this.routes = {};
-
-    this.build();
   }
 
   /**
@@ -21,6 +19,7 @@ export class Router {
    * @returns 
    */
   getRoutes() {
+    this.build();
     return this.routes;
   }
 
@@ -28,6 +27,8 @@ export class Router {
    * Build routes
    */
   build() {
+    this.routes = {} as BunRoutes;
+
     const controllers = container.getControllers();
 
     controllers.forEach((controllerInstance, controllerConstructor) => {

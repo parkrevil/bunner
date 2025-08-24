@@ -11,7 +11,7 @@ export interface BunnerCreateApplicationOptions {
 }
 
 export interface BunnerCreateWebApplicationOptions extends BunnerCreateApplicationOptions {
-  controllers?: ClassType<any>[];
+  modules?: ClassType<any>[];
 }
 
 export interface BunnerRequestConstructorParams {

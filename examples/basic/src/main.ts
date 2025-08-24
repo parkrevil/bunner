@@ -1,8 +1,8 @@
 import { Bunner } from '../../../src';
-import { UsersController } from './users';
+import { AppModule } from './app.module';
 
-const webApp = Bunner.createWebApplication({
-  controllers: [UsersController],
+const webApp = Bunner.createWebApplication(AppModule, {
+  name: 'basic-app'
 });
 
 webApp.start({

@@ -1,4 +1,3 @@
-import { container } from '../core/container';
 import { HttpMethod, HttpMethodDecorator, RestControllerDecorator } from './constants';
 import type { HttpMethodDecoratorMetadata, HttpMethodDecoratorOptions, RestControllerDecoratorMetadata, RestControllerDecoratorOptions } from './interfaces';
 import type { HttpMethodType } from './types';
@@ -17,8 +16,6 @@ export function RestController(path?: string, options?: RestControllerDecoratorO
       path,
       ...options,
     } as RestControllerDecoratorMetadata, target);
-
-    container.registerController(target);
   };
 }
 
