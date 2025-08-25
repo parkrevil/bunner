@@ -1,5 +1,6 @@
 import type { Server } from 'bun';
 import type { BunnerWebServerStartOptions } from './interfaces';
+import { BodyParser } from './providers/body-parser';
 import { BunnerRequest } from './request';
 import { BunnerResponse } from './response';
 import { Router } from './router';
@@ -7,13 +8,15 @@ import type { HttpMethodType } from './types';
 
 export class BunnerWebServer {
   private readonly router: Router;
+  private readonly bodyParser: BodyParser;
   private server: Server;
 
   constructor() {
     this.router = new Router();
+    this.bodyParser = new BodyParser();
   }
 
-  /**
+  /** 
    * Start the server
    * @param options - The options for the server
    * @returns A promise that resolves to true if the server started successfully
@@ -29,14 +32,17 @@ export class BunnerWebServer {
           return new Response('Not Found', { status: 404 });
         }
 
-        const bunnerRequest = new BunnerRequest({
+        const req = new BunnerRequest({
           request: rawReq,
           server,
           params: route.params,
           queryParams: route.searchParams,
         });
-        const bunnerResponse = new BunnerResponse();
-        const result = await route.handler(bunnerRequest, bunnerResponse);
+        const res = new BunnerResponse();
+
+        req.body = await this.bodyParser.parse(req);
+
+        const result = await route.handler(req, res);
 
         return new Response(result);
       },

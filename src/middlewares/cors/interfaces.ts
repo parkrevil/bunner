@@ -1,8 +1,8 @@
-import { HttpMethod } from '../../enums';
+import type { HttpMethodType } from 'src/web-application';
 
 export interface CorsOptions {
   origin?: boolean | string | RegExp | (string | RegExp)[] | ((origin: string) => boolean | Promise<boolean>);
-  methods?: HttpMethod[] | string[];
+  methods?: HttpMethodType[];
   allowedHeaders?: string[];
   exposedHeaders?: string[];
   credentials?: boolean;

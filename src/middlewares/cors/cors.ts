@@ -1,6 +1,5 @@
-import type { BunRequest } from 'bun';
 import { StatusCodes } from 'http-status-codes';
-import { HttpMethod } from '../../enums';
+import { HeaderField, HttpMethod, type HttpMethodType } from 'src/web-application';
 import type { MiddlewareFn } from '../../types';
 import { BunnerRequest } from '../../web-application/request';
 import { BunnerResponse } from '../../web-application/response';
@@ -33,7 +32,7 @@ async function isOriginAllowed(origin: string, allowedOrigins: CorsOptions['orig
 export function cors(options: CorsOptions): MiddlewareFn {
   const {
     origin = '*',
-    methods = [HttpMethod.GET, HttpMethod.HEAD, HttpMethod.PUT, HttpMethod.PATCH, HttpMethod.POST, HttpMethod.DELETE],
+    methods = [HttpMethod.Get, HttpMethod.Head, HttpMethod.Put, HttpMethod.Patch, HttpMethod.Post, HttpMethod.Delete],
     allowedHeaders = ['Content-Type', 'Authorization'],
     exposedHeaders = [],
     credentials = false,
@@ -45,10 +44,10 @@ export function cors(options: CorsOptions): MiddlewareFn {
   const normalizedAllowedHeaders = allowedHeaders.join(headerSeperator);
   const normalizedExposedHeaders = exposedHeaders.join(headerSeperator);
 
-  return async (req: BunRequest | BunnerRequest, res: BunnerResponse, next: () => void) => {
-    const requestOrigin = req.headers['origin'];
+  return async (req: BunnerRequest, res: BunnerResponse, next: () => void) => {
+    const requestOrigin = req.headers.get(HeaderField.Origin);
     const method = req.method.toUpperCase();
-    const isPreflight = method === HttpMethod.OPTIONS;
+    const isPreflight = method === HttpMethod.Options;
 
     if (!requestOrigin) {
       return next();
@@ -58,38 +57,38 @@ export function cors(options: CorsOptions): MiddlewareFn {
 
     if (!await isOriginAllowed(requestOrigin, origin)) {
       errorCode = StatusCodes.FORBIDDEN;
-    } else if (!isPreflight && !methods.includes(method as HttpMethod)) {
+    } else if (!isPreflight && !methods.includes(method as HttpMethodType)) {
       errorCode = StatusCodes.METHOD_NOT_ALLOWED;
     }
 
     if (!!errorCode) {
-      return res.setHeader('Access-Control-Allow-Origin', 'https://not-allowed.com').setStatus(errorCode).end();
+      return res.setHeader(HeaderField.AccessControlAllowOrigin, 'https://not-allowed.com').setStatus(errorCode).end();
     }
 
-    res.setHeader('Vary', 'Origin');
+    res.setHeader(HeaderField.Vary, 'Origin');
 
     if (credentials) {
       res.setHeaders({
-        'Access-Control-Allow-Origin': requestOrigin,
-        'Access-Control-Allow-Credentials': 'true',
+        [HeaderField.AccessControlAllowOrigin]: requestOrigin,
+        [HeaderField.AccessControlAllowCredentials]: 'true',
       });
     } else {
-      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader(HeaderField.AccessControlAllowOrigin, '*');
     }
 
     if (isPreflight) {
       return res
         .setHeaders({
-          'Access-Control-Allow-Methods': normalizedMethods,
-          'Access-Control-Allow-Headers': normalizedAllowedHeaders,
-          'Access-Control-Max-Age': maxAge.toString(),
+          [HeaderField.AccessControlAllowMethods]: normalizedMethods,
+          [HeaderField.AccessControlAllowHeaders]: normalizedAllowedHeaders,
+          [HeaderField.AccessControlMaxAge]: maxAge.toString(),
         })
         .setStatus(optionsSuccessStatus)
         .end();
     }
 
     if (normalizedExposedHeaders.length) {
-      res.setHeader('Access-Control-Expose-Headers', normalizedExposedHeaders!);
+      res.setHeader(HeaderField.AccessControlExposeHeaders, normalizedExposedHeaders!);
     }
 
     next();

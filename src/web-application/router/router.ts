@@ -3,9 +3,8 @@ import qs from 'qs';
 import { container } from '../../core/injector';
 import { HttpMethodDecorator, RestControllerDecorator } from '../constants';
 import type { HttpMethodDecoratorMetadata, RestControllerDecoratorMetadata } from '../interfaces';
-import type { BunnerRequest } from '../request';
-import type { BunnerResponse } from '../response';
 import type { HttpMethodType } from '../types';
+import type { RouteHandler } from './types';
 
 export class Router {
   private readonly router: findMyWay.Instance<any>;
@@ -58,10 +57,7 @@ export class Router {
             controllerPath ?? '',
             methodPath ?? '',
           ].join('/'),
-          (req: BunnerRequest, res: BunnerResponse) => {
-            console.log(req);
-            return controllerInstance[handlerName]();
-          }
+          (req, res) => controllerInstance[handlerName](req, res),
         );
       });
     });
@@ -74,6 +70,19 @@ export class Router {
    * @returns The route
    */
   find(method: HttpMethodType, path: string) {
-    return this.router.find(method, path);
+    const route = this.router.find(method, path);
+
+    if (!route) {
+      return;
+    }
+
+    const handler: RouteHandler = (req, res) => (route.handler as any)(req, res);
+
+    return {
+      handler,
+      params: route.params,
+      store: route.store,
+      searchParams: route.searchParams,
+    };
   }
 }

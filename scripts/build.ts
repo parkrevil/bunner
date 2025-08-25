@@ -18,6 +18,14 @@ async function build() {
   console.log(`🗑️ Removing ${outDir}...`);
   await $`rm -rf ${outDir}`;
 
+  console.log(`🔨 Building Declaration...`);
+  const declarationResult = await $`bun tsc --project tsconfig.build.json --outDir ${outDir}`;
+
+  if (declarationResult.exitCode !== 0) {
+    console.error(declarationResult.stderr.toString());
+    process.exit(1);
+  }
+
   console.log(`🔨 Building ESM...`);
   const esmResult = await $`${buildCmd} --format esm --outfile ${outDir}/index.mjs`;
 
@@ -31,14 +39,6 @@ async function build() {
 
   if (cjsResult.exitCode !== 0) {
     console.error(cjsResult.stderr.toString());
-    process.exit(1);
-  }
-
-  console.log(`🔨 Building Declaration...`);
-  const declarationResult = await $`bun tsc --project tsconfig.build.json --outDir ${outDir}`;
-
-  if (declarationResult.exitCode !== 0) {
-    console.error(declarationResult.stderr.toString());
     process.exit(1);
   }
 }

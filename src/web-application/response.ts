@@ -1,6 +1,7 @@
 import { getReasonPhrase, StatusCodes } from 'http-status-codes';
-import { ContentType, HeaderField } from '../enums';
 import { isObject } from '../helpers';
+import { ContentType, HeaderField } from './constants';
+import type { ContentTypeType } from './types';
 
 export class BunnerResponse {
   private _body: any;
@@ -60,11 +61,11 @@ export class BunnerResponse {
   }
 
   getContentType() {
-    return this.getHeader(HeaderField.CONTENT_TYPE);
+    return this.getHeader(HeaderField.ContentType);
   }
 
-  setContentType(contentType: ContentType) {
-    this.setHeader(HeaderField.CONTENT_TYPE, contentType);
+  setContentType(contentType: ContentTypeType) {
+    this.setHeader(HeaderField.ContentType, contentType);
 
     return this;
   }
@@ -75,7 +76,7 @@ export class BunnerResponse {
    * @param contentType - The content type to set
    * @returns The response object
    */
-  type(contentType: ContentType) {
+  type(contentType: ContentTypeType) {
     this.setContentType(contentType);
 
     return this;
@@ -91,10 +92,10 @@ export class BunnerResponse {
     if (contentType) {
       this._body = data;
     } else if (isObject(data)) {
-      this.setHeader(HeaderField.CONTENT_TYPE, ContentType.JSON);
+      this.setHeader(HeaderField.ContentType, ContentType.Json);
       this._body = data;
     } else {
-      this.setHeader(HeaderField.CONTENT_TYPE, ContentType.TEXT);
+      this.setHeader(HeaderField.ContentType, ContentType.Text);
       this._body = data ?? '';
     }
 
@@ -108,7 +109,7 @@ export class BunnerResponse {
   }
 
   redirect(url: string) {
-    this.setHeader(HeaderField.LOCATION, url);
+    this.setHeader(HeaderField.Location, url);
 
     return this;
   }
@@ -132,8 +133,8 @@ export class BunnerResponse {
       return this._response;
     }
 
-    const location = this.getHeader(HeaderField.LOCATION);
-    const contentType = this.getHeader(HeaderField.CONTENT_TYPE);
+    const location = this.getHeader(HeaderField.Location);
+    const contentType = this.getHeader(HeaderField.ContentType);
     const responseInit: ResponseInit = {
       status: this._status,
       statusText: this._statusText,
@@ -142,7 +143,7 @@ export class BunnerResponse {
 
     if (location) {
       return Response.redirect(location);
-    } else if (contentType === ContentType.JSON) {
+    } else if (contentType === ContentType.Json) {
       return Response.json(this.body, responseInit);
     }
 

@@ -1,24 +1,40 @@
 import type { SocketAddress } from 'bun';
 import type { BunnerRequestConstructorParams } from '../interfaces';
+import { HeaderField } from './constants';
 
 export class BunnerRequest {
   readonly raw: Request;
   readonly params: Record<string, any>;
   readonly queryParams: Record<string, any>;
-  readonly body: any;
   readonly query: Record<string, string>;
+  readonly contentType: string | undefined;
+  readonly contentLength: number | undefined;
   readonly ip: string | undefined;
   readonly socketAddress: SocketAddress | undefined;
+  body: any;
 
   constructor(params: BunnerRequestConstructorParams) {
     this.raw = params.request;
     this.params = params.params;
     this.query = params.queryParams;
-    this.body = this.raw.body;
-    this.socketAddress = params.server.requestIP(this.raw) || undefined;
 
-    const xff = this.raw.headers.get('x-forwarded-for');
-    this.ip = xff ? xff?.split(',')[0]?.trim() : this.raw.headers.get('x-real-ip') || this.socketAddress?.address || undefined;
+    const contentTypeHeader = this.raw.headers.get(HeaderField.ContentType);
+    this.contentType = contentTypeHeader ?? undefined;
+
+    const contentLengthHeader = this.raw.headers.get(HeaderField.ContentLength);
+    this.contentLength = contentLengthHeader ? Math.floor(Number(contentLengthHeader)) : undefined;
+
+    const xff = this.raw.headers.get(HeaderField.XForwardedFor);
+    this.socketAddress = params.server.requestIP(this.raw) || undefined;
+    this.ip = xff ? xff?.split(',')[0]?.trim() : this.raw.headers.get(HeaderField.XRealIp) || this.socketAddress?.address || undefined;
+  }
+
+  /**
+   * Get the headers of the request
+   * @returns The headers of the request
+   */
+  get headers() {
+    return this.raw.headers;
   }
 
   /**

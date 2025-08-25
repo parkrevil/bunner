@@ -1,10 +1,12 @@
 {
   "compilerOptions": {
     "lib": [
-      "ESNext"
+      "ESNext",
+      "DOM"
     ],
+    "baseUrl": ".",
     "target": "ESNext",
-    "module": "Preserve",
+    "module": "ESNext",
     "moduleDetection": "force",
     "moduleResolution": "bundler",
     "verbatimModuleSyntax": true,
@@ -13,18 +15,9 @@
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
     "noImplicitAny": false,
-    "strictPropertyInitialization": false,
-    "types": [
-      "bun",
-      "node",
-    ],
-    "typeRoots": [
-      "./types",
-      "./node_modules/@types"
-    ],
+    "strictPropertyInitialization": false
   },
   "include": [
-    "./src/**/*.ts",
-    "./types/**/*.d.ts"
+    "./src/**/*.ts"
   ]
 }

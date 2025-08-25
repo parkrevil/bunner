@@ -29,7 +29,7 @@ export function RestController(path?: string, options?: RestControllerDecoratorO
  * @returns MethodDecorator
  */
 export function Get(path?: string, options?: HttpMethodDecoratorOptions): MethodDecorator {
-  return defineHttpMethodDecorator(HttpMethod.GET, path, options);
+  return defineHttpMethodDecorator(HttpMethod.Get, path, options);
 }
 
 /**
@@ -39,7 +39,7 @@ export function Get(path?: string, options?: HttpMethodDecoratorOptions): Method
  * @returns MethodDecorator
  */
 export function Post(path?: string, options?: HttpMethodDecoratorOptions): MethodDecorator {
-  return defineHttpMethodDecorator(HttpMethod.POST, path, options);
+  return defineHttpMethodDecorator(HttpMethod.Post, path, options);
 }
 
 /**
@@ -49,7 +49,7 @@ export function Post(path?: string, options?: HttpMethodDecoratorOptions): Metho
  * @returns MethodDecorator
  */
 export function Put(path?: string, options?: HttpMethodDecoratorOptions): MethodDecorator {
-  return defineHttpMethodDecorator(HttpMethod.PUT, path, options);
+  return defineHttpMethodDecorator(HttpMethod.Put, path, options);
 }
 
 /**
@@ -59,7 +59,7 @@ export function Put(path?: string, options?: HttpMethodDecoratorOptions): Method
  * @returns MethodDecorator
  */
 export function Patch(path?: string, options?: HttpMethodDecoratorOptions): MethodDecorator {
-  return defineHttpMethodDecorator(HttpMethod.PATCH, path, options);
+  return defineHttpMethodDecorator(HttpMethod.Patch, path, options);
 }
 
 /**
@@ -69,7 +69,7 @@ export function Patch(path?: string, options?: HttpMethodDecoratorOptions): Meth
  * @returns MethodDecorator
  */
 export function Delete(path?: string, options?: HttpMethodDecoratorOptions): MethodDecorator {
-  return defineHttpMethodDecorator(HttpMethod.DELETE, path, options);
+  return defineHttpMethodDecorator(HttpMethod.Delete, path, options);
 }
 
 /**
@@ -79,7 +79,7 @@ export function Delete(path?: string, options?: HttpMethodDecoratorOptions): Met
  * @returns MethodDecorator
  */
 export function Options(path?: string, options?: HttpMethodDecoratorOptions): MethodDecorator {
-  return defineHttpMethodDecorator(HttpMethod.OPTIONS, path, options);
+  return defineHttpMethodDecorator(HttpMethod.Options, path, options);
 }
 
 /**
@@ -89,7 +89,7 @@ export function Options(path?: string, options?: HttpMethodDecoratorOptions): Me
  * @returns MethodDecorator
  */
 export function Head(path?: string, options?: HttpMethodDecoratorOptions): MethodDecorator {
-  return defineHttpMethodDecorator(HttpMethod.HEAD, path, options);
+  return defineHttpMethodDecorator(HttpMethod.Head, path, options);
 }
 
 /**
