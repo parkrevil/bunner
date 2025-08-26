@@ -28,29 +28,7 @@ export class BunnerWebApplication extends BunnerApplication {
     this.router.register();
 
     this.server = Bun.serve({
-      fetch: async (rawReq: Request, server: Server) => {
-        const route = this.router.find(rawReq.method as HttpMethodValue, rawReq.url);
-
-        if (!route) {
-          return new Response('Not Found', { status: 404 });
-        }
-
-        const req = new BunnerRequest({
-          request: rawReq,
-          server,
-          params: route.params,
-          queryParams: route.searchParams,
-        });
-        const res = new BunnerResponse(req);
-
-        req.setBody(await this.bodyParser.parse(req));
-
-        const result = await RequestContext.runWithContainer(this.container.createRequestContainer() as any, () => route.handler(req, res));
-
-        return result instanceof BunnerResponse
-          ? result.toResponse()
-          : res.setBody(result).toResponse();
-      },
+      fetch: this.handleRequest.bind(this),
       ...options,
     });
   }
@@ -66,6 +44,36 @@ export class BunnerWebApplication extends BunnerApplication {
     }
 
     await this.server.stop(force);
+  }
+
+  /**
+   * Handle a request
+   * @param rawReq - The raw request
+   * @param server - The server
+   * @returns The response
+   */
+  private async handleRequest(rawReq: Request, server: Server) {
+    const route = this.router.find(rawReq.method as HttpMethodValue, rawReq.url);
+
+    if (!route) {
+      return new Response('Not Found', { status: 404 });
+    }
+
+    const req = new BunnerRequest({
+      request: rawReq,
+      server,
+      params: route.params,
+      queryParams: route.searchParams,
+    });
+    const res = new BunnerResponse(req);
+
+    req.setBody(await this.bodyParser.parse(req));
+
+    const result = await RequestContext.runWithContainer(this.container.createRequestContainer() as any, () => route.handler(req, res));
+
+    return result instanceof BunnerResponse
+      ? result.toResponse()
+      : res.setBody(result).toResponse();
   }
   /* 
     use(middleware: MiddlewareFn) {
