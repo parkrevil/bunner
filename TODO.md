@@ -1,7 +1,10 @@
 # TODO
 
-## Injector
+## Router
+### Deferred
+  - [ ] Use Rust WASM for the route matcher algorithm (Radix Tree)
 
+## Injector
 ### Deferred
 - Injector Core
   - [ ] Replace custom Injector Core with InversifyJS
@@ -12,7 +15,6 @@
   - [ ] Apply Request scope to @Injectable.
 
 ## Body Parser
-
 ### Deferred
 - In-memory storage
 - File storage
