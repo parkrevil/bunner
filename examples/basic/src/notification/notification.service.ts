@@ -1,9 +1,9 @@
-import { Inject, Injectable, forwardRef } from '../../../../src';
+import { Inject, Injectable, LazyServiceIdentifier } from '../../../../src';
 import { EmailService } from '../email';
 
 @Injectable()
 export class NotificationService {
-  constructor(@Inject(forwardRef(() => EmailService)) private readonly emailService: EmailService) { }
+  constructor(@Inject(new LazyServiceIdentifier(() => EmailService)) private readonly emailService: EmailService) { }
 
   /**
    * Send notification

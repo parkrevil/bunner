@@ -1,3 +1,4 @@
+import { decorate, injectable } from 'inversify';
 import { HttpMethod, HttpMethodDecorator, RestControllerDecorator } from './constants';
 import type { HttpMethodDecoratorMetadata, HttpMethodDecoratorOptions, RestControllerDecoratorMetadata, RestControllerDecoratorOptions } from './interfaces';
 import type { HttpMethodType } from './types';
@@ -12,6 +13,9 @@ import type { HttpMethodType } from './types';
  */
 export function RestController(path?: string, options?: RestControllerDecoratorOptions): ClassDecorator {
   return function (target: any) {
+    // Make controller injectable for Inversify without requiring explicit @injectable()
+    try { decorate(injectable(), target); } catch { }
+
     Reflect.defineMetadata(RestControllerDecorator, {
       path,
       ...options,

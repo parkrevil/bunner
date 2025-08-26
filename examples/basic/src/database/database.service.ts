@@ -1,9 +1,9 @@
-import { Inject, Injectable, forwardRef } from '../../../../src';
+import { Inject, Injectable, LazyServiceIdentifier } from '../../../../src';
 import { AuthService } from '../auth';
 
 @Injectable()
 export class DatabaseService {
-  constructor(@Inject(forwardRef(() => AuthService)) private readonly authService: AuthService) { }
+  constructor(@Inject(new LazyServiceIdentifier(() => AuthService)) private readonly authService: AuthService) { }
 
   /**
    * Get database connection

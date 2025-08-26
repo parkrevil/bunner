@@ -1,9 +1,9 @@
-import { Inject, Injectable, forwardRef } from '../../../../src';
+import { Inject, Injectable } from '../../../../src';
 import { UsersService } from '../users';
 
 @Injectable()
 export class AuthService {
-  constructor(@Inject(forwardRef(() => UsersService)) private readonly usersService: UsersService) { }
+  constructor(@Inject(Symbol.for('Factory:UsersService')) private readonly getUsersService: () => UsersService) { }
 
   /**
    * Authenticate user by ID
@@ -11,7 +11,8 @@ export class AuthService {
    * @returns Authentication result
    */
   authenticate(userId: number) {
-    const user = this.usersService.getById(userId);
+    const usersService = this.getUsersService();
+    const user = usersService.getById(userId);
     return {
       authenticated: !!user,
       user: user,

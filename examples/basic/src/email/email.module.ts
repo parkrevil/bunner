@@ -1,4 +1,4 @@
-import { Module, forwardRef } from '../../../../src';
+import { Module } from '../../../../src';
 import { CacheModule } from '../cache';
 import { EmailService } from './email.service';
 
@@ -6,7 +6,7 @@ import { EmailService } from './email.service';
  * Email module
  */
 @Module({
-  imports: [forwardRef(() => CacheModule)],
+  imports: [() => CacheModule],
   providers: [EmailService],
   exports: [EmailService],
 })

@@ -1,5 +1,4 @@
-import { container } from './core/injector';
-import type { BunnerApplication } from './interfaces';
+import type { BunnerApplication } from './bunner-application';
 import type { ClassType, CreateApplicationOptions } from './types';
 
 /**
@@ -27,10 +26,9 @@ export class Bunner {
 
     const app = new appConstructor();
 
-    container.registerModule(module);
-    await container.invokeOnModuleInit();
-
     this.apps.set(name, app);
+
+    await app.bootstrap(module);
 
     return app;
   }
@@ -72,10 +70,9 @@ export class Bunner {
    * @param force - Whether to force the applications to stop
    */
   static async shutdownAll(force = false) {
-    await Promise.all([
-      ...Array.from(this.apps.values()).map(app => app.shutdown(force)),
-      container.invokeApplicationShutdown(),
-    ]).catch(console.error);
+    const apps = Array.from(this.apps.values());
+
+    await Promise.all(apps.map(app => app.shutdown(force))).catch(console.error);
   }
 
   /**

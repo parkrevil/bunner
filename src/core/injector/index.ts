@@ -1,7 +1,7 @@
+export * from './app-container';
 export * from './constants';
-export * from './container';
 export * from './decorators';
-export * from './helpers';
-export * from './module-container';
 export * from './types';
+
+export { inject as Inject, injectable as Injectable, LazyServiceIdentifier } from 'inversify';
 

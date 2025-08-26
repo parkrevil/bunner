@@ -1,4 +1,4 @@
-import { Module, forwardRef } from '../../../../src';
+import { Module } from '../../../../src';
 import { AuthModule } from '../auth';
 import { DatabaseService } from './database.service';
 
@@ -6,7 +6,7 @@ import { DatabaseService } from './database.service';
  * Database module
  */
 @Module({
-  imports: [forwardRef(() => AuthModule)],
+  imports: [() => AuthModule],
   providers: [DatabaseService],
   exports: [DatabaseService],
 })

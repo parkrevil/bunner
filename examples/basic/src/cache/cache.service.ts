@@ -1,9 +1,9 @@
-import { Inject, Injectable, forwardRef } from '../../../../src';
+import { Inject, Injectable, LazyServiceIdentifier } from '../../../../src';
 import { DatabaseService } from '../database';
 
 @Injectable()
 export class CacheService {
-  constructor(@Inject(forwardRef(() => DatabaseService)) private readonly databaseService: DatabaseService) { }
+  constructor(@Inject(new LazyServiceIdentifier(() => DatabaseService)) private readonly databaseService: DatabaseService) { }
 
   /**
    * Get cached data

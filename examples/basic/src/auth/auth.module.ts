@@ -1,4 +1,4 @@
-import { Module, forwardRef } from '../../../../src';
+import { Module } from '../../../../src';
 import { UsersModule } from '../users';
 import { AuthService } from './auth.service';
 
@@ -6,7 +6,7 @@ import { AuthService } from './auth.service';
  * Auth module
  */
 @Module({
-  imports: [forwardRef(() => UsersModule)],
+  imports: [() => UsersModule],
   providers: [AuthService],
   exports: [AuthService],
 })

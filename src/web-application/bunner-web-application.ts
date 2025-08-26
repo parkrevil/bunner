@@ -1,18 +1,20 @@
 import type { Server } from 'bun';
 import { type BunnerWebServerStartOptions, type HttpMethodType } from '.';
-import type { BunnerApplication } from '../interfaces';
+import { BunnerApplication } from '../bunner-application';
 import { BodyParser } from './providers/body-parser';
 import { Router } from './providers/router';
 import { BunnerRequest } from './request';
 import { BunnerResponse } from './response';
 
-export class BunnerWebApplication implements BunnerApplication {
+export class BunnerWebApplication extends BunnerApplication {
   private readonly router: Router;
   private readonly bodyParser: BodyParser;
   private server: Server;
 
   constructor() {
-    this.router = new Router();
+    super();
+
+    this.router = new Router(this.container);
     this.bodyParser = new BodyParser();
   }
 

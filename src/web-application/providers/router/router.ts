@@ -1,6 +1,6 @@
 import findMyWay from 'find-my-way';
 import qs from 'qs';
-import { container } from '../../../core/injector';
+import type { AppContainer } from '../../../core/injector';
 import { HttpMethodDecorator, RestControllerDecorator } from '../../constants';
 import type { HttpMethodDecoratorMetadata, RestControllerDecoratorMetadata } from '../../interfaces';
 import type { HttpMethodType } from '../../types';
@@ -8,8 +8,11 @@ import type { RouteHandler } from './types';
 
 export class Router {
   private readonly router: findMyWay.Instance<any>;
+  private readonly appContainer: AppContainer;
 
-  constructor() {
+  constructor(container: AppContainer) {
+    this.appContainer = container;
+
     this.router = findMyWay({
       querystringParser: qs.parse,
       caseSensitive: true,
@@ -23,10 +26,10 @@ export class Router {
    * Register routes
    */
   register() {
-    const controllers = container.getControllers();
+    const controllerClasses = this.appContainer.getControllerClasses();
 
-    controllers.forEach((controllerInstance, controllerConstructor) => {
-      const controllerPrototype = Object.getPrototypeOf(controllerInstance);
+    controllerClasses.forEach((controllerConstructor) => {
+      const controllerPrototype = controllerConstructor.prototype;
       const {
         path: controllerPath = '',
         version: controllerVersion,
@@ -38,17 +41,17 @@ export class Router {
           return;
         }
 
-        const {
-          httpMethod,
-          httpStatus,
-          version: methodVersion,
-          path: methodPath,
-          document: methodDocument,
-        }: HttpMethodDecoratorMetadata = Reflect.getMetadata(HttpMethodDecorator, controllerPrototype, handlerName);
+        const httpMetadata: HttpMethodDecoratorMetadata = Reflect.getMetadata(HttpMethodDecorator, controllerPrototype, handlerName);
 
-        if (!httpMethod) {
+        if (!httpMetadata) {
           return;
         }
+
+        const {
+          httpMethod,
+          version: methodVersion,
+          path: methodPath,
+        } = httpMetadata;
 
         this.router.on(
           httpMethod,
@@ -57,7 +60,14 @@ export class Router {
             controllerPath ?? '',
             methodPath ?? '',
           ].join('/'),
-          (req, res) => controllerInstance[handlerName](req, res),
+          (req, res) => {
+            // Per-request container for Request scope
+            const requestContainer = this.appContainer.createRequestContainer();
+
+            const controller = requestContainer.get<any>(controllerConstructor);
+
+            return controller[handlerName](req, res);
+          },
         );
       });
     });

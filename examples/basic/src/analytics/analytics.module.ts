@@ -1,4 +1,4 @@
-import { Module, forwardRef } from '../../../../src';
+import { Module } from '../../../../src';
 import { NotificationModule } from '../notification';
 import { AnalyticsService } from './analytics.service';
 
@@ -6,7 +6,7 @@ import { AnalyticsService } from './analytics.service';
  * Analytics module
  */
 @Module({
-  imports: [forwardRef(() => NotificationModule)],
+  imports: [() => NotificationModule],
   providers: [AnalyticsService],
   exports: [AnalyticsService],
 })

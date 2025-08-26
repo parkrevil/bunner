@@ -1,14 +1,9 @@
-import { Inject, Injectable, forwardRef } from '../../../../src';
+import { Inject, Injectable, LazyServiceIdentifier, type OnModuleInit } from '../../../../src';
 import { AnalyticsService } from '../analytics/analytics.service';
 import { OrdersService } from '../commerce/orders/orders.service';
 
 @Injectable()
-export class UsersService {
-  constructor(
-    @Inject(forwardRef(() => AnalyticsService)) private readonly analyticsService: AnalyticsService,
-    @Inject(forwardRef(() => OrdersService)) private readonly ordersService: OrdersService,
-  ) { }
-
+export class UsersService implements OnModuleInit {
   private users = [
     {
       id: 1,
@@ -27,6 +22,15 @@ export class UsersService {
       email: 'john.smith@example.com',
     },
   ];
+
+  constructor(
+    @Inject(new LazyServiceIdentifier(() => AnalyticsService)) private readonly analyticsService: AnalyticsService,
+    @Inject(new LazyServiceIdentifier(() => OrdersService)) private readonly ordersService: OrdersService,
+  ) { }
+
+  onModuleInit() {
+    console.log('UsersService initialized');
+  }
 
   getList() {
     this.analyticsService.trackEvent(0, 'getList');

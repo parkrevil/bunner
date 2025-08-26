@@ -1,11 +1,17 @@
-import { Delete, Get, Post, RestController } from '../../../../src';
+import { Delete, Get, Inject, LazyServiceIdentifier, OnModuleInit, Post, RestController } from '../../../../src';
 import { UsersService } from './users.service';
 
 @RestController('users', {
   version: 'v1',
 })
-export class UsersController {
-  constructor(private readonly usersService: UsersService) { }
+export class UsersController implements OnModuleInit {
+  constructor(
+    @Inject(new LazyServiceIdentifier(() => UsersService)) private readonly usersService: UsersService,
+  ) { }
+
+  onModuleInit() {
+    console.log('UsersController initialized');
+  }
 
   @Get()
   getList() {

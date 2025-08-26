@@ -1,15 +1,11 @@
-import type { Constructor } from './types';
+import type { ClassType } from '../../types';
+import type { ProviderDescriptor } from './types';
+
+export type ModuleImport = ClassType | (() => ClassType);
 
 export interface ModuleMetadata {
-  providers?: Constructor[];
-  controllers?: Constructor[];
-  imports?: Array<Constructor | ForwardRef>;
-  exports?: Constructor[];
-}
-
-/**
- * ForwardRef wrapper to defer resolving circular references
- */
-export interface ForwardRef<T = any> {
-  forwardRef: () => Constructor<T>;
+  providers?: ProviderDescriptor[];
+  controllers?: ClassType[];
+  imports?: ModuleImport[];
+  exports?: ClassType[];
 }

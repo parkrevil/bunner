@@ -1,9 +1,9 @@
-import { Inject, Injectable, forwardRef } from '../../../../src';
+import { Inject, Injectable, LazyServiceIdentifier } from '../../../../src';
 import { NotificationService } from '../notification';
 
 @Injectable()
 export class AnalyticsService {
-  constructor(@Inject(forwardRef(() => NotificationService)) private readonly notificationService: any) { }
+  constructor(@Inject(new LazyServiceIdentifier(() => NotificationService)) private readonly notificationService: any) { }
 
   /**
    * Track user event

@@ -1,9 +1,9 @@
-import { Inject, Injectable, forwardRef } from '../../../../src';
+import { Inject, Injectable, LazyServiceIdentifier } from '../../../../src';
 import { CacheService } from '../cache';
 
 @Injectable()
 export class EmailService {
-  constructor(@Inject(forwardRef(() => CacheService)) private readonly cacheService: CacheService) { }
+  constructor(@Inject(new LazyServiceIdentifier(() => CacheService)) private readonly cacheService: CacheService) { }
 
   /**
    * Send email

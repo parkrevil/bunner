@@ -1,7 +1,7 @@
-import { Module, forwardRef } from '../../../../src';
+import { Module } from '../../../../src';
 import { OrdersModule } from './orders/orders.module';
 
 @Module({
-  imports: [forwardRef(() => OrdersModule)],
+  imports: [OrdersModule],
 })
 export class CommerceAppModule { }

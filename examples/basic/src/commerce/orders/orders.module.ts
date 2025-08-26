@@ -1,10 +1,10 @@
-import { Module, forwardRef } from '../../../../../src';
+import { Module } from '../../../../../src';
 import { CatalogModule } from '../catalog/catalog.module';
 import { OrdersController } from './orders.controller';
 import { OrdersService } from './orders.service';
 
 @Module({
-  imports: [forwardRef(() => CatalogModule)],
+  imports: [() => CatalogModule],
   providers: [OrdersService],
   controllers: [OrdersController],
   exports: [OrdersService, CatalogModule],
