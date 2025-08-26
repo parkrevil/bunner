@@ -5,9 +5,8 @@ import type { ClassType, CreateApplicationOptions } from './types';
  * Bunner class
  */
 export class Bunner {
-  /**
-   * The applications map
-   */
+  private static isShuttingDown = false;
+  private static signalsInitialized = false;
   static apps: Map<string, BunnerApplication> = new Map();
 
   /**
@@ -23,6 +22,9 @@ export class Bunner {
     if (this.apps.has(name)) {
       throw new Error(`Application with name "${name}" already exists`);
     }
+
+    // Register signal handlers once
+    this.setupSignalHandlers();
 
     const app = new appConstructor();
 
@@ -51,28 +53,24 @@ export class Bunner {
   }
 
   /**
-   * Shutdown an application
-   * @param name - The name of the application
-   * @param force - Whether to force the application to stop
+   * Shutdown all applications
    */
-  static async shutdownApplication(name: string, force = false) {
-    const app = this.getApplication(name);
-
-    if (!app) {
-      throw new Error(`Application with name "${name}" not found`);
+  static async shutdown() {
+    if (this.isShuttingDown) {
+      return;
     }
 
-    await app.shutdown(force);
-  }
+    this.isShuttingDown = true;
 
-  /**
-   * Shutdown all applications
-   * @param force - Whether to force the applications to stop
-   */
-  static async shutdownAll(force = false) {
     const apps = Array.from(this.apps.values());
 
-    await Promise.all(apps.map(app => app.shutdown(force))).catch(console.error);
+    await Promise.all(apps.map(async (app) => {
+      try {
+        await app.shutdown();
+      } catch (e) {
+        console.error('[Bunner] app shutdown failed:', e);
+      }
+    })).catch(console.error);
   }
 
   /**
@@ -81,5 +79,37 @@ export class Bunner {
    */
   private static generateApplicationDefaultName() {
     return `bunner--${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
+  }
+
+  /**
+   * Setup OS signal handlers (idempotent)
+   */
+  private static setupSignalHandlers() {
+    if (this.signalsInitialized) {
+      return;
+    }
+
+    const handler = async (signal: string) => {
+      let exitCode = 0;
+
+      try {
+        await Promise.race([
+          this.shutdown(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('shutdown timeout')), 10000)),
+        ]);
+      } catch (e) {
+        console.error(`[Bunner] graceful shutdown failed on ${signal}:`, e);
+
+        exitCode = 1;
+      } finally {
+        try { process.exit(exitCode); } catch { }
+      }
+    };
+
+    ['SIGINT', 'SIGTERM', 'SIGQUIT', 'SIGHUP', 'SIGUSR2'].forEach((sig) => {
+      try { process.on(sig, handler); } catch { }
+    });
+
+    this.signalsInitialized = true;
   }
 }

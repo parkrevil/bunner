@@ -59,7 +59,7 @@ export class BunnerWebApplication extends BunnerApplication {
    * @param force - Whether to force the server to close
    * @returns A promise that resolves to true if the application stopped successfully
    */
-  async shutdown(force = false) {
+  async stop(force = false) {
     if (!this.server) {
       return;
     }
@@ -71,12 +71,6 @@ export class BunnerWebApplication extends BunnerApplication {
   /* 
     use(middleware: MiddlewareFn) {
       this.middlewares.push(middleware);
-    }
-  
-    enableCors(options: CorsOptions) {
-      this.corsFn = cors(options);
-  
-      this.use(this.corsFn);
     }
   
     private addRoute(method: HttpMethodType, path: string, handler: RouteHandler) {

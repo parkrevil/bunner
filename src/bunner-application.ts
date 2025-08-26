@@ -1,5 +1,5 @@
 import { AppContainer } from './core/injector';
-import type { OnModuleInit } from './interfaces';
+import type { OnApplicationShutdown, OnModuleInit } from './interfaces';
 import type { ClassType } from './types';
 
 export abstract class BunnerApplication {
@@ -28,9 +28,14 @@ export abstract class BunnerApplication {
   /**
    * Graceful shutdown; wait until all onApplicationShutdown hooks complete.
    */
-  async teardown() {
+  async shutdown() {
+    const { providers, controllers } = await this.container.loadAndGetAllNonRequest();
+
+    await Promise.all(
+      ([this.stop(true)] as any[]).concat(providers, controllers).map((m) => (m as OnApplicationShutdown).onApplicationShutdown?.())
+    );
   }
 
   abstract start(options?: any): void | Promise<void>;
-  abstract shutdown(force?: boolean): void | Promise<void>;
+  abstract stop(force?: boolean): void | Promise<void>;
 }

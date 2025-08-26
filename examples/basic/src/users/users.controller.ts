@@ -1,4 +1,4 @@
-import type { OnModuleInit } from '../../../../src';
+import type { OnApplicationShutdown, OnModuleInit } from '../../../../src';
 import { Delete, Get, Inject, LazyServiceIdentifier, Post, RestController } from '../../../../src';
 import { FEATURE_TOKEN } from '../feature/feature.module';
 import { RequestScopedService, TransientService } from '../scope/scope.service';
@@ -7,7 +7,7 @@ import { UsersService } from './users.service';
 @RestController('users', {
   version: 'v1',
 })
-export class UsersController implements OnModuleInit {
+export class UsersController implements OnModuleInit, OnApplicationShutdown {
   constructor(
     @Inject(new LazyServiceIdentifier(() => UsersService)) private readonly usersService: UsersService,
     @Inject(FEATURE_TOKEN) private readonly feature: any,
@@ -17,6 +17,10 @@ export class UsersController implements OnModuleInit {
 
   onModuleInit() {
     console.log('UsersController initialized');
+  }
+
+  onApplicationShutdown() {
+    console.log('UsersController shutdown');
   }
 
   @Get()

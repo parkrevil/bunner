@@ -4,6 +4,6 @@ export class BunnerStandaloneApplication extends BunnerApplication {
   start(options?: any) {
   }
 
-  shutdown(force?: boolean) {
+  stop(force?: boolean) {
   }
 }
