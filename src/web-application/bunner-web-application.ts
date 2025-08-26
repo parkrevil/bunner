@@ -46,7 +46,11 @@ export class BunnerWebApplication extends BunnerApplication {
 
         const result = await RequestContext.runWithContainer(this.container.createRequestContainer() as any, () => route.handler(req, res));
 
-        return new Response(result);
+        if (result instanceof Response) {
+          return result;
+        }
+
+        return res.end(result);
       },
       ...options,
     });
