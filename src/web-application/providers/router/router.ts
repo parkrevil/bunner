@@ -61,11 +61,8 @@ export class Router {
             methodPath ?? '',
           ].join('/'),
           (req, res) => {
-            // Per-request container for Request scope
-            const requestContainer = this.appContainer.createRequestContainer();
-
-            const controller = requestContainer.get<any>(controllerConstructor);
-
+            // Resolve controller as singleton. Request-scoped services must be resolved via RequestContext within handlers.
+            const controller = this.appContainer.get<any>(controllerConstructor);
             return controller[handlerName](req, res);
           },
         );

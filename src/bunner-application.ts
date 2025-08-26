@@ -1,4 +1,5 @@
 import { AppContainer } from './core/injector';
+import type { OnModuleInit } from './interfaces';
 import type { ClassType } from './types';
 
 export abstract class BunnerApplication {
@@ -13,19 +14,13 @@ export abstract class BunnerApplication {
    * Apps should call this after registering modules and before starting servers.
    */
   async bootstrap(module: ClassType) {
-    this.container.registerModule(module);
+    await this.container.registerModule(module);
 
-    const { modules, providers, controllers } = await this.container.loadAndGetAll();
+    const { providers, controllers } = await this.container.loadAndGetAllNonRequest();
 
-    console.log('modules', modules);
-    console.log('providers', providers);
-    console.log('controllers', controllers);
-
-    await Promise.all([
-      Promise.all(modules.map(m => m.onModuleInit?.())),
-      Promise.all(providers.map(p => p.onModuleInit?.())),
-      Promise.all(controllers.map(c => c.onModuleInit?.())),
-    ]);
+    await Promise.all(
+      ([] as any[]).concat(providers, controllers).map((m) => (m as OnModuleInit).onModuleInit?.())
+    );
 
     console.log('🚀 All modules/providers/controllers initialized.');
   }

@@ -1,6 +1,7 @@
 import type { Server } from 'bun';
 import { type BunnerWebServerStartOptions, type HttpMethodType } from '.';
 import { BunnerApplication } from '../bunner-application';
+import { RequestContext } from '../core/injector/request-context';
 import { BodyParser } from './providers/body-parser';
 import { Router } from './providers/router';
 import { BunnerRequest } from './request';
@@ -43,7 +44,7 @@ export class BunnerWebApplication extends BunnerApplication {
 
         req.body = await this.bodyParser.parse(req);
 
-        const result = await route.handler(req, res);
+        const result = await RequestContext.runWithContainer(this.container.createRequestContainer() as any, () => route.handler(req, res));
 
         return new Response(result);
       },
