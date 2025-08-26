@@ -4,6 +4,13 @@ export type ProviderScope = 'Singleton' | 'Transient' | 'Request';
 
 export type ServiceIdentifier<T = any> = ClassType<T> | symbol | string;
 
+export type ModuleOrDynamic = ClassType | import('./interfaces').DynamicModule;
+
+export type ModuleImport =
+  | ModuleOrDynamic
+  | Promise<ModuleOrDynamic>
+  | (() => ModuleOrDynamic | Promise<ModuleOrDynamic>);
+
 export type ProviderDescriptor =
   | ClassType
   | {

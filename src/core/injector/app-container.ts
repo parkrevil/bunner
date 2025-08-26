@@ -51,6 +51,107 @@ export class AppContainer {
   }
 
   /**
+   * Unbind token if already bound.
+   */
+  private unbindIfBound(token: any) {
+    if (this.container.isBound(token)) {
+      this.container.unbind(token);
+    }
+  }
+
+  /**
+   * Bind factory tokens so consumers can inject factory functions for a service.
+   * Factory resolves using current ALS request container when available.
+   */
+  private bindFactoryTokensForClass(targetClass: Function, serviceToResolve: ServiceIdentifier, bind: any) {
+    const { uniq, legacy, globalRef } = this.getFactoryTokensForClass(targetClass);
+
+    const toFactory = (ctx: any) => () => {
+      const currentContainer = RequestContext.getCurrentContainer() ?? (ctx.container as InversifyContainer);
+      return currentContainer.get(serviceToResolve as any);
+    };
+
+    this.unbindIfBound(uniq);
+    (bind as any)(uniq).toFactory(toFactory);
+
+    if (!this.container.isBound(legacy)) {
+      (bind as any)(legacy).toFactory(toFactory);
+    }
+
+    if (!this.container.isBound(globalRef)) {
+      (bind as any)(globalRef).toFactory(toFactory);
+    }
+  }
+
+  /**
+   * Bind class provider as Singleton and expose factory tokens.
+   */
+  private bindClassProvider(providerClass: Function, bind: any) {
+    this.unbindIfBound(providerClass);
+
+    bind(providerClass).toSelf().inSingletonScope();
+
+    this.providerScopes.set(providerClass as unknown as ServiceIdentifier, 'Singleton');
+    this.providerClasses.add(providerClass as unknown as ServiceIdentifier);
+
+    this.bindFactoryTokensForClass(providerClass, providerClass as any, bind);
+  }
+
+  /**
+   * Bind descriptor provider (useValue/useFactory/useClass) with scope and factory tokens.
+   */
+  private bindDescriptorProvider(descriptor: Exclude<ProviderDescriptor, Function>, bind: any) {
+    const serviceIdentifier = descriptor.provide as ServiceIdentifier;
+
+    if (descriptor.useValue !== undefined) {
+      this.unbindIfBound(serviceIdentifier);
+      bind(serviceIdentifier as any).toConstantValue(descriptor.useValue);
+      this.providerScopes.set(serviceIdentifier, 'Singleton');
+      this.providerClasses.add(serviceIdentifier);
+      return;
+    }
+
+    if (descriptor.useFactory) {
+      const factory = descriptor.useFactory;
+      const injects = descriptor.inject ?? [];
+
+      this.unbindIfBound(serviceIdentifier);
+      (bind as any)(serviceIdentifier as any)
+        .toDynamicValue(async (ctx: any) => {
+          const deps = await Promise.all(injects.map((id) => (ctx.container as InversifyContainer).getAsync(id as any)));
+          return await factory(...deps);
+        })
+        .inSingletonScope();
+
+      this.providerScopes.set(serviceIdentifier, 'Singleton');
+      this.providerClasses.add(serviceIdentifier);
+      return;
+    }
+
+    const implementationClass = (descriptor.useClass ?? descriptor.provide) as Function;
+
+    this.unbindIfBound(serviceIdentifier);
+    const bindingFluent = bind(serviceIdentifier as any).to(implementationClass as any);
+
+    switch (descriptor.scope) {
+      case 'Transient':
+        bindingFluent.inTransientScope();
+        this.providerScopes.set(serviceIdentifier, 'Transient');
+        break;
+      case 'Request':
+        bindingFluent.inRequestScope();
+        this.providerScopes.set(serviceIdentifier, 'Request');
+        break;
+      default:
+        bindingFluent.inSingletonScope();
+        this.providerScopes.set(serviceIdentifier, 'Singleton');
+    }
+
+    this.providerClasses.add(serviceIdentifier);
+    this.bindFactoryTokensForClass(implementationClass, serviceIdentifier, bind);
+  }
+
+  /**
    * Register a module and its imports into the DI container.
    * Supports lazy import functions to avoid TDZ/cycles and binds
    * providers/controllers with appropriate scopes.
@@ -92,95 +193,19 @@ export class AppContainer {
       const { bind } = loadOptions;
 
       for (const providerEntry of metadata.providers ?? []) {
-        const providerDescriptor = providerEntry as ProviderDescriptor;
+        const descriptor = providerEntry as ProviderDescriptor;
 
-        if (typeof providerDescriptor === 'function') {
-          if (this.container.isBound(providerDescriptor)) {
-            this.container.unbind(providerDescriptor);
-          }
-          bind(providerDescriptor).toSelf().inSingletonScope();
-
-          this.providerScopes.set(providerDescriptor, 'Singleton');
-
-          const { uniq, legacy, globalRef } = this.getFactoryTokensForClass(providerDescriptor as any);
-          const toFactory = (ctx: any) => () => {
-            const current = RequestContext.getCurrentContainer() ?? (ctx.container as InversifyContainer);
-            return current.get(providerDescriptor);
-          };
-          if (this.container.isBound(uniq)) this.container.unbind(uniq);
-          (bind as any)(uniq).toFactory(toFactory);
-          if (!this.container.isBound(legacy)) {
-            (bind as any)(legacy).toFactory(toFactory);
-          }
-          if (!this.container.isBound(globalRef)) {
-            (bind as any)(globalRef).toFactory(toFactory);
-          }
-
-          this.providerClasses.add(providerDescriptor);
-
+        if (typeof descriptor === 'function') {
+          this.bindClassProvider(descriptor, bind);
           continue;
         }
 
-        const serviceIdentifier = providerDescriptor.provide as ServiceIdentifier;
-
-        if (providerDescriptor.useValue !== undefined) {
-          if (this.container.isBound(serviceIdentifier as any)) this.container.unbind(serviceIdentifier as any);
-          bind(serviceIdentifier as any).toConstantValue(providerDescriptor.useValue);
-          this.providerScopes.set(serviceIdentifier, 'Singleton');
-          continue;
-        }
-
-        if (providerDescriptor.useFactory) {
-          const factory = providerDescriptor.useFactory;
-          const injects = providerDescriptor.inject ?? [];
-          if (this.container.isBound(serviceIdentifier as any)) this.container.unbind(serviceIdentifier as any);
-          (bind as any)(serviceIdentifier as any).toDynamicValue(async (ctx: any) => {
-            const deps = await Promise.all(injects.map((id) => (ctx.container as InversifyContainer).getAsync(id as any)));
-            return await factory(...deps);
-          }).inSingletonScope();
-          this.providerScopes.set(serviceIdentifier, 'Singleton');
-          continue;
-        }
-
-        const implementationClass = providerDescriptor.useClass ?? (providerDescriptor.provide as any);
-        if (this.container.isBound(serviceIdentifier as any)) this.container.unbind(serviceIdentifier as any);
-        const binding = bind(serviceIdentifier as any).to(implementationClass as any);
-
-        const { uniq, legacy, globalRef } = this.getFactoryTokensForClass(implementationClass as any);
-        const toFactory = (ctx: any) => () => {
-          const current = RequestContext.getCurrentContainer() ?? (ctx.container as InversifyContainer);
-          return current.get(serviceIdentifier as any);
-        };
-        if (this.container.isBound(uniq)) this.container.unbind(uniq);
-        (bind as any)(uniq).toFactory(toFactory);
-        if (!this.container.isBound(legacy)) {
-          (bind as any)(legacy).toFactory(toFactory);
-        }
-        if (!this.container.isBound(globalRef)) {
-          (bind as any)(globalRef).toFactory(toFactory);
-        }
-
-        switch (providerDescriptor.scope) {
-          case 'Transient':
-            binding.inTransientScope();
-            this.providerScopes.set(serviceIdentifier, 'Transient');
-            break;
-          case 'Request':
-            binding.inRequestScope();
-            this.providerScopes.set(serviceIdentifier, 'Request');
-            break;
-          default:
-            binding.inSingletonScope();
-            this.providerScopes.set(serviceIdentifier, 'Singleton');
-        }
-
-        this.providerClasses.add(serviceIdentifier);
+        this.bindDescriptorProvider(descriptor as any, bind);
       }
 
       for (const controllerClass of metadata.controllers ?? []) {
-        if (this.container.isBound(controllerClass)) this.container.unbind(controllerClass);
+        this.unbindIfBound(controllerClass);
         bind(controllerClass).toSelf().inSingletonScope();
-
         this.controllerClasses.add(controllerClass);
       }
     };
