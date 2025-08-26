@@ -22,7 +22,7 @@ export abstract class BunnerApplication {
       ([] as any[]).concat(providers, controllers).map((m) => (m as OnModuleInit).onModuleInit?.())
     );
 
-    console.log('🚀 All modules/providers/controllers initialized.');
+    console.log('🚀 Application is ready.');
   }
 
   /**
@@ -31,8 +31,10 @@ export abstract class BunnerApplication {
   async shutdown() {
     const { providers, controllers } = await this.container.loadAndGetAllNonRequest();
 
+    await this.stop(true);
+
     await Promise.all(
-      ([this.stop(true)] as any[]).concat(providers, controllers).map((m) => (m as OnApplicationShutdown).onApplicationShutdown?.())
+      providers.concat(controllers).map((m) => (m as OnApplicationShutdown).onApplicationShutdown?.())
     );
   }
 

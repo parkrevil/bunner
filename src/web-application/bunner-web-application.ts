@@ -26,6 +26,7 @@ export class BunnerWebApplication extends BunnerApplication {
    */
   async start(options: BunnerWebServerStartOptions) {
     this.router.register();
+
     this.server = Bun.serve({
       fetch: async (rawReq: Request, server: Server) => {
         const route = this.router.find(rawReq.method as HttpMethodValue, rawReq.url);
@@ -42,7 +43,7 @@ export class BunnerWebApplication extends BunnerApplication {
         });
         const res = new BunnerResponse(req);
 
-        req.body = await this.bodyParser.parse(req);
+        req.setBody(await this.bodyParser.parse(req));
 
         const result = await RequestContext.runWithContainer(this.container.createRequestContainer() as any, () => route.handler(req, res));
 
@@ -63,8 +64,6 @@ export class BunnerWebApplication extends BunnerApplication {
     if (!this.server) {
       return;
     }
-
-    force && this.server.unref();
 
     await this.server.stop(force);
   }

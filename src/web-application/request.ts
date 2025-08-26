@@ -11,7 +11,7 @@ export class BunnerRequest {
   readonly contentLength: number | undefined;
   readonly ip: string | undefined;
   readonly socketAddress: SocketAddress | undefined;
-  body: any;
+  private _body: any;
 
   constructor(params: BunnerRequestConstructorParams) {
     this.raw = params.request;
@@ -59,5 +59,24 @@ export class BunnerRequest {
    */
   get family() {
     return this.socketAddress?.family;
+  }
+
+  /**
+   * Get the body of the request
+   * @returns The body of the request
+   */
+  get body() {
+    return this._body;
+  }
+
+  /**
+   * Set the body of the request
+   * @param body - The body of the request
+   * @returns The request instance
+   */
+  setBody(body: any) {
+    this._body = body;
+
+    return this;
   }
 }
