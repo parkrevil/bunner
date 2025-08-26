@@ -1,9 +1,9 @@
 import findMyWay from 'find-my-way';
 import qs from 'qs';
-import { container } from '../../core/injector';
-import { HttpMethodDecorator, RestControllerDecorator } from '../constants';
-import type { HttpMethodDecoratorMetadata, RestControllerDecoratorMetadata } from '../interfaces';
-import type { HttpMethodType } from '../types';
+import { container } from '../../../core/injector';
+import { HttpMethodDecorator, RestControllerDecorator } from '../../constants';
+import type { HttpMethodDecoratorMetadata, RestControllerDecoratorMetadata } from '../../interfaces';
+import type { HttpMethodType } from '../../types';
 import type { RouteHandler } from './types';
 
 export class Router {

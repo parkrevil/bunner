@@ -1,8 +1,8 @@
 import { StatusCodes } from 'http-status-codes';
-import { HeaderField, HttpMethod, type HttpMethodType } from 'src/web-application';
-import type { MiddlewareFn } from '../../types';
-import { BunnerRequest } from '../../web-application/request';
-import { BunnerResponse } from '../../web-application/response';
+import { HeaderField, HttpMethod } from '../../constants';
+import { BunnerRequest } from '../../request';
+import { BunnerResponse } from '../../response';
+import type { HttpMethodType, MiddlewareFn } from '../../types';
 import type { CorsOptions } from './interfaces';
 
 async function isOriginAllowed(origin: string, allowedOrigins: CorsOptions['origin']): Promise<boolean> {

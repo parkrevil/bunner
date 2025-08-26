@@ -1,7 +1,6 @@
 import { container } from './core/injector';
-import type { BunnerCreateWebApplicationOptions, IBunnerApplication } from './interfaces';
-import type { BunnerApplicationType } from './types';
-import { BunnerWebApplication } from './web-application';
+import type { BunnerApplication } from './interfaces';
+import type { ClassType, CreateApplicationOptions } from './types';
 
 /**
  * Bunner class
@@ -10,39 +9,30 @@ export class Bunner {
   /**
    * The applications map
    */
-  static apps: Map<string, IBunnerApplication> = new Map();
+  static apps: Map<string, BunnerApplication> = new Map();
 
   /**
    * Create a new Bunner application
-   * @param module - The root module class
-   * @param options - The options for the application
+   * @param type - The type of the application
    * @returns The Bunner application
    */
-  static createWebApplication(module: any, options?: BunnerCreateWebApplicationOptions) {
+  static async createApplication<T extends BunnerApplication>(appConstructor: ClassType<T>, module: ClassType<any>, options?: CreateApplicationOptions<T>) {
     const {
-      name = this.generateApplicationDefaultName('web'),
-    } = options ?? {};
+      name = this.generateApplicationDefaultName(),
+    } = options ?? {} as CreateApplicationOptions<T>;
 
     if (this.apps.has(name)) {
       throw new Error(`Application with name "${name}" already exists`);
     }
 
-    const app = new BunnerWebApplication();
+    const app = new appConstructor();
 
-    // Register the root module
     container.registerModule(module);
+    await container.invokeOnModuleInit();
 
     this.apps.set(name, app);
 
     return app;
-  }
-
-  /**
-   * Register a module with the global container
-   * @param moduleClass - The module class to register
-   */
-  static registerModule(moduleClass: any) {
-    container.registerModule(moduleClass);
   }
 
   /**
@@ -63,37 +53,36 @@ export class Bunner {
   }
 
   /**
-   * Stop an application
+   * Shutdown an application
    * @param name - The name of the application
    * @param force - Whether to force the application to stop
    */
-  static async stopApplication(name: string, force = false) {
+  static async shutdownApplication(name: string, force = false) {
     const app = this.getApplication(name);
 
     if (!app) {
       throw new Error(`Application with name "${name}" not found`);
     }
 
-    await app.stop(force);
+    await app.shutdown(force);
   }
 
   /**
-   * Delete an application
-   * @param name - The name of the application
+   * Shutdown all applications
+   * @param force - Whether to force the applications to stop
    */
-  static async deleteApplication(name: string) {
-    const app = this.getApplication(name);
-
-    if (!app) {
-      throw new Error(`Application with name "${name}" not found`);
-    }
-
-    await app.stop(true);
-
-    this.apps.delete(name);
+  static async shutdownAll(force = false) {
+    await Promise.all([
+      ...Array.from(this.apps.values()).map(app => app.shutdown(force)),
+      container.invokeApplicationShutdown(),
+    ]).catch(console.error);
   }
 
-  private static generateApplicationDefaultName(type: BunnerApplicationType) {
-    return `bunner-${type}-${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
+  /**
+   * Generate a default name for an application
+   * @returns The default name
+   */
+  private static generateApplicationDefaultName() {
+    return `bunner--${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
   }
 }

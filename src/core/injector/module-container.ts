@@ -196,6 +196,15 @@ export class ModuleContainer {
   }
 
   /**
+   * Get all registered providers
+   */
+  getProviders() {
+    // Ensure providers listed in metadata are instantiated so lifecycle hooks can run
+    (this.metadata.providers || []).forEach(p => this.registerProvider(p));
+    return this.providers;
+  }
+
+  /**
    * Get all exported providers
    */
   getExports() {

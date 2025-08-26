@@ -1,6 +1,6 @@
 import type { SocketAddress } from 'bun';
-import type { BunnerRequestConstructorParams } from '../interfaces';
 import { HeaderField } from './constants';
+import type { BunnerRequestConstructorParams } from './interfaces';
 
 export class BunnerRequest {
   readonly raw: Request;

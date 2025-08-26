@@ -1,5 +1,5 @@
 import type { BunFile } from 'bun';
-import { getObjectFromString, isUrl } from './helpers';
+import { getObjectFromString, isUrl } from '../../../helpers';
 import type { ApiDocumentBuildResult } from './interfaces';
 
 /**

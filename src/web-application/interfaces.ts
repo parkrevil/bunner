@@ -1,7 +1,16 @@
-import type { ServeOptions } from 'bun';
+import type { ServeOptions, Server } from 'bun';
 import type { StatusCodes } from 'http-status-codes';
-import type { MiddlewareFn } from '../types';
-import type { HttpMethodType } from './types';
+import type { BunnerCreateApplicationOptions } from '../interfaces';
+import type { HttpMethodType, MiddlewareFn } from './types';
+
+export interface BunnerCreateWebApplicationOptions extends BunnerCreateApplicationOptions { }
+
+export interface BunnerRequestConstructorParams {
+  request: Request;
+  server: Server;
+  params: Record<string, any>;
+  queryParams: Record<string, any>;
+}
 
 export interface RestControllerApiDocument {
   tags?: string[];
@@ -34,4 +43,4 @@ export interface HttpMethodDecoratorMetadata extends HttpMethodDecoratorOptions 
   httpMethod: HttpMethodType;
 }
 
-export interface BunnerWebServerStartOptions extends Omit<ServeOptions, 'fetch'> { }
+export interface BunnerWebServerStartOptions extends Omit<ServeOptions, 'fetch' | 'error'> { }

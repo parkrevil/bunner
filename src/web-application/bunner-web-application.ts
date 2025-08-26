@@ -1,20 +1,19 @@
-import { BunnerWebServer, type BunnerWebServerStartOptions } from '.';
-import { container } from '../core/injector';
-import type { IBunnerApplication } from '../interfaces';
+import type { Server } from 'bun';
+import { type BunnerWebServerStartOptions, type HttpMethodType } from '.';
+import type { BunnerApplication } from '../interfaces';
+import { BodyParser } from './providers/body-parser';
+import { Router } from './providers/router';
+import { BunnerRequest } from './request';
+import { BunnerResponse } from './response';
 
-export class BunnerWebApplication implements IBunnerApplication {
-  private readonly server: BunnerWebServer;
+export class BunnerWebApplication implements BunnerApplication {
+  private readonly router: Router;
+  private readonly bodyParser: BodyParser;
+  private server: Server;
 
   constructor() {
-    this.server = new BunnerWebServer();
-  }
-
-  /**
-   * Register a module with the application
-   * @param moduleClass - The module class to register
-   */
-  registerModule(moduleClass: any) {
-    container.registerModule(moduleClass);
+    this.router = new Router();
+    this.bodyParser = new BodyParser();
   }
 
   /**
@@ -22,8 +21,32 @@ export class BunnerWebApplication implements IBunnerApplication {
    * @param options - The options for the web application
    * @returns A promise that resolves to true if the application started successfully
    */
-  start(options: BunnerWebServerStartOptions) {
-    this.server.start(options);
+  async start(options: BunnerWebServerStartOptions) {
+    this.router.register();
+    this.server = Bun.serve({
+      fetch: async (rawReq: Request, server: Server) => {
+        const route = this.router.find(rawReq.method as HttpMethodType, rawReq.url);
+
+        if (!route) {
+          return new Response('Not Found', { status: 404 });
+        }
+
+        const req = new BunnerRequest({
+          request: rawReq,
+          server,
+          params: route.params,
+          queryParams: route.searchParams,
+        });
+        const res = new BunnerResponse();
+
+        req.body = await this.bodyParser.parse(req);
+
+        const result = await route.handler(req, res);
+
+        return new Response(result);
+      },
+      ...options,
+    });
   }
 
   /**
@@ -31,7 +54,13 @@ export class BunnerWebApplication implements IBunnerApplication {
    * @param force - Whether to force the server to close
    * @returns A promise that resolves to true if the application stopped successfully
    */
-  async stop(force = false) {
+  async shutdown(force = false) {
+    if (!this.server) {
+      return;
+    }
+
+    force && this.server.unref();
+
     await this.server.stop(force);
   }
   /* 

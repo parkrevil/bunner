@@ -1,3 +1,4 @@
+import type { OnApplicationShutdown, OnModuleInit } from '../../interfaces';
 import { InjectDecorator, ModuleDecorator } from './constants';
 import { isConstructor, isForwardRef } from './helpers';
 import type { ModuleMetadata } from './interfaces';
@@ -51,6 +52,50 @@ export class Container {
     module.initialize();
 
     return module;
+  }
+
+  private async invokeModuleInit(module: ModuleContainer) {
+    const controllers = module.getControllers();
+    for (const instance of controllers.values()) {
+      if (typeof (instance as any).onModuleInit === 'function') {
+        await (instance as unknown as OnModuleInit).onModuleInit();
+      }
+    }
+
+    const providers = module.getProviders();
+    for (const instance of providers.values()) {
+      if (typeof (instance as any).onModuleInit === 'function') {
+        await (instance as unknown as OnModuleInit).onModuleInit();
+      }
+    }
+  }
+
+  /**
+   * Invoke onModuleInit across all registered modules
+   */
+  async invokeOnModuleInit() {
+    for (const module of this.modules.values()) {
+      await this.invokeModuleInit(module);
+    }
+  }
+
+  async invokeApplicationShutdown(signal?: string | number) {
+    // Iterate over all modules and call onApplicationShutdown if present
+    for (const module of this.modules.values()) {
+      const controllers = module.getControllers();
+      for (const instance of controllers.values()) {
+        if (typeof (instance as any).onApplicationShutdown === 'function') {
+          await (instance as unknown as OnApplicationShutdown).onApplicationShutdown(signal);
+        }
+      }
+
+      const providers = module.getProviders();
+      for (const instance of providers.values()) {
+        if (typeof (instance as any).onApplicationShutdown === 'function') {
+          await (instance as unknown as OnApplicationShutdown).onApplicationShutdown(signal);
+        }
+      }
+    }
   }
 
   /**
