@@ -1,7 +1,7 @@
 import type { ServeOptions, Server } from 'bun';
 import type { StatusCodes } from 'http-status-codes';
 import type { BunnerCreateApplicationOptions } from '../interfaces';
-import type { HttpMethodType, MiddlewareFn } from './types';
+import type { HttpMethodValue, MiddlewareFn } from './types';
 
 export interface BunnerCreateWebApplicationOptions extends BunnerCreateApplicationOptions { }
 
@@ -40,7 +40,7 @@ export interface HttpMethodDecoratorOptions {
 
 export interface HttpMethodDecoratorMetadata extends HttpMethodDecoratorOptions {
   path?: string;
-  httpMethod: HttpMethodType;
+  httpMethod: HttpMethodValue;
 }
 
 export interface BunnerWebServerStartOptions extends Omit<ServeOptions, 'fetch' | 'error'> { }

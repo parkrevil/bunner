@@ -2,7 +2,7 @@ import { StatusCodes } from 'http-status-codes';
 import { HeaderField, HttpMethod } from '../../constants';
 import { BunnerRequest } from '../../request';
 import { BunnerResponse } from '../../response';
-import type { HttpMethodType, MiddlewareFn } from '../../types';
+import type { HttpMethodValue, MiddlewareFn } from '../../types';
 import type { CorsOptions } from './interfaces';
 
 async function isOriginAllowed(origin: string, allowedOrigins: CorsOptions['origin']): Promise<boolean> {
@@ -57,12 +57,12 @@ export function cors(options: CorsOptions): MiddlewareFn {
 
     if (!await isOriginAllowed(requestOrigin, origin)) {
       errorCode = StatusCodes.FORBIDDEN;
-    } else if (!isPreflight && !methods.includes(method as HttpMethodType)) {
+    } else if (!isPreflight && !methods.includes(method as HttpMethodValue)) {
       errorCode = StatusCodes.METHOD_NOT_ALLOWED;
     }
 
     if (!!errorCode) {
-      return res.setHeader(HeaderField.AccessControlAllowOrigin, 'https://not-allowed.com').setStatus(errorCode).end();
+      return res.setHeader(HeaderField.AccessControlAllowOrigin, 'https://not-allowed.com').setStatus(errorCode).toResponse();
     }
 
     res.setHeader(HeaderField.Vary, 'Origin');
@@ -84,7 +84,7 @@ export function cors(options: CorsOptions): MiddlewareFn {
           [HeaderField.AccessControlMaxAge]: maxAge.toString(),
         })
         .setStatus(optionsSuccessStatus)
-        .end();
+        .toResponse();
     }
 
     if (normalizedExposedHeaders.length) {

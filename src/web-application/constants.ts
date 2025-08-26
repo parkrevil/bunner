@@ -26,7 +26,7 @@ export const ContentType = {
   Text: 'text/plain',
   Html: 'text/html',
   Css: 'text/css',
-  JS: 'application/javascript',
+  Javascript: 'application/javascript',
   FormUrlencoded: 'application/x-www-form-urlencoded',
   MultipartFormData: 'multipart/form-data',
   OctetStream: 'application/octet-stream',
@@ -46,4 +46,5 @@ export const HeaderField = {
   AccessControlAllowHeaders: 'access-control-allow-headers',
   AccessControlMaxAge: 'access-control-max-age',
   AccessControlExposeHeaders: 'access-control-expose-headers',
+  ContentDisposition: 'content-disposition',
 } as const;

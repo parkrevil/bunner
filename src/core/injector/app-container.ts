@@ -214,22 +214,6 @@ export class AppContainer {
   }
 
   /**
-   * Return module classes without resolving instances (avoid eager DI/cycles).
-   * @returns module classes
-   */
-  getModuleClasses() {
-    return Array.from(this.moduleClasses);
-  }
-
-  /**
-   * Return provider classes without resolving instances (avoid eager DI/cycles).
-   * @returns provider classes
-   */
-  getProviderClasses() {
-    return Array.from(this.providerClasses);
-  }
-
-  /**
    * Return controller classes without resolving instances (avoid eager DI/cycles).
    * @returns controller classes
    */
@@ -243,8 +227,7 @@ export class AppContainer {
    * @returns The service.
    */
   async loadAndGetAllNonRequest() {
-    const providerIds = this.getProviderClasses().filter(id => this.providerScopes.get(id) !== 'Request');
-
+    const providerIds = Array.from(this.providerClasses).filter(id => this.providerScopes.get(id) !== 'Request');
     const [providerInstances, controllerInstances] = await Promise.all([
       Promise.all(providerIds.map(r => this.container.getAsync(r as any).catch(() => undefined))),
       Promise.all(this.getControllerClasses().map(r => this.container.getAsync(r).catch(() => undefined))),
@@ -254,10 +237,6 @@ export class AppContainer {
       providers: providerInstances.filter(Boolean),
       controllers: controllerInstances.filter(Boolean),
     };
-  }
-
-  getProviderEntries() {
-    return Array.from(this.providerClasses).map(id => ({ id, scope: this.providerScopes.get(id) as ProviderScope }));
   }
 
   /**

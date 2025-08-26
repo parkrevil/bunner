@@ -3,7 +3,7 @@ import qs from 'qs';
 import type { AppContainer } from '../../../core/injector';
 import { HttpMethodDecorator, RestControllerDecorator } from '../../constants';
 import type { HttpMethodDecoratorMetadata, RestControllerDecoratorMetadata } from '../../interfaces';
-import type { HttpMethodType } from '../../types';
+import type { HttpMethodValue } from '../../types';
 import type { RouteHandler } from './types';
 
 export class Router {
@@ -76,7 +76,7 @@ export class Router {
    * @param path - The path of the request
    * @returns The route
    */
-  find(method: HttpMethodType, path: string) {
+  find(method: HttpMethodValue, path: string) {
     const route = this.router.find(method, path);
 
     if (!route) {

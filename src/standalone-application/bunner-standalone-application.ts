@@ -1,6 +1,6 @@
-import type { BunnerApplication } from '../interfaces';
+import { BunnerApplication } from '../bunner-application';
 
-export class BunnerStandaloneApplication implements BunnerApplication {
+export class BunnerStandaloneApplication extends BunnerApplication {
   start(options?: any) {
   }
 

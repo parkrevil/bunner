@@ -1,7 +1,7 @@
 import { decorate, injectable } from 'inversify';
 import { HttpMethod, HttpMethodDecorator, RestControllerDecorator } from './constants';
 import type { HttpMethodDecoratorMetadata, HttpMethodDecoratorOptions, RestControllerDecoratorMetadata, RestControllerDecoratorOptions } from './interfaces';
-import type { HttpMethodType } from './types';
+import type { HttpMethodValue } from './types';
 
 /**
  * Class Decorators
@@ -103,7 +103,7 @@ export function Head(path?: string, options?: HttpMethodDecoratorOptions): Metho
  * @param options - Route options
  * @returns MethodDecorator
  */
-function defineHttpMethodDecorator(httpMethod: HttpMethodType, path?: string, options?: HttpMethodDecoratorOptions): MethodDecorator {
+function defineHttpMethodDecorator(httpMethod: HttpMethodValue, path?: string, options?: HttpMethodDecoratorOptions): MethodDecorator {
   return function (target: any, propertyKey: string | symbol) {
     Reflect.defineMetadata(HttpMethodDecorator, {
       httpMethod,

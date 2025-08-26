@@ -1,5 +1,5 @@
 import type { Server } from 'bun';
-import { type BunnerWebServerStartOptions, type HttpMethodType } from '.';
+import { type BunnerWebServerStartOptions, type HttpMethodValue } from '.';
 import { BunnerApplication } from '../bunner-application';
 import { RequestContext } from '../core/injector/request-context';
 import { BodyParser } from './providers/body-parser';
@@ -28,7 +28,7 @@ export class BunnerWebApplication extends BunnerApplication {
     this.router.register();
     this.server = Bun.serve({
       fetch: async (rawReq: Request, server: Server) => {
-        const route = this.router.find(rawReq.method as HttpMethodType, rawReq.url);
+        const route = this.router.find(rawReq.method as HttpMethodValue, rawReq.url);
 
         if (!route) {
           return new Response('Not Found', { status: 404 });
@@ -40,17 +40,15 @@ export class BunnerWebApplication extends BunnerApplication {
           params: route.params,
           queryParams: route.searchParams,
         });
-        const res = new BunnerResponse();
+        const res = new BunnerResponse(req);
 
         req.body = await this.bodyParser.parse(req);
 
         const result = await RequestContext.runWithContainer(this.container.createRequestContainer() as any, () => route.handler(req, res));
 
-        if (result instanceof Response) {
-          return result;
-        }
-
-        return res.end(result);
+        return result instanceof BunnerResponse
+          ? result.toResponse()
+          : res.setBody(result).toResponse();
       },
       ...options,
     });

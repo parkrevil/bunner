@@ -1,26 +1,22 @@
 import { getReasonPhrase, StatusCodes } from 'http-status-codes';
-import { isObject } from '../helpers';
-import { ContentType, HeaderField } from './constants';
-import type { ContentTypeType } from './types';
+import { ContentType, HeaderField, HttpMethod } from './constants';
+import type { BunnerRequest } from './request';
+import type { ContentTypeValue } from './types';
 
 export class BunnerResponse {
+  private readonly req: BunnerRequest;
   private _body: any;
   private _headers: Headers;
-  private _status = StatusCodes.OK;
-  private _statusText = getReasonPhrase(StatusCodes.OK);
-  private _response: Response;
+  private _status;
+  private _statusText;
 
-  constructor() {
+  constructor(req: BunnerRequest) {
+    this.req = req;
     this._headers = new Headers();
-    this._status = StatusCodes.OK;
   }
 
-  get status() {
+  getStatus() {
     return this._status;
-  }
-
-  get body() {
-    return this._body;
   }
 
   setStatus(status: StatusCodes, statusText?: string) {
@@ -61,49 +57,21 @@ export class BunnerResponse {
   }
 
   getContentType() {
-    return this.getHeader(HeaderField.ContentType);
+    return this.getHeader(HeaderField.ContentType) as ContentTypeValue | undefined;
   }
 
-  setContentType(contentType: ContentTypeType) {
-    this.setHeader(HeaderField.ContentType, contentType);
+  setContentType(contentType: ContentTypeValue, charset?: string) {
+    this.setHeader(HeaderField.ContentType, `${contentType}${charset ? `; charset=${charset}` : ''}`);
 
     return this;
   }
 
-  /**
-   * For express-like syntax
-   * Set the content type of the response
-   * @param contentType - The content type to set
-   * @returns The response object
-   */
-  type(contentType: ContentTypeType) {
-    this.setContentType(contentType);
-
-    return this;
+  getBody() {
+    return this._body;
   }
 
   setBody(data: any) {
-    if (this._body) {
-      return;
-    }
-
-    const contentType = this.getContentType();
-
-    if (contentType) {
-      this._body = data;
-    } else if (isObject(data)) {
-      this.setHeader(HeaderField.ContentType, ContentType.Json);
-      this._body = data;
-    } else {
-      this.setHeader(HeaderField.ContentType, ContentType.Text);
-      this._body = data ?? '';
-    }
-
-    return this;
-  }
-
-  setResponse(response: Response) {
-    this._response = response;
+    this._body = data ?? '';
 
     return this;
   }
@@ -114,39 +82,101 @@ export class BunnerResponse {
     return this;
   }
 
-  send(data?: any) {
-    this.setBody(data);
-
-    return this;
-  }
-
-  end(data?: any) {
-    if (data !== undefined) {
-      this.setBody(data);
-    }
-
-    return this.build();
-  }
-
-  private build() {
-    if (this._response) {
-      return this._response;
-    }
-
+  toResponse() {
     const location = this.getHeader(HeaderField.Location);
-    const contentType = this.getHeader(HeaderField.ContentType);
-    const responseInit: ResponseInit = {
+
+    if (location) {
+      if (!this._status) {
+        this.setStatus(StatusCodes.MOVED_PERMANENTLY);
+      }
+
+      return new Response(undefined, this.makeResponseInit());
+    }
+
+    let contentType = this.getContentType();
+
+    if (!contentType) {
+      contentType = this.inferContentType();
+
+      const needsCharset =
+        contentType.startsWith('text/') ||
+        contentType === ContentType.Json ||
+        contentType === ContentType.Javascript;
+
+      this.setContentType(contentType, needsCharset ? 'utf-8' : undefined);
+    }
+
+    if (this.req.method === HttpMethod.Head) {
+      if (!this._status) {
+        this.setStatus(StatusCodes.OK);
+      }
+
+      return new Response(undefined, this.makeResponseInit());
+    }
+
+    if (this._status === StatusCodes.NO_CONTENT || this._status === StatusCodes.NOT_MODIFIED) {
+      return new Response(undefined, this.makeResponseInit());
+    }
+
+    if (!this._status && (this._body === null || this._body === undefined)) {
+      this.setStatus(StatusCodes.NO_CONTENT);
+
+      return new Response(undefined, this.makeResponseInit());
+    }
+
+    if (contentType === ContentType.Json) {
+      try {
+        return Response.json(this._body, this.makeResponseInit());
+      } catch {
+        this.setContentType(ContentType.Text, 'utf-8');
+
+        return new Response(String(this._body), this.makeResponseInit());
+      }
+    }
+
+    if (this._body && typeof this._body?.name === 'string' && !this.getHeader(HeaderField.ContentDisposition)) {
+      const filename = this._body.name;
+
+      this.setHeader(HeaderField.ContentDisposition, `attachment; filename="${filename}"`);
+
+      return new Response(this._body, this.makeResponseInit());
+    }
+
+    return new Response(this._body, this.makeResponseInit());
+  }
+
+  /**
+   * Infer content type based on current body value.
+   */
+  private inferContentType(): ContentTypeValue {
+    if (typeof this._body === 'string') {
+      return ContentType.Text as ContentTypeValue;
+    }
+
+    if (this._body instanceof Blob) {
+      return ((this._body as Blob).type || ContentType.OctetStream) as ContentTypeValue;
+    }
+
+    if (this._body instanceof ArrayBuffer || this._body instanceof Uint8Array) {
+      return ContentType.OctetStream as ContentTypeValue;
+    }
+
+    if (typeof ReadableStream !== 'undefined' && this._body instanceof ReadableStream) {
+      return ContentType.OctetStream as ContentTypeValue;
+    }
+
+    if (this._body !== null && (typeof this._body === 'object' || typeof this._body === 'number' || typeof this._body === 'boolean')) {
+      return ContentType.Json as ContentTypeValue;
+    }
+
+    return ContentType.Text as ContentTypeValue;
+  }
+
+  private makeResponseInit() {
+    return {
       status: this._status,
       statusText: this._statusText,
       headers: this._headers,
-    };
-
-    if (location) {
-      return Response.redirect(location);
-    } else if (contentType === ContentType.Json) {
-      return Response.json(this.body, responseInit);
-    }
-
-    return new Response(this.body, responseInit);
+    } as ResponseInit;
   }
 }
