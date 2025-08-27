@@ -28,6 +28,7 @@ export const HeaderField = {
   CacheControl: 'cache-control',
   XForwardedFor: 'x-forwarded-for',
   XRealIp: 'x-real-ip',
+  RequestId: 'x-request-id',
   Origin: 'origin',
   AcceptEncoding: 'accept-encoding',
   Vary: 'vary',

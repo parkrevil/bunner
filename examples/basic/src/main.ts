@@ -2,6 +2,7 @@ import { Bunner, BunnerWebApplication } from '../../../src';
 import { bodyParser } from '../../../src/web-application/middlewares/body-parser/body-parser';
 import { compress } from '../../../src/web-application/middlewares/compress';
 import { cors } from '../../../src/web-application/middlewares/cors';
+import { requestId } from '../../../src/web-application/middlewares/request-id';
 import { AppModule } from './app.module';
 import { authCheck, delay, log, shortCircuit, throwError, timeEnd, timeStart } from './core/middlewares/log.middleware';
 
@@ -12,6 +13,7 @@ async function bootstrap() {
 
   webApp.addGlobalMiddlewares({
     onRequest: [
+      requestId(),
       cors({ origin: true, credentials: true, exposedHeaders: ['X-Request-Id'] }),
       log('global.onRequest'), [timeStart('req'), timeEnd('req')]
     ],
