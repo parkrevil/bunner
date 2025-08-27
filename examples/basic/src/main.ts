@@ -1,4 +1,5 @@
 import { Bunner, BunnerWebApplication } from '../../../src';
+import { Logger } from '../../../src/providers/logger';
 import { bodyParser } from '../../../src/web-application/middlewares/body-parser/body-parser';
 import { compress } from '../../../src/web-application/middlewares/compress';
 import { cors } from '../../../src/web-application/middlewares/cors';
@@ -11,6 +12,9 @@ async function bootstrap() {
   const webApp = await Bunner.createApplication(BunnerWebApplication, AppModule, {
     name: 'basic-app'
   });
+
+  const logger = new Logger('main');
+  logger.info('Starting Bunner basic application...');
 
   webApp.addGlobalMiddlewares({
     onRequest: [
@@ -55,7 +59,7 @@ async function bootstrap() {
 
   setInterval(() => {
     const mem = process.memoryUsage();
-    console.log(
+    logger.info(
       `[메모리 사용량] rss: ${(mem.rss / 1024 / 1024).toFixed(2)}MB, heapTotal: ${(mem.heapTotal / 1024 / 1024).toFixed(2)}MB, heapUsed: ${(mem.heapUsed / 1024 / 1024).toFixed(2)}MB`
     );
   }, 1000);

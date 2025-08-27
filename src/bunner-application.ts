@@ -38,13 +38,13 @@ export abstract class BunnerApplication {
     );
   }
 
-  abstract start(options?: any): void | Promise<void>;
-  abstract stop(force?: boolean): void | Promise<void>;
-
   /**
    * Resolve a dependency from the root container.
    */
   get<T>(id: any): T {
     return this.container.get<T>(id);
   }
+
+  abstract start(options?: any): void | Promise<void>;
+  abstract stop(force?: boolean): void | Promise<void>;
 }
