@@ -2,7 +2,6 @@ import type { Server } from 'bun';
 import { type BunnerWebServerStartOptions, type HttpMethodValue } from '.';
 import { BunnerApplication } from '../bunner-application';
 import { RequestContext } from '../core/injector';
-import { BodyParser } from './providers/body-parser';
 import type { MiddlewareContext } from './providers/middleware';
 import { type GlobalMiddlewareOptions, type RouteMiddlewareOptions, MiddlewareProvider } from './providers/middleware';
 import { RouterProvider } from './providers/router';
@@ -12,7 +11,6 @@ import { BunnerResponse } from './response';
 export class BunnerWebApplication extends BunnerApplication {
   private readonly routerProvider: RouterProvider;
   private readonly middlewareProvider: MiddlewareProvider;
-  private readonly bodyParser: BodyParser;
   private server: Server;
 
   constructor() {
@@ -20,7 +18,6 @@ export class BunnerWebApplication extends BunnerApplication {
 
     this.middlewareProvider = new MiddlewareProvider();
     this.routerProvider = new RouterProvider(this.container, this.middlewareProvider);
-    this.bodyParser = new BodyParser();
   }
 
   /**
@@ -70,8 +67,6 @@ export class BunnerWebApplication extends BunnerApplication {
       queryParams: route.searchParams,
     });
     const res = new BunnerResponse(req);
-
-    req.setBody(await this.bodyParser.parse(req));
 
     const ctx: MiddlewareContext = {
       req,

@@ -1,4 +1,5 @@
 import { Bunner, BunnerWebApplication } from '../../../src';
+import { bodyParser } from '../../../src/web-application';
 import { AppModule } from './app.module';
 import { authCheck, delay, log, shortCircuit, throwError, timeEnd, timeStart } from './core/middlewares/log.middleware';
 
@@ -10,7 +11,7 @@ async function bootstrap() {
   // Global middlewares
   webApp.addGlobalMiddlewares({
     onRequest: [log('global.onRequest'), [timeStart('req'), timeEnd('req')]],
-    beforeHandler: [authCheck(), log('global.before')],
+    beforeHandler: [bodyParser(['json']), authCheck(), log('global.before')],
     afterHandler: [[delay('global.after.g1', 50), delay('global.after.g2', 30)], log('global.after')],
     afterResponse: [log('global.afterResponse')],
   });
