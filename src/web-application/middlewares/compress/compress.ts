@@ -1,7 +1,7 @@
 import compressible from 'compressible';
 import { StatusCodes } from 'http-status-codes';
 import { brotliCompressSync as nodeBrotliCompressSync, constants as zlibConstants } from 'zlib';
-import { ContentType, HeaderField } from '../../constants';
+import { ContentType, HeaderField, textEncoder } from '../../constants';
 import type { Middleware } from '../../providers/middleware';
 import { CompressAlgorithm, ETagAlgorithm } from './constants';
 import type { AcceptCacheValue, CompressOptions } from './interfaces';
@@ -106,7 +106,7 @@ export function compress(options: CompressOptions = {}): Middleware {
     let input: Uint8Array | undefined;
 
     if (typeof body === 'string') {
-      input = getTextEncoder().encode(body);
+      input = textEncoder.encode(body);
     } else if (body instanceof Uint8Array) {
       input = body;
     } else if (body instanceof ArrayBuffer) {
@@ -167,14 +167,6 @@ export function compress(options: CompressOptions = {}): Middleware {
       }
     }
   };
-}
-
-function getTextEncoder() {
-  if (!encoder) {
-    encoder = new TextEncoder();
-  }
-
-  return encoder;
 }
 
 function parseAcceptEncoding(header: string) {

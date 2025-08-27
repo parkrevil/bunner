@@ -1,3 +1,5 @@
+export const textEncoder = new TextEncoder();
+
 export const Protocol = {
   Http: 'http',
   Https: 'https',

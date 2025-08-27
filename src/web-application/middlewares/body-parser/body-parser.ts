@@ -1,5 +1,7 @@
-import { ContentType } from '../../constants';
+import { StatusCodes } from 'http-status-codes';
+import { ContentType, textEncoder } from '../../constants';
 import type { Middleware } from '../../providers/middleware';
+import type { BodyParserOptions } from './interfaces';
 import type { BodyType } from './types';
 
 const BODY_TYPE: Record<BodyType, { test: (ct: string | undefined) => boolean; parse: (raw: Request) => Promise<any> }> = {
@@ -33,8 +35,9 @@ const BODY_TYPE: Record<BodyType, { test: (ct: string | undefined) => boolean; p
   },
 };
 
-export function bodyParser(allowed: BodyType[]): Middleware {
+export function bodyParser(allowed: BodyType[], options: BodyParserOptions = {}): Middleware {
   const pipelines = allowed.map((type) => BODY_TYPE[type]);
+  const maxBytes = typeof options.maxBytes === 'number' && options.maxBytes > 0 ? options.maxBytes : undefined;
 
   return async (req, res) => {
     if (!req.raw.body) {
@@ -43,8 +46,12 @@ export function bodyParser(allowed: BodyType[]): Middleware {
 
     const contentType = req.contentType;
 
+    if (maxBytes && typeof req.contentLength === 'number' && req.contentLength > maxBytes) {
+      return res.setStatus(StatusCodes.REQUEST_TOO_LONG);
+    }
+
     if (pipelines.length === 0) {
-      return res.setStatus(415);
+      return res.setStatus(StatusCodes.UNSUPPORTED_MEDIA_TYPE);
     }
 
     for (let i = 0; i < pipelines.length; i++) {
@@ -55,7 +62,29 @@ export function bodyParser(allowed: BodyType[]): Middleware {
           continue;
         }
 
-        req.setBody(await entry.parse(req.raw));
+        const parsed = await entry.parse(req.raw);
+
+        if (maxBytes) {
+          let size = 0;
+
+          if (typeof parsed === 'string') {
+            size = textEncoder.encode(parsed).byteLength;
+          } else if (parsed instanceof Blob) {
+            size = parsed.size;
+          } else if (parsed instanceof ArrayBuffer) {
+            size = parsed.byteLength;
+          } else if (parsed instanceof Uint8Array) {
+            size = parsed.byteLength;
+          } else {
+            size = JSON.stringify(parsed).length;
+          }
+
+          if (size > maxBytes) {
+            return res.setStatus(StatusCodes.REQUEST_TOO_LONG);
+          }
+        }
+
+        req.setBody(parsed);
 
         return;
       } catch (e) {
@@ -63,7 +92,7 @@ export function bodyParser(allowed: BodyType[]): Middleware {
       }
     }
 
-    return res.setStatus(415);
+    return res.setStatus(StatusCodes.UNSUPPORTED_MEDIA_TYPE);
   };
 }
 
