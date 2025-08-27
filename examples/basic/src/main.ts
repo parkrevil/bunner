@@ -51,13 +51,12 @@ async function bootstrap() {
     port: 5000,
   });
 
-  /* 
-    setInterval(() => {
-      const mem = process.memoryUsage();
-      console.log(
-        `[메모리 사용량] rss: ${(mem.rss / 1024 / 1024).toFixed(2)}MB, heapTotal: ${(mem.heapTotal / 1024 / 1024).toFixed(2)}MB, heapUsed: ${(mem.heapUsed / 1024 / 1024).toFixed(2)}MB`
-      );
-    }, 1000); */
+  setInterval(() => {
+    const mem = process.memoryUsage();
+    console.log(
+      `[메모리 사용량] rss: ${(mem.rss / 1024 / 1024).toFixed(2)}MB, heapTotal: ${(mem.heapTotal / 1024 / 1024).toFixed(2)}MB, heapUsed: ${(mem.heapUsed / 1024 / 1024).toFixed(2)}MB`
+    );
+  }, 1000);
 }
 
 bootstrap();
