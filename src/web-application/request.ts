@@ -11,12 +11,16 @@ export class BunnerRequest {
   readonly contentLength: number | undefined;
   readonly ip: string | undefined;
   readonly socketAddress: SocketAddress | undefined;
+  readonly path: string;
   private _body: any;
 
   constructor(params: BunnerRequestConstructorParams) {
     this.raw = params.request;
     this.params = params.params;
     this.query = params.queryParams;
+
+    const url = new URL(this.raw.url);
+    this.path = url.pathname;
 
     const contentTypeHeader = this.raw.headers.get(HeaderField.ContentType);
     this.contentType = contentTypeHeader ?? undefined;

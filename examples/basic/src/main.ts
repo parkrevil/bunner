@@ -1,9 +1,32 @@
 import { Bunner, BunnerWebApplication } from '../../../src';
 import { AppModule } from './app.module';
+import { authCheck, delay, log, shortCircuit, throwError, timeEnd, timeStart } from './core/middlewares/log.middleware';
 
 async function bootstrap() {
   const webApp = await Bunner.createApplication(BunnerWebApplication, AppModule, {
     name: 'basic-app'
+  });
+
+  // Global middlewares
+  webApp.addGlobalMiddlewares({
+    onRequest: [log('global.onRequest'), [timeStart('req'), timeEnd('req')]],
+    beforeHandler: [authCheck(), log('global.before')],
+    afterHandler: [[delay('global.after.g1', 50), delay('global.after.g2', 30)], log('global.after')],
+    afterResponse: [log('global.afterResponse')],
+  });
+
+  // Route(glob/regex) middlewares
+  webApp.addRouteMiddlewares({
+    beforeHandler: {
+      '/users/**': log('route.glob.before'),
+      're:^/users/\\d+$': log('route.regex.before'),
+      're:^/users/short$': shortCircuit('route.short', { short: true }),
+    },
+    afterHandler: {
+      '/users/**': log('route.glob.after'),
+      're:^/users/\\d+$': log('route.regex.after'),
+      're:^/users/error$': throwError('route.after.error'),
+    },
   });
 
   await webApp.start({
@@ -11,13 +34,13 @@ async function bootstrap() {
     port: 5000,
   });
 
-
-  setInterval(() => {
-    const mem = process.memoryUsage();
-    console.log(
-      `[메모리 사용량] rss: ${(mem.rss / 1024 / 1024).toFixed(2)}MB, heapTotal: ${(mem.heapTotal / 1024 / 1024).toFixed(2)}MB, heapUsed: ${(mem.heapUsed / 1024 / 1024).toFixed(2)}MB`
-    );
-  }, 1000);
+  /* 
+    setInterval(() => {
+      const mem = process.memoryUsage();
+      console.log(
+        `[메모리 사용량] rss: ${(mem.rss / 1024 / 1024).toFixed(2)}MB, heapTotal: ${(mem.heapTotal / 1024 / 1024).toFixed(2)}MB, heapUsed: ${(mem.heapUsed / 1024 / 1024).toFixed(2)}MB`
+      );
+    }, 1000); */
 }
 
 bootstrap();

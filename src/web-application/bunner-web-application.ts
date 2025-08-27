@@ -1,21 +1,25 @@
 import type { Server } from 'bun';
 import { type BunnerWebServerStartOptions, type HttpMethodValue } from '.';
 import { BunnerApplication } from '../bunner-application';
-import { RequestContext } from '../core/injector/request-context';
+import { RequestContext } from '../core/injector';
+import type { MiddlewareContext } from './interfaces';
 import { BodyParser } from './providers/body-parser';
-import { Router } from './providers/router';
+import { type GlobalMiddlewareOptions, type RouteMiddlewareOptions, MiddlewareProvider } from './providers/middleware';
+import { RouterProvider } from './providers/router';
 import { BunnerRequest } from './request';
 import { BunnerResponse } from './response';
 
 export class BunnerWebApplication extends BunnerApplication {
-  private readonly router: Router;
+  private readonly routerProvider: RouterProvider;
+  private readonly middlewareProvider: MiddlewareProvider;
   private readonly bodyParser: BodyParser;
   private server: Server;
 
   constructor() {
     super();
 
-    this.router = new Router(this.container);
+    this.middlewareProvider = new MiddlewareProvider();
+    this.routerProvider = new RouterProvider(this.container, this.middlewareProvider);
     this.bodyParser = new BodyParser();
   }
 
@@ -25,7 +29,7 @@ export class BunnerWebApplication extends BunnerApplication {
    * @returns A promise that resolves to true if the application started successfully
    */
   async start(options: BunnerWebServerStartOptions) {
-    this.router.register();
+    this.routerProvider.register();
 
     this.server = Bun.serve({
       fetch: this.handleRequest.bind(this),
@@ -53,7 +57,7 @@ export class BunnerWebApplication extends BunnerApplication {
    * @returns The response
    */
   private async handleRequest(rawReq: Request, server: Server) {
-    const route = this.router.find(rawReq.method as HttpMethodValue, rawReq.url);
+    const route = this.routerProvider.find(rawReq.method as HttpMethodValue, rawReq.url);
 
     if (!route) {
       return new Response('Not Found', { status: 404 });
@@ -69,181 +73,77 @@ export class BunnerWebApplication extends BunnerApplication {
 
     req.setBody(await this.bodyParser.parse(req));
 
-    const result = await RequestContext.runWithContainer(this.container.createRequestContainer() as any, () => route.handler(req, res));
+    const ctx: MiddlewareContext = {
+      req,
+      res,
+      path: req.path,
+    };
 
-    return result instanceof BunnerResponse
-      ? result.toResponse()
-      : res.setBody(result).toResponse();
+    const isBunnerResponse = (value: any): boolean => !!value && typeof value.toResponse === 'function';
+    const finalizeEarly = async (value: any) => {
+      const response = (value as any).toResponse();
+      await this.middlewareProvider.executePhase(ctx, 'afterResponse', ctx.path);
+      return response;
+    };
+
+    console.log('******************* onRequest');
+    try {
+      const onRequestResult = await this.middlewareProvider.executePhase(ctx, 'onRequest', ctx.path);
+      if (isBunnerResponse(onRequestResult)) {
+        return await finalizeEarly(onRequestResult);
+      }
+    } catch {
+      try { await this.middlewareProvider.executePhase(ctx, 'afterResponse', ctx.path); } catch { }
+      return new Response('Internal Server Error', { status: 500 });
+    }
+
+    console.log('******************* beforeHandler');
+    try {
+      const beforeHandlerResult = await this.middlewareProvider.executePhase(ctx, 'beforeHandler', ctx.path);
+      if (isBunnerResponse(beforeHandlerResult)) {
+        return await finalizeEarly(beforeHandlerResult);
+      }
+    } catch {
+      try { await this.middlewareProvider.executePhase(ctx, 'afterResponse', ctx.path); } catch { }
+      return new Response('Internal Server Error', { status: 500 });
+    }
+
+    console.log('******************* handler');
+    try {
+      const precomputed = this.middlewareProvider.getPhaseMap(route.originalHandler) || { onRequest: [], beforeHandler: [], afterHandler: [], afterResponse: [] };
+
+      if (precomputed.beforeHandler?.length) {
+        const early = await this.middlewareProvider.executeGroups(ctx, 'beforeHandler', precomputed.beforeHandler);
+        if (isBunnerResponse(early)) {
+          return await finalizeEarly(early);
+        }
+      }
+
+      const result = await RequestContext.runWithContainer(this.container.createRequestContainer() as any, () => route.handler(req, res));
+
+      if (precomputed.afterHandler?.length) {
+        await this.middlewareProvider.executeGroups(ctx, 'afterHandler', [...precomputed.afterHandler].reverse());
+      }
+
+      console.log('******************* afterHandler');
+      await this.middlewareProvider.executePhase(ctx, 'afterHandler', ctx.path);
+      await this.middlewareProvider.executePhase(ctx, 'afterResponse', ctx.path);
+
+      return result instanceof BunnerResponse
+        ? result.toResponse()
+        : res.setBody(result).toResponse();
+    } catch (e) {
+      console.log('******************* afterResponse');
+      try { await this.middlewareProvider.executePhase(ctx, 'afterResponse', ctx.path); } catch { }
+      return new Response('Internal Server Error', { status: 500 });
+    }
   }
-  /* 
-    use(middleware: MiddlewareFn) {
-      this.middlewares.push(middleware);
-    }
-  
-    private addRoute(method: HttpMethodType, path: string, handler: RouteHandler) {
-      let methods = this.routes.get(path);
-  
-      if (!methods) {
-        methods = new Map();
-        methods.set(method, handler);
-  
-        this.routes.set(path, methods);
-  
-        return;
-      }
-  
-      if (methods.has(method)) {
-        throw new Error(`Duplicate route detected: [${method}] ${path}`);
-      }
-  
-      methods.set(method, handler);
-    }
-  
-    async static(urlPath: string, filePath: string, options: StaticOptions = {}) {
-      this.staticRoutes.set(urlPath, { filePath, ...options });
-    }
-  
-    private toBunRoutes() {
-      const routes: Record<string, BunRouteValue> = {};
-  
-      this.routes.forEach((methods, path) => {
-        const methodHandlers: Record<string, BunRouteHandler> = {};
-  
-        if (!!this.corsFn && !methods.has(HttpMethod.Options)) {
-          this.addRoute(HttpMethod.Options, path, () => { });
-        }
-  
-        methods.forEach((handler, method) => {
-          methodHandlers[method] = async (bunReq: BunRequest, server: Server) => {
-            const req = await BunnerRequest.fromBunRequest(bunReq, server);
-            const res = new BunnerResponse();
-  
-            for (const middleware of this.middlewares) {
-              const result = await new Promise<any>(async (resolve, reject) => {
-                const r = await middleware(req, res, () => resolve(undefined)).catch(reject);
-  
-                resolve(r);
-              });
-  
-              if (result instanceof Response) {
-                return result;
-              }
-            }
-  
-            if (handler instanceof Response) {
-              return handler;
-            }
-  
-            const result = await handler(req, res);
-  
-            if (result instanceof Response) {
-              res.setResponse(result);
-            } else if (result !== undefined) {
-              res.setBody(result);
-            }
-  
-            return res.end();
-          };
-        });
-  
-        routes[path] = methodHandlers;
-      });
-  
-      const notFound = new Response(ReasonPhrases.NOT_FOUND, { status: StatusCodes.NOT_FOUND });
-  
-      routes['/*'] = async (bunReq, server) => {
-        const res = new BunnerResponse();
-  
-        if (this.corsFn) {
-          const corsResult = await this.corsFn(bunReq, res, () => { });
-  
-          if (corsResult instanceof Response) {
-            return corsResult;
-          }
-        }
-  
-        return notFound;
-      };
-  
-      return routes;
-    }
-  
-    private toBunStaticRoutes() {
-      const routes: Record<string, BunRouteValue> = {};
-      const forbiddenResponse = new Response(ReasonPhrases.FORBIDDEN, { status: StatusCodes.FORBIDDEN });
-      const makeHandler = (urlPath: string, config: StaticConfig): BunRouteHandler => {
-        return async (bunReq: BunRequest) => {
-          try {
-            const parsed = new URL(bunReq.url);
-            const path = parsed.pathname;
-            const relativePath = path.replace(urlPath ?? '', '').replace(this.staticPathFilter, '');
-            const file = Bun.file(config.filePath + '/' + relativePath);
-            const stat = await file.stat();
-  
-            if (stat.isFile()) {
-              return new Response(file);
-            }
-  
-            if (config.index === false) {
-              return forbiddenResponse;
-            }
-  
-            const indexes = Array.isArray(config.index) ? config.index : [config.index ?? 'index.html'];
-  
-            for (const index of indexes) {
-              try {
-                const indexFile = Bun.file(config.filePath + '/' + relativePath + '/' + index);
-                const indexStat = await indexFile.stat();
-  
-                if (indexStat.isFile()) {
-                  return new Response(indexFile);
-                }
-              } catch (e) {
-                continue;
-              }
-            }
-  
-            return forbiddenResponse;
-          } catch (e) {
-            return new Response(ReasonPhrases.NOT_FOUND, { status: StatusCodes.NOT_FOUND });
-          }
-        };
-      }
-  
-      for (const [urlPath, staticConfig] of Array.from(this.staticRoutes)) {
-        const handler = makeHandler(urlPath, staticConfig);
-  
-        routes[urlPath] = { GET: handler };
-        routes[urlPath.replace(/\/$/, '') + '/*'] = { GET: handler };
-      }
-  
-      return routes;
-    }
-  
-    async enableApiDocument(path: string, value: string, options?: ApiDocumentOptions) {
-      const { useTemplate = true } = options || {};
-      const { spec: text, parsedSpec, fileType } = await this.apiDocumentBuilder.build(value);
-      const filteredPath = '/' + path.replace(this.staticPathFilter, '').replace(/\/$/, '');
-      const specPath = `${filteredPath}/spec.${fileType}`;
-  
-      this.get(specPath, () => new Response(text, {
-        headers: {
-          [HeaderField.CONTENT_TYPE]: fileType === 'json' ? ContentType.JSON : ContentType.YAML,
-          [HeaderField.CONTENT_LENGTH]: text.length.toString(),
-        },
-      }));
-  
-      if (!useTemplate) {
-        return;
-      }
-  
-      const template = await this.apiDocumentBuilder.getTemplate(parsedSpec, specPath);
-  
-      this.get(filteredPath, () => new Response(template, {
-        headers: {
-          [HeaderField.CONTENT_TYPE]: ContentType.HTML,
-          [HeaderField.CONTENT_LENGTH]: template.length.toString(),
-        },
-      }));
-    } */
+
+  addGlobalMiddlewares(options: GlobalMiddlewareOptions) {
+    this.middlewareProvider.addGlobalMiddlewares(options);
+  }
+
+  addRouteMiddlewares(options: RouteMiddlewareOptions) {
+    this.middlewareProvider.addRouteMiddlewares(options);
+  }
 }

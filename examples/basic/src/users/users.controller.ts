@@ -1,11 +1,15 @@
 import type { OnApplicationShutdown, OnModuleInit } from '../../../../src';
 import { Delete, Get, Inject, LazyServiceIdentifier, Post, RestController } from '../../../../src';
+import { log } from '../core/middlewares/log.middleware';
 import { FEATURE_TOKEN } from '../feature/feature.module';
 import { RequestScopedService, TransientService } from '../scope/scope.service';
 import { UsersService } from './users.service';
 
 @RestController('users', {
-  version: 'v1',
+  middlewares: {
+    beforeHandler: [log('controller.before')],
+    afterHandler: [log('controller.after')],
+  }
 })
 export class UsersController implements OnModuleInit, OnApplicationShutdown {
   constructor(
@@ -23,7 +27,12 @@ export class UsersController implements OnModuleInit, OnApplicationShutdown {
     console.log('UsersController shutdown');
   }
 
-  @Get()
+  @Get('/', {
+    middlewares: {
+      beforeHandler: [[log('handler.before.a'), log('handler.before.b')]],
+      afterHandler: [[log('handler.after.a'), log('handler.after.b')]],
+    },
+  })
   getList() {
     const req1 = this.getRequestSvc();
     const req2 = this.getRequestSvc();
@@ -39,7 +48,10 @@ export class UsersController implements OnModuleInit, OnApplicationShutdown {
   }
 
   @Get(':id', {
-    version: 'v2',
+    middlewares: {
+      beforeHandler: [log('handler.before.getById')],
+      afterHandler: [log('handler.after.getById')],
+    }
   })
   getById() {
     return this.usersService.getById(1);
@@ -53,5 +65,15 @@ export class UsersController implements OnModuleInit, OnApplicationShutdown {
   @Delete(':id')
   delete() {
     return this.usersService.delete(1);
+  }
+
+  @Get('short')
+  getShort() {
+    return { short: false };
+  }
+
+  @Get('error')
+  getError() {
+    return { ok: true };
   }
 }

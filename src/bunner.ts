@@ -23,7 +23,6 @@ export class Bunner {
       throw new Error(`Application with name "${name}" already exists`);
     }
 
-    // Register signal handlers once
     this.setupSignalHandlers();
 
     const app = new appConstructor();

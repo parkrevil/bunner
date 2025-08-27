@@ -1,7 +1,7 @@
 import type { ServeOptions, Server } from 'bun';
-import type { StatusCodes } from 'http-status-codes';
 import type { BunnerCreateApplicationOptions } from '../interfaces';
-import type { HttpMethodValue, MiddlewareFn } from './types';
+import type { BunnerRequest } from './request';
+import type { BunnerResponse } from './response';
 
 export interface BunnerCreateWebApplicationOptions extends BunnerCreateApplicationOptions { }
 
@@ -21,26 +21,10 @@ export interface HttpMethodApiDocument {
   description?: string;
 }
 
-export interface RestControllerDecoratorOptions {
-  version?: string;
-  document?: RestControllerApiDocument;
-  middlewares?: MiddlewareFn;
-}
-
-export interface RestControllerDecoratorMetadata extends RestControllerDecoratorOptions {
-  path?: string;
-}
-
-export interface HttpMethodDecoratorOptions {
-  httpStatus?: StatusCodes;
-  version?: string;
-  document?: HttpMethodApiDocument;
-  middlewares?: MiddlewareFn;
-}
-
-export interface HttpMethodDecoratorMetadata extends HttpMethodDecoratorOptions {
-  path?: string;
-  httpMethod: HttpMethodValue;
-}
-
 export interface BunnerWebServerStartOptions extends Omit<ServeOptions, 'fetch' | 'error'> { }
+
+export interface MiddlewareContext {
+  req: BunnerRequest;
+  res: BunnerResponse;
+  path: string;
+}

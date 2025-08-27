@@ -1,13 +1,4 @@
 /**
- * Decorator Symbols
- */
-// Class Decorators
-export const RestControllerDecorator = Symbol('rest-controller');
-
-// Controller Method Decorators
-export const HttpMethodDecorator = Symbol('http-method');
-
-/**
  * HTTP Methods
  */
 export const HttpMethod = {
