@@ -1,6 +1,6 @@
 import type { OnApplicationShutdown, OnModuleInit } from '../../../../src';
 import { Delete, Get, Inject, LazyServiceIdentifier, Post, RestController } from '../../../../src';
-import { log } from '../core/middlewares/log.middleware';
+import { log, userGuard } from '../core/middlewares/log.middleware';
 import { FEATURE_TOKEN } from '../feature/feature.module';
 import { RequestScopedService, TransientService } from '../scope/scope.service';
 import { UsersService } from './users.service';
@@ -49,12 +49,19 @@ export class UsersController implements OnModuleInit, OnApplicationShutdown {
 
   @Get(':id', {
     middlewares: {
-      beforeHandler: [log('handler.before.getById')],
+      beforeHandler: [userGuard(), log('handler.before.getById')],
       afterHandler: [log('handler.after.getById')],
     }
   })
-  getById() {
-    return this.usersService.getById(1);
+  getById(req: any) {
+    const userFromGuard = req.getCustomData?.('user');
+    if (userFromGuard) {
+      console.log(userFromGuard);
+      return userFromGuard;
+    }
+
+    const id = Number(req?.params?.id ?? 0);
+    return this.usersService.getById(id);
   }
 
   @Post('')

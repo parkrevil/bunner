@@ -2,8 +2,8 @@ import type { Server } from 'bun';
 import { type BunnerWebServerStartOptions, type HttpMethodValue } from '.';
 import { BunnerApplication } from '../bunner-application';
 import { RequestContext } from '../core/injector';
-import type { MiddlewareContext } from './interfaces';
 import { BodyParser } from './providers/body-parser';
+import type { MiddlewareContext } from './providers/middleware';
 import { type GlobalMiddlewareOptions, type RouteMiddlewareOptions, MiddlewareProvider } from './providers/middleware';
 import { RouterProvider } from './providers/router';
 import { BunnerRequest } from './request';
@@ -77,6 +77,7 @@ export class BunnerWebApplication extends BunnerApplication {
       req,
       res,
       path: req.path,
+      app: this,
     };
 
     const isBunnerResponse = (value: any): boolean => !!value && typeof value.toResponse === 'function';

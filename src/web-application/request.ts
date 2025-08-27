@@ -13,6 +13,7 @@ export class BunnerRequest {
   readonly socketAddress: SocketAddress | undefined;
   readonly path: string;
   private _body: any;
+  private readonly _customData: Map<string, any> = new Map<string, any>();
 
   constructor(params: BunnerRequestConstructorParams) {
     this.raw = params.request;
@@ -82,5 +83,26 @@ export class BunnerRequest {
     this._body = body;
 
     return this;
+  }
+
+  /**
+   * Attach arbitrary data to the request lifecycle.
+   * @param key - The key to store the value under.
+   * @param value - The value to store.
+   * @returns The request instance.
+   */
+  setCustomData<TValue>(key: string, value: TValue) {
+    this._customData.set(key, value);
+
+    return this;
+  }
+
+  /**
+   * Retrieve previously stored custom data from the request.
+   * @param key - The key of the value to retrieve.
+   * @returns The stored value or undefined.
+   */
+  getCustomData<TValue>(key: string): TValue | undefined {
+    return this._customData.get(key) as TValue | undefined;
   }
 }

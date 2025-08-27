@@ -110,12 +110,8 @@ export class MiddlewareProvider {
   }
 
   private validateMiddleware(middleware: Middleware) {
-    if (!middleware || typeof middleware !== 'object') {
-      throw new MiddlewareValidationError('Invalid middleware: expected object');
-    }
-
-    if (typeof middleware.run !== 'function') {
-      throw new MiddlewareValidationError('Invalid middleware: missing run() function');
+    if (typeof middleware !== 'function') {
+      throw new MiddlewareValidationError('Invalid middleware: expected function(req, res, app)');
     }
   }
 
@@ -147,7 +143,7 @@ export class MiddlewareProvider {
 
   private async runGroup(context: MiddlewareContext, _phase: MiddlewarePhase, group: MiddlewareGroup) {
     const callHook = async (middleware: Middleware) => {
-      const hookResult = await middleware.run(context.req, context.res);
+      const hookResult = await middleware(context.req, context.res, context.app);
 
       if (this.isBunnerResponse(hookResult)) {
         return { response: hookResult };

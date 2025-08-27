@@ -1,7 +1,5 @@
 import type { ServeOptions, Server } from 'bun';
 import type { BunnerCreateApplicationOptions } from '../interfaces';
-import type { BunnerRequest } from './request';
-import type { BunnerResponse } from './response';
 
 export interface BunnerCreateWebApplicationOptions extends BunnerCreateApplicationOptions { }
 
@@ -23,8 +21,4 @@ export interface HttpMethodApiDocument {
 
 export interface BunnerWebServerStartOptions extends Omit<ServeOptions, 'fetch' | 'error'> { }
 
-export interface MiddlewareContext {
-  req: BunnerRequest;
-  res: BunnerResponse;
-  path: string;
-}
+// moved: see providers/middleware/interfaces.ts

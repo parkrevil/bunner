@@ -6,13 +6,20 @@ export interface MiddlewareContext {
   req: BunnerRequest;
   res: BunnerResponse;
   path: string;
+  app: AppRef;
 }
 
 export type MiddlewarePhase = 'onRequest' | 'beforeHandler' | 'afterHandler' | 'afterResponse';
 
-export interface Middleware {
-  run: (req: BunnerRequest, res: BunnerResponse) => BunnerResponse | void | Promise<BunnerResponse | void>;
+export interface AppRef {
+  get<T>(id: any): T;
 }
+
+export type Middleware = (
+  req: BunnerRequest,
+  res: BunnerResponse,
+  app: AppRef
+) => BunnerResponse | void | Promise<BunnerResponse | void>;
 
 export interface GlobalMiddlewareOptions extends Partial<GlobalMiddlewareRegistry> { }
 
