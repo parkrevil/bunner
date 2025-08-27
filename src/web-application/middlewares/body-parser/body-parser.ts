@@ -1,14 +1,6 @@
 import { ContentType } from '../../constants';
 import type { Middleware } from '../../providers/middleware';
-
-export type BodyType =
-  | 'json'
-  | 'text'
-  | 'form-urlencoded'
-  | 'multipart-formdata'
-  | 'octet-stream'
-  | 'arraybuffer'
-  | 'blob';
+import type { BodyType } from './types';
 
 const BODY_TYPE: Record<BodyType, { test: (ct: string | undefined) => boolean; parse: (raw: Request) => Promise<any> }> = {
   json: {

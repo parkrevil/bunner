@@ -69,8 +69,6 @@ export class MiddlewareProvider {
     return this.phaseMap.get(handler);
   }
 
-  // No httpMethod-based keys; matching is path-only per requirements
-
   /**
    * Register route-matching middlewares for before/after handler phases.
    * Pattern supports OR between glob and regex-like (re:/.../ or /.../).

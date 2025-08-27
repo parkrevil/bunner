@@ -1,5 +1,6 @@
 import { Bunner, BunnerWebApplication } from '../../../src';
 import { bodyParser } from '../../../src/web-application/middlewares/body-parser/body-parser';
+import { compress } from '../../../src/web-application/middlewares/compress';
 import { cors } from '../../../src/web-application/middlewares/cors';
 import { AppModule } from './app.module';
 import { authCheck, delay, log, shortCircuit, throwError, timeEnd, timeStart } from './core/middlewares/log.middleware';
@@ -9,18 +10,27 @@ async function bootstrap() {
     name: 'basic-app'
   });
 
-  // Global middlewares
   webApp.addGlobalMiddlewares({
     onRequest: [
       cors({ origin: true, credentials: true, exposedHeaders: ['X-Request-Id'] }),
       log('global.onRequest'), [timeStart('req'), timeEnd('req')]
     ],
     beforeHandler: [bodyParser(['json', 'multipart-formdata']), authCheck(), log('global.before')],
-    afterHandler: [[delay('global.after.g1', 50), delay('global.after.g2', 30)], log('global.after')],
+    afterHandler: [
+      compress({
+        thresholds: {
+          thresholdBytes: 0,
+          minRatio: 0.8,
+          smallStringBytes: 0,
+          sampleBytes: 0,
+        },
+      }),
+      [delay('global.after.g1', 50), delay('global.after.g2', 30)],
+      log('global.after')
+    ],
     afterResponse: [log('global.afterResponse')],
   });
 
-  // Route(glob/regex) middlewares
   webApp.addRouteMiddlewares({
     beforeHandler: {
       '/users/**': log('route.glob.before'),

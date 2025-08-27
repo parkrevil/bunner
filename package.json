@@ -38,6 +38,7 @@
     "test": "bun test --watch"
   },
   "dependencies": {
+    "compressible": "^2.0.18",
     "find-my-way": "^9.3.0",
     "http-status-codes": "^2.3.0",
     "inversify": "^7.9.0",
@@ -48,6 +49,7 @@
   },
   "devDependencies": {
     "@types/bun": "^1.2.0",
+    "@types/compressible": "^2.0.3",
     "@types/picomatch": "^4.0.2",
     "typescript": "^5"
   }

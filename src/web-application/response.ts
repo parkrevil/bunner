@@ -9,6 +9,7 @@ export class BunnerResponse {
   private _headers: Headers;
   private _status;
   private _statusText;
+  private _built = false;
 
   constructor(req: BunnerRequest) {
     this.req = req;
@@ -56,6 +57,12 @@ export class BunnerResponse {
     return this;
   }
 
+  removeHeader(name: string) {
+    this._headers.delete(name);
+
+    return this;
+  }
+
   getContentType() {
     return this.getHeader(HeaderField.ContentType) as ContentTypeValue | undefined;
   }
@@ -82,15 +89,20 @@ export class BunnerResponse {
     return this;
   }
 
-  toResponse() {
+  build() {
+    if (this._built) {
+      return this;
+    }
+
     const location = this.getHeader(HeaderField.Location);
 
     if (location) {
       if (!this._status) {
         this.setStatus(StatusCodes.MOVED_PERMANENTLY);
       }
-
-      return new Response(undefined, this.makeResponseInit());
+      this._body = undefined;
+      this._built = true;
+      return this;
     }
 
     let contentType = this.getContentType();
@@ -111,37 +123,51 @@ export class BunnerResponse {
         this.setStatus(StatusCodes.OK);
       }
 
-      return new Response(undefined, this.makeResponseInit());
+      this._body = undefined;
+      this._built = true;
+
+      return this;
     }
 
     if (this._status === StatusCodes.NO_CONTENT || this._status === StatusCodes.NOT_MODIFIED) {
-      return new Response(undefined, this.makeResponseInit());
+      this._body = undefined;
+      this._built = true;
+
+      return this;
     }
 
     if (!this._status && (this._body === null || this._body === undefined)) {
       this.setStatus(StatusCodes.NO_CONTENT);
+      this._body = undefined;
+      this._built = true;
 
-      return new Response(undefined, this.makeResponseInit());
+      return this;
     }
 
-    if (contentType === ContentType.Json) {
+    if (contentType === ContentType.Json && typeof this._body !== 'string' && !(this._body instanceof Uint8Array) && !(this._body instanceof ArrayBuffer)) {
       try {
-        return Response.json(this._body, this.makeResponseInit());
+        this._body = JSON.stringify(this._body);
       } catch {
         this.setContentType(ContentType.Text, 'utf-8');
 
-        return new Response(String(this._body), this.makeResponseInit());
+        this._body = String(this._body);
       }
     }
 
-    if (this._body && typeof this._body?.name === 'string' && !this.getHeader(HeaderField.ContentDisposition)) {
-      const filename = this._body.name;
-
-      this.setHeader(HeaderField.ContentDisposition, `attachment; filename="${filename}"`);
-
-      return new Response(this._body, this.makeResponseInit());
+    if (contentType.startsWith('text/') && typeof this._body !== 'string') {
+      this._body = String(this._body);
     }
 
+    if (this._body && typeof (this._body as any)?.name === 'string' && !this.getHeader(HeaderField.ContentDisposition)) {
+      this.setHeader(HeaderField.ContentDisposition, `attachment; filename="${(this._body as any).name}"`);
+    }
+
+    this._built = true;
+
+    return this;
+  }
+
+  toResponse() {
     return new Response(this._body, this.makeResponseInit());
   }
 

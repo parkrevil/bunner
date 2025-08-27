@@ -1,6 +1,3 @@
-/**
- * HTTP Methods
- */
 export const HttpMethod = {
   Get: 'GET',
   Post: 'POST',
@@ -27,10 +24,14 @@ export const HeaderField = {
   Location: 'location',
   ContentType: 'content-type',
   ContentLength: 'content-length',
+  ContentEncoding: 'content-encoding',
+  CacheControl: 'cache-control',
   XForwardedFor: 'x-forwarded-for',
   XRealIp: 'x-real-ip',
   Origin: 'origin',
+  AcceptEncoding: 'accept-encoding',
   Vary: 'vary',
+  ETag: 'etag',
   AccessControlAllowOrigin: 'access-control-allow-origin',
   AccessControlAllowCredentials: 'access-control-allow-credentials',
   AccessControlAllowMethods: 'access-control-allow-methods',
@@ -40,4 +41,6 @@ export const HeaderField = {
   ContentDisposition: 'content-disposition',
   AccessControlRequestMethod: 'access-control-request-method',
   AccessControlRequestHeaders: 'access-control-request-headers',
+  NoCompress: 'x-no-compress',
+  Range: 'range',
 } as const;

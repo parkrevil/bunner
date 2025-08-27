@@ -2,7 +2,7 @@ import type { Server } from 'bun';
 import { type BunnerWebServerStartOptions, type HttpMethodValue } from '.';
 import { BunnerApplication } from '../bunner-application';
 import { RequestContext } from '../core/injector';
-import type { MiddlewareContext } from './providers/middleware';
+import type { MiddlewareContext, PhaseMiddlewareMap } from './providers/middleware';
 import { type GlobalMiddlewareOptions, type RouteMiddlewareOptions, MiddlewareProvider } from './providers/middleware';
 import { RouterProvider } from './providers/router';
 import { BunnerRequest } from './request';
@@ -67,70 +67,78 @@ export class BunnerWebApplication extends BunnerApplication {
       queryParams: route.searchParams,
     });
     const res = new BunnerResponse(req);
-
     const ctx: MiddlewareContext = {
       req,
       res,
       path: req.path,
       app: this,
     };
+    const finalizeEarly = async (res: BunnerResponse) => {
+      res.build();
 
-    const isBunnerResponse = (value: any): boolean => !!value && typeof value.toResponse === 'function';
-    const finalizeEarly = async (value: any) => {
-      const response = (value as any).toResponse();
       await this.middlewareProvider.executePhase(ctx, 'afterResponse', ctx.path);
-      return response;
+
+      return res.toResponse();
     };
 
-    console.log('******************* onRequest');
     try {
       const onRequestResult = await this.middlewareProvider.executePhase(ctx, 'onRequest', ctx.path);
-      if (isBunnerResponse(onRequestResult)) {
-        return await finalizeEarly(onRequestResult);
+
+      if (onRequestResult instanceof BunnerResponse) {
+        return finalizeEarly(onRequestResult);
       }
     } catch {
-      try { await this.middlewareProvider.executePhase(ctx, 'afterResponse', ctx.path); } catch { }
+      finalizeEarly(res);
+
       return new Response('Internal Server Error', { status: 500 });
     }
 
-    console.log('******************* beforeHandler');
     try {
       const beforeHandlerResult = await this.middlewareProvider.executePhase(ctx, 'beforeHandler', ctx.path);
-      if (isBunnerResponse(beforeHandlerResult)) {
-        return await finalizeEarly(beforeHandlerResult);
+      if (beforeHandlerResult instanceof BunnerResponse) {
+        return finalizeEarly(beforeHandlerResult);
       }
     } catch {
-      try { await this.middlewareProvider.executePhase(ctx, 'afterResponse', ctx.path); } catch { }
+      finalizeEarly(res);
+
       return new Response('Internal Server Error', { status: 500 });
     }
 
-    console.log('******************* handler');
     try {
-      const precomputed = this.middlewareProvider.getPhaseMap(route.originalHandler) || { onRequest: [], beforeHandler: [], afterHandler: [], afterResponse: [] };
+      const precomputed: PhaseMiddlewareMap = this.middlewareProvider.getPhaseMap(route.originalHandler) || {
+        onRequest: [],
+        beforeHandler: [],
+        afterHandler: [],
+        afterResponse: [],
+      };
 
       if (precomputed.beforeHandler?.length) {
         const early = await this.middlewareProvider.executeGroups(ctx, 'beforeHandler', precomputed.beforeHandler);
-        if (isBunnerResponse(early)) {
-          return await finalizeEarly(early);
+
+        if (early instanceof BunnerResponse) {
+          return finalizeEarly(early);
         }
       }
 
       const result = await RequestContext.runWithContainer(this.container.createRequestContainer() as any, () => route.handler(req, res));
 
-      if (precomputed.afterHandler?.length) {
-        await this.middlewareProvider.executeGroups(ctx, 'afterHandler', [...precomputed.afterHandler].reverse());
+      if (!(result instanceof BunnerResponse)) {
+        res.setBody(result);
       }
 
-      console.log('******************* afterHandler');
+      res.build();
+
+      if (precomputed.afterHandler?.length) {
+        await this.middlewareProvider.executeGroups(ctx, 'afterHandler', precomputed.afterHandler.reverse());
+      }
+
       await this.middlewareProvider.executePhase(ctx, 'afterHandler', ctx.path);
       await this.middlewareProvider.executePhase(ctx, 'afterResponse', ctx.path);
 
-      return result instanceof BunnerResponse
-        ? result.toResponse()
-        : res.setBody(result).toResponse();
+      return res.toResponse();
     } catch (e) {
-      console.log('******************* afterResponse');
-      try { await this.middlewareProvider.executePhase(ctx, 'afterResponse', ctx.path); } catch { }
+      finalizeEarly(res);
+
       return new Response('Internal Server Error', { status: 500 });
     }
   }
