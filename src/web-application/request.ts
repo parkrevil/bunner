@@ -1,17 +1,18 @@
 import type { SocketAddress } from 'bun';
 import { HeaderField } from './constants';
 import type { BunnerRequestConstructorParams } from './interfaces';
+import type { ProtocolValue } from './types';
 
 export class BunnerRequest {
   readonly raw: Request;
-  readonly params: Record<string, any>;
-  readonly queryParams: Record<string, any>;
-  readonly query: Record<string, string>;
+  readonly protocol: ProtocolValue;
+  readonly path: string;
   readonly contentType: string | undefined;
   readonly contentLength: number | undefined;
+  readonly params: Record<string, any>;
+  readonly query: Record<string, string>;
   readonly ip: string | undefined;
   readonly socketAddress: SocketAddress | undefined;
-  readonly path: string;
   private _body: any;
   private readonly _customData: Map<string, any> = new Map<string, any>();
 
@@ -22,6 +23,7 @@ export class BunnerRequest {
 
     const url = new URL(this.raw.url);
     this.path = url.pathname;
+    this.protocol = url.protocol.split(':')[0] as ProtocolValue;
 
     const contentTypeHeader = this.raw.headers.get(HeaderField.ContentType);
     this.contentType = contentTypeHeader ?? undefined;

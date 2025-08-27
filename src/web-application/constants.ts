@@ -1,3 +1,8 @@
+export const Protocol = {
+  Http: 'http',
+  Https: 'https',
+} as const;
+
 export const HttpMethod = {
   Get: 'GET',
   Post: 'POST',
@@ -29,6 +34,23 @@ export const HeaderField = {
   XForwardedFor: 'x-forwarded-for',
   XRealIp: 'x-real-ip',
   RequestId: 'x-request-id',
+  XContentTypeOptions: 'x-content-type-options',
+  XDnsPrefetchControl: 'x-dns-prefetch-control',
+  XDownloadOptions: 'x-download-options',
+  XFrameOptions: 'x-frame-options',
+  XPermittedCrossDomainPolicies: 'x-permitted-cross-domain-policies',
+  XXssProtection: 'x-xss-protection',
+  XPoweredBy: 'x-powered-by',
+  ExpectCt: 'expect-ct',
+  ContentSecurityPolicy: 'content-security-policy',
+  ContentSecurityPolicyReportOnly: 'content-security-policy-report-only',
+  CrossOriginEmbedderPolicy: 'cross-origin-embedder-policy',
+  CrossOriginOpenerPolicy: 'cross-origin-opener-policy',
+  CrossOriginResourcePolicy: 'cross-origin-resource-policy',
+  OriginAgentCluster: 'origin-agent-cluster',
+  ReferrerPolicy: 'referrer-policy',
+  StrictTransportSecurity: 'strict-transport-security',
+  PermissionsPolicy: 'permissions-policy',
   Origin: 'origin',
   AcceptEncoding: 'accept-encoding',
   Vary: 'vary',
