@@ -3,48 +3,46 @@ import { ContentType, textEncoder } from '../../constants';
 import type { Middleware } from '../../providers/middleware';
 import type { BodyParserOptions } from './interfaces';
 import type { BodyType } from './types';
-
-const BODY_TYPE: Record<BodyType, { test: (ct: string | undefined) => boolean; parse: (raw: Request) => Promise<any> }> = {
-  json: {
-    test: (ct) => !!ct && ct.includes(ContentType.Json),
-    parse: parseJson,
-  },
-  text: {
-    test: (ct) => !!ct && ct.startsWith('text/'),
-    parse: parseText,
-  },
-  'form-urlencoded': {
-    test: (ct) => !!ct && ct.includes(ContentType.FormUrlencoded),
-    parse: parseFormUrlencoded,
-  },
-  'multipart-formdata': {
-    test: (ct) => !!ct && ct.includes(ContentType.MultipartFormData),
-    parse: parseMultipartFormData,
-  },
-  'octet-stream': {
-    test: (ct) => !!ct && ct.includes(ContentType.OctetStream),
-    parse: parseBlob,
-  },
-  blob: {
-    test: (ct) => !!ct && ct.includes(ContentType.OctetStream),
-    parse: parseBlob,
-  },
-  arraybuffer: {
-    test: (ct) => !ct,
-    parse: parseArrayBuffer,
-  },
-};
+import qs from 'qs';
 
 export function bodyParser(allowed: BodyType[], options: BodyParserOptions = {}): Middleware {
-  const pipelines = allowed.map((type) => BODY_TYPE[type]);
   const maxBytes = typeof options.maxBytes === 'number' && options.maxBytes > 0 ? options.maxBytes : undefined;
+  const BODY_TYPE: Record<BodyType, { test: (ct: string | undefined) => boolean; parse: (raw: Request) => Promise<any> }> = {
+    json: {
+      test: (ct) => !!ct && ct.includes(ContentType.Json),
+      parse: parseJson,
+    },
+    text: {
+      test: (ct) => !!ct && ct.startsWith('text/'),
+      parse: parseText,
+    },
+    'form-urlencoded': {
+      test: (ct) => !!ct && ct.includes(ContentType.FormUrlencoded),
+      parse: (raw) => parseFormUrlencoded(raw, options.urlencodedOptions),
+    },
+    'multipart-formdata': {
+      test: (ct) => !!ct && ct.includes(ContentType.MultipartFormData),
+      parse: parseMultipartFormData,
+    },
+    'octet-stream': {
+      test: (ct) => !!ct && ct.includes(ContentType.OctetStream),
+      parse: parseBlob,
+    },
+    blob: {
+      test: (ct) => !!ct && ct.includes(ContentType.OctetStream),
+      parse: parseBlob,
+    },
+    arraybuffer: {
+      test: (ct) => !ct,
+      parse: parseArrayBuffer,
+    },
+  };
+  const pipelines = allowed.map((type) => BODY_TYPE[type]);
 
   return async (req, res) => {
     if (!req.raw.body) {
       return;
     }
-
-    const contentType = req.contentType;
 
     if (maxBytes && typeof req.contentLength === 'number' && req.contentLength > maxBytes) {
       return res.setStatus(StatusCodes.REQUEST_TOO_LONG);
@@ -58,7 +56,7 @@ export function bodyParser(allowed: BodyType[], options: BodyParserOptions = {})
       try {
         const entry = pipelines[i]!;
 
-        if (!entry.test(contentType)) {
+        if (!entry.test(req.contentType)) {
           continue;
         }
 
@@ -104,8 +102,8 @@ function parseText(raw: Request) {
   return raw.text();
 }
 
-async function parseFormUrlencoded(raw: Request) {
-  return new URLSearchParams(await raw.text());
+async function parseFormUrlencoded(raw: Request, qsOptions: qs.IParseOptions) {
+  return qs.parse(await raw.text(), qsOptions);
 }
 
 async function parseMultipartFormData(raw: Request) {
