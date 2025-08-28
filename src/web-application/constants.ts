@@ -34,6 +34,7 @@ export const HeaderField = {
   ContentEncoding: 'content-encoding',
   CacheControl: 'cache-control',
   XForwardedFor: 'x-forwarded-for',
+  XForwardedProto: 'x-forwarded-proto',
   XRealIp: 'x-real-ip',
   RequestId: 'x-request-id',
   XContentTypeOptions: 'x-content-type-options',

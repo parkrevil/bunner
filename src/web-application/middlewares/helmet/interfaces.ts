@@ -1,20 +1,92 @@
+export interface CoepOptions {
+  policy: 'require-corp' | 'unsafe-none' | 'credentialless';
+}
+
+export interface CoopOptions {
+  policy: 'same-origin' | 'same-origin-allow-popups' | 'unsafe-none';
+}
+
+export interface CorpOptions {
+  policy: 'same-origin' | 'same-site' | 'cross-origin';
+}
+
+export interface FrameguardOptions {
+  action: 'deny' | 'sameorigin';
+}
+
+export interface HstsOptions {
+  maxAge: number;
+  includeSubDomains?: boolean;
+  preload?: boolean;
+}
+
+export interface ExpectCtOptions {
+  maxAge?: number;
+  enforce?: boolean;
+  reportUri?: string;
+}
+
+export interface PcdpOptions {
+  policy: 'none' | 'master-only' | 'by-content-type' | 'all';
+}
+
+export interface ReferrerPolicyOptions {
+  policy: string | string[];
+}
+
+export interface PermissionsPolicyOptions {
+  policy: string;
+}
+
+export interface CspOptions {
+  directives: Record<string, string | string[]>;
+}
+export interface HidePoweredByOptions {
+  value?: string; // 기존 setTo
+}
+
+export interface DnsPrefetchControlOptions {
+  value: boolean; // 기존 allow
+}
+
+export interface FrameguardOptions {
+  action: 'deny' | 'sameorigin';
+}
+
+export interface CoepOptions {
+  policy: 'require-corp' | 'unsafe-none' | 'credentialless';
+}
+
+export interface CoopOptions {
+  policy: 'same-origin' | 'same-origin-allow-popups' | 'unsafe-none';
+}
+
+export interface CorpOptions {
+  policy: 'same-origin' | 'same-site' | 'cross-origin';
+}
+
+
 export interface HelmetOptions {
-  contentSecurityPolicy?: false | { directives?: Record<string, string | string[]> };
-  contentSecurityPolicyReportOnly?: false | { directives?: Record<string, string | string[]> };
-  crossOriginEmbedderPolicy?: boolean | { policy?: 'require-corp' | 'unsafe-none' | 'credentialless' };
-  crossOriginOpenerPolicy?: boolean | { policy?: 'same-origin' | 'same-origin-allow-popups' | 'unsafe-none' };
-  crossOriginResourcePolicy?: boolean | { policy?: 'same-origin' | 'same-site' | 'cross-origin' };
-  dnsPrefetchControl?: boolean | { allow?: boolean };
-  expectCt?: false | { maxAge?: number; enforce?: boolean; reportUri?: string };
-  frameguard?: boolean | { action?: 'deny' | 'sameorigin' };
-  hidePoweredBy?: boolean | { setTo?: string };
-  hsts?: boolean | { maxAge?: number; includeSubDomains?: boolean; preload?: boolean };
-  ieNoOpen?: boolean;
+  hidePoweredBy?: boolean | HidePoweredByOptions;
   noSniff?: boolean;
+  ieNoOpen?: boolean;
   originAgentCluster?: boolean;
-  permittedCrossDomainPolicies?: boolean | { policy?: 'none' | 'master-only' | 'by-content-type' | 'all' };
-  referrerPolicy?: false | { policy?: string | string[] };
   xssFilter?: boolean;
-  permissionsPolicy?: false | { policy?: string };
+  dnsPrefetchControl?: boolean | DnsPrefetchControlOptions;
+
+  frameguard?: boolean | FrameguardOptions;
+  crossOriginEmbedderPolicy?: boolean | CoepOptions;
+  crossOriginOpenerPolicy?: boolean | CoopOptions;
+  crossOriginResourcePolicy?: boolean | CorpOptions;
+
+  hsts?: boolean | HstsOptions;
+  expectCt?: boolean | ExpectCtOptions;
+  permittedCrossDomainPolicies?: boolean | PcdpOptions;
+  referrerPolicy?: boolean | ReferrerPolicyOptions;
+  permissionsPolicy?: boolean | PermissionsPolicyOptions;
+
+  contentSecurityPolicy?: boolean | CspOptions;
+  contentSecurityPolicyReportOnly?: boolean | CspOptions;
+
   disableXfoIfCspPresent?: boolean;
 }

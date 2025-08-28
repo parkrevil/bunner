@@ -1,5 +1,5 @@
 import type { SocketAddress } from 'bun';
-import { HeaderField } from './constants';
+import { HeaderField, Protocol } from './constants';
 import type { BunnerRequestConstructorParams } from './interfaces';
 import type { ProtocolValue } from './types';
 
@@ -14,6 +14,7 @@ export class BunnerRequest {
   readonly socketAddress: SocketAddress | undefined;
 
   private readonly _customData: Map<string, any> = new Map<string, any>();
+  private _isHttps: boolean;
   private _queryParams: Record<string, string>;
   private _body: any;
 
@@ -35,6 +36,9 @@ export class BunnerRequest {
     const xff = this.raw.headers.get(HeaderField.XForwardedFor);
     this.socketAddress = params.server.requestIP(this.raw) || undefined;
     this.ip = xff ? xff?.split(',')[0]?.trim() : this.raw.headers.get(HeaderField.XRealIp) || this.socketAddress?.address || undefined;
+
+    const xfProto = this.headers.get(HeaderField.XForwardedProto) ?? '';
+    this._isHttps = xfProto.toLowerCase().includes(Protocol.Https) || this.protocol === Protocol.Https;
   }
 
   /**
@@ -83,6 +87,14 @@ export class BunnerRequest {
    */
   get body() {
     return this._body;
+  }
+
+  /**
+   * Check if the request is HTTPS
+   * @returns True if the request is HTTPS, false otherwise
+   */
+  isHttps() {
+    return this._isHttps;
   }
 
   /**

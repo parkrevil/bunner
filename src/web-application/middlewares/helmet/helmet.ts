@@ -1,182 +1,202 @@
-import { HeaderField, Protocol } from '../../constants';
+import { HeaderField } from '../../constants';
 import type { Middleware } from '../../providers/middleware';
 import type { BunnerRequest } from '../../request';
-import type { HelmetOptions } from './interfaces';
+import type {
+  CoepOptions,
+  CoopOptions,
+  CorpOptions,
+  DnsPrefetchControlOptions,
+  ExpectCtOptions,
+  FrameguardOptions,
+  HelmetOptions,
+  HidePoweredByOptions,
+  HstsOptions,
+  PcdpOptions,
+  PermissionsPolicyOptions,
+  ReferrerPolicyOptions,
+} from './interfaces';
 
-
-export function helmet(options: HelmetOptions = {}): Middleware {
-  const csp = options.contentSecurityPolicy === false ? undefined : options.contentSecurityPolicy;
-  const cspReportOnly = options.contentSecurityPolicyReportOnly === false ? undefined : options.contentSecurityPolicyReportOnly;
-  const coep = options.crossOriginEmbedderPolicy !== false ? (options.crossOriginEmbedderPolicy || { policy: 'require-corp' }) : undefined;
-  const coop = options.crossOriginOpenerPolicy !== false ? (options.crossOriginOpenerPolicy || { policy: 'same-origin' }) : undefined;
-  const corp = options.crossOriginResourcePolicy !== false ? (options.crossOriginResourcePolicy || { policy: 'same-origin' }) : undefined;
-  const dns = options.dnsPrefetchControl !== false ? (options.dnsPrefetchControl || { allow: false }) : undefined;
-  const frame = options.frameguard !== false ? (options.frameguard || { action: 'sameorigin' }) : undefined;
-  const hsts = options.hsts !== false ? (options.hsts || { maxAge: 15552000, includeSubDomains: true }) : undefined;
-  const noSniff = options.noSniff !== false;
-  const ieNoOpen = options.ieNoOpen !== false;
-  const hidePoweredByOpt = options.hidePoweredBy;
-  const oac = options.originAgentCluster !== false;
-  const pcdp = options.permittedCrossDomainPolicies !== false ? (options.permittedCrossDomainPolicies || { policy: 'none' }) : undefined;
-  const ref = options.referrerPolicy !== false ? (options.referrerPolicy || { policy: 'no-referrer' }) : undefined;
-  const xss = options.xssFilter !== false;
-  const pp = options.permissionsPolicy !== false ? options.permissionsPolicy : undefined;
-  const disableXfoIfCspPresent = options.disableXfoIfCspPresent === true;
-
-  return (req, res) => {
-    const removePoweredBy = hidePoweredByOpt === undefined || hidePoweredByOpt === true;
-    const poweredByValue = typeof hidePoweredByOpt === 'object' ? hidePoweredByOpt.setTo : undefined;
-
-    if (removePoweredBy) {
-      res.removeHeader(HeaderField.XPoweredBy);
-    }
-
-    if (poweredByValue) {
-      res.setHeader(HeaderField.XPoweredBy, poweredByValue);
-    }
-
-    if (noSniff) {
-      res.setHeader(HeaderField.XContentTypeOptions, 'nosniff');
-    }
-
-    if (dns && typeof dns !== 'boolean') {
-      res.setHeader(HeaderField.XDnsPrefetchControl, dns.allow ? 'on' : 'off');
-    }
-
-    if (ieNoOpen) {
-      res.setHeader(HeaderField.XDownloadOptions, 'noopen');
-    }
-
-    if (frame && typeof frame !== 'boolean') {
-      const hasFrameAncestors = !!(csp?.directives && 'frame-ancestors' in (csp.directives as Record<string, string | string[]>));
-
-      if (!(disableXfoIfCspPresent && hasFrameAncestors)) {
-        res.setHeader(HeaderField.XFrameOptions, frame.action || 'sameorigin');
-      }
-    }
-
-    if (pcdp && typeof pcdp !== 'boolean') {
-      res.setHeader(HeaderField.XPermittedCrossDomainPolicies, pcdp.policy || 'none');
-    }
-
-    if (xss) {
-      res.setHeader(HeaderField.XXssProtection, '0');
-    }
-
-    if (oac) {
-      res.setHeader(HeaderField.OriginAgentCluster, '?1');
-    }
-
-    if (corp && typeof corp !== 'boolean') {
-      res.setHeader(HeaderField.CrossOriginResourcePolicy, corp.policy || 'same-origin');
-    }
-
-    if (coop && typeof coop !== 'boolean') {
-      res.setHeader(HeaderField.CrossOriginOpenerPolicy, coop.policy || 'same-origin');
-    }
-
-    if (coep && typeof coep !== 'boolean') {
-      res.setHeader(HeaderField.CrossOriginEmbedderPolicy, (coep as any).policy || 'require-corp');
-    }
-
-    if (ref) {
-      const policy = Array.isArray(ref.policy) ? ref.policy.join(',') : (ref.policy || 'no-referrer');
-
-      res.setHeader(HeaderField.ReferrerPolicy, policy);
-    }
-
-    if (options.expectCt) {
-      const parts = [`max-age=${options.expectCt.maxAge ?? 0}`];
-
-      if (options.expectCt.enforce) {
-        parts.push('enforce');
-      }
-
-      if (options.expectCt.reportUri) {
-        parts.push(`report-uri="${options.expectCt.reportUri}"`);
-      }
-
-      res.setHeader(HeaderField.ExpectCt, parts.join(', '));
-    }
-
-    if (hsts && typeof hsts !== 'boolean' && isHttps(req)) {
-      const parts = [`max-age=${hsts.maxAge ?? 15552000}`];
-      const include = hsts.includeSubDomains !== false;
-
-      if (include) {
-        parts.push('includeSubDomains');
-      }
-
-      const preload = !!hsts.preload;
-
-      if (preload && !include) {
-        parts.push('includeSubDomains');
-      }
-
-      if (preload) {
-        parts.push('preload');
-      }
-
-      res.setHeader(HeaderField.StrictTransportSecurity, parts.join('; '));
-    }
-
-    if (pp && typeof pp.policy === 'string' && pp.policy.trim().length > 0) {
-      res.setHeader(HeaderField.PermissionsPolicy, pp.policy.trim());
-    }
-
-    if (csp) {
-      const defaultCsp = { 'default-src': "'self'", 'base-uri': "'self'", 'frame-ancestors': "'self'", 'object-src': "'none'", 'upgrade-insecure-requests': '' } as Record<string, string>;
-      const user = csp.directives || {};
-      const norm: Record<string, string | string[]> = {};
-
-      Object.entries(user).forEach(([k, v]) => {
-        norm[k.toLowerCase()] = v;
-      });
-
-      const merged = { ...defaultCsp, ...norm } as Record<string, string | string[]>;
-
-      Object.keys(merged).forEach((k) => {
-        const val = merged[k];
-
-        if (typeof val === 'string' && val.trim() === '') {
-          delete merged[k];
-        }
-      });
-
-      const cspValue = toCsp(merged);
-
-      if (cspValue) {
-        res.setHeader(HeaderField.ContentSecurityPolicy, cspValue);
-      }
-    }
-
-    const cspRoValue = toCsp(cspReportOnly?.directives);
-
-    if (cspRoValue) {
-      res.setHeader(HeaderField.ContentSecurityPolicyReportOnly, cspRoValue);
-    }
-  };
-}
-
-function isHttps(req: BunnerRequest) {
-  const xfProto = req.headers?.get?.('x-forwarded-proto') || '';
-
-  if (typeof xfProto === 'string' && xfProto.toLowerCase().includes(Protocol.Https)) {
-    return true;
-  }
-
-  if (req.protocol === Protocol.Https) {
-    return true;
-  }
-
-  return false;
-}
-
-
-function toCsp(d?: Record<string, string | string[]>) {
-  if (!d) {
+function resolveObjectOption<T extends object>(opt: boolean | T | undefined, defaultObj: T): T | undefined {
+  if (opt === false) {
     return undefined;
   }
 
-  return Object.entries(d).map(([k, v]) => `${k} ${Array.isArray(v) ? v.join(' ') : v}`).join('; ');
+  if (typeof opt === 'boolean') {
+    return defaultObj;
+  }
+
+  return opt ?? defaultObj;
+}
+
+function buildHeader(parts: string[], delimiter = '; ') {
+  return parts.join(delimiter);
+}
+
+function buildHsts(opt: HstsOptions) {
+  const parts = [`max-age=${opt.maxAge}`];
+
+  if (opt.includeSubDomains !== false) {
+    parts.push('includeSubDomains');
+  }
+
+  if (opt.preload) {
+    parts.push('preload');
+  }
+
+  return buildHeader(parts, '; ');
+}
+
+function buildExpectCt(opt: ExpectCtOptions) {
+  const parts = [`max-age=${opt.maxAge ?? 0}`];
+
+  if (opt.enforce) {
+    parts.push('enforce');
+  }
+
+  if (opt.reportUri) {
+    parts.push(`report-uri="${opt.reportUri}"`);
+  }
+
+  return buildHeader(parts, ', ');
+}
+
+function buildCsp(directives: Record<string, string | string[]>) {
+  const normalized: Record<string, string | string[]> = {};
+
+  Object.entries(directives).forEach(([k, v]) => {
+    normalized[k.toLowerCase()] = v;
+  });
+
+  return Object.entries(normalized)
+    .filter(([_, v]) => !(typeof v === 'string' && v.trim() === ''))
+    .map(([k, v]) => `${k} ${Array.isArray(v) ? v.join(' ') : v}`)
+    .join('; ');
+}
+
+export function helmet(options: HelmetOptions = {}): Middleware {
+  const pipeline: ((req: BunnerRequest, res: any) => void)[] = [];
+
+  const noSniff = options.noSniff ?? true;
+  const ieNoOpen = options.ieNoOpen ?? true;
+  const xssFilter = options.xssFilter ?? true;
+  const originAgentCluster = options.originAgentCluster ?? true;
+
+  if (noSniff) {
+    pipeline.push((req, res) => res.setHeader(HeaderField.XContentTypeOptions, 'nosniff'));
+  }
+
+  if (ieNoOpen) {
+    pipeline.push((req, res) => res.setHeader(HeaderField.XDownloadOptions, 'noopen'));
+  }
+
+  if (xssFilter) {
+    pipeline.push((req, res) => res.setHeader(HeaderField.XXssProtection, '0'));
+  }
+
+  if (originAgentCluster) {
+    pipeline.push((req, res) => res.setHeader(HeaderField.OriginAgentCluster, '?1'));
+  }
+
+  const hidePoweredByOpt = resolveObjectOption<HidePoweredByOptions>(options.hidePoweredBy, {});
+
+  if (hidePoweredByOpt) {
+    pipeline.push((req, res) => res.removeHeader(HeaderField.XPoweredBy));
+
+    if (hidePoweredByOpt.value) {
+      pipeline.push((req, res) => res.setHeader(HeaderField.XPoweredBy, hidePoweredByOpt.value));
+    }
+  }
+
+  const coep = resolveObjectOption<CoepOptions>(options.crossOriginEmbedderPolicy, { policy: 'require-corp' });
+  const coop = resolveObjectOption<CoopOptions>(options.crossOriginOpenerPolicy, { policy: 'same-origin' });
+  const corp = resolveObjectOption<CorpOptions>(options.crossOriginResourcePolicy, { policy: 'same-origin' });
+  const frame = resolveObjectOption<FrameguardOptions>(options.frameguard, { action: 'sameorigin' });
+  const dnsPrefetch = resolveObjectOption<DnsPrefetchControlOptions>(options.dnsPrefetchControl, { value: false });
+  const pcdp = resolveObjectOption<PcdpOptions>(options.permittedCrossDomainPolicies, { policy: 'none' });
+  const ref = resolveObjectOption<ReferrerPolicyOptions>(options.referrerPolicy, { policy: 'no-referrer' });
+  const pp = resolveObjectOption<PermissionsPolicyOptions>(options.permissionsPolicy, { policy: '' });
+  const expectCt = resolveObjectOption<ExpectCtOptions>(options.expectCt, {});
+  const hstsOpt = resolveObjectOption<HstsOptions>(options.hsts, { maxAge: 15552000, includeSubDomains: true, preload: false });
+
+  if (coep) {
+    pipeline.push((req, res) => res.setHeader(HeaderField.CrossOriginEmbedderPolicy, coep.policy));
+  }
+
+  if (coop) {
+    pipeline.push((req, res) => res.setHeader(HeaderField.CrossOriginOpenerPolicy, coop.policy));
+  }
+
+  if (corp) {
+    pipeline.push((req, res) => res.setHeader(HeaderField.CrossOriginResourcePolicy, corp.policy));
+  }
+
+  if (frame) {
+    pipeline.push((req, res) => {
+      const hasFrameAncestors =
+        options.contentSecurityPolicy &&
+        typeof options.contentSecurityPolicy !== 'boolean' &&
+        !!options.contentSecurityPolicy.directives?.['frame-ancestors'];
+
+      if (!(options.disableXfoIfCspPresent && hasFrameAncestors)) {
+        res.setHeader(HeaderField.XFrameOptions, frame.action);
+      }
+    });
+  }
+
+  if (dnsPrefetch) {
+    pipeline.push((req, res) =>
+      res.setHeader(HeaderField.XDnsPrefetchControl, dnsPrefetch.value ? 'on' : 'off')
+    );
+  }
+
+  if (pcdp) {
+    pipeline.push((req, res) => res.setHeader(HeaderField.XPermittedCrossDomainPolicies, pcdp.policy));
+  }
+
+  if (ref) {
+    const policy = Array.isArray(ref.policy) ? ref.policy.join(',') : ref.policy;
+    pipeline.push((req, res) => res.setHeader(HeaderField.ReferrerPolicy, policy));
+  }
+
+  if (pp && pp.policy.trim()) {
+    pipeline.push((req, res) => res.setHeader(HeaderField.PermissionsPolicy, pp.policy));
+  }
+
+  if (expectCt) {
+    pipeline.push((req, res) => res.setHeader(HeaderField.ExpectCt, buildExpectCt(expectCt)));
+  }
+
+  if (hstsOpt) {
+    pipeline.push((req, res) => {
+      req.isHttps() && res.setHeader(HeaderField.StrictTransportSecurity, buildHsts(hstsOpt));
+    });
+  }
+
+  if (options.contentSecurityPolicy && typeof options.contentSecurityPolicy !== 'boolean') {
+    const cspOpts = options.contentSecurityPolicy;
+    const cspHeader = buildCsp(cspOpts.directives ?? {});
+
+    if (cspHeader) {
+      pipeline.push((req, res) =>
+        res.setHeader(HeaderField.ContentSecurityPolicy, cspHeader)
+      );
+    }
+  }
+
+  if (options.contentSecurityPolicyReportOnly && typeof options.contentSecurityPolicyReportOnly !== 'boolean') {
+    const cspRoOpts = options.contentSecurityPolicyReportOnly;
+    const cspRoHeader = buildCsp(cspRoOpts.directives ?? {});
+
+    if (cspRoHeader) {
+      pipeline.push((req, res) =>
+        res.setHeader(HeaderField.ContentSecurityPolicyReportOnly, cspRoHeader)
+      );
+    }
+  }
+
+  return (req, res) => {
+    for (const fn of pipeline) {
+      fn(req, res);
+    }
+  };
 }
