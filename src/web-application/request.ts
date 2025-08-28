@@ -1,4 +1,4 @@
-import type { SocketAddress } from 'bun';
+import type { CookieMap, SocketAddress } from 'bun';
 import { HeaderField, Protocol } from './constants';
 import type { BunnerRequestConstructorParams } from './interfaces';
 import type { ProtocolValue } from './types';
@@ -17,6 +17,7 @@ export class BunnerRequest {
   private _isHttps: boolean;
   private _queryParams: Record<string, string>;
   private _body: any;
+  private _cookies: CookieMap | undefined;
 
   constructor(params: BunnerRequestConstructorParams) {
     this.raw = params.request;
@@ -90,11 +91,30 @@ export class BunnerRequest {
   }
 
   /**
+   * Get the cookies of the request
+   * @returns The cookies of the request
+   */
+  get cookies() {
+    return this._cookies;
+  }
+
+  /**
    * Check if the request is HTTPS
    * @returns True if the request is HTTPS, false otherwise
    */
   isHttps() {
     return this._isHttps;
+  }
+
+  /**
+   * Set the cookies of the request
+   * @param cookies - The cookies of the request
+   * @returns The request instance
+   */
+  setCookies(cookies: CookieMap | undefined) {
+    this._cookies = cookies;
+
+    return this;
   }
 
   /**

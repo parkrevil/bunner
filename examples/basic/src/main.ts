@@ -3,6 +3,7 @@ import { Logger } from '../../../src/providers/logger';
 import { bodyLimiter } from '../../../src/web-application/middlewares/body-limiter';
 import { bodyParser } from '../../../src/web-application/middlewares/body-parser';
 import { compress } from '../../../src/web-application/middlewares/compress';
+import { cookieParser } from '../../../src/web-application/middlewares/cookie-parser';
 import { cors } from '../../../src/web-application/middlewares/cors';
 import { helmet } from '../../../src/web-application/middlewares/helmet';
 import { hpp } from '../../../src/web-application/middlewares/hpp/hpp';
@@ -21,6 +22,7 @@ async function bootstrap() {
   webApp.addGlobalMiddlewares({
     onRequest: [
       requestId(),
+      cookieParser(),
       bodyLimiter({ maxBytes: 1024 * 1024 }),
       hpp(),
       helmet(),

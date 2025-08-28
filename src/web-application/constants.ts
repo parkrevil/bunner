@@ -69,4 +69,5 @@ export const HeaderField = {
   AccessControlRequestHeaders: 'access-control-request-headers',
   NoCompress: 'x-no-compress',
   Range: 'range',
+  Cookie: 'Cookie',
 } as const;
