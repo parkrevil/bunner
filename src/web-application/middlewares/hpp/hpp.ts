@@ -1,10 +1,10 @@
 import type { Middleware } from '../../providers/middleware';
-import type { HppOptions } from './interfaces';
+import type { HppOptions, ProcessHPPOptions } from './interfaces';
 
 function processHPP(
   data: Record<string, any>,
-  options: Required<HppOptions>,
-  depth = 0
+  options: ProcessHPPOptions,
+  depth = 0,
 ): Record<string, any> {
   if (!data || (options.depth !== undefined && depth > options.depth)) {
     return data;
@@ -14,7 +14,7 @@ function processHPP(
     let val = data[key];
 
     if (Array.isArray(val)) {
-      if (options.whitelist.includes(key)) {
+      if (options.whitelist.has(key)) {
         val = val.map(item => (item && typeof item === 'object' ? processHPP(item, options, depth + 1) : item));
       } else {
         val = options.keepValue === 'first' ? val[0] : val[val.length - 1];
@@ -31,11 +31,11 @@ function processHPP(
 }
 
 export function hpp(options?: HppOptions): Middleware {
-  const hppOptions: Required<HppOptions> = {
+  const hppOptions: ProcessHPPOptions = {
     target: options?.target ?? 'queryParams',
     keepValue: options?.keepValue ?? 'last',
     depth: options?.depth ?? 0,
-    whitelist: Array.from((options?.whitelist ? new Set(options.whitelist) : new Set()).values()) as string[],
+    whitelist: new Set(options?.whitelist ?? []),
   };
 
   return (req, res) => {
