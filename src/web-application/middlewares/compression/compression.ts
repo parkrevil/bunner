@@ -3,17 +3,16 @@ import { StatusCodes } from 'http-status-codes';
 import { brotliCompressSync as nodeBrotliCompressSync, constants as zlibConstants } from 'zlib';
 import { ContentType, HeaderField, textEncoder } from '../../constants';
 import type { Middleware } from '../../providers/middleware';
-import { CompressAlgorithm, ETagAlgorithm } from './constants';
-import type { AcceptCacheValue, CompressOptions } from './interfaces';
-import type { BunDeflateLevel, BunGzipLevel, CompressAlgorithmValue, ETagAlgorithmValue, ZstdLevel } from './types';
+import { CompressionAlgorithm, ETagAlgorithm } from './constants';
+import type { AcceptCacheValue, CompressionOptions } from './interfaces';
+import type { BunDeflateLevel, BunGzipLevel, CompressionAlgorithmValue, ETagAlgorithmValue, ZstdLevel } from './types';
 
 const ACCEPT_CACHE = new Map<string, AcceptCacheValue>();
 const ACCEPT_CACHE_MAX = 128;
 const ACCEPT_CACHE_TTL_MS = 60_000;
-let encoder: TextEncoder | undefined;
 
-export function compress(options: CompressOptions = {}): Middleware {
-  const algorithms = (options.negotiation?.algorithms ?? [CompressAlgorithm.Zstd, CompressAlgorithm.Gzip, CompressAlgorithm.Deflate, CompressAlgorithm.Brotli]) as CompressAlgorithmValue[];
+export function compression(options: CompressionOptions = {}): Middleware {
+  const algorithms = (options.negotiation?.algorithms ?? [CompressionAlgorithm.Zstd, CompressionAlgorithm.Gzip, CompressionAlgorithm.Deflate, CompressionAlgorithm.Brotli]) as CompressionAlgorithmValue[];
   const thresholdBase = options.thresholds?.thresholdBytes ?? 1024;
   const minRatioBase = options.thresholds?.minRatio ?? 0.8;
   const smallStringBytes = options.thresholds?.smallStringBytes ?? 64;
@@ -76,7 +75,7 @@ export function compress(options: CompressOptions = {}): Middleware {
       return;
     }
 
-    let pick: CompressAlgorithmValue | undefined;
+    let pick: CompressionAlgorithmValue | undefined;
     const accept = req.headers.get(HeaderField.AcceptEncoding) || '';
     const acceptTrim = accept.trim().toLowerCase();
 
@@ -132,13 +131,13 @@ export function compress(options: CompressOptions = {}): Middleware {
 
     let compressed: Uint8Array | undefined;
 
-    if (pick === CompressAlgorithm.Zstd) {
+    if (pick === CompressionAlgorithm.Zstd) {
       compressed = zstdCompress(input, options.quality?.zstdLevel ?? 3);
-    } else if (pick === CompressAlgorithm.Brotli) {
+    } else if (pick === CompressionAlgorithm.Brotli) {
       compressed = brotliCompress(input, options.quality?.brotliQuality ?? 6);
-    } else if (pick === CompressAlgorithm.Gzip) {
+    } else if (pick === CompressionAlgorithm.Gzip) {
       compressed = gzipCompress(input, options.quality?.gzipLevel ?? 6);
-    } else if (pick === CompressAlgorithm.Deflate) {
+    } else if (pick === CompressionAlgorithm.Deflate) {
       compressed = deflateCompress(input, options.quality?.deflateLevel ?? 6);
     }
 

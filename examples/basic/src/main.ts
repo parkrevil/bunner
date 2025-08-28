@@ -2,7 +2,7 @@ import { Bunner, BunnerWebApplication } from '../../../src';
 import { Logger } from '../../../src/providers/logger';
 import { bodyLimiter } from '../../../src/web-application/middlewares/body-limiter';
 import { bodyParser } from '../../../src/web-application/middlewares/body-parser';
-import { compress } from '../../../src/web-application/middlewares/compress';
+import { compression } from '../../../src/web-application/middlewares/compression';
 import { cookieParser } from '../../../src/web-application/middlewares/cookie-parser';
 import { cors } from '../../../src/web-application/middlewares/cors';
 import { helmet } from '../../../src/web-application/middlewares/helmet';
@@ -31,7 +31,7 @@ async function bootstrap() {
     ],
     beforeHandler: [bodyParser(['json', 'multipart-formdata']), authCheck(), log('global.before')],
     afterHandler: [
-      compress({
+      compression({
         thresholds: {
           thresholdBytes: 0,
           minRatio: 0.8,

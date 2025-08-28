@@ -1,8 +1,8 @@
-import type { BrotliQuality, BunDeflateLevel, BunGzipLevel, CompressAlgorithmValue, ETagAlgorithmValue, ZstdLevel } from './types';
+import type { BrotliQuality, BunDeflateLevel, BunGzipLevel, CompressionAlgorithmValue, ETagAlgorithmValue, ZstdLevel } from './types';
 
-export interface CompressOptions {
+export interface CompressionOptions {
   negotiation?: {
-    algorithms?: CompressAlgorithmValue[];
+    algorithms?: CompressionAlgorithmValue[];
     treatVendorJsonXmlAsCompressible?: boolean;
   };
   thresholds?: {

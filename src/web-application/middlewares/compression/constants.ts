@@ -1,4 +1,4 @@
-export const CompressAlgorithm = {
+export const CompressionAlgorithm = {
   Gzip: 'gzip',
   Deflate: 'deflate',
   Brotli: 'br',

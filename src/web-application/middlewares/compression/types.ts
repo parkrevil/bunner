@@ -1,6 +1,6 @@
-import { CompressAlgorithm, ETagAlgorithm } from './constants';
+import { CompressionAlgorithm, ETagAlgorithm } from './constants';
 
-export type CompressAlgorithmValue = (typeof CompressAlgorithm)[keyof typeof CompressAlgorithm];
+export type CompressionAlgorithmValue = (typeof CompressionAlgorithm)[keyof typeof CompressionAlgorithm];
 
 export type ETagAlgorithmValue = (typeof ETagAlgorithm)[keyof typeof ETagAlgorithm];
 
