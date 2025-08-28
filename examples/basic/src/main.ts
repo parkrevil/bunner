@@ -5,6 +5,7 @@ import { bodyParser } from '../../../src/web-application/middlewares/body-parser
 import { compress } from '../../../src/web-application/middlewares/compress';
 import { cors } from '../../../src/web-application/middlewares/cors';
 import { helmet } from '../../../src/web-application/middlewares/helmet';
+import { hpp } from '../../../src/web-application/middlewares/hpp/hpp';
 import { requestId } from '../../../src/web-application/middlewares/request-id';
 import { AppModule } from './app.module';
 import { authCheck, delay, log, shortCircuit, throwError, timeEnd, timeStart } from './core/middlewares/log.middleware';
@@ -20,7 +21,8 @@ async function bootstrap() {
   webApp.addGlobalMiddlewares({
     onRequest: [
       requestId(),
-      bodyLimiter({ maxBytes: 1024 * 1024 }), // 1MB 제한
+      bodyLimiter({ maxBytes: 1024 * 1024 }),
+      hpp(),
       helmet(),
       cors({ origin: true, credentials: true, exposedHeaders: ['X-Request-Id'] }),
       log('global.onRequest'), [timeStart('req'), timeEnd('req')]

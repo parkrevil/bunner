@@ -9,5 +9,6 @@ export * from './middlewares/body-parser';
 export * from './middlewares/compress';
 export * from './middlewares/cors';
 export * from './middlewares/helmet';
+export * from './middlewares/hpp/hpp';
 export * from './middlewares/request-id/request-id';
 

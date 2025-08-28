@@ -10,16 +10,17 @@ export class BunnerRequest {
   readonly contentType: string | undefined;
   readonly contentLength: number | undefined;
   readonly params: Record<string, any>;
-  readonly query: Record<string, string>;
   readonly ip: string | undefined;
   readonly socketAddress: SocketAddress | undefined;
-  private _body: any;
+
   private readonly _customData: Map<string, any> = new Map<string, any>();
+  private _queryParams: Record<string, string>;
+  private _body: any;
 
   constructor(params: BunnerRequestConstructorParams) {
     this.raw = params.request;
     this.params = params.params;
-    this.query = params.queryParams;
+    this._queryParams = params.queryParams;
 
     const url = new URL(this.raw.url);
     this.path = url.pathname;
@@ -69,11 +70,30 @@ export class BunnerRequest {
   }
 
   /**
+   * Get the query params of the request
+   * @returns The query params of the request
+   */
+  get queryParams() {
+    return this._queryParams;
+  }
+
+  /**
    * Get the body of the request
    * @returns The body of the request
    */
   get body() {
     return this._body;
+  }
+
+  /**
+   * Set the query params of the request
+   * @param queryParams - The query params of the request
+   * @returns The request instance
+   */
+  setQueryParams(queryParams: Record<string, string>) {
+    this._queryParams = queryParams;
+
+    return this;
   }
 
   /**
