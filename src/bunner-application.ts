@@ -1,5 +1,5 @@
-import { AppContainer } from './core/injector';
 import type { OnApplicationShutdown, OnModuleInit } from './interfaces';
+import { AppContainer } from './providers/injector';
 import type { ClassType } from './types';
 
 export abstract class BunnerApplication {

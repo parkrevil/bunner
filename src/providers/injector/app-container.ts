@@ -1,5 +1,5 @@
 import { ContainerModule, Container as InversifyContainer } from 'inversify';
-import type { ClassType } from '../../types';
+import type { ClassType } from '../../../types';
 import { ModuleDecorator } from './constants';
 import type { DynamicModule, ModuleMetadata } from './interfaces';
 import { RequestContext } from './request-context';

@@ -5,12 +5,12 @@ import { bodyParser } from '../../../src/web-application/middlewares/body-parser
 import { compression } from '../../../src/web-application/middlewares/compression';
 import { cookieParser } from '../../../src/web-application/middlewares/cookie-parser';
 import { cors } from '../../../src/web-application/middlewares/cors';
+import { csrf } from '../../../src/web-application/middlewares/csrf';
 import { helmet } from '../../../src/web-application/middlewares/helmet';
 import { hpp } from '../../../src/web-application/middlewares/hpp/hpp';
 import { requestId } from '../../../src/web-application/middlewares/request-id';
 import { AppModule } from './app.module';
 import { authCheck, delay, log, shortCircuit, throwError, timeEnd, timeStart } from './core/middlewares/log.middleware';
-import { csrf } from '../../../src/web-application/middlewares/csrf';
 
 async function bootstrap() {
   const webApp = await Bunner.createApplication(BunnerWebApplication, AppModule, {

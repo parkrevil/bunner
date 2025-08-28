@@ -1,8 +1,8 @@
 import findMyWay from 'find-my-way';
 import qs from 'qs';
-import type { AppContainer } from '../../../core/injector';
 import { HttpMethodDecorator, RestControllerDecorator, type HttpMethodDecoratorMetadata, type RestControllerDecoratorMetadata } from '../../decorators';
 import type { HttpMethodValue } from '../../types';
+import type { AppContainer } from '../injector';
 import { MiddlewareProvider, type PhaseMiddlewareMap } from '../middleware';
 import type { RouteHandler } from './types';
 

@@ -1,7 +1,7 @@
 import type { Server } from 'bun';
 import { type BunnerWebServerStartOptions, type HttpMethodValue } from '.';
 import { BunnerApplication } from '../bunner-application';
-import { RequestContext } from '../core/injector';
+import { RequestContext } from '../providers/injector';
 import type { MiddlewareContext, PhaseMiddlewareMap } from './providers/middleware';
 import { type GlobalMiddlewareOptions, type RouteMiddlewareOptions, MiddlewareProvider } from './providers/middleware';
 import { RouterProvider } from './providers/router';
