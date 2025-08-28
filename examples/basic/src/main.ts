@@ -10,6 +10,7 @@ import { hpp } from '../../../src/web-application/middlewares/hpp/hpp';
 import { requestId } from '../../../src/web-application/middlewares/request-id';
 import { AppModule } from './app.module';
 import { authCheck, delay, log, shortCircuit, throwError, timeEnd, timeStart } from './core/middlewares/log.middleware';
+import { csrf } from '../../../src/web-application/middlewares/csrf';
 
 async function bootstrap() {
   const webApp = await Bunner.createApplication(BunnerWebApplication, AppModule, {
@@ -29,7 +30,7 @@ async function bootstrap() {
       cors({ origin: true, credentials: true, exposedHeaders: ['X-Request-Id'] }),
       log('global.onRequest'), [timeStart('req'), timeEnd('req')]
     ],
-    beforeHandler: [bodyParser(['json', 'multipart-formdata']), authCheck(), log('global.before')],
+    beforeHandler: [bodyParser(['json', 'multipart-formdata']), csrf(), authCheck(), log('global.before')],
     afterHandler: [
       compression({
         thresholds: {

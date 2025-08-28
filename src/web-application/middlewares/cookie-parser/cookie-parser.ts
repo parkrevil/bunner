@@ -1,3 +1,4 @@
+import { CookieMap } from 'bun';
 import { HeaderField } from '../../constants';
 import type { Middleware } from '../../providers/middleware';
 
@@ -9,6 +10,6 @@ export function cookieParser(): Middleware {
       return;
     }
 
-    req.setCookies(new Bun.CookieMap(cookies));
+    req.setCookies(new CookieMap(cookies));
   };
 }

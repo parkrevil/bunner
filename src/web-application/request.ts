@@ -1,7 +1,7 @@
 import type { CookieMap, SocketAddress } from 'bun';
 import { HeaderField, Protocol } from './constants';
 import type { BunnerRequestConstructorParams } from './interfaces';
-import type { ProtocolValue } from './types';
+import type { HttpMethodValue, ProtocolValue } from './types';
 
 export class BunnerRequest {
   readonly raw: Request;
@@ -63,7 +63,7 @@ export class BunnerRequest {
    * @returns The method of the request
    */
   get method() {
-    return this.raw.method;
+    return this.raw.method as HttpMethodValue;
   }
 
   /**

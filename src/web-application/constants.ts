@@ -70,4 +70,6 @@ export const HeaderField = {
   NoCompress: 'x-no-compress',
   Range: 'range',
   Cookie: 'Cookie',
+  XCSRFToken: 'X-CSRF-Token',
+  SetCookie: 'Set-Cookie',
 } as const;

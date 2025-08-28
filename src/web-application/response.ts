@@ -1,3 +1,4 @@
+import { CookieMap, type CookieInit } from 'bun';
 import { getReasonPhrase, StatusCodes } from 'http-status-codes';
 import { ContentType, HeaderField, HttpMethod } from './constants';
 import type { BunnerRequest } from './request';
@@ -6,6 +7,7 @@ import type { ContentTypeValue } from './types';
 export class BunnerResponse {
   private readonly req: BunnerRequest;
   private _body: any;
+  private _cookies: CookieMap;
   private _headers: Headers;
   private _status;
   private _statusText;
@@ -14,6 +16,7 @@ export class BunnerResponse {
   constructor(req: BunnerRequest) {
     this.req = req;
     this._headers = new Headers();
+    this._cookies = new CookieMap();
   }
 
   getStatus() {
@@ -69,6 +72,27 @@ export class BunnerResponse {
 
   setContentType(contentType: ContentTypeValue, charset?: string) {
     this.setHeader(HeaderField.ContentType, `${contentType}${charset ? `; charset=${charset}` : ''}`);
+
+    return this;
+  }
+
+  /**
+   * Get the cookies set on the response.
+   * @returns The cookies set on the response.
+   */
+  getCookies() {
+    return this._cookies;
+  }
+
+  /**
+   * Set a cookie on the response.
+   * @param name - The name of the cookie.
+   * @param value - The value of the cookie.
+   * @param options - Options for serializing the cookie.
+   * @returns The response instance.
+   */
+  setCookie(name: string, value: string, options?: CookieInit) {
+    this._cookies.set(name, value, options);
 
     return this;
   }
@@ -199,6 +223,10 @@ export class BunnerResponse {
   }
 
   private makeResponseInit() {
+    if (this._cookies.size > 0) {
+      this.setHeader(HeaderField.SetCookie, this._cookies.toSetCookieHeaders().join(', '));
+    }
+
     return {
       status: this._status,
       statusText: this._statusText,
