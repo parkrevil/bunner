@@ -2,19 +2,16 @@
   "lockfileVersion": 1,
   "workspaces": {
     "": {
-      "name": "bunner",
+      "name": "@bunner/http-cors",
       "devDependencies": {
-        "@types/bun": "^1.2.0",
+        "@types/bun": "latest",
+      },
+      "peerDependencies": {
         "typescript": "^5",
       },
     },
-    "packages/http-provider/middlewares/cors": {
-      "name": "@bunner/http-cors",
-    },
   },
   "packages": {
-    "@bunner/http-cors": ["@bunner/http-cors@workspace:packages/http-provider/middlewares/cors"],
-
     "@types/bun": ["@types/bun@1.2.21", "", { "dependencies": { "bun-types": "1.2.21" } }, "sha512-NiDnvEqmbfQ6dmZ3EeUO577s4P5bf4HCTXtI6trMc6f6RzirY5IrF3aIookuSpyslFzrnvv2lmEWv5HyC1X79A=="],
 
     "@types/node": ["@types/node@24.3.0", "", { "dependencies": { "undici-types": "~7.10.0" } }, "sha512-aPTXCrfwnDLj4VvXrm+UUCQjNEvJgNA8s5F1cvwQU+3KNltTOkBm1j30uNLyqqPNe7gE3KFzImYoZEfLhp4Yow=="],

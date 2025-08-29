@@ -1,0 +1,10 @@
+[package]
+name = "http-provider-middlewares-cors"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "http_provider_middlewares_cors"
+crate-type = ["cdylib"]
+
+[dependencies]

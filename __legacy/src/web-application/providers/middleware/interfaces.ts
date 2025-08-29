@@ -1,5 +1,5 @@
-import type { BunnerRequest } from '../../request';
-import type { BunnerResponse } from '../../response';
+import type { BunnerRequest } from '../../request.js';
+import type { BunnerResponse } from '../../response.js';
 import type { MiddlewareGroup } from './types.js';
 
 export interface MiddlewareContext {
