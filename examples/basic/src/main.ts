@@ -8,6 +8,7 @@ import { cors } from '../../../src/web-application/middlewares/cors';
 import { csrf } from '../../../src/web-application/middlewares/csrf';
 import { helmet } from '../../../src/web-application/middlewares/helmet';
 import { hpp } from '../../../src/web-application/middlewares/hpp/hpp';
+import { rateLimiter } from '../../../src/web-application/middlewares/rate-limiter/rate-limiter';
 import { requestId } from '../../../src/web-application/middlewares/request-id';
 import { AppModule } from './app.module';
 import { authCheck, delay, log, shortCircuit, throwError, timeEnd, timeStart } from './core/middlewares/log.middleware';
@@ -22,12 +23,17 @@ async function bootstrap() {
 
   webApp.addGlobalMiddlewares({
     onRequest: [
+      cors({ origin: true, credentials: true, exposedHeaders: ['X-Request-Id'] }),
+      hpp(),
+      helmet(),
+      rateLimiter({
+        max: 5,
+        windowMs: 1000,
+        headers: true,
+      }),
       requestId(),
       cookieParser(),
       bodyLimiter({ maxBytes: 1024 * 1024 }),
-      hpp(),
-      helmet(),
-      cors({ origin: true, credentials: true, exposedHeaders: ['X-Request-Id'] }),
       log('global.onRequest'), [timeStart('req'), timeEnd('req')]
     ],
     beforeHandler: [bodyParser(['json', 'multipart-formdata']), csrf(), authCheck(), log('global.before')],
@@ -63,13 +69,13 @@ async function bootstrap() {
     hostname: '0.0.0.0',
     port: 5000,
   });
-
+/* 
   setInterval(() => {
     const mem = process.memoryUsage();
     logger.info(
       `[메모리 사용량] rss: ${(mem.rss / 1024 / 1024).toFixed(2)}MB, heapTotal: ${(mem.heapTotal / 1024 / 1024).toFixed(2)}MB, heapUsed: ${(mem.heapUsed / 1024 / 1024).toFixed(2)}MB`
     );
-  }, 1000);
-}
+  }, 10000);
+ */}
 
 bootstrap();

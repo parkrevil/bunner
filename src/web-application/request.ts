@@ -36,7 +36,9 @@ export class BunnerRequest {
 
     const xff = this.raw.headers.get(HeaderField.XForwardedFor);
     this.socketAddress = params.server.requestIP(this.raw) || undefined;
-    this.ip = xff ? xff?.split(',')[0]?.trim() : this.raw.headers.get(HeaderField.XRealIp) || this.socketAddress?.address || undefined;
+    this.ip = this.normalizeIp(
+      xff ? xff?.split(',')[0]?.trim() : this.raw.headers.get(HeaderField.XRealIp) ?? this.socketAddress?.address,
+    );
 
     const xfProto = this.headers.get(HeaderField.XForwardedProto) ?? '';
     this._isHttps = xfProto.toLowerCase().includes(Protocol.Https) || this.protocol === Protocol.Https;
@@ -158,5 +160,24 @@ export class BunnerRequest {
    */
   getCustomData<TValue>(key: string): TValue | undefined {
     return this._customData.get(key) as TValue | undefined;
+  }
+
+  /**
+   * Normalize the IP address
+   * @param ip - The IP address to normalize
+   * @returns The normalized IP address
+   */
+  private normalizeIp(ip: string | undefined): string | undefined {
+    if (!ip) {
+      return undefined;
+    }
+
+    const withoutPort = ip.split(':').length > 2 ? ip : ip.split(':')[0];
+
+    if (withoutPort?.startsWith('::ffff:')) {
+      return withoutPort.slice(7);
+    }
+
+    return withoutPort;
   }
 }
