@@ -1,12 +1,20 @@
 import { BunnerApplication } from '@bunner/core';
+import type { Server } from 'bun';
 
 export class HttpServer extends BunnerApplication {
+  private server: Server | undefined;
+
   constructor() {
     super();
+
+    this.server = undefined;
   }
 
-  async start() {
-    Bun.serve({
+  /**
+   * Start the server
+   */
+  start() {
+    this.server = Bun.serve({
       port: 5000,
       fetch: (req, res) => {
         console.log(req.url);
@@ -14,5 +22,18 @@ export class HttpServer extends BunnerApplication {
         return new Response('Hello, world!');
       },
     });
+  }
+
+  /**
+   * Stop the server
+   * @param force - Whether to force the server to close
+   * @returns A promise that resolves to true if the application stopped successfully
+   */
+  async stop(force = false) {
+    if (!this.server) {
+      return;
+    }
+
+    await this.server.stop(force);
   }
 }

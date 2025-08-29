@@ -6,7 +6,7 @@ class AppModule {}
 async function bootstrap() {
   const app = await Bunner.createApplication(HttpServer, AppModule);
 
-  await app.start();
+  app.start();
 
   console.log('Server is running on port 5000');
 }

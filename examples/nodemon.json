@@ -1,0 +1,15 @@
+{
+  "ext": "*",
+  "watch": [
+    "./src/**",
+    "./package.json",
+    "./tsconfig.json",
+    "../packages/**"
+  ],
+  "ignore": [],
+  "exec": "bun run src/main.ts",
+  "delay": 700,
+  "env": {
+    "NODE_ENV": "local"
+  }
+}
