@@ -2,34 +2,21 @@
   "lockfileVersion": 1,
   "workspaces": {
     "": {
-      "name": "bunner",
-      "devDependencies": {
-        "@types/bun": "^1.2.0",
-        "typescript": "^5",
+      "name": "examples",
+      "dependencies": {
+        "@bunner/core": "file:../packages/core",
+        "@bunner/http-server": "file:../packages/http-server",
       },
-    },
-    "packages/core": {
-      "name": "@bunner/core",
-    },
-    "packages/http-provider": {
-      "name": "@bunner/http-provider",
       "devDependencies": {
         "@types/bun": "latest",
-      },
-      "peerDependencies": {
         "typescript": "^5",
       },
-    },
-    "packages/http-provider/middlewares/cors": {
-      "name": "@bunner/http-cors",
     },
   },
   "packages": {
-    "@bunner/core": ["@bunner/core@workspace:packages/core"],
+    "@bunner/core": ["@bunner/core@file:../packages/core", {}],
 
-    "@bunner/http-cors": ["@bunner/http-cors@workspace:packages/http-provider/middlewares/cors"],
-
-    "@bunner/http-provider": ["@bunner/http-provider@workspace:packages/http-provider"],
+    "@bunner/http-server": ["@bunner/http-provider@file:../packages/http-server", { "devDependencies": { "@types/bun": "latest" }, "peerDependencies": { "typescript": "^5" } }],
 
     "@types/bun": ["@types/bun@1.2.21", "", { "dependencies": { "bun-types": "1.2.21" } }, "sha512-NiDnvEqmbfQ6dmZ3EeUO577s4P5bf4HCTXtI6trMc6f6RzirY5IrF3aIookuSpyslFzrnvv2lmEWv5HyC1X79A=="],
 
