@@ -16,94 +16,42 @@ pub extern "C" fn init_logger() {
             .with_env_filter(filter)
             .finish();
 
-            tracing::subscriber::set_global_default(subscriber)
-                .expect("Failed to set global logger");
+        tracing::subscriber::set_global_default(subscriber)
+            .expect("Failed to set global logger");
 
         info!("Bunner Rust Logger initialized.");
     });
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn log_trace(message: *const c_char) {
-    let rust_str = unsafe {
-        if message.is_null() {
-            error!("Received null pointer for trace log message.");
-            return;
-        }
-        CStr::from_ptr(message)
-    };
-
-    if let Ok(str_slice) = rust_str.to_str() {
-        trace!("{}", str_slice);
-    } else {
-        error!("Failed to convert C string to UTF-8 for trace log.");
-    }
+#[repr(C)]
+#[allow(non_camel_case_types)]
+pub enum LogLevel {
+    trace,
+    debug,
+    info,
+    warn,
+    error,
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn log_debug(message: *const c_char) {
+pub extern "C" fn log_message(level: LogLevel, message: *const c_char) {
     let rust_str = unsafe {
         if message.is_null() {
-            error!("Received null pointer for debug log message.");
+            error!("Received null pointer for log message.");
             return;
         }
         CStr::from_ptr(message)
     };
 
     if let Ok(str_slice) = rust_str.to_str() {
-        debug!("{}", str_slice);
-    } else {
-        error!("Failed to convert C string to UTF-8 for debug log.");
-    }
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn log_info(message: *const c_char) {
-    let rust_str = unsafe {
-        if message.is_null() {
-            error!("Received null pointer for info log message.");
-            return;
+        match level {
+            LogLevel::trace => trace!("{}", str_slice),
+            LogLevel::debug => debug!("{}", str_slice),
+            LogLevel::info => info!("{}", str_slice),
+            LogLevel::warn => warn!("{}", str_slice),
+            LogLevel::error => error!("{}", str_slice),
         }
-        CStr::from_ptr(message)
-    };
-
-    if let Ok(str_slice) = rust_str.to_str() {
-        info!("{}", str_slice);
     } else {
-        error!("Failed to convert C string to UTF-8 for info log.");
-    }
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn log_warn(message: *const c_char) {
-    let rust_str = unsafe {
-        if message.is_null() {
-            error!("Received null pointer for warn log message.");
-            return;
-        }
-        CStr::from_ptr(message)
-    };
-
-    if let Ok(str_slice) = rust_str.to_str() {
-        warn!("{}", str_slice);
-    } else {
-        error!("Failed to convert C string to UTF-8 for warn log.");
-    }
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn log_error(message: *const c_char) {
-    let rust_str = unsafe {
-        if message.is_null() {
-            error!("Received null pointer for error log message.");
-            return;
-        }
-        CStr::from_ptr(message)
-    };
-
-    if let Ok(str_slice) = rust_str.to_str() {
-        error!("{}", str_slice);
-    } else {
-        error!("Failed to convert C string to UTF-8 for error log.");
+        error!("Failed to convert C string to UTF-8.");
     }
 }
