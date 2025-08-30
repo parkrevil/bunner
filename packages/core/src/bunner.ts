@@ -1,6 +1,6 @@
 import type { BunnerApplication } from './bunner-application';
-import type { BunnerCreateApplicationOptions } from './interfaces';
-import type { ClassType } from './types';
+import type { CreateBunnerApplicationOptions, BunnerRootModule } from './interfaces';
+import type { Class } from './types';
 
 /**
  * Bunner class
@@ -15,22 +15,25 @@ export class Bunner {
    * @param type - The type of the application
    * @returns The Bunner application
    */
-  static async createApplication<T extends BunnerApplication>(appConstructor: ClassType<T>, module: ClassType<any>, options?: BunnerCreateApplicationOptions) {
+  static async createApplication<T extends BunnerApplication>(
+    appConstructor: Class<T>,
+    module: Class<BunnerRootModule>,
+    options?: CreateBunnerApplicationOptions,
+  ) {
+    this.setupSignalHandlers();
+
     const {
       name = this.generateApplicationDefaultName(),
-    } = options ?? {} as BunnerCreateApplicationOptions;
+    } = options ?? {};
 
     if (this.apps.has(name)) {
       throw new Error(`Application with name "${name}" already exists`);
     }
 
-    this.setupSignalHandlers();
-
     const app = new appConstructor();
+    await app.bootstrap(module);
 
     this.apps.set(name, app);
-
-    await app.bootstrap(module);
 
     return app;
   }
@@ -66,7 +69,7 @@ export class Bunner {
 
     await Promise.all(apps.map(async (app) => {
       try {
-        await app.shutdown();
+        await app.stop(true);
       } catch (e) {
         console.error('[Bunner] app shutdown failed:', e);
       }
@@ -93,6 +96,8 @@ export class Bunner {
       let exitCode = 0;
 
       try {
+        console.log('🛑 Shutting down...');
+
         await Promise.race([
           this.shutdown(),
           new Promise((_, reject) => setTimeout(() => reject(new Error('shutdown timeout')), 10000)),
@@ -107,7 +112,7 @@ export class Bunner {
     };
 
     ['SIGINT', 'SIGTERM', 'SIGQUIT', 'SIGHUP', 'SIGUSR2'].forEach((sig) => {
-      try { process.on(sig, handler); } catch { }
+      process.on(sig, handler);
     });
 
     this.signalsInitialized = true;

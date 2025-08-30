@@ -7,7 +7,7 @@
     "../packages/**"
   ],
   "ignore": [],
-  "exec": "bun run src/main.ts",
+  "exec": "bun install && bun run src/main.ts",
   "delay": 700,
   "env": {
     "NODE_ENV": "local"

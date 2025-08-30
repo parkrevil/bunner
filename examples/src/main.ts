@@ -1,10 +1,9 @@
 import { Bunner } from '@bunner/core';
 import { HttpServer } from '@bunner/http-server';
-
-class AppModule {}
+import { RootModule } from './root.module';
 
 async function bootstrap() {
-  const app = await Bunner.createApplication(HttpServer, AppModule);
+  const app = await Bunner.createApplication(HttpServer, RootModule);
 
   app.start();
 

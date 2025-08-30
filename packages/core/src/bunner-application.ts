@@ -1,23 +1,30 @@
-import type { ClassType } from './types';
+import type { BunnerRootModule } from './interfaces';
+import type { Class } from './types';
 
 export abstract class BunnerApplication {
   /**
-   * Initialize modules/resources and wait until all onModuleInit hooks complete.
-   * Apps should call this after registering modules and before starting servers.
+   * Bootstrap the application
+   * @param moduleConstructor - The module constructor
    */
-  async bootstrap(module: ClassType) {
+  async bootstrap(moduleConstructor: Class<BunnerRootModule>) {
     console.log('🚀 Application is booting...');
+
+    const module = new moduleConstructor();
+    await module.configure();
+    await module.registerMiddlewares();
 
     console.log('🚀 Application is ready.');
   }
 
   /**
-   * Graceful shutdown; wait until all onApplicationShutdown hooks complete.
+   * Start the application
+   * @param options - The options
    */
-  async shutdown() {
-    await this.stop(true);
-  }
-
   abstract start(options?: any): void | Promise<void>;
+
+  /**
+   * Stop the application
+   * @param force - Whether to force stop the application
+   */
   abstract stop(force?: boolean): void | Promise<void>;
 }

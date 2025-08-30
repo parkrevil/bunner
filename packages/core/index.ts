@@ -1,2 +1,4 @@
-export { Bunner } from './src/bunner';
-export { BunnerApplication } from './src/bunner-application';
+export * from './src/bunner';
+export * from './src/bunner-application';
+export * from './src/decorators';
+export * from './src/interfaces';
