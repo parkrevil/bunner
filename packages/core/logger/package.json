@@ -1,0 +1,7 @@
+{
+  "name": "@bunner/core-logger",
+  "type": "module",
+  "dependencies": {
+    "@bunner/core": "workspace:*"
+  }
+}

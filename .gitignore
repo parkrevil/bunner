@@ -3,3 +3,4 @@ dist
 target
 bun.lock
 Cargo.lock
+bin

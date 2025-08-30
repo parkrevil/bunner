@@ -5,20 +5,22 @@ use bunner_core_logger::LogLevel;
 
 #[test]
 fn test_logger_ffi() {
-    #[cfg(target_os = "linux")]
-    let lib_name = "libbunner_core_logger.so";
-    #[cfg(target_os = "macos")]
-    let lib_name = "libbunner_core_logger.dylib";
-    #[cfg(target_os = "windows")]
-    let lib_name = "bunner_core_logger.dll";
+    let base_name = "bunner_core_logger";
+    let lib_name = if cfg!(target_os = "linux") {
+        format!("lib{base_name}.so")
+    } else if cfg!(target_os = "macos") {
+        format!("lib{base_name}.dylib")
+    } else if cfg!(target_os = "windows") {
+        format!("{base_name}.dll")
+    } else {
+        panic!("Unsupported operating system for {base_name}");
+    };
 
-    // 라이브러리 로드
     let lib = unsafe {
         Library::new(&lib_name)
             .expect(&format!("Failed to load library: {}", lib_name))
     };
 
-    // init_logger 함수 가져오기 및 호출
     let init_logger: Symbol<extern "C" fn()> = unsafe {
         lib.get(b"init_logger\0")
             .expect("Could not find init_logger symbol")

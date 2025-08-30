@@ -1,11 +1,2 @@
-[build]
-rustflags = [
-    "-L", "dependency=target/debug",
-    "-L", "dependency=target/release",
-]
-
 [env]
 RUST_LOG = "trace"
-LD_LIBRARY_PATH = "target/debug"
-DYLD_LIBRARY_PATH = "target/debug"
-PATH = "target/debug"

@@ -28,5 +28,8 @@
   "devDependencies": {
     "@types/bun": "^1.2.0",
     "typescript": "^5"
+  },
+  "dependencies": {
+    "package-directory": "^8.1.0"
   }
 }

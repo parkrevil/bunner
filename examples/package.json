@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@bunner/core": "file:../packages/core",
+    "@bunner/core-logger": "file:../packages/core/logger",
     "@bunner/http-server": "file:../packages/http-server"
   },
   "devDependencies": {
