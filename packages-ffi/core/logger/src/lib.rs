@@ -6,6 +6,16 @@ use tracing_subscriber::{fmt, EnvFilter};
 
 static LOGGER_INIT: OnceCell<()> = OnceCell::new();
 
+#[repr(C)]
+#[allow(non_camel_case_types)]
+pub enum LogLevel {
+    trace,
+    debug,
+    info,
+    warn,
+    error,
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn init_logger() {
     LOGGER_INIT.get_or_init(|| {
@@ -21,16 +31,6 @@ pub extern "C" fn init_logger() {
 
         info!("Bunner Rust Logger initialized.");
     });
-}
-
-#[repr(C)]
-#[allow(non_camel_case_types)]
-pub enum LogLevel {
-    trace,
-    debug,
-    info,
-    warn,
-    error,
 }
 
 #[unsafe(no_mangle)]

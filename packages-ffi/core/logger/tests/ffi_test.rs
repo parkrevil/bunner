@@ -1,6 +1,7 @@
 use std::ffi::CString;
 use std::os::raw::c_char;
 use libloading::{Library, Symbol};
+use bunner_core_logger::LogLevel;
 
 #[test]
 fn test_logger_ffi() {
@@ -11,51 +12,36 @@ fn test_logger_ffi() {
     #[cfg(target_os = "windows")]
     let lib_name = "bunner_core_logger.dll";
 
+    // 라이브러리 로드
     let lib = unsafe {
-        Library::new(format!("../../../target/release/{}", lib_name))
+        Library::new(&lib_name)
             .expect(&format!("Failed to load library: {}", lib_name))
     };
 
+    // init_logger 함수 가져오기 및 호출
     let init_logger: Symbol<extern "C" fn()> = unsafe {
         lib.get(b"init_logger\0")
             .expect("Could not find init_logger symbol")
     };
     init_logger();
 
-    let log_trace: Symbol<unsafe extern "C" fn(*const c_char)> = unsafe {
-        lib.get(b"log_trace\0")
-            .expect("Could not find log_trace symbol")
+    let log_message: Symbol<unsafe extern "C" fn(LogLevel, *const c_char)> = unsafe {
+        lib.get(b"log_message\0")
+            .expect("Could not find log_message symbol")
     };
+
     let trace_message = CString::new("This is a trace message from FFI test.").expect("CString::new failed");
-    unsafe { log_trace(trace_message.as_ptr()) };
+    unsafe { log_message(LogLevel::trace, trace_message.as_ptr()) };
 
-    let log_debug: Symbol<unsafe extern "C" fn(*const c_char)> = unsafe {
-        lib.get(b"log_debug\0")
-            .expect("Could not find log_debug symbol")
-    };
     let debug_message = CString::new("This is a debug message from FFI test.").expect("CString::new failed");
-    unsafe { log_debug(debug_message.as_ptr()) };
+    unsafe { log_message(LogLevel::debug, debug_message.as_ptr()) };
 
-    let log_info: Symbol<unsafe extern "C" fn(*const c_char)> = unsafe {
-        lib.get(b"log_info\0")
-            .expect("Could not find log_info symbol")
-    };
     let info_message = CString::new("This is an info message from FFI test.").expect("CString::new failed");
-    unsafe { log_info(info_message.as_ptr()) };
+    unsafe { log_message(LogLevel::info, info_message.as_ptr()) };
 
-    let log_warn: Symbol<unsafe extern "C" fn(*const c_char)> = unsafe {
-        lib.get(b"log_warn\0")
-            .expect("Could not find log_warn symbol")
-    };
     let warn_message = CString::new("This is a warn message from FFI test.").expect("CString::new failed");
-    unsafe { log_warn(warn_message.as_ptr()) };
+    unsafe { log_message(LogLevel::warn, warn_message.as_ptr()) };
 
-    let log_error: Symbol<unsafe extern "C" fn(*const c_char)> = unsafe {
-        lib.get(b"log_error\0")
-            .expect("Could not find log_error symbol")
-    };
     let error_message = CString::new("This is an error message from FFI test.").expect("CString::new failed");
-    unsafe { log_error(error_message.as_ptr()) };
-
-    init_logger();
+    unsafe { log_message(LogLevel::error, error_message.as_ptr()) };
 }
