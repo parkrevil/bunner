@@ -1,0 +1,10 @@
+[package]
+name = "bunner-core-logger"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "bunner_core_logger"
+crate-type = ["cdylib"]
+
+[dependencies]

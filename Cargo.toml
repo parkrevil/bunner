@@ -1,5 +1,6 @@
 [workspace]
 members = [
-    "packages-ffi/http-provider/middlewares/cors",
+  "packages-ffi/core/logger",
+  "packages-ffi/http-provider/middlewares/cors",
 ]
 resolver = "2"
