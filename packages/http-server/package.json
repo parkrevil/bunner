@@ -1,5 +1,5 @@
 {
-  "name": "@bunner/http-provider",
+  "name": "@bunner/http-server",
   "module": "index.ts",
   "type": "module",
   "devDependencies": {
@@ -9,5 +9,8 @@
   },
   "dependencies": {
     "statuses": "^2.0.2"
+  },
+  "peerDependencies": {
+    "@bunner/core": "workspace:*"
   }
 }

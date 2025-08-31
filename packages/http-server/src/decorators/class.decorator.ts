@@ -1,4 +1,4 @@
-import { ControllerDecoratorOptions } from './interfaces';
+import type { ControllerDecoratorOptions } from './interfaces';
 
 /**
  * Controller Decorators

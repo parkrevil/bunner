@@ -1,8 +1,29 @@
 import { Injectable } from '@bunner/core';
+import type { UserRepository } from './users.repository';
 
 @Injectable()
 export class UsersService {
-  constructor() {
+  constructor(private readonly userRepository: UserRepository) {
     console.log('Users Service Constructor');
+  }
+
+  findAll() {
+    return this.userRepository.findAll();
+  }
+
+  findOneById(id: number) {
+    return this.userRepository.findOneById(id);
+  }
+
+  create(body: any) {
+    this.userRepository.create(body);
+  }
+
+  update(id: number, data: any) {
+    this.userRepository.updateById(id, data);
+  }
+
+  delete(id: number) {
+    this.userRepository.deleteById(id);
   }
 }

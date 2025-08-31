@@ -1,4 +1,4 @@
-import { HttpMethod, HttpStatusCode } from '../types';
+import type { HttpMethod, HttpStatusCode } from '../types';
 
 /**
  * Controller Decorator Options

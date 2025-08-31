@@ -1,4 +1,4 @@
-import { InjectableMetadata, ModuleMetadata } from './interfaces';
+import type { InjectableMetadata, ModuleMetadata } from './interfaces';
 
 /**
  * Module Decorator

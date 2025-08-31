@@ -1,19 +1,21 @@
 {
-  "name": "examples",
+  "name": "@bunner/examples",
   "module": "src/main.ts",
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "nodemon"
+    "dev": "nodemon",
+    "di": "bunner di"
   },
   "dependencies": {
-    "@bunner/cli": "file:../packages/cli",
-    "@bunner/core": "file:../packages/core",
-    "@bunner/core-logger": "file:../packages/core/logger",
-    "@bunner/http-server": "file:../packages/http-server"
+    "@bunner/cli": "workspace:*",
+    "@bunner/core": "workspace:*",
+    "@bunner/core-logger": "workspace:*",
+    "@bunner/http-server": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "^1.2.0",
+    "nodemon": "^3.1.10",
     "typescript": "^5"
   }
 }

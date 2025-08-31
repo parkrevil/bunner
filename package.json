@@ -22,7 +22,8 @@
   },
   "homepage": "https://github.com/parkrevil/bunner",
   "workspaces": [
-    "packages/**"
+    "packages/**/*",
+    "examples"
   ],
   "scripts": {},
   "devDependencies": {

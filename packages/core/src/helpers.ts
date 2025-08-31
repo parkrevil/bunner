@@ -2,6 +2,11 @@ import { suffix } from "bun:ffi";
 import { textEncoder } from './instances';
 import { packageDirectorySync } from 'package-directory';
 
+/**
+ * Encode a string to a C string
+ * @param message - The message to encode
+ * @returns The encoded message
+ */
 export function encodeCString(message: string) {
   const bytes = textEncoder.encode(message);
   const buf = new Uint8Array(bytes.length + 1);
@@ -12,6 +17,12 @@ export function encodeCString(message: string) {
   return buf;
 }
 
+/**
+ * Resolve the path to a Rust library
+ * @param libName - The name of the library
+ * @param cwd - The current working directory
+ * @returns The path to the library
+ */
 export function resolveRustLibPath(libName: string, cwd: string) {
   const fname = process.platform === 'win32' ? `${libName}.dll` : `lib${libName}.${suffix}`;
 

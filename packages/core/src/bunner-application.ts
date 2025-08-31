@@ -10,8 +10,8 @@ export abstract class BunnerApplication {
     console.log('🚀 Application is booting...');
 
     const module = new moduleConstructor();
-    await module.configure();
-    await module.registerMiddlewares();
+    await module.configure?.();
+    await module.registerMiddlewares?.();
 
     console.log('🚀 Application is ready.');
   }

@@ -1,5 +1,5 @@
-import { HttpMethod } from '../types';
-import { HttpMethodDecoratorMetadata, HttpMethodDecoratorOptions } from './interfaces';
+import type { HttpMethod } from '../types';
+import type { HttpMethodDecoratorMetadata, HttpMethodDecoratorOptions } from './interfaces';
 
 /**
  * Get HTTP Method Decorator
@@ -78,10 +78,10 @@ export function Head(path?: string, options?: HttpMethodDecoratorMetadata): Meth
  * @param options - Route options
  * @returns MethodDecorator
  */
-function defineHttpMethodDecorator(httpMethod: HttpMethodValue, path?: string, options?: HttpMethodDecoratorOptions): MethodDecorator {
-  return function<T>(target: T, propertyKey: string | symbol, descriptor: TypedPropertyDescriptor<T>) {
+function defineHttpMethodDecorator(httpMethod: HttpMethod, path?: string, options?: HttpMethodDecoratorOptions): MethodDecorator {
+  return function(target: Object, propertyKey: string | symbol, descriptor: TypedPropertyDescriptor<any>) {
     console.log('📦 HTTP Method Decorator', httpMethod, path, options);
 
-    return target;
+    return descriptor;
   };
 }

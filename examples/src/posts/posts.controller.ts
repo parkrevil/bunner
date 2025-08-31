@@ -1,8 +1,47 @@
-import { Controller } from '@bunner/http-server';
+import { Controller, Delete, Get, Params, Post, Put, Body } from '@bunner/http-server';
+import type { PostsService } from './posts.service';
 
 @Controller()
 export class PostsController {
-  constructor() {
+  constructor(private readonly postsService: PostsService) {
     console.log('Posts Controller Constructor');
+  }
+
+  @Get()
+  getAll() {
+    return this.postsService.findAll();
+  }
+
+  @Get(':id')
+  getById(@Params() params: any) {
+    const { id } = params;
+    
+    return this.postsService.findOneById(id);
+  }
+
+  @Post()
+  create(@Body() body: any) {
+    return this.postsService.create(body);
+  }
+
+  @Put(':id')
+  update(@Params() params: any, @Body() body: any) {
+    const { id } = params;
+
+    return this.postsService.update(id, body);
+  }
+
+  @Delete(':id')
+  delete(@Params() params: any) {
+    const { id } = params;
+
+    return this.postsService.delete(id);
+  }
+
+  @Post(':id/comments')
+  createComment(@Params() params: any, @Body() body: any) {
+    const { id } = params;
+
+    return this.postsService.createComment(id, body);
   }
 }

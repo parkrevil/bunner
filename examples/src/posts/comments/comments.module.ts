@@ -1,9 +1,8 @@
 import { Module } from '@bunner/core';
-import { CommentsController } from './comments.controller';
 import { CommentsService } from './comments.service';
 
 @Module({
-  controllers: [CommentsController],
+  controllers: [],
   providers: [CommentsService],
   exports: [CommentsService],
 })

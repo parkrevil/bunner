@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { DiCommand } from './di';
+import { Di } from './di';
 import type { Command } from './interfaces';
 
 export class BunnerCLI {
@@ -14,7 +14,7 @@ export class BunnerCLI {
    * Register the available commands.
    */
   private registerCommands(): void {
-    this.commands.set('di', new DiCommand());
+    this.commands.set('di', new Di());
   }
 
   /**
