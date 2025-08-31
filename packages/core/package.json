@@ -1,4 +1,8 @@
 {
   "name": "@bunner/core",
-  "type": "module"
+  "type": "module",
+  "devDependencies": {
+    "@types/bun": "^1.2.0",
+    "typescript": "^5"
+  }
 }

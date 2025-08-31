@@ -7,12 +7,13 @@
     "dev": "nodemon"
   },
   "dependencies": {
+    "@bunner/cli": "file:../packages/cli",
     "@bunner/core": "file:../packages/core",
     "@bunner/core-logger": "file:../packages/core/logger",
     "@bunner/http-server": "file:../packages/http-server"
   },
   "devDependencies": {
-    "@types/bun": "latest",
+    "@types/bun": "^1.2.0",
     "typescript": "^5"
   }
 }
