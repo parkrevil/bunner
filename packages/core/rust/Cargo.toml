@@ -1,0 +1,17 @@
+[package]
+name = "bunner-core"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "bunner_core"
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+once_cell = "1.21"
+libc = "0.2"
+
+[dev-dependencies]
+libloading = "0.8"

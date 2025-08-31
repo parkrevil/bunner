@@ -15,7 +15,6 @@ export class PostsController {
   @Get(':id')
   getById(@Params() params: any) {
     const { id } = params;
-    
     return this.postsService.findOneById(id);
   }
 
@@ -27,7 +26,7 @@ export class PostsController {
   @Put(':id')
   update(@Params() params: any, @Body() body: any) {
     const { id } = params;
-
+    
     return this.postsService.update(id, body);
   }
 

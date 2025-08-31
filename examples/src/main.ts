@@ -1,10 +1,15 @@
-import { Bunner } from '@bunner/core';
+import { Bunner, metadataRegistry } from '@bunner/core';
 import { HttpServer } from '@bunner/http-server';
 import { RootModule } from './root.module';
 import { Logger } from '@bunner/core-logger';
 
 async function bootstrap() {
   const app = await Bunner.createApplication(HttpServer, RootModule);
+
+  console.log(metadataRegistry.modules);
+  console.log(metadataRegistry.providers);
+  console.log(metadataRegistry.controllers);
+
   const logger = await Logger.getInstance();
   
   logger.init();

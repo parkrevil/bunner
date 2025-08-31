@@ -1,68 +1,44 @@
-import type { HttpMethod, HttpStatusCode } from '../types';
+import type { HttpMethod } from '../types';
 
 /**
  * Controller Decorator Options
  * @description The options for the controller decorator
  */
-export interface ControllerDecoratorOptions {
-  version?: string;
-  middlewares?: ControllerMiddlewareMetadata;
-  document?: ControllerApiDocumentMetadata;
-}
+export interface ControllerDecoratorOptions {}
 
 /**
- * Controller Api Document Metadata
- * @description The metadata for the controller api document
+ * Controller Metadata
+ * @description The metadata for the http method decorator
  */
-export interface ControllerApiDocumentMetadata {
-  summary?: string;
-  description?: string;
-  tags?: string[];
-}
-
-/**
- * Controller Middleware Metadata
- * @description The metadata for the controller middleware
- */
-export interface ControllerMiddlewareMetadata {
-  beforeHandler?: number[];
-  afterHandler?: number[];
+export interface ControllerMetadata {
+  target: Function;
+  path?: string;
+  routes: RouteHandlerMetadata[];
 }
 
 /**
  * Http Method Decorator Options
  * @description The options for the http method decorator
  */
-export interface HttpMethodDecoratorOptions {
-  httpStatus?: HttpStatusCode;
-  version?: string;
-  middlewares?: RouteHandlerMiddlewareMetadata;
-  document?: HttpMethodApiDocumentMetadata;
-}
+export interface HttpMethodDecoratorOptions {}
 
 /**
  * Http Method Decorator Metadata
  * @description The metadata for the http method decorator
  */
-export interface HttpMethodDecoratorMetadata extends HttpMethodDecoratorOptions {
+export interface RouteHandlerMetadata {
+  target: Function;
+  propertyKey: string;
   path?: string;
   httpMethod: HttpMethod;
 }
 
 /**
- * Route Handler Middleware Metadata
- * @description The metadata for the route handler middleware
+ * Parameter Metadata
+ * @description The metadata for the parameter decorator
  */
-export interface RouteHandlerMiddlewareMetadata {
-  beforeHandler?: number[];
-  afterHandler?: number[];
-}
-
-/**
- * Http Method Api Document Metadata
- * @description The metadata for the http method api document
- */
-export interface HttpMethodApiDocumentMetadata {
-  summary?: string;
-  description?: string;
+export interface ParameterMetadata {
+  index: number;
+  type: string;
+  token?: string;
 }
