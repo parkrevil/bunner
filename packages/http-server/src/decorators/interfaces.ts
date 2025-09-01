@@ -13,7 +13,7 @@ export interface ControllerDecoratorOptions {}
 export interface ControllerMetadata {
   target: Function;
   path?: string;
-  routes: RouteHandlerMetadata[];
+  routeHandlerMetadatas: RouteHandlerMetadata[];
 }
 
 /**

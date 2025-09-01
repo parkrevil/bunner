@@ -1,21 +1,5 @@
-import type { ModuleController, ModuleExport, ModuleImport, ModuleProvider } from './types';
+import type { ModuleController, ModuleExport, ModuleImport, ModuleProvider, ProviderScope } from './types';
 
-/**
- * Injectable decorator options
- * @description The metadata for an injectable
- */
-export interface InjectableDecoratorOptions {
-  scope?: 'singleton' | 'transient' | 'request';
-}
-
-/**
- * Injectable Metadata
- * @description The metadata for an injectable
- */
-export interface InjectableMetadata extends InjectableDecoratorOptions {
-  name: string;
-  deps: string[];
-}
 
 /**
  * Module decorator options
@@ -38,4 +22,21 @@ export interface ModuleMetadata {
   controllers: ModuleController[];
   imports: ModuleImport[];
   exports: ModuleExport[];
+}
+
+/**
+ * Injectable decorator options
+ * @description The metadata for an injectable
+ */
+export interface InjectableDecoratorOptions {
+  scope?: ProviderScope;
+}
+
+/**
+ * Injectable Metadata
+ * @description The metadata for an injectable
+ */
+export interface InjectableMetadata extends InjectableDecoratorOptions {
+  name: string;
+  deps: string[];
 }

@@ -23,3 +23,9 @@ export type ModuleImport = Class;
  * @description The export for a module
  */
 export type ModuleExport = Class;
+
+/**
+ * Provider Scope
+ * @description The scope for a provider
+ */
+export type ProviderScope = 'singleton' | 'transient' | 'request';

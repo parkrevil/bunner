@@ -1,4 +1,5 @@
 import type { codes as HttpStatusCode } from 'statuses';
+import type { HttpMethod } from './constants';
 
 /**
  * HTTP Status Code
@@ -7,7 +8,7 @@ import type { codes as HttpStatusCode } from 'statuses';
 export type HttpStatusCode = (typeof HttpStatusCode)[number];
 
 /**
- * HTTP Method
- * @description The HTTP method
+ * HTTP Method Value
+ * @description The HTTP method value
  */
-export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'OPTIONS' | 'HEAD';
+export type HttpMethodValue = (typeof HttpMethod)[keyof typeof HttpMethod];
