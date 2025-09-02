@@ -1,6 +1,6 @@
-import type { Class } from '../types';
-import { INJECT_DEPS_KEY, metadataRegistry } from './constants';
-import type { InjectableDecoratorOptions, InjectableMetadata, ModuleDecoratorOptions } from './interfaces';
+import { MetadataKey } from './constants';
+import type { InjectableDecoratorOptions, InjectableMetadata, ModuleDecoratorOptions, ModuleMetadata } from './interfaces';
+
 
 /**
  * Module Decorator
@@ -8,6 +8,14 @@ import type { InjectableDecoratorOptions, InjectableMetadata, ModuleDecoratorOpt
  */
 export function Module(metadata?: ModuleDecoratorOptions): ClassDecorator {
   return function<T extends Function>(target: T) {
+    const moduleMetadata: ModuleMetadata = {
+      providers: metadata?.providers ?? [],
+      controllers: metadata?.controllers ?? [],
+      imports: metadata?.imports ?? [],
+      exports: metadata?.exports ?? [],
+    };
+
+    Reflect.defineMetadata(MetadataKey.Module, moduleMetadata, target);
   };
 }
 
@@ -17,5 +25,10 @@ export function Module(metadata?: ModuleDecoratorOptions): ClassDecorator {
  */
 export function Injectable(metadata?: InjectableDecoratorOptions): ClassDecorator {
   return function<T extends Function>(target: T) {
+    const injectableMetadata: InjectableMetadata = {
+      scope: metadata?.scope ?? 'singleton',
+    };
+
+    Reflect.defineMetadata(MetadataKey.Injectable, injectableMetadata, target);
   };
 }

@@ -1,4 +1,4 @@
-import { Bunner, metadataRegistry } from '@bunner/core';
+import { Bunner } from '@bunner/core';
 import { HttpServer } from '@bunner/http-server';
 import { RootModule } from './root.module';
 import { Logger } from '@bunner/core-logger';
@@ -14,6 +14,13 @@ async function bootstrap() {
   app.start();
 
   logger.info('🚀 Server is running on port 5000');
+
+  setInterval(() => {
+    const mem = process.memoryUsage();
+    logger.info(
+      `rss: ${(mem.rss / 1024 / 1024).toFixed(2)}MB, heapTotal: ${(mem.heapTotal / 1024 / 1024).toFixed(2)}MB, heapUsed: ${(mem.heapUsed / 1024 / 1024).toFixed(2)}MB`
+    );
+  }, 1000);
 }
 
 bootstrap();

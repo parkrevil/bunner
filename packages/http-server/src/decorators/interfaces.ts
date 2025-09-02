@@ -1,4 +1,4 @@
-import type { HttpMethod } from '../types';
+import type { HttpMethodValue } from '../types';
 
 /**
  * Controller Decorator Options
@@ -13,7 +13,7 @@ export interface ControllerDecoratorOptions {}
 export interface ControllerMetadata {
   target: Function;
   path?: string;
-  routeHandlerMetadatas: RouteHandlerMetadata[];
+  options?: ControllerDecoratorOptions;
 }
 
 /**
@@ -28,17 +28,17 @@ export interface HttpMethodDecoratorOptions {}
  */
 export interface RouteHandlerMetadata {
   target: Function;
-  propertyKey: string;
+  propertyKey: string | symbol;
+  httpMethod: HttpMethodValue;
   path?: string;
-  httpMethod: HttpMethod;
+  options?: HttpMethodDecoratorOptions;
 }
 
 /**
  * Parameter Metadata
  * @description The metadata for the parameter decorator
  */
-export interface ParameterMetadata {
+export interface HttpParamMetadata {
   index: number;
   type: string;
-  token?: string;
 }
