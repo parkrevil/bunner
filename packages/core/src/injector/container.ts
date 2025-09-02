@@ -78,15 +78,15 @@ export class Container {
     if (isClass(provider)) {
       token = provider;
       cls = provider;
-      dependencies = this.getDependenciesFromParams(provider);
+      dependencies = this.getDependenciesFromConstructor(provider);
     } else if (isUseClassProvider(provider)) {
       token = provider.token;
       cls = provider.useClass;
-      dependencies = this.getDependenciesFromParams(provider.useClass);
+      dependencies = this.getDependenciesFromConstructor(provider.useClass);
     } else if (isUseExistingProvider(provider)) {
       token = provider.token;
       cls = provider.useExisting;
-      dependencies = this.getDependenciesFromParams(provider.useExisting);
+      dependencies = this.getDependenciesFromConstructor(provider.useExisting);
     } else if (isUseFactoryProvider(provider)) {
       token = provider.token;
       dependencies = provider.inject ?? [];
@@ -126,7 +126,12 @@ export class Container {
     }
   }
 
-  private getDependenciesFromParams(provider: Class) {
+  /**
+   * Get the dependencies from the params
+   * @param provider 
+   * @returns 
+   */
+  private getDependenciesFromConstructor(provider: Class) {
     const paramTypes = Reflect.getMetadata(ReflectMetadataKey.DesignParamtypes, provider);
 
     if (!paramTypes) {
