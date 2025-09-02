@@ -24,7 +24,7 @@ export interface ProviderBase {
  * @description The value for a provider
  */
 export interface ProviderUseValue extends ProviderBase {
-  value: any;
+  useValue: any;
 }
 
 /**
@@ -61,25 +61,33 @@ export interface ForwardRef {
 };
 
 /**
- * Dependency Graph Module Node
- * @description The node for a module
+ * Dependency Graph Base
+ * @description The base for a dependency graph
  */
-export interface DependencyGraphModule extends ModuleMetadata {}
+export interface DependencyGraphBase {
+  type: 'module' | 'provider' | 'controller';
+}
 
 /**
- * Dependency Graph Provider Node
- * @description The node for a provider
+ * Dependency Graph Module
+ * @description The module for a dependency graph
  */
-export interface DependencyGraphProvider {
+export interface DependencyGraphModule extends DependencyGraphBase, ModuleMetadata {}
+
+/**
+ * Dependency Graph Provider
+ * @description The provider for a dependency graph
+ */
+export interface DependencyGraphProvider extends DependencyGraphBase {
   provider: Provider;
   dependencies: DependencyProvider[];
   scope: ProviderScope | undefined;
 }
 
 /**
- * Dependency Graph Controller Node
- * @description The node for a controller
+ * Dependency Graph Controller
+ * @description The controller for a dependency graph
  */
-export interface DependencyGraphController {
+export interface DependencyGraphController extends DependencyGraphBase {
   dependencies: DependencyProvider[];
 }

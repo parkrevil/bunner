@@ -1,7 +1,7 @@
 import { Bunner } from '@bunner/core';
 import { HttpServer } from '@bunner/http-server';
-import { RootModule } from './root.module';
 import { Logger } from '@bunner/core-logger';
+import { RootModule } from './root.module';
 
 async function bootstrap() {
   const app = await Bunner.create(HttpServer, RootModule);

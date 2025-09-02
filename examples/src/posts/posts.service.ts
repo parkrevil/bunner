@@ -1,6 +1,6 @@
 import { Injectable } from '@bunner/core';
-import type { CommentsService } from './comments';
-import type { PostsRepository } from './posts.repository';
+import { CommentsService } from './comments';
+import { PostsRepository } from './posts.repository';
 
 @Injectable()
 export class PostsService {

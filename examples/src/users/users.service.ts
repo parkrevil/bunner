@@ -1,5 +1,5 @@
 import { Injectable } from '@bunner/core';
-import type { UserRepository } from './users.repository';
+import { UserRepository } from './users.repository';
 
 @Injectable()
 export class UsersService {

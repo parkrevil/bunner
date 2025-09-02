@@ -15,7 +15,7 @@ export function Inject(providerToken?: ProviderToken | ForwardRef): ParameterDec
 
     if (providerToken) {
       if (isForwardRef(providerToken)) {
-        token = providerToken.forwardRef;
+        token = providerToken;
         provider = undefined;
       } else if (isClass(providerToken)) {
         token = providerToken;

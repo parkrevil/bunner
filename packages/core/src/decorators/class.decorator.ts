@@ -6,13 +6,13 @@ import type { InjectableDecoratorOptions, ModuleDecoratorOptions } from './inter
  * Module Decorator
  * Marks a class as a module and defines its metadata
  */
-export function Module(metadata?: ModuleDecoratorOptions): ClassDecorator {
+export function Module(options?: ModuleDecoratorOptions): ClassDecorator {
   return function<T extends Function>(target: T) {
     const moduleMetadata: ModuleMetadata = {
-      providers: metadata?.providers ?? [],
-      controllers: metadata?.controllers ?? [],
-      imports: metadata?.imports ?? [],
-      exports: metadata?.exports ?? [],
+      providers: options?.providers ?? [],
+      controllers: options?.controllers ?? [],
+      imports: options?.imports ?? [],
+      exports: options?.exports ?? [],
     };
 
     Reflect.defineMetadata(MetadataKey.Module, moduleMetadata, target);
@@ -23,10 +23,10 @@ export function Module(metadata?: ModuleDecoratorOptions): ClassDecorator {
  * Injectable Decorator
  * Marks a class as an injectable and defines its metadata
  */
-export function Injectable(metadata?: InjectableDecoratorOptions): ClassDecorator {
+export function Injectable(options?: InjectableDecoratorOptions): ClassDecorator {
   return function<T extends Function>(target: T) {
     const injectableMetadata: InjectableMetadata = {
-      scope: metadata?.scope ?? 'singleton',
+      scope: options?.scope ?? 'singleton',
     };
 
     Reflect.defineMetadata(MetadataKey.Injectable, injectableMetadata, target);

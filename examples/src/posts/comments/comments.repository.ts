@@ -1,7 +1,7 @@
 import { Injectable } from '@bunner/core';
 
 @Injectable()
-export class CommentsRepository {
+export class CommentRepository {
   private comments: any[] = [
     {
       id: 1,

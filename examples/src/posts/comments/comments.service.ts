@@ -1,5 +1,5 @@
 import { Injectable } from '@bunner/core';
-import type { CommentRepository } from './comments.repository';
+import { CommentRepository } from './comments.repository';
 
 @Injectable()
 export class CommentsService {

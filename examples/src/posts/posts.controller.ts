@@ -1,5 +1,5 @@
 import { RestController, Delete, Get, Params, Post, Put, Body } from '@bunner/http-server';
-import type { PostsService } from './posts.service';
+import { PostsService } from './posts.service';
 
 @RestController()
 export class PostsController {

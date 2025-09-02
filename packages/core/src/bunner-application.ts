@@ -22,6 +22,8 @@ export abstract class BunnerApplication {
    */
   async bootstrap() {
     console.log('🚀 Application is booting...');
+
+    await this.container.bootstrap();
     await this.rootModule.configure?.(this);
     await this.rootModule.registerMiddlewares?.(this);
 /* 

@@ -5,6 +5,7 @@
   "description": "Bunner is a web server framework for building web applications with Bun.",
   "author": "revil <revil.com@gmail.com>",
   "license": "MIT",
+  "type": "module",
   "keywords": [
     "bunner",
     "framework",
@@ -29,8 +30,5 @@
   "devDependencies": {
     "@types/bun": "^1.2.0",
     "typescript": "^5"
-  },
-  "dependencies": {
-    "package-directory": "^8.1.0"
   }
 }

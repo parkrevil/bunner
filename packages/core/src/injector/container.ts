@@ -3,7 +3,7 @@ import type { BunnerRootModule } from '../interfaces';
 import type { Class } from '../types';
 import { MetadataKey, ReflectMetadataKey } from './constants';
 import { isForwardRef, isUseClassProvider, isUseExistingProvider, isUseFactoryProvider, isUseValueProvider } from './helpers';
-import type { DependencyGraphController, DependencyGraphProvider, InjectMetadata } from './interfaces';
+import type { DependencyGraphController, DependencyGraphModule, DependencyGraphProvider, InjectMetadata } from './interfaces';
 import type { DependencyGraphNode, DependencyProvider, InjectableMetadata, ModuleMetadata, Provider, ProviderToken } from './types';
 
 /**
@@ -11,25 +11,33 @@ import type { DependencyGraphNode, DependencyProvider, InjectableMetadata, Modul
  * @description Dependency injection container for each application
  */
 export class Container {
-  private rootModuleCls: Class<BunnerRootModule>;
-  private graph: Map<Class | ProviderToken, DependencyGraphNode>;
+  private readonly rootModuleCls: Class<BunnerRootModule>;
+  private readonly graph: Map<Class | ProviderToken, DependencyGraphNode>;
+  private readonly modules: Map<Class, Object>;
+  private readonly providers: Map<ProviderToken, Object>;
+  private readonly controllers: Map<Class, Object>;
 
   constructor(rootModuleCls: Class<BunnerRootModule>) {
     this.rootModuleCls = rootModuleCls;
     this.graph = new Map<Class, DependencyGraphNode>();
+    this.modules = new Map<Class, Object>();
+    this.providers = new Map<ProviderToken, Object>();
+    this.controllers = new Map<Class, Object>();
   }
 
   /**
    * Initialize the container and build dependency graph
    */
-  async init() {
+  init() {
     console.log('🔧 Building dependency graph...');
     
     this.buildGraph();
-
-    console.log(this.graph);
     
     console.log('✅ Dependency graph built and resolved');
+  }
+  
+  public async bootstrap() {
+    await this.resolveModule(this.rootModuleCls);
   }
 
   /**
@@ -55,7 +63,10 @@ export class Container {
       throw new Error(`Module ${cls.name} does not have a @Module() decorator.`);
     }
 
-    this.graph.set(cls, metadata);
+    this.graph.set(cls, {
+      type: 'module',
+      ...metadata,
+    });
 
     for (const importedCls of metadata.imports) {
       this.exploreModule(importedCls);
@@ -106,6 +117,7 @@ export class Container {
     }
 
     const node: DependencyGraphProvider = {
+      type: 'provider',
       provider,
       dependencies,
       scope: undefined,
@@ -134,6 +146,7 @@ export class Container {
     const dependencies = this.getDependenciesFromConstructor(cls);
 
     this.graph.set(cls, {
+      type: 'controller',
       dependencies,
     } as DependencyGraphController);
 
@@ -174,5 +187,107 @@ export class Container {
     }
 
     return dependencies;
+  }
+
+  /**
+   * Resolve the module
+   * @param moduleCls 
+   * @returns 
+   */
+  private async resolveModule(moduleCls: Class) {
+    let module = this.modules.get(moduleCls);
+
+    if (module) {
+      return module;
+    }
+
+    module = new moduleCls();
+
+    this.modules.set(moduleCls, module!);
+
+    const node: DependencyGraphModule = this.graph.get(moduleCls) as DependencyGraphModule;
+
+    for (const importedCls of node.imports) {
+      this.resolveModule(importedCls);
+    }
+
+    for (const controllerCls of node.controllers) {
+      await this.resolveController(controllerCls);
+    }
+
+    return module;
+  }
+
+  /**
+   * Resolve the controller
+   * @param cls 
+   * @returns 
+   */
+  private async resolveController(cls: Class) {
+    let instance = this.controllers.get(cls);
+
+    if (instance) {
+      return instance;
+    }
+
+    const node: DependencyGraphController = this.graph.get(cls) as DependencyGraphController;
+    const dependencies = await Promise.all(
+      node.dependencies.map(dependency => this.resolveProvider(isForwardRef(dependency) ? dependency.forwardRef() : dependency))
+    );
+
+    instance = new cls(...dependencies);
+
+    this.controllers.set(cls, instance!);
+
+    return instance;
+  }
+  
+  /**
+   * Resolve the provider
+   * @param token 
+   * @returns 
+   */
+  private async resolveProvider(token: ProviderToken): Promise<any> {
+    let instance: any = this.providers.get(token);
+    
+    if (instance) {
+      return instance;
+    }
+
+    const node: DependencyGraphProvider = this.graph.get(token) as DependencyGraphProvider;
+    const provider = node.provider;
+    let dependencies: any[] = [];
+    
+    if (isClass(provider) || isUseClassProvider(provider)) {
+      const cls = isUseClassProvider(provider) ? provider.useClass : provider;
+
+      dependencies = await Promise.all(
+        node.dependencies.map(dep => {
+          if (isForwardRef(dep)) {
+            return this.resolveProvider(dep.forwardRef());
+          }
+
+          return this.resolveProvider(dep);
+        })
+      );
+      instance = new cls(...dependencies);
+    } else if (isUseExistingProvider(provider)) {
+      instance = await this.resolveProvider(provider.useExisting);
+    } else if (isUseFactoryProvider(provider)) {
+      dependencies = await Promise.all(
+        (provider.inject ?? []).map(r => this.resolveProvider(r))
+      );
+      instance = await provider.useFactory(...dependencies);
+    }  else if (isUseValueProvider(provider)) {
+      instance = provider.useValue;
+    } else {
+      throw new Error(`Invalid provider: ${provider}`);
+    }
+
+    if (node.scope === undefined || node.scope === 'singleton') {
+      this.providers.set(token, instance);
+    }
+
+    return instance;
   }
 }
