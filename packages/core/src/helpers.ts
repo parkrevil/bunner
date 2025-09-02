@@ -1,4 +1,4 @@
-import { suffix } from "bun:ffi";
+import { suffix } from 'bun:ffi';
 import { textEncoder } from './instances';
 import { packageDirectorySync } from 'package-directory';
 import type { Class } from './types';
@@ -34,7 +34,8 @@ export function encodeCString(message: string) {
  * @returns The path to the library
  */
 export function resolveRustLibPath(libName: string, cwd: string) {
-  const fname = process.platform === 'win32' ? `${libName}.dll` : `lib${libName}.${suffix}`;
+  const fname =
+    process.platform === 'win32' ? `${libName}.dll` : `lib${libName}.${suffix}`;
 
   return `${packageDirectorySync({ cwd })}/bin/${fname}`;
 }

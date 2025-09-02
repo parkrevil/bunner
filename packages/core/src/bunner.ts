@@ -1,7 +1,9 @@
 import { type BunnerApplication } from './bunner-application';
-import type { CreateBunnerApplicationOptions, BunnerRootModule } from './interfaces';
+import type {
+  CreateBunnerApplicationOptions,
+  BunnerRootModule,
+} from './interfaces';
 import type { Class } from './types';
-
 
 /**
  * Bunner class
@@ -23,9 +25,7 @@ export class Bunner {
   ) {
     this.setupSignalHandlers();
 
-    const {
-      name = this.generateApplicationDefaultName(),
-    } = options ?? {};
+    const { name = this.generateApplicationDefaultName() } = options ?? {};
 
     if (this.apps.has(name)) {
       throw new Error(`Application with name "${name}" already exists`);
@@ -69,13 +69,15 @@ export class Bunner {
 
     const apps = Array.from(this.apps.values());
 
-    await Promise.all(apps.map(async (app) => {
-      try {
-        await app.stop(true);
-      } catch (e) {
-        console.error('[Bunner] app shutdown failed:', e);
-      }
-    })).catch(console.error);
+    await Promise.all(
+      apps.map(async app => {
+        try {
+          await app.stop(true);
+        } catch (e) {
+          console.error('[Bunner] app shutdown failed:', e);
+        }
+      }),
+    ).catch(console.error);
   }
 
   /**
@@ -102,19 +104,23 @@ export class Bunner {
 
         await Promise.race([
           this.shutdown(),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('shutdown timeout')), 10000)),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('shutdown timeout')), 10000),
+          ),
         ]);
       } catch (e) {
         console.error(`[Bunner] graceful shutdown failed on ${signal}:`, e);
 
         exitCode = 1;
       } finally {
-        try { process.exit(exitCode); } catch { }
+        try {
+          process.exit(exitCode);
+        } catch {}
       }
     };
 
-    ['SIGINT', 'SIGTERM', 'SIGQUIT', 'SIGHUP', 'SIGUSR2'].forEach((sig) => {
-      process.on(sig, handler);
+    ['SIGINT', 'SIGTERM', 'SIGQUIT', 'SIGHUP', 'SIGUSR2'].forEach(sig => {
+      process.on(sig, signal => void handler(signal));
     });
 
     this.signalsInitialized = true;

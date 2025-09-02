@@ -6,12 +6,9 @@ import { UsersModule } from './users';
   imports: [UsersModule, PostsModule],
 })
 export class RootModule implements BunnerRootModule {
-  constructor() {
-  }
+  constructor() {}
 
-  configure() {
-  }
+  configure() {}
 
-  registerMiddlewares() {
-  }
+  registerMiddlewares() {}
 }

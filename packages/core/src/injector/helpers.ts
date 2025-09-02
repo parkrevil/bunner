@@ -1,11 +1,17 @@
-import type { ForwardRef, ProviderUseClass, ProviderUseExisting, ProviderUseFactory, ProviderUseValue } from '.';
+import type {
+  ForwardRef,
+  ProviderUseClass,
+  ProviderUseExisting,
+  ProviderUseFactory,
+  ProviderUseValue,
+} from '.';
 import { isClass } from '../helpers';
 
 /**
  * Forward Ref Decorator
  * @description ForwardRef decorator
- * @param fn 
- * @returns 
+ * @param fn
+ * @returns
  */
 export function forwardRef<T>(fn: () => T): ForwardRef {
   return { forwardRef: fn };
@@ -14,8 +20,8 @@ export function forwardRef<T>(fn: () => T): ForwardRef {
 /**
  * Is Forward Ref
  * @description Checks if a value is a forward ref
- * @param value 
- * @returns 
+ * @param value
+ * @returns
  */
 export function isForwardRef(value: any): value is ForwardRef {
   return value && typeof value.forwardRef === 'function';
@@ -24,8 +30,8 @@ export function isForwardRef(value: any): value is ForwardRef {
 /**
  * Is Use Value Provider
  * @description Checks if a value is a use value provider
- * @param value 
- * @returns 
+ * @param value
+ * @returns
  */
 export function isUseValueProvider(value: any): value is ProviderUseValue {
   return value && value.useValue !== undefined;
@@ -34,8 +40,8 @@ export function isUseValueProvider(value: any): value is ProviderUseValue {
 /**
  * Is Use Class Provider
  * @description Checks if a value is a use class provider
- * @param value 
- * @returns 
+ * @param value
+ * @returns
  */
 export function isUseClassProvider(value: any): value is ProviderUseClass {
   return value && isClass(value.useClass);
@@ -44,18 +50,20 @@ export function isUseClassProvider(value: any): value is ProviderUseClass {
 /**
  * Is Use Existing Provider
  * @description Checks if a value is a use existing provider
- * @param value 
- * @returns 
+ * @param value
+ * @returns
  */
-export function isUseExistingProvider(value: any): value is ProviderUseExisting {
+export function isUseExistingProvider(
+  value: any,
+): value is ProviderUseExisting {
   return value && isClass(value.useExisting);
 }
 
 /**
  * Is Use Factory Provider
  * @description Checks if a value is a factory provider
- * @param value 
- * @returns 
+ * @param value
+ * @returns
  */
 export function isUseFactoryProvider(value: any): value is ProviderUseFactory {
   return value && typeof value.useFactory === 'function';

@@ -1,6 +1,18 @@
-import type { InjectableDecoratorOptions, ModuleDecoratorOptions } from '../decorators';
+import type {
+  InjectableDecoratorOptions,
+  ModuleDecoratorOptions,
+} from '../decorators';
 import type { Class } from '../types';
-import type { ProviderUseValue, ProviderUseClass, ProviderUseExisting, ProviderUseFactory, ForwardRef, DependencyGraphModule, DependencyGraphProvider, DependencyGraphController } from './interfaces';
+import type {
+  ProviderUseValue,
+  ProviderUseClass,
+  ProviderUseExisting,
+  ProviderUseFactory,
+  ForwardRef,
+  DependencyGraphModule,
+  DependencyGraphProvider,
+  DependencyGraphController,
+} from './interfaces';
 
 /**
  * Provider Scope
@@ -18,7 +30,12 @@ export type ProviderToken = string | symbol | Class;
  * Provider Type
  * @description The type for a provider
  */
-export type Provider = Class | ProviderUseValue | ProviderUseClass | ProviderUseExisting | ProviderUseFactory;
+export type Provider =
+  | Class
+  | ProviderUseValue
+  | ProviderUseClass
+  | ProviderUseExisting
+  | ProviderUseFactory;
 
 /**
  * Module decorator metadata
@@ -42,7 +59,10 @@ export type ModuleExportsType = Class | ProviderToken;
  * Dependency Graph Node
  * @description The node for a dependency graph
  */
-export type DependencyGraphNode = DependencyGraphModule | DependencyGraphProvider | DependencyGraphController;
+export type DependencyGraphNode =
+  | DependencyGraphModule
+  | DependencyGraphProvider
+  | DependencyGraphController;
 
 /**
  * Dependency Provider

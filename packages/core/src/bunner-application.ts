@@ -2,7 +2,6 @@ import { Container } from './injector';
 import type { BunnerRootModule } from './interfaces';
 import type { Class } from './types';
 
-
 export abstract class BunnerApplication {
   private rootModule: BunnerRootModule;
   private container: Container;

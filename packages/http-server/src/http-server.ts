@@ -1,4 +1,8 @@
-import { BunnerApplication, type BunnerRootModule, type Class } from '@bunner/core';
+import {
+  BunnerApplication,
+  type BunnerRootModule,
+  type Class,
+} from '@bunner/core';
 import type { Server } from 'bun';
 
 export class HttpServer extends BunnerApplication {
@@ -16,9 +20,9 @@ export class HttpServer extends BunnerApplication {
   start() {
     this.server = Bun.serve({
       port: 5000,
-      fetch: (req, res) => {
+      fetch: req => {
         console.log(req.url);
-    
+
         return new Response('Hello, world!');
       },
     });

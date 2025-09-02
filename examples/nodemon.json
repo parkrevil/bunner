@@ -1,11 +1,6 @@
 {
   "ext": "*",
-  "watch": [
-    "./src/**",
-    "./package.json",
-    "./tsconfig.json",
-    "../packages/**"
-  ],
+  "watch": ["./src/**", "./package.json", "./tsconfig.json", "../packages/**"],
   "ignore": [],
   "exec": "lsof -ti:5000 | xargs kill -9 2>/dev/null || true  && bun install && bun run src/main.ts",
   "delay": 1000,

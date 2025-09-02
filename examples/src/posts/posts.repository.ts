@@ -28,10 +28,13 @@ export class PostsRepository {
   }
 
   update(id: number, data: any) {
-    return this.posts[this.posts.findIndex(post => post.id === id)] = data;
+    return (this.posts[this.posts.findIndex(post => post.id === id)] = data);
   }
 
   delete(id: number) {
-    return this.posts.splice(this.posts.findIndex(post => post.id === id), 1);
+    return this.posts.splice(
+      this.posts.findIndex(post => post.id === id),
+      1,
+    );
   }
 }

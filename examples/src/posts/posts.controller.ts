@@ -1,4 +1,12 @@
-import { RestController, Delete, Get, Params, Post, Put, Body } from '@bunner/http-server';
+import {
+  RestController,
+  Delete,
+  Get,
+  Params,
+  Post,
+  Put,
+  Body,
+} from '@bunner/http-server';
 import { PostsService } from './posts.service';
 
 @RestController()
@@ -24,7 +32,7 @@ export class PostsController {
   @Put(':id')
   update(@Params() params: any, @Body() body: any) {
     const { id } = params;
-    
+
     return this.postsService.update(id, body);
   }
 

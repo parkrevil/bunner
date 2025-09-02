@@ -1,4 +1,10 @@
-import type { InjectableMetadata, ModuleMetadata, ProviderToken, Provider, ProviderScope, DependencyProvider } from './types';
+import type {
+  ModuleMetadata,
+  ProviderToken,
+  Provider,
+  ProviderScope,
+  DependencyProvider,
+} from './types';
 import type { Class } from '../types';
 
 /**
@@ -58,7 +64,7 @@ export interface ProviderUseFactory extends ProviderBase {
  */
 export interface ForwardRef {
   forwardRef: () => any;
-};
+}
 
 /**
  * Dependency Graph Base
@@ -72,7 +78,9 @@ export interface DependencyGraphBase {
  * Dependency Graph Module
  * @description The module for a dependency graph
  */
-export interface DependencyGraphModule extends DependencyGraphBase, ModuleMetadata {}
+export interface DependencyGraphModule
+  extends DependencyGraphBase,
+    ModuleMetadata {}
 
 /**
  * Dependency Graph Provider

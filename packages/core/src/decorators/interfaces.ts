@@ -1,7 +1,6 @@
 import type { Class } from '../types';
 import type { ProviderScope, Provider } from '../injector';
 
-
 /**
  * Module decorator options
  * @description The metadata for a module

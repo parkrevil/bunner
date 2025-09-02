@@ -1,3 +1,3 @@
 import { LogType } from './constants';
 
-export type LogLevel = typeof LogType[keyof typeof LogType];
+export type LogLevel = (typeof LogType)[keyof typeof LogType];

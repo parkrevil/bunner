@@ -1,15 +1,28 @@
 import { EmitDecoratorMetadataError } from '../errors';
-import { MetadataKey, ReflectMetadataKey, type InjectMetadata, type ForwardRef, isForwardRef, type ProviderToken } from '../injector';
+import {
+  MetadataKey,
+  ReflectMetadataKey,
+  type InjectMetadata,
+  type ForwardRef,
+  isForwardRef,
+  type ProviderToken,
+} from '../injector';
 import { isClass } from '../helpers';
 
 /**
  * Inject Decorator
  * @description Injects a provider into a parameter
- * @param providerToken 
- * @returns 
+ * @param providerToken
+ * @returns
  */
-export function Inject(providerToken?: ProviderToken | ForwardRef): ParameterDecorator {
-  return function(target: Object, property: string | symbol | undefined, index: number) {
+export function Inject(
+  providerToken?: ProviderToken | ForwardRef,
+): ParameterDecorator {
+  return function (
+    target: object,
+    property: string | symbol | undefined,
+    index: number,
+  ) {
     let token: InjectMetadata['token'];
     let provider: InjectMetadata['provider'];
 
@@ -25,7 +38,11 @@ export function Inject(providerToken?: ProviderToken | ForwardRef): ParameterDec
         provider = undefined;
       }
     } else {
-      const paramtypes = Reflect.getMetadata(ReflectMetadataKey.DesignParamtypes, target, property!);
+      const paramtypes = Reflect.getMetadata(
+        ReflectMetadataKey.DesignParamtypes,
+        target,
+        property!,
+      );
 
       if (!paramtypes || !paramtypes[index]) {
         throw new EmitDecoratorMetadataError();
@@ -35,9 +52,15 @@ export function Inject(providerToken?: ProviderToken | ForwardRef): ParameterDec
       provider = paramtypes[index];
     }
 
-    const existingParams: InjectMetadata[] = Reflect.getMetadata(MetadataKey.Inject, target, property!) ?? [];
+    const existingParams: InjectMetadata[] =
+      Reflect.getMetadata(MetadataKey.Inject, target, property!) ?? [];
     existingParams.push({ index, token, provider });
-    
-    Reflect.defineMetadata(MetadataKey.Inject, existingParams, target, property!);
+
+    Reflect.defineMetadata(
+      MetadataKey.Inject,
+      existingParams,
+      target,
+      property!,
+    );
   };
 }

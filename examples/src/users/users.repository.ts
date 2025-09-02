@@ -38,6 +38,9 @@ export class UserRepository {
   }
 
   deleteById(id: number) {
-    this.users.splice(this.users.findIndex(user => user.id === id), 1);
+    this.users.splice(
+      this.users.findIndex(user => user.id === id),
+      1,
+    );
   }
 }

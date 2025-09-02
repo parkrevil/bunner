@@ -3,49 +3,60 @@ import { MetadataKey } from './constants';
 import type { RestHttpParamMetadata } from './interfaces';
 
 function createHttpParamDecorator(type: string) {
-  return function(target: Object, propertyKey: string | symbol | undefined, index: number) {
+  return function (
+    target: object,
+    propertyKey: string | symbol | undefined,
+    index: number,
+  ) {
     if (!propertyKey) {
       throw new EmitDecoratorMetadataError();
     }
 
-    const existingParams: RestHttpParamMetadata[] = Reflect.getMetadata(MetadataKey.RouteHandlerParam, target, propertyKey) ?? [];
+    const existingParams: RestHttpParamMetadata[] =
+      Reflect.getMetadata(MetadataKey.RouteHandlerParam, target, propertyKey) ??
+      [];
     existingParams.push({ index, type });
 
-    Reflect.defineMetadata(MetadataKey.RouteHandlerParam, existingParams, target, propertyKey);
+    Reflect.defineMetadata(
+      MetadataKey.RouteHandlerParam,
+      existingParams,
+      target,
+      propertyKey,
+    );
   };
 }
 
 /**
  * Body HTTP parameter decorator
  * @description Inject the body object
- * @returns 
+ * @returns
  */
 export const Body = () => createHttpParamDecorator('body');
 
 /**
  * Query HTTP parameter decorator
  * @description Inject the query object
- * @returns 
+ * @returns
  */
 export const Query = () => createHttpParamDecorator('query');
 
 /**
  * Params HTTP parameter decorator
  * @description Inject the params object
- * @returns 
+ * @returns
  */
 export const Params = () => createHttpParamDecorator('param');
 
 /**
  * Request HTTP parameter decorator
  * @description Inject the BunnerRequest object
- * @returns 
+ * @returns
  */
 export const Request = () => createHttpParamDecorator('request');
 
 /**
  * Response HTTP parameter decorator
  * @description Inject the BunnerResponse object
- * @returns 
+ * @returns
  */
 export const Response = () => createHttpParamDecorator('response');

@@ -2,9 +2,27 @@ import { isClass } from '../helpers';
 import type { BunnerRootModule } from '../interfaces';
 import type { Class } from '../types';
 import { MetadataKey, ReflectMetadataKey } from './constants';
-import { isForwardRef, isUseClassProvider, isUseExistingProvider, isUseFactoryProvider, isUseValueProvider } from './helpers';
-import type { DependencyGraphController, DependencyGraphModule, DependencyGraphProvider, InjectMetadata } from './interfaces';
-import type { DependencyGraphNode, DependencyProvider, InjectableMetadata, ModuleMetadata, Provider, ProviderToken } from './types';
+import {
+  isForwardRef,
+  isUseClassProvider,
+  isUseExistingProvider,
+  isUseFactoryProvider,
+  isUseValueProvider,
+} from './helpers';
+import type {
+  DependencyGraphController,
+  DependencyGraphModule,
+  DependencyGraphProvider,
+  InjectMetadata,
+} from './interfaces';
+import type {
+  DependencyGraphNode,
+  DependencyProvider,
+  InjectableMetadata,
+  ModuleMetadata,
+  Provider,
+  ProviderToken,
+} from './types';
 
 /**
  * Container
@@ -13,16 +31,16 @@ import type { DependencyGraphNode, DependencyProvider, InjectableMetadata, Modul
 export class Container {
   private readonly rootModuleCls: Class<BunnerRootModule>;
   private readonly graph: Map<Class | ProviderToken, DependencyGraphNode>;
-  private readonly modules: Map<Class, Object>;
-  private readonly providers: Map<ProviderToken, Object>;
-  private readonly controllers: Map<Class, Object>;
+  private readonly modules: Map<Class, object>;
+  private readonly providers: Map<ProviderToken, object>;
+  private readonly controllers: Map<Class, object>;
 
   constructor(rootModuleCls: Class<BunnerRootModule>) {
     this.rootModuleCls = rootModuleCls;
     this.graph = new Map<Class, DependencyGraphNode>();
-    this.modules = new Map<Class, Object>();
-    this.providers = new Map<ProviderToken, Object>();
-    this.controllers = new Map<Class, Object>();
+    this.modules = new Map<Class, object>();
+    this.providers = new Map<ProviderToken, object>();
+    this.controllers = new Map<Class, object>();
   }
 
   /**
@@ -30,34 +48,39 @@ export class Container {
    */
   async init() {
     console.log('🔧 Building dependency graph...');
-    
+
     this.buildGraph();
     await this.resolveModule(this.rootModuleCls);
-    
+
     console.log('✅ Dependency graph built and resolved');
   }
 
   /**
    * Build the dependency graph
    */
-  private async buildGraph() {
+  private buildGraph() {
     this.exploreModule(this.rootModuleCls);
   }
-  
+
   /**
    * Explore the module
-   * @param cls 
-   * @returns 
+   * @param cls
+   * @returns
    */
   private exploreModule(cls: Class) {
     if (this.graph.has(cls)) {
       return;
     }
 
-    const metadata: ModuleMetadata = Reflect.getMetadata(MetadataKey.Module, cls);
+    const metadata: ModuleMetadata = Reflect.getMetadata(
+      MetadataKey.Module,
+      cls,
+    );
 
     if (!metadata) {
-      throw new Error(`Module ${cls.name} does not have a @Module() decorator.`);
+      throw new Error(
+        `Module ${cls.name} does not have a @Module() decorator.`,
+      );
     }
 
     this.graph.set(cls, {
@@ -80,7 +103,7 @@ export class Container {
 
   /**
    * Explore the provider
-   * @param cls 
+   * @param cls
    */
   private exploreProvider(provider: Provider) {
     let token: ProviderToken;
@@ -106,7 +129,7 @@ export class Container {
       token = provider.token;
       dependencies = [];
     } else {
-      throw new Error(`Invalid provider: ${provider}`);
+      throw new Error(`Invalid provider: ${JSON.stringify(provider)}`);
     }
 
     if (this.graph.has(token)) {
@@ -121,7 +144,10 @@ export class Container {
     };
 
     if (cls) {
-      const injectableMetadata: InjectableMetadata = Reflect.getMetadata(MetadataKey.Injectable, cls);
+      const injectableMetadata: InjectableMetadata = Reflect.getMetadata(
+        MetadataKey.Injectable,
+        cls,
+      );
 
       if (injectableMetadata) {
         node.scope = injectableMetadata.scope;
@@ -154,22 +180,26 @@ export class Container {
 
   /**
    * Get the dependencies from the params
-   * @param cls 
-   * @returns 
+   * @param cls
+   * @returns
    */
   private getDependenciesFromConstructor(cls: Class) {
-    const paramTypes = Reflect.getMetadata(ReflectMetadataKey.DesignParamtypes, cls);
+    const paramTypes = Reflect.getMetadata(
+      ReflectMetadataKey.DesignParamtypes,
+      cls,
+    );
 
     if (!paramTypes) {
       return [];
     }
 
-    const injectParams: InjectMetadata[] = Reflect.getMetadata(MetadataKey.Inject, cls) ?? [];
+    const injectParams: InjectMetadata[] =
+      Reflect.getMetadata(MetadataKey.Inject, cls) ?? [];
     const dependencies: DependencyProvider[] = [];
 
     for (let i = 0; i < paramTypes.length; i++) {
       const injectedParam = injectParams.find(p => p.index === i);
-      
+
       if (!injectedParam) {
         dependencies.push(paramTypes[i]);
 
@@ -188,8 +218,8 @@ export class Container {
 
   /**
    * Resolve the module
-   * @param moduleCls 
-   * @returns 
+   * @param moduleCls
+   * @returns
    */
   private async resolveModule(moduleCls: Class) {
     let module = this.modules.get(moduleCls);
@@ -202,10 +232,12 @@ export class Container {
 
     this.modules.set(moduleCls, module!);
 
-    const node: DependencyGraphModule = this.graph.get(moduleCls) as DependencyGraphModule;
+    const node: DependencyGraphModule = this.graph.get(
+      moduleCls,
+    ) as DependencyGraphModule;
 
     for (const importedCls of node.imports) {
-      this.resolveModule(importedCls);
+      await this.resolveModule(importedCls);
     }
 
     for (const controllerCls of node.controllers) {
@@ -217,8 +249,8 @@ export class Container {
 
   /**
    * Resolve the controller
-   * @param cls 
-   * @returns 
+   * @param cls
+   * @returns
    */
   private async resolveController(cls: Class) {
     let instance = this.controllers.get(cls);
@@ -227,9 +259,15 @@ export class Container {
       return instance;
     }
 
-    const node: DependencyGraphController = this.graph.get(cls) as DependencyGraphController;
+    const node: DependencyGraphController = this.graph.get(
+      cls,
+    ) as DependencyGraphController;
     const dependencies = await Promise.all(
-      node.dependencies.map(dependency => this.resolveProvider(isForwardRef(dependency) ? dependency.forwardRef() : dependency))
+      node.dependencies.map(dependency =>
+        this.resolveProvider(
+          isForwardRef(dependency) ? dependency.forwardRef() : dependency,
+        ),
+      ),
     );
 
     instance = new cls(...dependencies);
@@ -238,23 +276,25 @@ export class Container {
 
     return instance;
   }
-  
+
   /**
    * Resolve the provider
-   * @param token 
-   * @returns 
+   * @param token
+   * @returns
    */
   private async resolveProvider(token: ProviderToken): Promise<any> {
     let instance: any = this.providers.get(token);
-    
+
     if (instance) {
       return instance;
     }
 
-    const node: DependencyGraphProvider = this.graph.get(token) as DependencyGraphProvider;
+    const node: DependencyGraphProvider = this.graph.get(
+      token,
+    ) as DependencyGraphProvider;
     const provider = node.provider;
     let dependencies: any[] = [];
-    
+
     if (isClass(provider) || isUseClassProvider(provider)) {
       const cls = isUseClassProvider(provider) ? provider.useClass : provider;
 
@@ -265,20 +305,20 @@ export class Container {
           }
 
           return this.resolveProvider(dep);
-        })
+        }),
       );
       instance = new cls(...dependencies);
     } else if (isUseExistingProvider(provider)) {
       instance = await this.resolveProvider(provider.useExisting);
     } else if (isUseFactoryProvider(provider)) {
       dependencies = await Promise.all(
-        (provider.inject ?? []).map(r => this.resolveProvider(r))
+        (provider.inject ?? []).map(r => this.resolveProvider(r)),
       );
       instance = await provider.useFactory(...dependencies);
-    }  else if (isUseValueProvider(provider)) {
+    } else if (isUseValueProvider(provider)) {
       instance = provider.useValue;
     } else {
-      throw new Error(`Invalid provider: ${provider}`);
+      throw new Error(`Invalid provider: ${provider as string}`);
     }
 
     if (node.scope === undefined || node.scope === 'singleton') {
