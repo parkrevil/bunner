@@ -1,5 +1,5 @@
-.PHONY: test-core-logger
+.PHONY: test
 
-test-core-logger:
+test:
 	@RUST_LOG=trace ./scripts/cargo-test.sh
 
