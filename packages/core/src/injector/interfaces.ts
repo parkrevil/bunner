@@ -1,4 +1,4 @@
-import type { InjectableMetadata, ModuleMetadata, ProviderToken, ProviderType } from './types';
+import type { InjectableMetadata, ModuleMetadata, ProviderToken, Provider, ProviderScope } from './types';
 import type { Class } from '../types';
 
 /**
@@ -8,7 +8,7 @@ import type { Class } from '../types';
 export interface InjectMetadata {
   index: number;
   token: ProviderToken | (() => any);
-  type: Class | undefined;
+  provider: Class | undefined;
 }
 
 /**
@@ -16,7 +16,7 @@ export interface InjectMetadata {
  * @description The base for a provider
  */
 export interface ProviderBase {
-  provide: ProviderToken;
+  token: ProviderToken;
 }
 
 /**
@@ -39,7 +39,7 @@ export interface ProviderUseClass extends ProviderBase {
  * Provider Use Exists
  * @description The exists for a provider
  */
-export interface ProviderUseExists extends ProviderBase {
+export interface ProviderUseExisting extends ProviderBase {
   useExisting: Class;
 }
 
@@ -70,11 +70,10 @@ export interface DependencyGraphModuleNode extends ModuleMetadata {}
  * Dependency Graph Provider Node
  * @description The node for a provider
  */
-export interface DependencyGraphProviderNode extends InjectableMeajrdjTJd
-tadata {
-  token: ProviderToken;
-  type: ProviderType;
-  providers: DependencyGraphProviderNode[];
+export interface DependencyGraphProviderNode {
+  provider: Provider;
+  dependencies: ProviderToken[];
+  scope: ProviderScope | undefined;
 }
 
 /**

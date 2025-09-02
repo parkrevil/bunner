@@ -1,7 +1,10 @@
+import { isClass } from '../helpers';
 import type { BunnerRootModule } from '../interfaces';
 import type { Class } from '../types';
-import { MetadataKey } from './constants';
-import type { DependencyGraphNode, ModuleMetadata } from './types';
+import { MetadataKey, ReflectMetadataKey } from './constants';
+import { isUseClassProvider, isUseExistingProvider, isUseFactoryProvider, isUseValueProvider } from './helpers';
+import type { DependencyGraphProviderNode } from './interfaces';
+import type { DependencyGraphNode, InjectableMetadata, ModuleMetadata, Provider, ProviderToken } from './types';
 
 /**
  * Container
@@ -9,7 +12,7 @@ import type { DependencyGraphNode, ModuleMetadata } from './types';
  */
 export class Container {
   private rootModuleCls: Class<BunnerRootModule>;
-  private graph: Map<Class, DependencyGraphNode>;
+  private graph: Map<Class | ProviderToken, DependencyGraphNode>;
 
   constructor(rootModuleCls: Class<BunnerRootModule>) {
     this.rootModuleCls = rootModuleCls;
@@ -57,5 +60,74 @@ export class Container {
     for (const importedCls of metadata.imports) {
       this.exploreModule(importedCls);
     }
+
+    for (const provider of metadata.providers) {
+      this.exploreProvider(provider);
+    }
+  }
+
+  /**
+   * Explore the provider
+   * @param cls 
+   */
+  private exploreProvider(provider: Provider) {
+    let token: ProviderToken;
+    let dependencies: ProviderToken[];
+    let cls: Class | undefined;
+
+    if (isClass(provider)) {
+      token = provider;
+      cls = provider;
+      dependencies = this.getDependenciesFromParams(provider);
+    } else if (isUseClassProvider(provider)) {
+      token = provider.token;
+      cls = provider.useClass;
+      dependencies = this.getDependenciesFromParams(provider.useClass);
+    } else if (isUseExistingProvider(provider)) {
+      token = provider.token;
+      cls = provider.useExisting;
+      dependencies = this.getDependenciesFromParams(provider.useExisting);
+    } else if (isUseFactoryProvider(provider)) {
+      token = provider.token;
+      dependencies = provider.inject ?? [];
+    } else if (isUseValueProvider(provider)) {
+      token = provider.token;
+      dependencies = [];
+    } else {
+      throw new Error(`Invalid provider: ${provider}`);
+    }
+
+    if (this.graph.has(token)) {
+      return;
+    }
+
+    const node: DependencyGraphProviderNode = {
+      provider,
+      dependencies,
+      scope: undefined,
+    };
+
+    if (cls) {
+      const injectableMetadata: InjectableMetadata = Reflect.getMetadata(MetadataKey.Injectable, cls);
+
+      if (injectableMetadata) {
+        node.scope = injectableMetadata.scope;
+      }
+    }
+
+    this.graph.set(token, node);
+
+    for (const dependency of dependencies) {
+      if (!isClass(dependency)) {
+        continue;
+      }
+
+      this.exploreProvider(dependency);
+    }
+  }
+
+  private getDependenciesFromParams(provider: Class): ProviderToken[] {
+    const dependencies = Reflect.getMetadata(ReflectMetadataKey.DesignParamtypes, provider);
+    return dependencies || [];
   }
 }

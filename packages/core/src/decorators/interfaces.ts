@@ -1,5 +1,5 @@
 import type { Class } from '../types';
-import type { ProviderScope, ProviderType } from '../injector';
+import type { ProviderScope, Provider } from '../injector';
 
 
 /**
@@ -7,10 +7,10 @@ import type { ProviderScope, ProviderType } from '../injector';
  * @description The metadata for a module
  */
 export interface ModuleDecoratorOptions {
-  providers?: ProviderType[];
+  providers?: Provider[];
   controllers?: Class[];
   imports?: Class[];
-  exports?: ProviderType[];
+  exports?: Provider[];
 }
 
 /**

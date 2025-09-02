@@ -1,5 +1,6 @@
 import { EmitDecoratorMetadataError } from '../errors';
 import { MetadataKey, ReflectMetadataKey, type InjectMetadata, type ForwardRef, isForwardRef, type ProviderToken } from '../injector';
+import { isClass } from '../helpers';
 
 /**
  * Inject Decorator
@@ -10,26 +11,32 @@ import { MetadataKey, ReflectMetadataKey, type InjectMetadata, type ForwardRef, 
 export function Inject(providerToken?: ProviderToken | ForwardRef): ParameterDecorator {
   return function(target: Object, property: string | symbol | undefined, index: number) {
     let token: InjectMetadata['token'];
-    let type: InjectMetadata['type'];
-    const existingParams: InjectMetadata[] = Reflect.getMetadata(MetadataKey.Inject, target, property!) ?? [];
+    let provider: InjectMetadata['provider'];
 
-    if (providerToken && isForwardRef(providerToken)) {
-      token = providerToken.forwardRef;
-      type = undefined;
-    } else if (providerToken) {
-      token = providerToken;
-      type = typeof token === 'function' ? token : undefined;
+    if (providerToken) {
+      if (isForwardRef(providerToken)) {
+        token = providerToken.forwardRef;
+        provider = undefined;
+      } else if (isClass(providerToken)) {
+        token = providerToken;
+        provider = providerToken;
+      } else {
+        token = providerToken;
+        provider = undefined;
+      }
     } else {
       const paramtypes = Reflect.getMetadata(ReflectMetadataKey.DesignParamtypes, target, property!);
 
       if (!paramtypes || !paramtypes[index]) {
         throw new EmitDecoratorMetadataError();
       }
+
       token = paramtypes[index];
-      type = paramtypes[index];
+      provider = paramtypes[index];
     }
 
-    existingParams.push({ index, type, token });
+    const existingParams: InjectMetadata[] = Reflect.getMetadata(MetadataKey.Inject, target, property!) ?? [];
+    existingParams.push({ index, token, provider });
     
     Reflect.defineMetadata(MetadataKey.Inject, existingParams, target, property!);
   };
