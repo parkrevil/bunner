@@ -28,7 +28,8 @@
   ],
   "scripts": {
     "lint": "eslint . --fix",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "prepare": "husky"
   },
   "devDependencies": {
     "@eslint/css": "^0.11.0",
@@ -41,6 +42,8 @@
     "eslint-plugin-import": "^2.32.0",
     "eslint-plugin-prettier": "^5.5.4",
     "globals": "^16.3.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.1.6",
     "typescript": "^5",
     "typescript-eslint": "^8.42.0"
   }
