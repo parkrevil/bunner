@@ -8,7 +8,6 @@
     "di": "bunner di"
   },
   "dependencies": {
-    "@bunner/cli": "workspace:*",
     "@bunner/core": "workspace:*",
     "@bunner/core-logger": "workspace:*",
     "@bunner/http-server": "workspace:*"
