@@ -1,7 +1,8 @@
-import { dlopen } from 'bun:ffi';
-import type { FfiSymbols } from './interfaces';
-import { LogType } from './constants';
 import { encodeCString, resolveRustLibPath } from '@bunner/core';
+import { dlopen } from 'bun:ffi';
+
+import { LogType } from './constants';
+import type { FfiSymbols } from './interfaces';
 import type { LogLevel } from './types';
 
 export class Logger {

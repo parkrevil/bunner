@@ -1,10 +1,11 @@
 import { HttpMethod } from '../constants';
 import type { HttpMethodValue } from '../types';
+
+import { MetadataKey } from './constants';
 import type {
   HttpMethodDecoratorOptions,
   RestRouteHandlerMetadata,
 } from './interfaces';
-import { MetadataKey } from './constants';
 
 /**
  * Create HTTP method decorator

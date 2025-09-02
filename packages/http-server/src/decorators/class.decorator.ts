@@ -1,8 +1,8 @@
+import { MetadataKey } from './constants';
 import type {
   RestControllerDecoratorOptions,
   RestControllerMetadata,
 } from './interfaces';
-import { MetadataKey } from './constants';
 
 /**
  * Controller Decorators

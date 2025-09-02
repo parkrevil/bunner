@@ -11,6 +11,22 @@ export abstract class BunnerApplication {
     this.container = new Container(rootModule);
   }
 
+  /**
+   * Start the application
+   * @param options - The options
+   */
+  abstract start(options?: any): void | Promise<void>;
+
+  /**
+   * Stop the application
+   * @param force - Whether to force stop the application
+   */
+  abstract stop(force?: boolean): void | Promise<void>;
+
+  /**
+   * Initialize the application
+   * @returns
+   */
   async init() {
     await this.container.init();
   }
@@ -27,16 +43,4 @@ export abstract class BunnerApplication {
 
     console.log('🚀 Application is ready.');
   }
-
-  /**
-   * Start the application
-   * @param options - The options
-   */
-  abstract start(options?: any): void | Promise<void>;
-
-  /**
-   * Stop the application
-   * @param force - Whether to force stop the application
-   */
-  abstract stop(force?: boolean): void | Promise<void>;
 }

@@ -1,3 +1,5 @@
+import type { Class } from '../types';
+
 import type {
   ModuleMetadata,
   ProviderToken,
@@ -5,7 +7,6 @@ import type {
   ProviderScope,
   DependencyProvider,
 } from './types';
-import type { Class } from '../types';
 
 /**
  * Inject Metadata

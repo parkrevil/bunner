@@ -1,4 +1,5 @@
 import { Module } from '@bunner/core';
+
 import { CommentsModule } from './comments';
 import { PostsController } from './posts.controller';
 import { PostsService } from './posts.service';

@@ -1,3 +1,5 @@
+import { isClass } from '../helpers';
+
 import type {
   ForwardRef,
   ProviderUseClass,
@@ -5,7 +7,6 @@ import type {
   ProviderUseFactory,
   ProviderUseValue,
 } from '.';
-import { isClass } from '../helpers';
 
 /**
  * Forward Ref Decorator

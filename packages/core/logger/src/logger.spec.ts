@@ -4,9 +4,12 @@ const calls: { dlopen: Array<{ path: string; symbols: any }> } = { dlopen: [] };
 
 const initLoggerSpy = mock(() => {});
 const logMessageSpy = mock((level: number, msgPtr: Uint8Array) => {
-  if (!(msgPtr instanceof Uint8Array)) throw new Error('msg is not Uint8Array');
-  if (msgPtr[msgPtr.length - 1] !== 0)
+  if (!(msgPtr instanceof Uint8Array)) {
+    throw new Error('msg is not Uint8Array');
+  }
+  if (msgPtr[msgPtr.length - 1] !== 0) {
     throw new Error('msg is not null-terminated');
+  }
 });
 
 const encodeCStringSpy = mock((message: string) => {

@@ -1,4 +1,5 @@
 import type { codes as HttpStatusCode } from 'statuses';
+
 import type { HttpMethod } from './constants';
 
 /**

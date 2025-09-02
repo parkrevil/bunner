@@ -1,4 +1,5 @@
 import { describe, test, expect, beforeAll } from 'bun:test';
+
 import { Logger } from '../src/logger';
 
 process.env.RUST_LOG = process.env.RUST_LOG || 'trace';

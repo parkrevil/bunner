@@ -1,10 +1,14 @@
+import css from '@eslint/css';
 import eslint from '@eslint/js';
-import globals from 'globals';
-import tseslint from 'typescript-eslint';
 import json from '@eslint/json';
 import markdown from '@eslint/markdown';
-import css from '@eslint/css';
 import { defineConfig } from 'eslint/config';
+import importPlugin from 'eslint-plugin-import';
+import globals from 'globals';
+import {
+  plugin as tseslintPlugin,
+  configs as tseslintConfigs,
+} from 'typescript-eslint';
 
 export default defineConfig([
   {
@@ -34,13 +38,21 @@ export default defineConfig([
       },
     },
     plugins: {
-      '@typescript-eslint': tseslint.plugin,
+      '@typescript-eslint': tseslintPlugin,
     },
     extends: [
       eslint.configs.recommended,
-      tseslint.configs.recommended,
-      tseslint.configs.recommendedTypeChecked,
+      tseslintConfigs.recommended,
+      tseslintConfigs.recommendedTypeChecked,
+      importPlugin.flatConfigs.recommended,
+      importPlugin.flatConfigs.typescript,
     ],
+    settings: {
+      'import/resolver': {
+        typescript: true,
+        node: true,
+      },
+    },
     rules: {
       'no-empty': [
         'error',
@@ -48,6 +60,88 @@ export default defineConfig([
           allowEmptyCatch: true,
         },
       ],
+      'import/order': [
+        'error',
+        {
+          groups: [
+            'builtin',
+            'external',
+            'internal',
+            'parent',
+            'sibling',
+            'index',
+          ],
+          'newlines-between': 'always',
+          alphabetize: {
+            order: 'asc',
+            caseInsensitive: true,
+          },
+        },
+      ],
+      '@typescript-eslint/member-ordering': [
+        'error',
+        {
+          default: [
+            'signature',
+
+            'public-static-field',
+            'protected-static-field',
+            'private-static-field',
+
+            'public-abstract-field',
+            'public-decorated-field',
+            'public-instance-field',
+
+            'protected-abstract-field',
+            'protected-decorated-field',
+            'protected-instance-field',
+
+            'private-decorated-field',
+            'private-instance-field',
+
+            'public-constructor',
+            'protected-constructor',
+            'private-constructor',
+
+            'public-static-method',
+            'protected-static-method',
+            'private-static-method',
+
+            'public-abstract-method',
+            'public-decorated-method',
+            'public-instance-method',
+
+            'protected-abstract-method',
+            'protected-decorated-method',
+            'protected-instance-method',
+
+            'private-decorated-method',
+            'private-instance-method',
+          ],
+        },
+      ],
+      curly: 'error',
+      'block-spacing': 'error',
+      'space-before-blocks': 'error',
+      'brace-style': 'error',
+      'no-else-return': 'error',
+      'no-unneeded-ternary': 'error',
+      'default-case': 'error',
+      'default-case-last': 'error',
+      'default-param-last': 'error',
+      'no-self-compare': 'error',
+      'no-unmodified-loop-condition': 'error',
+      'no-loop-func': 'error',
+      'for-direction': 'error',
+      'keyword-spacing': ['error', { before: true, after: true }],
+      'semi-spacing': ['error', { before: false, after: true }],
+      'space-in-parens': ['error', 'never'],
+      'object-curly-spacing': ['error', 'always'],
+      'array-bracket-spacing': ['error', 'never'],
+      'comma-spacing': ['error', { before: false, after: true }],
+      quotes: ['error', 'single'],
+      semi: ['error', 'always'],
+      'comma-dangle': ['error', 'always-multiline'],
       '@typescript-eslint/no-empty-object-type': [
         'error',
         {

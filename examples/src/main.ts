@@ -1,6 +1,7 @@
 import { Bunner } from '@bunner/core';
-import { HttpServer } from '@bunner/http-server';
 import { Logger } from '@bunner/core-logger';
+import { HttpServer } from '@bunner/http-server';
+
 import { RootModule } from './root.module';
 
 async function bootstrap() {

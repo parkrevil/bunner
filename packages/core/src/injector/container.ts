@@ -1,6 +1,7 @@
 import { isClass } from '../helpers';
 import type { BunnerRootModule } from '../interfaces';
 import type { Class } from '../types';
+
 import { MetadataKey, ReflectMetadataKey } from './constants';
 import {
   isForwardRef,

@@ -1,4 +1,5 @@
 import { Module, type BunnerRootModule } from '@bunner/core';
+
 import { PostsModule } from './posts';
 import { UsersModule } from './users';
 

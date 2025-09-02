@@ -1,6 +1,7 @@
 import { suffix } from 'bun:ffi';
-import { textEncoder } from './instances';
 import { packageDirectorySync } from 'package-directory';
+
+import { textEncoder } from './instances';
 import type { Class } from './types';
 
 /**

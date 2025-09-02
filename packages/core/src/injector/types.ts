@@ -3,6 +3,7 @@ import type {
   ModuleDecoratorOptions,
 } from '../decorators';
 import type { Class } from '../types';
+
 import type {
   ProviderUseValue,
   ProviderUseClass,

@@ -1,5 +1,5 @@
-import type { Class } from '../types';
 import type { ProviderScope, Provider } from '../injector';
+import type { Class } from '../types';
 
 /**
  * Module decorator options

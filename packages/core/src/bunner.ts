@@ -9,9 +9,9 @@ import type { Class } from './types';
  * Bunner class
  */
 export class Bunner {
+  static apps: Map<string, BunnerApplication> = new Map();
   private static isShuttingDown = false;
   private static signalsInitialized = false;
-  static apps: Map<string, BunnerApplication> = new Map();
 
   /**
    * Create a new Bunner application
