@@ -3,7 +3,7 @@ import type { BunnerRootModule } from '../interfaces';
 import type { Class } from '../types';
 import { MetadataKey, ReflectMetadataKey } from './constants';
 import { isForwardRef, isUseClassProvider, isUseExistingProvider, isUseFactoryProvider, isUseValueProvider } from './helpers';
-import type { DependencyGraphProvider, InjectMetadata } from './interfaces';
+import type { DependencyGraphController, DependencyGraphProvider, InjectMetadata } from './interfaces';
 import type { DependencyGraphNode, DependencyProvider, InjectableMetadata, ModuleMetadata, Provider, ProviderToken } from './types';
 
 /**
@@ -59,6 +59,10 @@ export class Container {
 
     for (const importedCls of metadata.imports) {
       this.exploreModule(importedCls);
+    }
+
+    for (const controller of metadata.controllers) {
+      this.exploreController(controller);
     }
 
     for (const provider of metadata.providers) {
@@ -126,19 +130,31 @@ export class Container {
     }
   }
 
+  private exploreController(cls: Class) {
+    const dependencies = this.getDependenciesFromConstructor(cls);
+
+    this.graph.set(cls, {
+      dependencies,
+    } as DependencyGraphController);
+
+    for (const dependency of dependencies) {
+      this.exploreProvider(dependency as Provider);
+    }
+  }
+
   /**
    * Get the dependencies from the params
-   * @param provider 
+   * @param cls 
    * @returns 
    */
-  private getDependenciesFromConstructor(provider: Class) {
-    const paramTypes = Reflect.getMetadata(ReflectMetadataKey.DesignParamtypes, provider);
+  private getDependenciesFromConstructor(cls: Class) {
+    const paramTypes = Reflect.getMetadata(ReflectMetadataKey.DesignParamtypes, cls);
 
     if (!paramTypes) {
       return [];
     }
 
-    const injectParams: InjectMetadata[] = Reflect.getMetadata(MetadataKey.Inject, provider) ?? [];
+    const injectParams: InjectMetadata[] = Reflect.getMetadata(MetadataKey.Inject, cls) ?? [];
     const dependencies: DependencyProvider[] = [];
 
     for (let i = 0; i < paramTypes.length; i++) {

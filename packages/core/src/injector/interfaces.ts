@@ -81,5 +81,5 @@ export interface DependencyGraphProvider {
  * @description The node for a controller
  */
 export interface DependencyGraphController {
-  providers: DependencyProvider[];
+  dependencies: DependencyProvider[];
 }
