@@ -1,4 +1,4 @@
-import type { ControllerDecoratorOptions, ControllerMetadata } from './interfaces';
+import type { RestControllerDecoratorOptions, RestControllerMetadata } from './interfaces';
 import { MetadataKey } from './constants';
 
 
@@ -8,14 +8,14 @@ import { MetadataKey } from './constants';
  * @param options - The controller options
  * @returns ClassDecorator
  */
-export function Controller(path?: string, options?: ControllerDecoratorOptions): ClassDecorator {
+export function RestController(path?: string, options?: RestControllerDecoratorOptions): ClassDecorator {
   return function<T extends Function>(target: T) {
-    const controllerMetadata: ControllerMetadata = {
+    const controllerMetadata: RestControllerMetadata = {
       target,
       path,
       options,
     };
 
-    Reflect.defineMetadata(MetadataKey.Controller, controllerMetadata, target);
+    Reflect.defineMetadata(MetadataKey.RestController, controllerMetadata, target);
   };
 }

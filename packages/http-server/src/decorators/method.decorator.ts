@@ -1,6 +1,6 @@
 import { HttpMethod } from '../constants';
 import type { HttpMethodValue } from '../types';
-import type { HttpMethodDecoratorOptions, RouteHandlerMetadata } from './interfaces';
+import type { HttpMethodDecoratorOptions, RestRouteHandlerMetadata } from './interfaces';
 import { MetadataKey } from './constants';
 
 
@@ -13,7 +13,7 @@ import { MetadataKey } from './constants';
 function createHttpMethodDecorator(httpMethod: HttpMethodValue) {
   return function(path?: string, options?: HttpMethodDecoratorOptions): MethodDecorator {
     return function(target: Object, propertyKey: string | symbol, descriptor: TypedPropertyDescriptor<any>) {
-      const routeMetadata: RouteHandlerMetadata = {
+      const routeMetadata: RestRouteHandlerMetadata = {
         target: target.constructor,
         propertyKey,
         httpMethod,

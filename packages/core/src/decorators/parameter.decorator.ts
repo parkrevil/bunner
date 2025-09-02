@@ -1,8 +1,5 @@
 import { EmitDecoratorMetadataError } from '../errors';
-import { MetadataKey, ReflectMetadataKey } from './constants';
-import { isForwardRef } from './helpers';
-import type { ForwardRef, InjectMetadata } from './interfaces';
-import type { ProviderToken } from './types';
+import { MetadataKey, ReflectMetadataKey, type InjectMetadata, type ForwardRef, isForwardRef, type ProviderToken } from '../injector';
 
 /**
  * Inject Decorator

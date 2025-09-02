@@ -1,7 +1,7 @@
-import { Controller, Delete, Get, Params, Post, Put, Body } from '@bunner/http-server';
+import { RestController, Delete, Get, Params, Post, Put, Body } from '@bunner/http-server';
 import type { UsersService } from './users.service';
 
-@Controller('users', {
+@RestController('users', {
   version: '2',
 })
 export class UsersController {

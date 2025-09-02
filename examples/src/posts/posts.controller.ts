@@ -1,7 +1,7 @@
-import { Controller, Delete, Get, Params, Post, Put, Body } from '@bunner/http-server';
+import { RestController, Delete, Get, Params, Post, Put, Body } from '@bunner/http-server';
 import type { PostsService } from './posts.service';
 
-@Controller()
+@RestController()
 export class PostsController {
   constructor(private readonly postsService: PostsService) {
     console.log('Posts Controller Constructor');

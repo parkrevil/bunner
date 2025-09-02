@@ -1,10 +1,12 @@
+import type { BunnerApplication } from './bunner-application';
+
 /**
  * Bunner Root Module
  * @description The root module for the Bunner application
  */
 export interface BunnerRootModule {
-  configure?(): void | Promise<void>;
-  registerMiddlewares?(): void | Promise<void>;
+  configure?(app: BunnerApplication): void | Promise<void>;
+  registerMiddlewares?(app: BunnerApplication): void | Promise<void>;
 }
 
 /**

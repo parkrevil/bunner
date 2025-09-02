@@ -1,11 +1,11 @@
-import { BunnerApplication } from '@bunner/core';
+import { BunnerApplication, type BunnerRootModule, type Class } from '@bunner/core';
 import type { Server } from 'bun';
 
 export class HttpServer extends BunnerApplication {
   private server: Server | undefined;
 
-  constructor() {
-    super();
+  constructor(rootModule: Class<BunnerRootModule>) {
+    super(rootModule);
 
     this.server = undefined;
   }

@@ -9,7 +9,7 @@ export const MetadataKeyPrefix = 'bunner:http-server:';
  * @description The metadata keys used by the Bunner HTTP server framework
  */
 export const MetadataKey = {
-  Controller: `${MetadataKeyPrefix}controller`,
+  RestController: `${MetadataKeyPrefix}rest-controller`,
   RouteHandler: `${MetadataKeyPrefix}route-handler`,
   RouteHandlerParam: `${MetadataKeyPrefix}route-handler-param`,
 } as const;

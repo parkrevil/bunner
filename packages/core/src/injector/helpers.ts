@@ -1,4 +1,4 @@
-import type { ForwardRef } from './interfaces';
+import type { ForwardRef } from '.';
 
 /**
  * Forward Ref Decorator

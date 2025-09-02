@@ -4,7 +4,7 @@ import { RootModule } from './root.module';
 import { Logger } from '@bunner/core-logger';
 
 async function bootstrap() {
-  const app = await Bunner.createApplication(HttpServer, RootModule);
+  const app = await Bunner.create(HttpServer, RootModule);
   const logger = await Logger.getInstance();
   
   logger.init();

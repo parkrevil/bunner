@@ -1,18 +1,34 @@
+import { Container } from './injector';
 import type { BunnerRootModule } from './interfaces';
 import type { Class } from './types';
 
+
 export abstract class BunnerApplication {
+  private rootModule: BunnerRootModule;
+  private container: Container;
+
+  constructor(rootModule: Class<BunnerRootModule>) {
+    this.rootModule = new rootModule();
+    this.container = new Container(rootModule);
+  }
+
+  async init() {
+    await this.container.init();
+  }
+
   /**
    * Bootstrap the application
    * @param moduleConstructor - The module constructor
    */
-  async bootstrap(moduleConstructor: Class<BunnerRootModule>) {
+  async bootstrap() {
     console.log('🚀 Application is booting...');
-
+    await this.rootModule.configure?.(this);
+    await this.rootModule.registerMiddlewares?.(this);
+/* 
     const module = new moduleConstructor();
     await module.configure?.();
     await module.registerMiddlewares?.();
-
+ */
     console.log('🚀 Application is ready.');
   }
 

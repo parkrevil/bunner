@@ -4,16 +4,16 @@ import type { HttpMethodValue } from '../types';
  * Controller Decorator Options
  * @description The options for the controller decorator
  */
-export interface ControllerDecoratorOptions {}
+export interface RestControllerDecoratorOptions {}
 
 /**
  * Controller Metadata
  * @description The metadata for the http method decorator
  */
-export interface ControllerMetadata {
+export interface RestControllerMetadata {
   target: Function;
   path?: string;
-  options?: ControllerDecoratorOptions;
+  options?: RestControllerDecoratorOptions;
 }
 
 /**
@@ -26,7 +26,7 @@ export interface HttpMethodDecoratorOptions {}
  * Http Method Decorator Metadata
  * @description The metadata for the http method decorator
  */
-export interface RouteHandlerMetadata {
+export interface RestRouteHandlerMetadata {
   target: Function;
   propertyKey: string | symbol;
   httpMethod: HttpMethodValue;
@@ -38,7 +38,7 @@ export interface RouteHandlerMetadata {
  * Parameter Metadata
  * @description The metadata for the parameter decorator
  */
-export interface HttpParamMetadata {
+export interface RestHttpParamMetadata {
   index: number;
   type: string;
 }

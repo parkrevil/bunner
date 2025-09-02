@@ -1,5 +1,5 @@
-import { MetadataKey } from './constants';
-import type { InjectableDecoratorOptions, InjectableMetadata, ModuleDecoratorOptions, ModuleMetadata } from './interfaces';
+import { MetadataKey, type InjectableMetadata, type ModuleMetadata } from '../injector';
+import type { InjectableDecoratorOptions, ModuleDecoratorOptions } from './interfaces';
 
 
 /**
