@@ -28,16 +28,13 @@ export class Container {
   /**
    * Initialize the container and build dependency graph
    */
-  init() {
+  async init() {
     console.log('🔧 Building dependency graph...');
     
     this.buildGraph();
+    await this.resolveModule(this.rootModuleCls);
     
     console.log('✅ Dependency graph built and resolved');
-  }
-  
-  public async bootstrap() {
-    await this.resolveModule(this.rootModuleCls);
   }
 
   /**
