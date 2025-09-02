@@ -1,6 +1,6 @@
 import type { InjectableDecoratorOptions, ModuleDecoratorOptions } from '../decorators';
 import type { Class } from '../types';
-import type { ProviderUseValue, ProviderUseClass, ProviderUseExisting, ProviderUseFactory, DependencyGraphControllerNode, DependencyGraphProviderNode, DependencyGraphModuleNode } from './interfaces';
+import type { ProviderUseValue, ProviderUseClass, ProviderUseExisting, ProviderUseFactory, DependencyGraphControllerNode, DependencyGraphProviderNode, DependencyGraphModuleNode, ForwardRef } from './interfaces';
 
 /**
  * Provider Scope
@@ -43,3 +43,9 @@ export type ModuleExportsType = Class | ProviderToken;
  * @description The node for a dependency graph
  */
 export type DependencyGraphNode = DependencyGraphModuleNode | DependencyGraphProviderNode | DependencyGraphControllerNode;
+
+/**
+ * Dependency Provider
+ * @description The provider for a dependency graph
+ */
+export type DependencyProvider = ProviderToken | ForwardRef;

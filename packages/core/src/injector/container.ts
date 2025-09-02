@@ -2,9 +2,9 @@ import { isClass } from '../helpers';
 import type { BunnerRootModule } from '../interfaces';
 import type { Class } from '../types';
 import { MetadataKey, ReflectMetadataKey } from './constants';
-import { isUseClassProvider, isUseExistingProvider, isUseFactoryProvider, isUseValueProvider } from './helpers';
-import type { DependencyGraphProviderNode } from './interfaces';
-import type { DependencyGraphNode, InjectableMetadata, ModuleMetadata, Provider, ProviderToken } from './types';
+import { isForwardRef, isUseClassProvider, isUseExistingProvider, isUseFactoryProvider, isUseValueProvider } from './helpers';
+import type { DependencyGraphProvider, InjectMetadata } from './interfaces';
+import type { DependencyGraphNode, DependencyProvider, InjectableMetadata, ModuleMetadata, Provider, ProviderToken } from './types';
 
 /**
  * Container
@@ -72,7 +72,7 @@ export class Container {
    */
   private exploreProvider(provider: Provider) {
     let token: ProviderToken;
-    let dependencies: ProviderToken[];
+    let dependencies: DependencyProvider[];
     let cls: Class | undefined;
 
     if (isClass(provider)) {
@@ -101,7 +101,7 @@ export class Container {
       return;
     }
 
-    const node: DependencyGraphProviderNode = {
+    const node: DependencyGraphProvider = {
       provider,
       dependencies,
       scope: undefined,
@@ -126,8 +126,32 @@ export class Container {
     }
   }
 
-  private getDependenciesFromParams(provider: Class): ProviderToken[] {
-    const dependencies = Reflect.getMetadata(ReflectMetadataKey.DesignParamtypes, provider);
-    return dependencies || [];
+  private getDependenciesFromParams(provider: Class) {
+    const paramTypes = Reflect.getMetadata(ReflectMetadataKey.DesignParamtypes, provider);
+
+    if (!paramTypes) {
+      return [];
+    }
+
+    const injectParams: InjectMetadata[] = Reflect.getMetadata(MetadataKey.Inject, provider) ?? [];
+    const dependencies: DependencyProvider[] = [];
+
+    for (let i = 0; i < paramTypes.length; i++) {
+      const injectedParam = injectParams.find(p => p.index === i);
+      
+      if (!injectedParam) {
+        dependencies.push(paramTypes[i]);
+
+        continue;
+      }
+
+      if (isForwardRef(injectedParam.token)) {
+        dependencies.push(injectedParam.token);
+      } else {
+        dependencies.push(injectedParam.token);
+      }
+    }
+
+    return dependencies;
   }
 }

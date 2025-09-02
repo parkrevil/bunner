@@ -1,4 +1,4 @@
-import type { InjectableMetadata, ModuleMetadata, ProviderToken, Provider, ProviderScope } from './types';
+import type { InjectableMetadata, ModuleMetadata, ProviderToken, Provider, ProviderScope, DependencyProvider } from './types';
 import type { Class } from '../types';
 
 /**
@@ -7,7 +7,7 @@ import type { Class } from '../types';
  */
 export interface InjectMetadata {
   index: number;
-  token: ProviderToken | (() => any);
+  token: ProviderToken | ForwardRef;
   provider: Class | undefined;
 }
 
@@ -64,15 +64,15 @@ export interface ForwardRef {
  * Dependency Graph Module Node
  * @description The node for a module
  */
-export interface DependencyGraphModuleNode extends ModuleMetadata {}
+export interface DependencyGraphModule extends ModuleMetadata {}
 
 /**
  * Dependency Graph Provider Node
  * @description The node for a provider
  */
-export interface DependencyGraphProviderNode {
+export interface DependencyGraphProvider {
   provider: Provider;
-  dependencies: ProviderToken[];
+  dependencies: DependencyProvider[];
   scope: ProviderScope | undefined;
 }
 
@@ -80,6 +80,6 @@ export interface DependencyGraphProviderNode {
  * Dependency Graph Controller Node
  * @description The node for a controller
  */
-export interface DependencyGraphControllerNode {
-  providers: DependencyGraphProviderNode[];
+export interface DependencyGraphController {
+  providers: DependencyProvider[];
 }
