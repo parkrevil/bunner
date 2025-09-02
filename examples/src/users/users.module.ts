@@ -8,8 +8,4 @@ import { UsersService } from './users.service';
   providers: [UsersService, UserRepository],
   exports: [UsersService],
 })
-export class UsersModule {
-  constructor() {
-    console.log('Users Module Constructor');
-  }
-}
+export class UsersModule {}

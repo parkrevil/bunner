@@ -8,7 +8,4 @@ import { CommentRepository } from './comments.repository';
   exports: [CommentsService],
 })
 export class CommentsModule {
-  constructor() {
-    console.log('Comments Module Constructor');
-  }
 }

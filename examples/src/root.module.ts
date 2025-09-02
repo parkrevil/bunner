@@ -7,14 +7,11 @@ import { UsersModule } from './users';
 })
 export class RootModule implements BunnerRootModule {
   constructor() {
-    console.log('Root Module Constructor');
   }
 
   configure() {
-    console.log('Configure');
   }
 
   registerMiddlewares() {
-    console.log('Register Middlewares');
   }
 }

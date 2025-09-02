@@ -3,9 +3,7 @@ import { UserRepository } from './users.repository';
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly userRepository: UserRepository) {
-    console.log('Users Service Constructor');
-  }
+  constructor(private readonly userRepository: UserRepository) {}
 
   findAll() {
     return this.userRepository.findAll();

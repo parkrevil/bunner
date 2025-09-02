@@ -8,8 +8,4 @@ import { PostsService } from './posts.service';
   controllers: [PostsController],
   providers: [PostsService],
 })
-export class PostsModule {
-  constructor() {
-    console.log('Posts Module Constructor');
-  }
-}
+export class PostsModule {}

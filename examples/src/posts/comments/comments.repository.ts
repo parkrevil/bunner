@@ -15,10 +15,6 @@ export class CommentRepository {
     },
   ];
 
-  constructor() {
-    console.log('Comment Repository Constructor');
-  }
-
   findAll() {
     return this.comments;
   }

@@ -5,9 +5,7 @@ import { UsersService } from './users.service';
   version: '2',
 })
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {
-    console.log('Users Controller Constructor');
-  }
+  constructor(private readonly usersService: UsersService) {}
 
   @Get()
   getAll() {

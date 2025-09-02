@@ -7,9 +7,7 @@ export class PostsService {
   constructor(
     private readonly postRepo: PostsRepository,
     private readonly commentsService: CommentsService,
-  ) {
-    console.log('Posts Service Constructor');
-  }
+  ) {}
 
   findAll() {
     return this.postRepo.findAll();

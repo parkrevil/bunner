@@ -15,10 +15,6 @@ export class PostsRepository {
     },
   ];
 
-  constructor() {
-    console.log('Post Repository Constructor');
-  }
-
   findAll() {
     return this.posts;
   }

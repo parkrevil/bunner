@@ -21,10 +21,6 @@ export class UserRepository {
     { id: 16, name: 'Jane Smith' },
   ];
 
-  constructor() {
-    console.log('User Repository Constructor');
-  }
-
   findAll() {
     return this.users;
   }
