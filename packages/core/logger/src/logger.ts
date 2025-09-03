@@ -34,7 +34,7 @@ export class Logger {
   }
 
   init() {
-    this.symbols.init_logger();
+    this.symbols.init();
   }
 
   trace(message: string) {
@@ -58,6 +58,6 @@ export class Logger {
   }
 
   private log(level: LogLevel, message: string) {
-    this.symbols.log_message(level, encodeCString(message));
+    this.symbols.log(level, encodeCString(message));
   }
 }

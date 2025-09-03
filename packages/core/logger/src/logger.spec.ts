@@ -30,8 +30,8 @@ await mock.module('bun:ffi', () => ({
     calls.dlopen.push({ path, symbols });
     return {
       symbols: {
-        init_logger: initLoggerSpy,
-        log_message: logMessageSpy,
+        init: initLoggerSpy,
+        log: logMessageSpy,
       },
     } as any;
   },
@@ -80,8 +80,8 @@ async function restoreMocks() {
       calls.dlopen.push({ path, symbols });
       return {
         symbols: {
-          init_logger: initLoggerSpy,
-          log_message: logMessageSpy,
+          init: initLoggerSpy,
+          log: logMessageSpy,
         },
       } as any;
     },
@@ -101,8 +101,8 @@ describe('Logger', () => {
 
         expect(calls.dlopen.length).toBe(1);
         expect(calls.dlopen[0]?.symbols).toEqual({
-          init_logger: { args: [], returns: 'void' },
-          log_message: { args: ['i32', 'cstring'], returns: 'void' },
+          init: { args: [], returns: 'void' },
+          log: { args: ['i32', 'cstring'], returns: 'void' },
         });
       });
 
@@ -148,8 +148,8 @@ describe('Logger', () => {
         await mock.module('bun:ffi', () => ({
           dlopen: () => ({
             symbols: {
-              init_logger: undefined,
-              log_message: undefined,
+              init: undefined,
+              log: undefined,
             },
           }),
         }));
@@ -232,37 +232,37 @@ describe('Logger', () => {
         logger = getLogger();
       });
 
-      test('calls native init_logger', () => {
+      test('calls native init', () => {
         const before = (initLoggerSpy as any).mock.calls.length;
         logger.init();
         expect((initLoggerSpy as any).mock.calls.length).toBe(before + 1);
       });
 
-      test('calls init_logger each time', () => {
+      test('calls init each time', () => {
         const before = (initLoggerSpy as any).mock.calls.length;
         logger.init();
         logger.init();
         expect((initLoggerSpy as any).mock.calls.length).toBe(before + 2);
       });
 
-      test('throws error when init_logger is undefined', () => {
+      test('throws error when init is undefined', () => {
         const originalSymbols = (logger as any).symbols;
-        (logger as any).symbols.init_logger = undefined;
+        (logger as any).symbols.init = undefined;
 
         expect(() => logger.init()).toThrow();
 
         (logger as any).symbols = originalSymbols;
       });
 
-      test('handles init_logger throwing error', () => {
-        const originalInitLogger = (logger as any).symbols.init_logger;
-        (logger as any).symbols.init_logger = () => {
-          throw new Error('init_logger failed');
+      test('handles init throwing error', () => {
+        const originalInitLogger = (logger as any).symbols.init;
+        (logger as any).symbols.init = () => {
+          throw new Error('init failed');
         };
 
-        expect(() => logger.init()).toThrow('init_logger failed');
+        expect(() => logger.init()).toThrow('init failed');
 
-        (logger as any).symbols.init_logger = originalInitLogger;
+        (logger as any).symbols.init = originalInitLogger;
       });
 
       test('throws error when symbols is null', () => {
@@ -287,7 +287,7 @@ describe('Logger', () => {
 
       const testLogMethod = (method: string, level: number) => {
         describe(method, () => {
-          test(`calls log_message with ${method} level`, () => {
+          test(`calls log with ${method} level`, () => {
             const before = (logMessageSpy as any).mock.calls.length;
             (logger as any)[method]('test message');
             expect((logMessageSpy as any).mock.calls.length).toBe(before + 1);
@@ -306,7 +306,7 @@ describe('Logger', () => {
             );
           });
 
-          test('passes encoded message to log_message', () => {
+          test('passes encoded message to log', () => {
             const message = `${method} test`;
             (logger as any)[method](message);
 
@@ -348,13 +348,13 @@ describe('Logger', () => {
             expect(decodeCString(lastCall[1])).toBe(longMsg);
           });
 
-          test('throws error when log_message is undefined', () => {
-            const originalLogMessage = (logger as any).symbols.log_message;
-            (logger as any).symbols.log_message = undefined;
+          test('throws error when log is undefined', () => {
+            const originalLogMessage = (logger as any).symbols.log;
+            (logger as any).symbols.log = undefined;
 
             expect(() => (logger as any)[method]('test')).toThrow();
 
-            (logger as any).symbols.log_message = originalLogMessage;
+            (logger as any).symbols.log = originalLogMessage;
           });
 
           test('throws error when encodeCString fails', async () => {
@@ -398,7 +398,7 @@ describe('Logger', () => {
         logger.init();
       });
 
-      test('calls log_message with correct level and encoded message', () => {
+      test('calls log with correct level and encoded message', () => {
         const before = (logMessageSpy as any).mock.calls.length;
         logger.info('test message');
 
