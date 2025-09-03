@@ -1,12 +1,3 @@
-//! Segment pattern representation, compatibility policy, and scoring.
-//!
-//! Policy: Two patterns are compatible if they have the same shape. Under
-//! `strict_param_names`, parameter names must also match; otherwise names are
-//! ignored for compatibility. Regexes must either both be absent or identical.
-//!
-//! Scoring: More specific patterns sort earlier. Literals weigh highest (100 +
-//! length), regex params weigh 10, plain params weigh 5. This yields a stable
-//! ordering favoring static-heavy segments.
 use regex::Regex;
 
 #[derive(Debug, Clone)]
@@ -16,56 +7,128 @@ pub enum SegmentPart {
 }
 
 #[derive(Debug, Clone)]
-pub struct SegmentPattern { pub parts: Vec<SegmentPart> }
+pub struct SegmentPattern {
+    pub parts: Vec<SegmentPart>,
+}
 
-/// Compute a specificity score; higher means more specific.
+impl PartialEq for SegmentPattern {
+    fn eq(&self, other: &Self) -> bool {
+        if self.parts.len() != other.parts.len() {
+            return false;
+        }
+        for (a, b) in self.parts.iter().zip(other.parts.iter()) {
+            match (a, b) {
+                (SegmentPart::Literal(la), SegmentPart::Literal(lb)) => {
+                    if la != lb {
+                        return false;
+                    }
+                }
+                (
+                    SegmentPart::Param {
+                        name: na,
+                        regex: ra,
+                    },
+                    SegmentPart::Param {
+                        name: nb,
+                        regex: rb,
+                    },
+                ) => {
+                    if na != nb {
+                        return false;
+                    }
+                    match (ra, rb) {
+                        (None, None) => {}
+                        (Some(x), Some(y)) => {
+                            if x.as_str() != y.as_str() {
+                                return false;
+                            }
+                        }
+                        _ => {
+                            return false;
+                        }
+                    }
+                }
+                _ => {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+}
+
 pub fn pattern_score(p: &SegmentPattern) -> usize {
     let mut s = 0usize;
     for part in p.parts.iter() {
         match part {
-            SegmentPart::Literal(l) => { s += 100 + l.len(); }
-            SegmentPart::Param { regex: Some(_), .. } => { s += 10; }
-            SegmentPart::Param { regex: None, .. } => { s += 5; }
+            SegmentPart::Literal(l) => {
+                s += 100 + l.len();
+            }
+            SegmentPart::Param { regex: None, .. } => {
+                s += 10;
+            }
+            SegmentPart::Param { regex: Some(_), .. } => {
+                s += 5;
+            }
         }
     }
     s
 }
 
-/// Backward-compat policy: strict name equality and identical regexes.
-// legacy strict-compatible function removed; use `pattern_compatible_policy` instead
-
-/// Policy-aware compatibility. If `strict_param_names` is true, parameter
-/// names must match, otherwise names are ignored. Regex presence and source
-/// string must match for both.
-pub fn pattern_compatible_policy(a: &SegmentPattern, b: &SegmentPattern, strict_param_names: bool) -> bool {
-    if a.parts.len() != b.parts.len() { return false; }
+pub fn pattern_compatible_policy(a: &SegmentPattern, b: &SegmentPattern) -> bool {
+    if a.parts.len() != b.parts.len() {
+        return false;
+    }
     for (pa, pb) in a.parts.iter().zip(b.parts.iter()) {
         match (pa, pb) {
-            (SegmentPart::Literal(la), SegmentPart::Literal(lb)) => { if la != lb { return false; } }
-            (SegmentPart::Param { name: na, regex: ra }, SegmentPart::Param { name: nb, regex: rb }) => {
-                if strict_param_names && na != nb { return false; }
-                match (ra, rb) {
-                    (None, None) => {}
-                    (Some(x), Some(y)) => { if x.as_str() != y.as_str() { return false; } }
-                    _ => { return false; }
+            (SegmentPart::Literal(la), SegmentPart::Literal(lb)) => {
+                if la != lb {
+                    return false;
                 }
             }
-            _ => { return false; }
+            (
+                SegmentPart::Param {
+                    name: _na,
+                    regex: ra,
+                },
+                SegmentPart::Param {
+                    name: _nb,
+                    regex: rb,
+                },
+            ) => match (ra, rb) {
+                (None, None) => {}
+                (None, Some(_)) | (Some(_), None) => {}
+                (Some(x), Some(y)) => {
+                    if x.as_str() != y.as_str() {
+                        return false;
+                    }
+                }
+            },
+            _ => {
+                return false;
+            }
         }
     }
     true
 }
 
-/// Return true if the pattern is a single literal equal to `key_seg`.
 pub fn pattern_is_pure_static(p: &SegmentPattern, key_seg: &str) -> bool {
-    if p.parts.len() != 1 { return false; }
-    match &p.parts[0] { SegmentPart::Literal(l) => l == key_seg, _ => false }
+    if p.parts.len() != 1 {
+        return false;
+    }
+    match &p.parts[0] {
+        SegmentPart::Literal(l) => l == key_seg,
+        _ => false,
+    }
 }
 
-/// Match a segment against a pattern and return parameter offsets.
-pub fn match_segment(seg: &str, seg_l: &str, pat: &SegmentPattern, max_len: usize) -> Option<Vec<(String, (usize, usize))>> {
-    let mut i = 0usize; // index into seg (original case)
-    let mut i_l = 0usize; // index into lower/lookup seg
+pub fn match_segment(
+    seg: &str,
+    seg_l: &str,
+    pat: &SegmentPattern,
+) -> Option<Vec<(String, (usize, usize))>> {
+    let mut i = 0usize;
+    let mut i_l = 0usize;
     let bytes = seg.as_bytes();
     let _bytes_l = seg_l.as_bytes();
     let mut out: Vec<(String, (usize, usize))> = Vec::new();
@@ -73,15 +136,21 @@ pub fn match_segment(seg: &str, seg_l: &str, pat: &SegmentPattern, max_len: usiz
     while idx < pat.parts.len() {
         match &pat.parts[idx] {
             SegmentPart::Literal(lit) => {
-                if i_l + lit.len() > seg_l.len() { return None; }
-                if &seg_l[i_l..i_l + lit.len()] != lit.as_str() { return None; }
+                if i_l + lit.len() > seg_l.len() {
+                    return None;
+                }
+                if &seg_l[i_l..i_l + lit.len()] != lit.as_str() {
+                    return None;
+                }
                 i += lit.len();
                 i_l += lit.len();
             }
             SegmentPart::Param { name, regex } => {
                 let mut next_lit: Option<&str> = None;
-                if idx + 1 < pat.parts.len() {
-                    if let SegmentPart::Literal(l) = &pat.parts[idx + 1] { next_lit = Some(l.as_str()); }
+                if idx + 1 < pat.parts.len()
+                    && let SegmentPart::Literal(l) = &pat.parts[idx + 1]
+                {
+                    next_lit = Some(l.as_str());
                 }
                 let mut end = bytes.len();
                 if let Some(nl_str) = next_lit {
@@ -89,15 +158,27 @@ pub fn match_segment(seg: &str, seg_l: &str, pat: &SegmentPattern, max_len: usiz
                     let mut j_l = i_l;
                     let mut found: Option<usize> = None;
                     while j_l + nl <= seg_l.len() {
-                        if &seg_l[j_l..j_l + nl] == nl_str { found = Some(j_l); break; }
+                        if &seg_l[j_l..j_l + nl] == nl_str {
+                            found = Some(j_l);
+                            break;
+                        }
                         j_l += 1;
                     }
-                    if let Some(stop_l) = found { end = i + (stop_l - i_l); } else { return None; }
+                    if let Some(stop_l) = found {
+                        end = i + (stop_l - i_l);
+                    } else {
+                        return None;
+                    }
                 }
-                if end < i { return None; }
+                if end < i {
+                    return None;
+                }
                 let slice = &seg[i..end];
-                if slice.len() > max_len { return None; }
-                if let Some(re) = regex.as_ref() { if !re.is_match(slice) { return None; } }
+                if let Some(re) = regex.as_ref()
+                    && !re.is_match(slice)
+                {
+                    return None;
+                }
                 out.push((name.clone(), (i, end - i)));
                 i = end;
                 i_l = end;
@@ -107,5 +188,3 @@ pub fn match_segment(seg: &str, seg_l: &str, pat: &SegmentPattern, max_len: usiz
     }
     if i == seg.len() { Some(out) } else { None }
 }
-
-

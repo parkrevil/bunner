@@ -29,14 +29,19 @@ pub extern "C" fn init() {
     });
 }
 
+/// Log a message at the specified level.
+///
+/// # Safety
+/// This function is unsafe because it dereferences a raw pointer `message`.
+/// The caller must ensure that `message` points to a valid null-terminated C string.
 #[unsafe(no_mangle)]
-pub extern "C" fn log(level: LogLevel, message: *const c_char) {
-    let rust_str = unsafe {
+pub unsafe extern "C" fn log(level: LogLevel, message: *const c_char) {
+    let rust_str = {
         if message.is_null() {
             error!("Received null pointer for log message.");
             return;
         }
-        CStr::from_ptr(message)
+        unsafe { CStr::from_ptr(message) }
     };
 
     if let Ok(str_slice) = rust_str.to_str() {

@@ -1,10 +1,3 @@
-//! Radix router core module.
-//!
-//! This module declares the `RadixRouter` type and wires submodules:
-//! - `node`: radix node structure and indexes
-//! - `insert`: route insertion and segment parsing
-//! - `find`: matching logic
-
 use dashmap::DashMap;
 use regex::Regex;
 use std::sync::{Arc, atomic::AtomicU64};
@@ -26,14 +19,13 @@ pub(super) fn method_index(m: Method) -> usize {
     }
 }
 
-pub(super) mod node;
-mod insert;
-mod find;
 mod compress;
+mod find;
+mod insert;
+pub(super) mod node;
 
 pub use node::RadixNode;
 
-/// Router facade over the radix tree. Build (insert/seal) first, then find() concurrently.
 #[derive(Debug, Default)]
 pub struct RadixRouter {
     pub(super) root: RadixNode,
@@ -43,7 +35,9 @@ pub struct RadixRouter {
 }
 
 impl RadixRouter {
-    pub fn compress(&mut self) { compress::compress_root(&mut self.root); }
+    pub fn compress(&mut self) {
+        compress::compress_root(&mut self.root);
+    }
     pub fn new(options: RouterOptions) -> Self {
         Self {
             root: RadixNode::default(),
@@ -52,5 +46,8 @@ impl RadixRouter {
             regex_clock: AtomicU64::new(1),
         }
     }
-    pub fn seal(&mut self) { self.root.sealed = true; self.compress(); }
+    pub fn seal(&mut self) {
+        self.root.sealed = true;
+        self.compress();
+    }
 }

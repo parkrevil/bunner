@@ -16,19 +16,16 @@ fn test_logger_ffi() {
         panic!("Unsupported operating system for {base_name}");
     };
 
-    let lib =
-        unsafe { Library::new(&lib_name).expect(&format!("Failed to load library: {}", lib_name)) };
-
-    let init: Symbol<extern "C" fn()> = unsafe {
-        lib.get(b"init\0")
-            .expect("Could not find init symbol")
+    let lib = unsafe {
+        Library::new(&lib_name).unwrap_or_else(|_| panic!("Failed to load library: {}", lib_name))
     };
+
+    let init: Symbol<extern "C" fn()> =
+        unsafe { lib.get(b"init\0").expect("Could not find init symbol") };
     init();
 
-    let log: Symbol<unsafe extern "C" fn(LogLevel, *const c_char)> = unsafe {
-        lib.get(b"log\0")
-            .expect("Could not find log symbol")
-    };
+    let log: Symbol<unsafe extern "C" fn(LogLevel, *const c_char)> =
+        unsafe { lib.get(b"log\0").expect("Could not find log symbol") };
 
     let trace_message =
         CString::new("This is a trace message from FFI test.").expect("CString::new failed");

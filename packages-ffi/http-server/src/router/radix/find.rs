@@ -1,41 +1,33 @@
-//! Route lookup logic.
+use crate::router::pattern;
 
-use crate::router::pattern::{SegmentPart, match_segment};
-
-use super::{method_index, RadixRouter};
+use super::{RadixRouter, method_index};
 
 #[inline]
 fn starts_with_ascii_ci(hay: &str, pre: &str) -> bool {
-    if pre.len() > hay.len() { return false; }
+    if pre.len() > hay.len() {
+        return false;
+    }
     hay.as_bytes()
         .iter()
         .zip(pre.as_bytes().iter())
         .take(pre.len())
-        .all(|(a, b)| a.to_ascii_lowercase() == b.to_ascii_lowercase())
+        .all(|(a, b)| a.eq_ignore_ascii_case(b))
 }
 
 impl RadixRouter {
-    /// Find a route key and parameter offsets for a given method/path.
-    ///
-    /// Algorithm outline:
-    /// - Normalize path according to options
-    /// - Traverse fused static edges greedily (case-aware)
-    /// - For each segment: try static child first; then pattern children
-    ///   using first-literal index; finally wildcard route
-    pub fn find(&self, method: super::super::Method, path: &str) -> Option<super::super::MatchResult> {
-        let orig = super::super::normalize_path(path, &self.options);
-        if orig.len() > self.options.max_path_length { return None; }
-        let s = orig.as_str();
+    fn find_from(
+        &self,
+        mut node: &super::node::RadixNode,
+        method: super::super::Method,
+        s: &str,
+        mut i: usize,
+        params: Vec<(String, (usize, usize))>,
+    ) -> Option<super::super::MatchResult> {
         let bytes = s.as_bytes();
-        let mut params: Vec<(String, (usize, usize))> = Vec::new();
-        let mut node = &self.root;
-        let mut i = 0usize;
-
-        // skip leading slashes
-        while i < bytes.len() && bytes[i] == b'/' { i += 1; }
-
+        while i < bytes.len() && bytes[i] == b'/' {
+            i += 1;
+        }
         loop {
-            // prefix-compressed static edge
             if let Some(edge) = node.fused_edge.as_ref() {
                 let rem = &s[i..];
                 let ok = if self.options.case_sensitive {
@@ -45,7 +37,9 @@ impl RadixRouter {
                 };
                 if ok {
                     let mut ni = i + edge.len();
-                    while ni < s.len() && s.as_bytes()[ni] == b'/' { ni += 1; }
+                    while ni < s.len() && s.as_bytes()[ni] == b'/' {
+                        ni += 1;
+                    }
                     if let Some(child) = node.fused_child.as_ref() {
                         node = child.as_ref();
                         i = ni;
@@ -54,87 +48,99 @@ impl RadixRouter {
                 }
             }
 
-            // wildcard candidate at current node
             let wildcard_key = node.wildcard_routes[method_index(method)];
-
-            if i >= bytes.len() {
-                // terminal
+            if i >= s.len() {
                 let rk = node.routes[method_index(method)];
-                if rk != 0 { return Some(super::super::MatchResult { key: rk, params }); }
-                if wildcard_key != 0 { return Some(super::super::MatchResult { key: wildcard_key, params }); }
+                if rk != 0 {
+                    return Some(super::super::MatchResult { key: rk, params });
+                }
+                if wildcard_key != 0 {
+                    return Some(super::super::MatchResult {
+                        key: wildcard_key,
+                        params,
+                    });
+                }
                 return None;
             }
 
-            // find next segment end
             let start = i;
-            while i < bytes.len() && bytes[i] != b'/' { i += 1; }
+            while i < s.len() && s.as_bytes()[i] != b'/' {
+                i += 1;
+            }
             let seg = &s[start..i];
             let key_lookup_owned;
-            let key_lookup: &str = if self.options.case_sensitive { seg } else { key_lookup_owned = seg.to_ascii_lowercase(); &key_lookup_owned };
-
-            // static match first
-            if let Some(next) = node.get_static_ref(key_lookup) {
-                node = next;
-            } else if !node.pattern_children.is_empty() {
-                let mut matched = false;
-                let comp = key_lookup;
-                // use first-literal index if available
-                let cands = node.pattern_candidates_for(comp);
-                if !cands.is_empty() {
-                    for &idx in cands.iter() {
-                        let (pat, next) = &node.pattern_children[idx];
-                        if let Some(kvs) = match_segment(seg, comp, pat, self.options.max_param_length) {
-                            for (name, (off, len)) in kvs.into_iter() {
-                                params.push((name, (start + off, len)));
-                                if params.len() > self.options.max_total_params { return None; }
-                            }
-                            node = next.as_ref();
-                            matched = true;
-                            break;
-                        }
-                    }
-                } else {
-                    for (pat, next) in node.pattern_children.iter() {
-                        if let Some(SegmentPart::Literal(l0)) = pat.parts.first() {
-                            if comp.len() < l0.len() || &comp[..l0.len()] != l0 { continue; }
-                        }
-                        if let Some(kvs) = match_segment(seg, comp, pat, self.options.max_param_length) {
-                            for (name, (off, len)) in kvs.into_iter() {
-                                params.push((name, (start + off, len)));
-                                if params.len() > self.options.max_total_params { return None; }
-                            }
-                            node = next.as_ref();
-                            matched = true;
-                            break;
-                        }
-                    }
-                }
-                if !matched {
-                    if wildcard_key != 0 {
-                        let mut rest = &s[start..];
-                        if rest.starts_with('/') { rest = &rest[1..]; }
-                        if rest.len() > self.options.max_param_length { return None; }
-                        params.push(("*".to_string(), (start + 1, rest.len())));
-                        return Some(super::super::MatchResult { key: wildcard_key, params });
-                    }
-                    return None;
-                }
+            let comp: &str = if self.options.case_sensitive {
+                seg
             } else {
-                // no match at this level; try wildcard
-                if wildcard_key != 0 {
-                    let mut rest = &s[start..];
-                    if rest.starts_with('/') { rest = &rest[1..]; }
-                    if rest.len() > self.options.max_param_length { return None; }
-                    params.push(("*".to_string(), (start + 1, rest.len())));
-                    return Some(super::super::MatchResult { key: wildcard_key, params });
+                key_lookup_owned = seg.to_ascii_lowercase();
+                &key_lookup_owned
+            };
+
+            let mut cand_idxs: Vec<usize> = Vec::new();
+            if !node.pattern_children.is_empty() {
+                let first = node.pattern_candidates_for(comp);
+                if !first.is_empty() {
+                    cand_idxs.extend(first);
+                } else {
+                    for idx in 0..node.pattern_children.len() {
+                        cand_idxs.push(idx);
+                    }
                 }
-                return None;
             }
 
-            // skip consecutive slashes
-            while i < bytes.len() && bytes[i] == b'/' { i += 1; }
+            if let Some(next) = node.get_static_ref(comp)
+                && let Some(ok) = self.find_from(next, method, s, i, params.clone())
+            {
+                return Some(ok);
+            }
+
+            for idx in cand_idxs {
+                let (pat, next) = &node.pattern_children[idx];
+                if let Some(kvs) = pattern::match_segment(seg, comp, pat) {
+                    let mut new_params = params.clone();
+                    for (name, (off, len)) in kvs.into_iter() {
+                        new_params.push((name, (start + off, len)));
+                    }
+                    if let Some(ok) = self.find_from(next.as_ref(), method, s, i, new_params) {
+                        return Some(ok);
+                    }
+                }
+            }
+
+            if wildcard_key != 0 {
+                let mut rest = &s[start..];
+                if rest.starts_with('/') {
+                    rest = &rest[1..];
+                }
+                let mut new_params = params;
+                new_params.push(("*".to_string(), (start, rest.len())));
+                return Some(super::super::MatchResult {
+                    key: wildcard_key,
+                    params: new_params,
+                });
+            }
+            return None;
         }
     }
+
+    pub fn find(
+        &self,
+        method: super::super::Method,
+        path: &str,
+    ) -> Option<super::super::MatchResult> {
+        if path == "/" {
+            let idx = method_index(method);
+            let key = self.root.routes[idx];
+            if key != 0 {
+                return Some(super::super::MatchResult {
+                    key,
+                    params: vec![],
+                });
+            }
+            return None;
+        }
+
+        let norm = super::super::normalize_path(path, &self.options);
+        self.find_from(&self.root, method, norm.as_str(), 0, Vec::new())
+    }
 }
-
-
