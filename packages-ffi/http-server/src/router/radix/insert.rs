@@ -1,5 +1,3 @@
-//! Route insertion and segment parsing.
-
 use regex::Regex;
 
 use crate::router::errors::InsertError;
@@ -8,8 +6,10 @@ use crate::router::pattern::{
 };
 use crate::router::regex_guard::{anchor_and_compile, normalize_anchor, validate_regex_safe};
 
-use super::node::RadixNode;
+use super::new_node_box_from_arena_ptr;
 use super::{RadixRouter, method_index};
+use core::sync::atomic::Ordering;
+use smallvec::SmallVec;
 
 impl RadixRouter {
     pub fn insert(
@@ -22,12 +22,15 @@ impl RadixRouter {
             return Err(InsertError::Syntax);
         }
 
+        self.invalidate_indices();
+
         if path == "/" {
             let idx = method_index(method);
             if self.root.routes[idx] != 0 {
                 return Err(InsertError::Syntax);
             }
             self.root.routes[idx] = key;
+            self.root.dirty = true;
             return Ok(());
         }
 
@@ -47,6 +50,7 @@ impl RadixRouter {
         }
 
         let mut current = &mut self.root;
+        let arena_ptr: *const bumpalo::Bump = &self.arena;
         let mut _total_params = 0usize;
 
         for (i, (seg, pat)) in segments.iter().zip(parsed_segments.iter()).enumerate() {
@@ -59,6 +63,7 @@ impl RadixRouter {
                     return Err(InsertError::Conflict);
                 }
                 current.wildcard_routes[idx] = key;
+                current.dirty = true;
                 return Ok(());
             }
 
@@ -75,49 +80,95 @@ impl RadixRouter {
             }
 
             if pattern_is_pure_static(pat, &key_seg) {
-                current = current.descend_static_mut(key_seg);
-            } else {
-                let has_incompatible = current
-                    .pattern_children
-                    .iter()
-                    .any(|(exist, _)| !pattern_compatible_policy(exist, pat));
-                if has_incompatible {
-                    return Err(InsertError::Conflict);
+                current = current.descend_static_mut_with_alloc(key_seg, || {
+                    new_node_box_from_arena_ptr(arena_ptr)
+                });
+                if current.static_keys.len() == current.static_vals.len() {
+                    let interner = &self.interner;
+                    let mut pairs: Vec<(u32, String, super::NodeBox)> = current
+                        .static_keys
+                        .iter()
+                        .cloned()
+                        .zip(current.static_vals.iter().map(|nb| super::NodeBox(nb.0)))
+                        .map(|(k, v)| (interner.intern(k.as_str()), k, v))
+                        .collect();
+                    pairs.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+                    current.static_keys.clear();
+                    current.static_vals.clear();
+                    for (_id, k, v) in pairs.into_iter() {
+                        current.static_keys.push(k);
+                        current.static_vals.push(v);
+                    }
                 }
+                current.dirty = true;
+            } else {
+                let shape_key = crate::router::pattern::pattern_shape_key(pat);
+                let tmp: SmallVec<[usize; 8]> = SmallVec::new();
+                let cand_indices: &[usize] =
+                    if let Some(v) = current.pattern_shape_index.get(&shape_key) {
+                        current.shape_hits.fetch_add(1, Ordering::Relaxed);
+                        v.as_slice()
+                    } else {
+                        let wkey = crate::router::pattern::pattern_shape_weak_key(pat);
+                        if let Some(v) = current.pattern_shape_weak_index.get(&wkey) {
+                            current.shape_hits.fetch_add(1, Ordering::Relaxed);
+                            v.as_slice()
+                        } else {
+                            current.shape_misses.fetch_add(1, Ordering::Relaxed);
+                            tmp.as_slice()
+                        }
+                    };
 
-                if i == segments.len() - 1 {
-                    'outer: for (exist, _) in current.pattern_children.iter() {
-                        if exist.parts.len() != pat.parts.len() {
-                            continue;
+                if cand_indices.is_empty() {
+                    for exist in current.patterns.iter() {
+                        if !pattern_compatible_policy(exist, pat) {
+                            return Err(InsertError::Conflict);
                         }
-                        for (ea, eb) in exist.parts.iter().zip(pat.parts.iter()) {
-                            match (ea, eb) {
-                                (SegmentPart::Literal(la), SegmentPart::Literal(lb)) => {
-                                    if la != lb {
-                                        continue 'outer;
-                                    }
-                                }
-                                (SegmentPart::Param { .. }, SegmentPart::Param { .. }) => {}
-                                _ => {
-                                    continue 'outer;
-                                }
-                            }
-                        }
-                        for (ea, eb) in exist.parts.iter().zip(pat.parts.iter()) {
-                            if let (
-                                SegmentPart::Param { regex: ra, .. },
-                                SegmentPart::Param { regex: rb, .. },
-                            ) = (ea, eb)
-                            {
-                                match (ra, rb) {
-                                    (None, None) => {}
-                                    (Some(x), Some(y)) => {
-                                        if x.as_str() != y.as_str() {
+                        if i == segments.len() - 1 {
+                            for (ea, eb) in exist.parts.iter().zip(pat.parts.iter()) {
+                                if let (
+                                    SegmentPart::Param { regex: ra, .. },
+                                    SegmentPart::Param { regex: rb, .. },
+                                ) = (ea, eb)
+                                {
+                                    match (ra, rb) {
+                                        (None, None) => {}
+                                        (Some(x), Some(y)) => {
+                                            if x.as_str() != y.as_str() {
+                                                return Err(InsertError::Conflict);
+                                            }
+                                        }
+                                        _ => {
                                             return Err(InsertError::Conflict);
                                         }
                                     }
-                                    _ => {
-                                        return Err(InsertError::Conflict);
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    for &idx in cand_indices.iter() {
+                        let exist = &current.patterns[idx];
+                        if !pattern_compatible_policy(exist, pat) {
+                            return Err(InsertError::Conflict);
+                        }
+                        if i == segments.len() - 1 {
+                            for (ea, eb) in exist.parts.iter().zip(pat.parts.iter()) {
+                                if let (
+                                    SegmentPart::Param { regex: ra, .. },
+                                    SegmentPart::Param { regex: rb, .. },
+                                ) = (ea, eb)
+                                {
+                                    match (ra, rb) {
+                                        (None, None) => {}
+                                        (Some(x), Some(y)) => {
+                                            if x.as_str() != y.as_str() {
+                                                return Err(InsertError::Conflict);
+                                            }
+                                        }
+                                        _ => {
+                                            return Err(InsertError::Conflict);
+                                        }
                                     }
                                 }
                             }
@@ -125,35 +176,34 @@ impl RadixRouter {
                     }
                 }
 
-                if let Some(existing_idx) = current
-                    .pattern_children
-                    .iter()
-                    .position(|(exist, _)| exist == pat)
-                {
-                    let child_ptr: *mut RadixNode =
-                        current.pattern_children[existing_idx].1.as_mut();
-                    unsafe {
-                        current = &mut *child_ptr;
-                    }
+                if let Some(existing_idx) = current.patterns.iter().position(|exist| exist == pat) {
+                    let child = current
+                        .pattern_nodes
+                        .get_mut(existing_idx)
+                        .unwrap()
+                        .as_mut();
+                    current = child;
                     continue;
                 }
 
-                if current.pattern_scores.len() != current.pattern_children.len() {
+                if current.pattern_scores.len() != current.patterns.len() {
                     current.rebuild_pattern_meta();
                 }
 
                 let score = pattern_score(pat);
                 let pos_opt = current.pattern_scores.iter().position(|&sc| sc < score);
-                let insert_pos = pos_opt.unwrap_or(current.pattern_children.len());
+                let insert_pos = pos_opt.unwrap_or(current.patterns.len());
+                current.patterns.insert(insert_pos, pat.clone());
                 current
-                    .pattern_children
-                    .insert(insert_pos, (pat.clone(), Box::new(RadixNode::default())));
+                    .pattern_nodes
+                    .insert(insert_pos, new_node_box_from_arena_ptr(arena_ptr));
                 current.pattern_scores.insert(insert_pos, score);
                 current.rebuild_pattern_index();
-                let child_ptr: *mut RadixNode = current.pattern_children[insert_pos].1.as_mut();
-                unsafe {
-                    current = &mut *child_ptr;
-                }
+                current.rebuild_shape_indices();
+                // 인덱스 미러는 seal() 단계 build_indices()에서 재구성됨
+                let child = current.pattern_nodes.get_mut(insert_pos).unwrap().as_mut();
+                current.dirty = true;
+                current = child;
             }
         }
 
@@ -162,6 +212,7 @@ impl RadixRouter {
             return Err(InsertError::Conflict);
         }
         current.routes[idx] = key;
+        current.dirty = true;
         Ok(())
     }
 

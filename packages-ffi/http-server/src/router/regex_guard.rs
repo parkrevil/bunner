@@ -25,9 +25,20 @@ pub fn validate_regex_safe(re: &str) -> bool {
         return false;
     }
 
+    // additional simple guards
+    // disallow backreferences like \1, \2 ... which can cause catastrophic backtracking
+    if re.contains("\\1") || re.contains("\\2") || re.contains("\\3") || re.contains("\\k<") {
+        return false;
+    }
+    // nested quantifiers like (a+)+ or (a*)+
+    if re.contains("+)+") || re.contains("*)+") || re.contains("?)+") {
+        return false;
+    }
+
     true
 }
 
+#[inline]
 pub fn anchor_and_compile(
     norm_src: &str,
     cache: &DashMap<String, (Regex, u64)>,
@@ -58,6 +69,7 @@ pub fn anchor_and_compile(
     }
 }
 
+#[inline]
 fn evict_one(cache: &DashMap<String, (Regex, u64)>) {
     let mut oldest_key: Option<String> = None;
     let mut oldest_tick: u64 = u64::MAX;

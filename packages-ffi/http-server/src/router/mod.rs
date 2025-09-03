@@ -1,6 +1,7 @@
 //
 
 mod errors;
+mod interner;
 mod pattern;
 mod radix;
 mod regex_guard;
@@ -26,7 +27,6 @@ pub struct Route {
 #[derive(Debug, Default)]
 pub struct MatchResult {
     pub key: u64,
-    // zero-copy friendly: (name, (start, len)) over the original path
     pub params: Vec<(String, (usize, usize))>,
 }
 
@@ -51,10 +51,12 @@ impl Router {
     }
 
     pub fn find(&self, method: Method, path: &str) -> Option<MatchResult> {
-        self.radix.find(method, path)
+        let norm = normalize_path(path, &self.radix.options);
+        self.radix.find_norm(method, &norm)
     }
 }
 
+#[inline(always)]
 fn method_from_u32(m: u32) -> Method {
     match m {
         0 => Method::GET,
@@ -91,9 +93,8 @@ pub fn match_route(
     path: &str,
 ) -> Option<(u64, Vec<(String, String)>)> {
     let method = method_from_u32(method);
-    // Use the same normalized string for matching and slicing to keep offsets consistent.
     let norm = normalize_path(path, &router.radix.options);
-    router.find(method, &norm).map(|m| {
+    router.radix.find_norm(method, &norm).map(|m| {
         let mut out = Vec::with_capacity(m.params.len());
         for (name, (start, len)) in m.params.into_iter() {
             let val = &norm[start..start + len];
@@ -131,21 +132,17 @@ pub use errors::InsertError;
 fn normalize_path(path: &str, opts: &RouterOptions) -> String {
     let bytes = path.as_bytes();
     let mut out = String::with_capacity(bytes.len());
-    let mut i = 0;
     let mut prev_slash = false;
-    while i < bytes.len() {
-        let b = bytes[i];
+    for &b in bytes.iter() {
         if b == b'/' {
             if !opts.ignore_duplicate_slashes || !prev_slash {
                 out.push('/');
             }
             prev_slash = true;
-            i += 1;
-            continue;
+        } else {
+            prev_slash = false;
+            out.push(b as char);
         }
-        prev_slash = false;
-        out.push(b as char);
-        i += 1;
     }
     if opts.ignore_trailing_slash && out.len() > 1 && out.as_bytes()[out.len() - 1] == b'/' {
         let mut end = out.len();
@@ -199,4 +196,15 @@ impl RouterHandle {
     pub fn find(&self, method: Method, path: &str) -> Option<MatchResult> {
         self.radix.find(method, path)
     }
+
+    pub fn metrics(&self) -> RouterMetrics {
+        self.radix.collect_metrics()
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct RouterMetrics {
+    pub pattern_first_literal_hits: u64,
+    pub shape_hits: u64,
+    pub shape_misses: u64,
 }

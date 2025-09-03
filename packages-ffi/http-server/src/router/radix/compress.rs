@@ -1,16 +1,15 @@
 use super::node::RadixNode;
 
 fn can_compress_here(n: &RadixNode) -> bool {
-    n.pattern_children.is_empty()
+    n.patterns.is_empty()
         && !n.routes.iter().any(|k| *k != 0)
         && !n.wildcard_routes.iter().any(|k| *k != 0)
         && n.static_children.len() <= 1
         && n.static_keys.len() <= 1
-        && n.pattern_children.is_empty()
 }
 
 fn compress_node(n: &mut RadixNode) {
-    if let Some((_, c)) = n.pattern_children.first_mut() {
+    if let Some(c) = n.pattern_nodes.first_mut() {
         compress_node(c.as_mut());
     }
     if !n.static_children.is_empty() {
@@ -50,7 +49,7 @@ fn compress_node(n: &mut RadixNode) {
     loop {
         let terminal =
             child.routes.iter().any(|k| *k != 0) || child.wildcard_routes.iter().any(|k| *k != 0);
-        if child.pattern_children.is_empty() && !terminal {
+        if child.patterns.is_empty() && !terminal {
             if !child.static_children.is_empty() && child.static_children.len() == 1 {
                 let (k2, c2) = child.static_children.drain().next().unwrap();
                 edge.push('/');

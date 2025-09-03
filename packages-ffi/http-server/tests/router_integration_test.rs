@@ -780,6 +780,28 @@ fn mixed_pattern_routes() {
 }
 
 #[test]
+fn pattern_order_with_first_literal_index() {
+    let mut r = build_router(true);
+
+    // 동일 세그먼트 내 첫 리터럴이 같은 패턴들 ("id-")
+    // 점수 정책상: 일반 파라미터 > 정규식 파라미터
+    assert!(register_route(&mut r, 0, "/p/id-:x/next", 1));
+    assert!(register_route(&mut r, 0, "/p/id-:x(\\d+)/next", 2));
+
+    seal_router(&mut r);
+
+    // 숫자 케이스: 두 패턴 모두 매칭 가능하나 일반 파라미터가 우선
+    let hit1 = match_route(&r, 0, "/p/id-123/next");
+    assert!(hit1.is_some());
+    assert_eq!(hit1.unwrap().0, 1);
+
+    // 문자 케이스: 일반 파라미터만 매칭
+    let hit2 = match_route(&r, 0, "/p/id-abc/next");
+    assert!(hit2.is_some());
+    assert_eq!(hit2.unwrap().0, 1);
+}
+
+#[test]
 fn regex_cache_behavior() {
     let mut r = build_router(true);
 
@@ -1011,4 +1033,66 @@ fn empty_and_special_paths() {
     let hit5 = match_route(&r, 0, "/..");
     assert!(hit5.is_some());
     assert_eq!(hit5.unwrap().0, 5);
+}
+
+// ============================================================================
+// 추가: SoA/Interner/Fused-edge 관련 보강 테스트
+// ============================================================================
+
+#[test]
+fn interner_static_lookup_binary_search() {
+    let mut r = build_router(true);
+
+    // 동일 부모 세그먼트 아래 정적 키를 많이 등록해 이진 탐색 경로를 유도
+    // /s/<k>
+    for i in 0..32 {
+        let path = format!("/s/k{:02}", i);
+        assert!(register_route(&mut r, 0, &path, 10_000 + i));
+    }
+
+    seal_router(&mut r);
+
+    // 몇몇 키를 샘플로 조회
+    for &i in &[0, 7, 8, 15, 16, 23, 31] {
+        let path = format!("/s/k{:02}", i);
+        let hit = match_route(&r, 0, &path);
+        assert!(hit.is_some());
+        assert_eq!(hit.unwrap().0, 10_000 + i);
+    }
+}
+
+#[test]
+fn fused_edge_case_insensitive_chain() {
+    // 대소문자 무시 모드에서 체인 압축(fused_edge) 경로가 대소문자 변형에 매칭되는지
+    let mut r = build_router(false);
+
+    assert!(register_route(&mut r, 0, "/Ab/Cd/Ef", 42));
+
+    seal_router(&mut r);
+
+    let cases = ["/ab/cd/ef", "/AB/CD/EF", "/Ab/Cd/Ef", "/aB/Cd/eF"];
+    for p in cases.iter() {
+        let hit = match_route(&r, 0, p);
+        assert!(hit.is_some(), "{} should match fused chain", p);
+        assert_eq!(hit.unwrap().0, 42);
+    }
+}
+
+#[test]
+fn wildcard_vs_param_precedence() {
+    let mut r = build_router(true);
+
+    // 같은 위치에서 파라미터와 와일드카드가 공존할 때 구체적인 파라미터가 우선
+    assert!(register_route(&mut r, 0, "/w/:id", 1));
+    assert!(register_route(&mut r, 0, "/w/*", 2));
+
+    seal_router(&mut r);
+
+    let hit_param = match_route(&r, 0, "/w/123");
+    assert!(hit_param.is_some());
+    assert_eq!(hit_param.unwrap().0, 1);
+
+    let hit_wc = match_route(&r, 0, "/w/x/y");
+    assert!(hit_wc.is_some());
+    assert_eq!(hit_wc.unwrap().0, 2);
 }
