@@ -1,8 +1,8 @@
+use once_cell::sync::OnceCell;
 use std::ffi::CStr;
 use std::os::raw::c_char;
-use once_cell::sync::OnceCell;
-use tracing::{info, error, trace, debug, warn};
-use tracing_subscriber::{fmt, EnvFilter};
+use tracing::{debug, error, info, trace, warn};
+use tracing_subscriber::{EnvFilter, fmt};
 
 static LOGGER_INIT: OnceCell<()> = OnceCell::new();
 
@@ -17,24 +17,20 @@ pub enum LogLevel {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn init_logger() {
+pub extern "C" fn init() {
     LOGGER_INIT.get_or_init(|| {
-        let filter = EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| EnvFilter::new("info"));
+        let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
-        let subscriber = fmt()
-            .with_env_filter(filter)
-            .finish();
+        let subscriber = fmt().with_env_filter(filter).finish();
 
-        tracing::subscriber::set_global_default(subscriber)
-            .expect("Failed to set global logger");
+        tracing::subscriber::set_global_default(subscriber).expect("Failed to set global logger");
 
         info!("Bunner Rust Logger initialized.");
     });
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn log_message(level: LogLevel, message: *const c_char) {
+pub extern "C" fn log(level: LogLevel, message: *const c_char) {
     let rust_str = unsafe {
         if message.is_null() {
             error!("Received null pointer for log message.");

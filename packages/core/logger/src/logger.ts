@@ -14,8 +14,8 @@ export class Logger {
       const lib = dlopen(
         resolveRustLibPath('bunner_core_logger', import.meta.dir),
         {
-          init_logger: { args: [], returns: 'void' },
-          log_message: { args: ['i32', 'cstring'], returns: 'void' },
+          init: { args: [], returns: 'void' },
+          log: { args: ['i32', 'cstring'], returns: 'void' },
         },
       );
 
