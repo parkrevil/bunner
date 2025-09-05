@@ -15,5 +15,19 @@ hashbrown = "0.14"
 dashmap = "5"
 regex-syntax = "0.8"
 bumpalo = "3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+memchr = "2"
+aho-corasick = "1"
+regex-automata = "0.4"
 
 [dev-dependencies]
+criterion.workspace = true
+libc.workspace = true
+jemalloc-ctl.workspace = true
+jemallocator.workspace = true
+rstest.workspace = true
+
+[[bench]]
+name = "router"
+harness = false

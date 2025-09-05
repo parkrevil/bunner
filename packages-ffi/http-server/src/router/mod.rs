@@ -1,10 +1,39 @@
 //
 
-mod errors;
+pub mod errors;
 mod interner;
 mod pattern;
 mod radix;
-mod regex_guard;
+pub use crate::router::errors::RouterError;
+
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+use std::sync::Once;
+use std::sync::OnceLock;
+
+static DEBUG_FLAG: OnceLock<bool> = OnceLock::new();
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+static SIMD_LOG_ONCE: Once = Once::new();
+
+#[inline]
+pub(crate) fn router_debug_enabled() -> bool {
+    *DEBUG_FLAG.get_or_init(|| match std::env::var("BUNNER_ROUTER_DEBUG") {
+        Ok(val) => matches!(val.as_str(), "1" | "true" | "TRUE"),
+        Err(_) => false,
+    })
+}
+
+#[inline]
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+pub(crate) fn log_avx2_once() {
+    SIMD_LOG_ONCE.call_once(|| {
+        eprintln!("[router] AVX2 enabled");
+    });
+}
+
+#[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+#[inline]
+pub(crate) fn log_avx2_once() { /* no-op when AVX2 is not available */
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Method {
@@ -31,6 +60,12 @@ pub struct MatchResult {
 }
 
 #[derive(Debug, Default)]
+pub struct MatchOffsets {
+    pub key: u64,
+    pub params: Vec<(u32, (usize, usize))>,
+}
+
+#[derive(Debug, Default)]
 pub struct Router {
     radix: radix::RadixRouter,
 }
@@ -46,12 +81,12 @@ impl Router {
         }
     }
 
-    pub fn add(&mut self, method: Method, path: &str, key: u64) {
-        let _ = self.radix.insert(method, path, key);
+    pub fn add(&mut self, method: Method, path: &str) -> Result<u64, errors::RouterError> {
+        self.radix.insert(method, path)
     }
 
     pub fn find(&self, method: Method, path: &str) -> Option<MatchResult> {
-        let norm = normalize_path(path, &self.radix.options);
+        let norm = normalize_path(path);
         self.radix.find_norm(method, &norm)
     }
 }
@@ -70,19 +105,19 @@ fn method_from_u32(m: u32) -> Method {
     }
 }
 
-pub fn register_route(router: &mut Router, method: u32, path: &str, key: u64) -> bool {
+pub fn register_route(
+    router: &mut Router,
+    method: u32,
+    path: &str,
+) -> Result<u64, errors::RouterError> {
     let method = method_from_u32(method);
-    match router.radix.insert(method, path, key) {
-        Ok(()) => true,
-        Err(errors::InsertError::Conflict) => true, // idempotent/no-op on conflict
-        Err(_) => false,
-    }
+    router.radix.insert(method, path)
 }
 
-pub fn register_route_ex(router: &mut Router, method: u32, path: &str, key: u64) -> u32 {
+pub fn register_route_ex(router: &mut Router, method: u32, path: &str) -> u32 {
     let method = method_from_u32(method);
-    match router.radix.insert(method, path, key) {
-        Ok(()) => 0,
+    match router.radix.insert(method, path) {
+        Ok(k) => k as u32,
         Err(e) => e as u32,
     }
 }
@@ -93,7 +128,8 @@ pub fn match_route(
     path: &str,
 ) -> Option<(u64, Vec<(String, String)>)> {
     let method = method_from_u32(method);
-    let norm = normalize_path(path, &router.radix.options);
+    // Always normalize trailing slashes; do not collapse duplicate slashes
+    let norm = normalize_path(path);
     router.radix.find_norm(method, &norm).map(|m| {
         let mut out = Vec::with_capacity(m.params.len());
         for (name, (start, len)) in m.params.into_iter() {
@@ -110,48 +146,108 @@ pub fn seal(router: &mut Router) {
 
 #[derive(Debug, Clone, Copy)]
 pub struct RouterOptions {
-    pub ignore_trailing_slash: bool,
-    pub ignore_duplicate_slashes: bool,
     pub case_sensitive: bool,
-    pub allow_unsafe_regex: bool,
+    // performance/feature toggles
+    pub enable_root_prune: bool,
+    pub enable_static_full_map: bool,
 }
 
 impl Default for RouterOptions {
     fn default() -> Self {
         Self {
-            ignore_trailing_slash: false,
-            ignore_duplicate_slashes: false,
             case_sensitive: true,
-            allow_unsafe_regex: false,
+            enable_root_prune: false,
+            enable_static_full_map: false,
         }
     }
 }
 
-pub use errors::InsertError;
+// InsertError removed; use RouterError numeric codes
 
-fn normalize_path(path: &str, opts: &RouterOptions) -> String {
-    let bytes = path.as_bytes();
-    let mut out = String::with_capacity(bytes.len());
-    let mut prev_slash = false;
-    for &b in bytes.iter() {
-        if b == b'/' {
-            if !opts.ignore_duplicate_slashes || !prev_slash {
-                out.push('/');
+fn normalize_path(path: &str) -> String {
+    // Fast path: no trailing slash or single "/" → return as-is clone
+    if path.len() <= 1 || path.as_bytes().last().is_none() || path.as_bytes().last() != Some(&b'/')
+    {
+        return path.to_string();
+    }
+    // Remove trailing slashes while keeping single root
+    let mut end = path.len();
+    while end > 1 && path.as_bytes()[end - 1] == b'/' {
+        end -= 1;
+    }
+    if end == path.len() {
+        return path.to_string();
+    }
+    path[..end].to_string()
+}
+
+#[inline]
+pub(crate) fn path_is_allowed_ascii(path: &str) -> bool {
+    // RFC3986-safe subset for path: unreserved + sub-delims + ':' '@' '/' and '.'
+    // Exclude '%', '?' and '#', and any control/space
+    for &b in path.as_bytes() {
+        if b <= 0x20 {
+            return false;
+        }
+        match b {
+            b'a'..=b'z'
+            | b'A'..=b'Z'
+            | b'0'..=b'9'
+            | b'-'
+            | b'.'
+            | b'_'
+            | b'~'
+            | b'!'
+            | b'$'
+            | b'&'
+            | b'\''
+            | b'('
+            | b')'
+            | b'*'
+            | b'+'
+            | b','
+            | b';'
+            | b'='
+            | b':'
+            | b'@'
+            | b'/' => {}
+            _ => {
+                return false;
             }
-            prev_slash = true;
-        } else {
-            prev_slash = false;
-            out.push(b as char);
         }
     }
-    if opts.ignore_trailing_slash && out.len() > 1 && out.as_bytes()[out.len() - 1] == b'/' {
-        let mut end = out.len();
-        while end > 1 && out.as_bytes()[end - 1] == b'/' {
-            end -= 1;
-        }
-        out.truncate(end);
+    true
+}
+
+pub fn match_route_err(
+    router: &Router,
+    method: u32,
+    path: &str,
+) -> Result<(u64, Vec<(String, String)>), RouterError> {
+    if path.is_empty() {
+        return Err(RouterError::MatchPathEmpty);
     }
-    out
+    if !path.is_ascii() {
+        return Err(RouterError::MatchPathNotAscii);
+    }
+    if !path_is_allowed_ascii(path) {
+        return Err(RouterError::MatchPathContainsDisallowedCharacters);
+    }
+    let method = method_from_u32(method);
+    let norm = normalize_path(path);
+    if !path_is_allowed_ascii(&norm) {
+        return Err(RouterError::MatchPathContainsDisallowedCharacters);
+    }
+    if let Some(m) = router.radix.find_norm(method, &norm) {
+        let mut out = Vec::with_capacity(m.params.len());
+        for (name, (start, len)) in m.params.into_iter() {
+            let val = &norm[start..start + len];
+            out.push((name, val.to_string()));
+        }
+        Ok((m.key, out))
+    } else {
+        Err(RouterError::MatchNotFound)
+    }
 }
 
 // fallback helpers removed (radix handles all)
@@ -174,8 +270,8 @@ impl RouterBuilder {
             radix: radix::RadixRouter::new(options),
         }
     }
-    pub fn add(mut self, method: Method, path: &str, key: u64) -> Self {
-        let _ = self.radix.insert(method, path, key);
+    pub fn add(mut self, method: Method, path: &str) -> Self {
+        let _ = self.radix.insert(method, path);
         self
     }
     pub fn seal(mut self) -> Self {
@@ -197,8 +293,27 @@ impl RouterHandle {
         self.radix.find(method, path)
     }
 
+    pub fn find_offsets(&self, method: Method, path: &str) -> Option<MatchOffsets> {
+        let norm = normalize_path(path);
+        self.radix.find_norm(method, norm.as_str()).map(|m| {
+            let mut out = MatchOffsets {
+                key: m.key,
+                params: Vec::with_capacity(m.params.len()),
+            };
+            for (name, (off, len)) in m.params.into_iter() {
+                let id = self.radix.interner.intern(name.as_str());
+                out.params.push((id, (off, len)));
+            }
+            out
+        })
+    }
+
     pub fn metrics(&self) -> RouterMetrics {
         self.radix.collect_metrics()
+    }
+
+    pub fn reset_metrics(&mut self) {
+        self.radix.reset_metrics();
     }
 }
 
@@ -207,4 +322,11 @@ pub struct RouterMetrics {
     pub pattern_first_literal_hits: u64,
     pub shape_hits: u64,
     pub shape_misses: u64,
+    pub cand_avg: f64,
+    pub cache_hits: u64,
+    pub cache_lookups: u64,
+    pub cache_misses: u64,
+    pub cand_p50: f64,
+    pub cand_p99: f64,
+    pub static_hits: u64,
 }

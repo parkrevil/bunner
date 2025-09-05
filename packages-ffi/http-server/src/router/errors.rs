@@ -1,19 +1,25 @@
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum InsertError {
-    Conflict = 1,
-    UnsafeRegex = 2,
-    Syntax = 3,
-    WildcardPosition = 4,
-}
+pub enum RouterError {
+    // Insert-time
+    RouteConflictOnDuplicatePath = 1,
+    RoutePathSyntaxInvalid = 3,
+    RouteWildcardSegmentNotAtEnd = 4,
+    RoutePathContainsDisallowedCharacters = 5,
+    RouteDuplicateParamNameInRoute = 6,
+    RouterSealedCannotInsert = 7,
+    RouteParamNameConflictAtSamePosition = 8,
+    RoutePathEmpty = 9,
+    RoutePathNotAscii = 10,
+    RouteParamNameInvalidStart = 11,
+    RouteParamNameInvalidChar = 12,
+    RouteSegmentContainsMixedParamAndLiteral = 13,
+    RouteWildcardAlreadyExistsForMethod = 14,
 
-impl core::fmt::Display for InsertError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            InsertError::Conflict => write!(f, "conflict"),
-            InsertError::UnsafeRegex => write!(f, "unsafe-regex"),
-            InsertError::Syntax => write!(f, "syntax"),
-            InsertError::WildcardPosition => write!(f, "wildcard-position"),
-        }
-    }
+    // Match-time
+    MatchNotFound = 100,
+    MatchPathSyntaxInvalid = 101,
+    MatchPathContainsDisallowedCharacters = 102,
+    MatchPathEmpty = 103,
+    MatchPathNotAscii = 104,
 }

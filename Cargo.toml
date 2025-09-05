@@ -4,3 +4,16 @@ members = [
   "packages-ffi/http-server"
 ]
 resolver = "2"
+
+[workspace.dependencies]
+criterion = "0.5"
+libc = "0.2"
+jemalloc-ctl = "0.5"
+jemallocator = "0.5"
+libloading = "0.8"
+rstest = "0.23"
+
+[workspace.metadata.cargo-udeps.ignore]
+normal = []
+development = ["rstest"]
+build = []

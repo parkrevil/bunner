@@ -1,6 +1,7 @@
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_uint, c_ulonglong};
 
+use super::errors::InsertError;
 use super::{self as router, Router, RouterOptions};
 
 #[repr(C)]
@@ -14,19 +15,15 @@ pub extern "C" fn create_router() -> RouterHandle {
 
 #[repr(C)]
 pub struct RouterOptionsC {
-    pub ignore_trailing_slash: bool,
-    pub ignore_duplicate_slashes: bool,
     pub case_sensitive: bool,
-    pub allow_unsafe_regex: bool,
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn create_router_with_options(opts: RouterOptionsC) -> RouterHandle {
     let options = RouterOptions {
-        ignore_trailing_slash: opts.ignore_trailing_slash,
-        ignore_duplicate_slashes: opts.ignore_duplicate_slashes,
         case_sensitive: opts.case_sensitive,
-        allow_unsafe_regex: opts.allow_unsafe_regex,
+        enable_root_prune: true,
+        enable_static_full_map: true,
     };
     let boxed = Box::new(Router::with_options(options, None));
     RouterHandle(Box::into_raw(boxed))
@@ -35,7 +32,9 @@ pub extern "C" fn create_router_with_options(opts: RouterOptionsC) -> RouterHand
 #[unsafe(no_mangle)]
 pub extern "C" fn destroy_router(handle: RouterHandle) {
     if !handle.0.is_null() {
-        unsafe { drop(Box::from_raw(handle.0)); }
+        unsafe {
+            drop(Box::from_raw(handle.0));
+        }
     }
 }
 
@@ -55,32 +54,57 @@ pub struct MatchResultC {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn register_route(handle: RouterHandle, method: c_uint, path: *const c_char, key: c_ulonglong) -> bool {
-    let c_str = unsafe { CStr::from_ptr(path) };
-    let path = c_str.to_string_lossy();
-    let router_ptr = handle.0;
-    if router_ptr.is_null() { return false; }
-    let router_mut = unsafe { &mut *router_ptr };
-    router::register_route(router_mut, method as u32, &path, key as u64)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn register_route_ex(handle: RouterHandle, method: c_uint, path: *const c_char, key: c_ulonglong) -> c_uint {
-    let c_str = unsafe { CStr::from_ptr(path) };
-    let path = c_str.to_string_lossy();
-    let router_ptr = handle.0;
-    if router_ptr.is_null() { return 255; /* invalid handle */ }
-    let router_mut = unsafe { &mut *router_ptr };
-    router::register_route_ex(router_mut, method as u32, &path, key as u64)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn match_route(handle: RouterHandle, method: c_uint, path: *const c_char) -> MatchResultC {
+pub extern "C" fn register_route(
+    handle: RouterHandle,
+    method: c_uint,
+    path: *const c_char,
+) -> c_ulonglong {
     let c_str = unsafe { CStr::from_ptr(path) };
     let path = c_str.to_string_lossy();
     let router_ptr = handle.0;
     if router_ptr.is_null() {
-        return MatchResultC { route_key: 0, buf_ptr: std::ptr::null_mut(), buf_len: 0, offsets_ptr: std::ptr::null_mut(), offsets_len: 0 };
+        return 0;
+    }
+    let router_mut = unsafe { &mut *router_ptr };
+    match router::register_route(router_mut, method as u32, &path) {
+        Ok(k) => k as c_ulonglong,
+        Err(_) => 0,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn register_route_ex(
+    handle: RouterHandle,
+    method: c_uint,
+    path: *const c_char,
+) -> c_uint {
+    let c_str = unsafe { CStr::from_ptr(path) };
+    let path = c_str.to_string_lossy();
+    let router_ptr = handle.0;
+    if router_ptr.is_null() {
+        return 255; /* invalid handle */
+    }
+    let router_mut = unsafe { &mut *router_ptr };
+    router::register_route_ex(router_mut, method as u32, &path)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn match_route(
+    handle: RouterHandle,
+    method: c_uint,
+    path: *const c_char,
+) -> MatchResultC {
+    let c_str = unsafe { CStr::from_ptr(path) };
+    let path = c_str.to_string_lossy();
+    let router_ptr = handle.0;
+    if router_ptr.is_null() {
+        return MatchResultC {
+            route_key: 0,
+            buf_ptr: std::ptr::null_mut(),
+            buf_len: 0,
+            offsets_ptr: std::ptr::null_mut(),
+            offsets_len: 0,
+        };
     }
     let router_ref = unsafe { &*router_ptr };
     if let Some((route_key, params)) = router::match_route(router_ref, method as u32, &path) {
@@ -107,7 +131,13 @@ pub extern "C" fn match_route(handle: RouterHandle, method: c_uint, path: *const
         std::mem::forget(off_box);
         return out;
     }
-    MatchResultC { route_key: 0, buf_ptr: std::ptr::null_mut(), buf_len: 0, offsets_ptr: std::ptr::null_mut(), offsets_len: 0 }
+    MatchResultC {
+        route_key: 0,
+        buf_ptr: std::ptr::null_mut(),
+        buf_len: 0,
+        offsets_ptr: std::ptr::null_mut(),
+        offsets_len: 0,
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -125,9 +155,9 @@ pub extern "C" fn free_match_result(res: MatchResultC) {
 #[unsafe(no_mangle)]
 pub extern "C" fn seal_router(handle: RouterHandle) {
     let router_ptr = handle.0;
-    if router_ptr.is_null() { return; }
+    if router_ptr.is_null() {
+        return;
+    }
     let router_mut = unsafe { &mut *router_ptr };
     router::seal(router_mut);
 }
-
-

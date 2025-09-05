@@ -1,6 +1,7 @@
 import { suffix } from 'bun:ffi';
 import { packageDirectorySync } from 'package-directory';
 
+import { isDevelopment, isTest } from './constants';
 import { textEncoder } from './instances';
 import type { Class } from './types';
 
@@ -35,8 +36,11 @@ export function encodeCString(message: string) {
  * @returns The path to the library
  */
 export function resolveRustLibPath(libName: string, cwd: string) {
-  const fname =
-    process.platform === 'win32' ? `${libName}.dll` : `lib${libName}.${suffix}`;
+  const additionalName = isDevelopment || isTest ? '-dev' : '';
+  const fileName =
+    process.platform === 'win32'
+      ? `${libName}${additionalName}.dll`
+      : `lib${libName}${additionalName}.${suffix}`;
 
-  return `${packageDirectorySync({ cwd })}/bin/${fname}`;
+  return `${packageDirectorySync({ cwd })}/bin/${fileName}`;
 }

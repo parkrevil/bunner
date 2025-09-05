@@ -5,3 +5,4 @@ bun.lock
 Cargo.lock
 bin
 di.json
+benchmarks

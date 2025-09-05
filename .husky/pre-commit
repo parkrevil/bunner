@@ -1,3 +1,2 @@
 cargo clippy --fix --allow-dirty --all-targets --all-features -- -D warnings
-cargo fmt --all
 bunx lint-staged

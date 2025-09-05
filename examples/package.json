@@ -4,8 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "nodemon",
-    "di": "bunner di"
+    "dev": "nodemon"
   },
   "dependencies": {
     "@bunner/core": "workspace:*",

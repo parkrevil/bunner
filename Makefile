@@ -1,10 +1,10 @@
-.PHONY: lint, format, test
+.PHONY: lint, format, test, bench
 
 lint:
-	cargo clippy --all-targets --all-features
+	cargo clippy --fix --allow-dirty --all-targets --all-features -- -D warnings
 
 format: 
-	cargo fmt
+	cargo fmt --all
 
 test:
 	@RUST_LOG=trace ./scripts/cargo-test.sh

@@ -4,6 +4,7 @@ import json from '@eslint/json';
 import markdown from '@eslint/markdown';
 import { defineConfig } from 'eslint/config';
 import importPlugin from 'eslint-plugin-import';
+import unusedImports from 'eslint-plugin-unused-imports';
 import globals from 'globals';
 import {
   plugin as tseslintPlugin,
@@ -39,6 +40,7 @@ export default defineConfig([
     },
     plugins: {
       '@typescript-eslint': tseslintPlugin,
+      'unused-imports': unusedImports,
     },
     extends: [
       eslint.configs.recommended,
@@ -58,6 +60,17 @@ export default defineConfig([
         'error',
         {
           allowEmptyCatch: true,
+        },
+      ],
+      'no-unused-vars': 'off',
+      'unused-imports/no-unused-imports': 'error',
+      'unused-imports/no-unused-vars': [
+        'warn',
+        {
+          vars: 'all',
+          varsIgnorePattern: '^_',
+          args: 'after-used',
+          argsIgnorePattern: '^_',
         },
       ],
       'import/order': [

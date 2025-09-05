@@ -1,25 +1,17 @@
-use regex::Regex;
-
-use crate::router::errors::InsertError;
+use crate::router::errors::RouterError;
 use crate::router::pattern::{
-    SegmentPart, SegmentPattern, pattern_compatible_policy, pattern_is_pure_static, pattern_score,
+    pattern_compatible_policy, pattern_is_pure_static, pattern_score, SegmentPart, SegmentPattern,
 };
-use crate::router::regex_guard::{anchor_and_compile, normalize_anchor, validate_regex_safe};
 
 use super::new_node_box_from_arena_ptr;
-use super::{RadixRouter, method_index};
+use super::{method_index, RadixRouter};
 use core::sync::atomic::Ordering;
 use smallvec::SmallVec;
 
 impl RadixRouter {
-    pub fn insert(
-        &mut self,
-        method: super::super::Method,
-        path: &str,
-        key: u64,
-    ) -> Result<(), InsertError> {
+    pub fn insert(&mut self, method: super::super::Method, path: &str) -> Result<u64, RouterError> {
         if self.root.sealed {
-            return Err(InsertError::Syntax);
+            return Err(RouterError::RouterSealedCannotInsert);
         }
 
         self.invalidate_indices();
@@ -27,25 +19,51 @@ impl RadixRouter {
         if path == "/" {
             let idx = method_index(method);
             if self.root.routes[idx] != 0 {
-                return Err(InsertError::Syntax);
+                return Err(RouterError::RouteConflictOnDuplicatePath);
             }
-            self.root.routes[idx] = key;
+            let key = self
+                .next_key
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            self.root.routes[idx] = key + 1;
+            self.root.method_mask |= 1 << idx;
             self.root.dirty = true;
-            return Ok(());
+            return Ok(key);
         }
 
-        let norm = super::super::normalize_path(path, &self.options);
+        if path.is_empty() {
+            return Err(RouterError::RoutePathEmpty);
+        }
+        if !path.is_ascii() {
+            return Err(RouterError::RoutePathNotAscii);
+        }
+        let norm = super::super::normalize_path(path);
+        if !super::super::path_is_allowed_ascii(&norm) {
+            return Err(RouterError::RoutePathContainsDisallowedCharacters);
+        }
+
+        if !norm.is_ascii() {
+            return Err(RouterError::RoutePathNotAscii);
+        }
 
         let segments: Vec<&str> = norm.split('/').filter(|s| !s.is_empty()).collect();
         if segments.is_empty() {
-            return Err(InsertError::Syntax);
+            return Err(RouterError::RoutePathSyntaxInvalid);
         }
 
         let case_sensitive = self.options.case_sensitive;
 
-        let mut parsed_segments = Vec::new();
+        let mut parsed_segments: Vec<SegmentPattern> = Vec::new();
+        let mut seen_params: hashbrown::HashSet<String> = hashbrown::HashSet::new();
         for seg in segments.iter() {
             let pat = self.parse_segment(seg)?;
+            for part in pat.parts.iter() {
+                if let SegmentPart::Param { name, .. } = part {
+                    if seen_params.contains(name) {
+                        return Err(RouterError::RouteDuplicateParamNameInRoute);
+                    }
+                    seen_params.insert(name.clone());
+                }
+            }
             parsed_segments.push(pat);
         }
 
@@ -53,18 +71,22 @@ impl RadixRouter {
         let arena_ptr: *const bumpalo::Bump = &self.arena;
         let mut _total_params = 0usize;
 
+        let m_idx = method_index(method);
         for (i, (seg, pat)) in segments.iter().zip(parsed_segments.iter()).enumerate() {
             if *seg == "*" {
                 if i != segments.len() - 1 {
-                    return Err(InsertError::WildcardPosition);
+                    return Err(RouterError::RouteWildcardSegmentNotAtEnd);
                 }
-                let idx = method_index(method);
-                if current.wildcard_routes[idx] != 0 {
-                    return Err(InsertError::Conflict);
+                if current.wildcard_routes[m_idx] != 0 {
+                    return Err(RouterError::RouteWildcardAlreadyExistsForMethod);
                 }
-                current.wildcard_routes[idx] = key;
+                let key = self
+                    .next_key
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                current.wildcard_routes[m_idx] = key + 1;
+                current.method_mask |= 1 << m_idx;
                 current.dirty = true;
-                return Ok(());
+                return Ok(key);
             }
 
             let key_seg = if case_sensitive {
@@ -83,6 +105,7 @@ impl RadixRouter {
                 current = current.descend_static_mut_with_alloc(key_seg, || {
                     new_node_box_from_arena_ptr(arena_ptr)
                 });
+                current.method_mask |= 1 << m_idx;
                 if current.static_keys.len() == current.static_vals.len() {
                     let interner = &self.interner;
                     let mut pairs: Vec<(u32, String, super::NodeBox)> = current
@@ -109,40 +132,20 @@ impl RadixRouter {
                         current.shape_hits.fetch_add(1, Ordering::Relaxed);
                         v.as_slice()
                     } else {
-                        let wkey = crate::router::pattern::pattern_shape_weak_key(pat);
-                        if let Some(v) = current.pattern_shape_weak_index.get(&wkey) {
-                            current.shape_hits.fetch_add(1, Ordering::Relaxed);
-                            v.as_slice()
-                        } else {
-                            current.shape_misses.fetch_add(1, Ordering::Relaxed);
-                            tmp.as_slice()
-                        }
+                        current.shape_misses.fetch_add(1, Ordering::Relaxed);
+                        tmp.as_slice()
                     };
 
                 if cand_indices.is_empty() {
                     for exist in current.patterns.iter() {
                         if !pattern_compatible_policy(exist, pat) {
-                            return Err(InsertError::Conflict);
+                            return Err(RouterError::RouteParamNameConflictAtSamePosition);
                         }
                         if i == segments.len() - 1 {
                             for (ea, eb) in exist.parts.iter().zip(pat.parts.iter()) {
-                                if let (
-                                    SegmentPart::Param { regex: ra, .. },
-                                    SegmentPart::Param { regex: rb, .. },
-                                ) = (ea, eb)
-                                {
-                                    match (ra, rb) {
-                                        (None, None) => {}
-                                        (Some(x), Some(y)) => {
-                                            if x.as_str() != y.as_str() {
-                                                return Err(InsertError::Conflict);
-                                            }
-                                        }
-                                        _ => {
-                                            return Err(InsertError::Conflict);
-                                        }
-                                    }
-                                }
+                                if let (SegmentPart::Param { .. }, SegmentPart::Param { .. }) =
+                                    (ea, eb)
+                                {}
                             }
                         }
                     }
@@ -150,27 +153,13 @@ impl RadixRouter {
                     for &idx in cand_indices.iter() {
                         let exist = &current.patterns[idx];
                         if !pattern_compatible_policy(exist, pat) {
-                            return Err(InsertError::Conflict);
+                            return Err(RouterError::RouteParamNameConflictAtSamePosition);
                         }
                         if i == segments.len() - 1 {
                             for (ea, eb) in exist.parts.iter().zip(pat.parts.iter()) {
-                                if let (
-                                    SegmentPart::Param { regex: ra, .. },
-                                    SegmentPart::Param { regex: rb, .. },
-                                ) = (ea, eb)
-                                {
-                                    match (ra, rb) {
-                                        (None, None) => {}
-                                        (Some(x), Some(y)) => {
-                                            if x.as_str() != y.as_str() {
-                                                return Err(InsertError::Conflict);
-                                            }
-                                        }
-                                        _ => {
-                                            return Err(InsertError::Conflict);
-                                        }
-                                    }
-                                }
+                                if let (SegmentPart::Param { .. }, SegmentPart::Param { .. }) =
+                                    (ea, eb)
+                                {}
                             }
                         }
                     }
@@ -200,110 +189,74 @@ impl RadixRouter {
                 current.pattern_scores.insert(insert_pos, score);
                 current.rebuild_pattern_index();
                 current.rebuild_shape_indices();
-                // 인덱스 미러는 seal() 단계 build_indices()에서 재구성됨
                 let child = current.pattern_nodes.get_mut(insert_pos).unwrap().as_mut();
+                current.method_mask |= 1 << m_idx;
                 current.dirty = true;
                 current = child;
             }
         }
 
-        let idx = method_index(method);
-        if current.routes[idx] != 0 {
-            return Err(InsertError::Conflict);
+        if current.routes[m_idx] != 0 {
+            return Err(RouterError::RouteConflictOnDuplicatePath);
         }
-        current.routes[idx] = key;
+        let key = self
+            .next_key
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        current.routes[m_idx] = key + 1;
+        current.method_mask |= 1 << m_idx;
         current.dirty = true;
-        Ok(())
+        Ok(key)
     }
 
-    fn get_or_compile_regex(&self, re_str: &str) -> Result<Regex, InsertError> {
-        let norm = normalize_anchor(re_str);
-        anchor_and_compile(&norm, &self.regex_cache, None, &self.regex_clock)
-    }
-
-    pub(super) fn parse_segment(&self, seg: &str) -> Result<SegmentPattern, InsertError> {
-        let mut parts: Vec<SegmentPart> = Vec::new();
-        let mut i = 0usize;
+    pub(super) fn parse_segment(&self, seg: &str) -> Result<SegmentPattern, RouterError> {
+        if seg.contains('(') || seg.contains(')') {
+            return Err(RouterError::RoutePathSyntaxInvalid);
+        }
         let bytes = seg.as_bytes();
-        let mut lit_start: Option<usize> = None;
-        while i < bytes.len() {
-            let c = bytes[i] as char;
-            if c == ':' {
-                if let Some(ls) = lit_start.take() {
-                    let lit = &seg[ls..i];
-                    if !lit.is_empty() {
-                        let lit_norm = if self.options.case_sensitive {
-                            lit.to_string()
-                        } else {
-                            lit.to_ascii_lowercase()
-                        };
-                        parts.push(SegmentPart::Literal(lit_norm));
-                    }
+        if bytes.first().copied() == Some(b':') {
+            let mut j = 1usize;
+            if j >= bytes.len() {
+                return Err(RouterError::RoutePathSyntaxInvalid);
+            }
+            while j < bytes.len() {
+                let b = bytes[j];
+                if !(b.is_ascii_alphanumeric() || b == b'_') {
+                    break;
                 }
-                let mut j = i + 1;
-                while j < bytes.len() {
-                    let cj = bytes[j] as char;
-                    if cj == '(' || cj == ':' || cj == ')' {
-                        break;
-                    }
-                    j += 1;
+                j += 1;
+            }
+            let name = &seg[1..];
+            if name.contains(':') {
+                return Err(RouterError::RoutePathSyntaxInvalid);
+            }
+            let nb = name.as_bytes();
+            if nb.is_empty() {
+                return Err(RouterError::RoutePathSyntaxInvalid);
+            }
+            if !(nb[0].is_ascii_alphabetic() || nb[0] == b'_') {
+                return Err(RouterError::RouteParamNameInvalidStart);
+            }
+            for &c in &nb[1..] {
+                if !(c.is_ascii_alphanumeric() || c == b'_') {
+                    return Err(RouterError::RouteParamNameInvalidChar);
                 }
-                if j > bytes.len() {
-                    return Err(InsertError::Syntax);
-                }
-                let name = &seg[i + 1..j];
-
-                let mut regex_opt: Option<Regex> = None;
-                if j < bytes.len() && bytes[j] as char == '(' {
-                    let close = seg[j + 1..]
-                        .find(')')
-                        .map(|p| j + 1 + p)
-                        .ok_or(InsertError::Syntax)?;
-                    let re_str = &seg[j + 1..close];
-                    if !self.options.allow_unsafe_regex && !validate_regex_safe(re_str) {
-                        return Err(InsertError::UnsafeRegex);
-                    }
-                    regex_opt = Some(self.get_or_compile_regex(re_str)?);
-                    if close + 1 < bytes.len() {
-                        let q = bytes[close + 1] as char;
-                        if q == '+' || q == '*' || q == '?' || q == '{' {
-                            return Err(InsertError::UnsafeRegex);
-                        }
-                    }
-                    i = close + 1;
-                } else {
-                    i = j;
-                }
-                parts.push(SegmentPart::Param {
+            }
+            return Ok(SegmentPattern {
+                parts: vec![SegmentPart::Param {
                     name: name.to_string(),
-                    regex: regex_opt,
-                });
-                continue;
-            }
-            if lit_start.is_none() {
-                lit_start = Some(i);
-            }
-            i += 1;
+                }],
+            });
         }
-        if let Some(ls) = lit_start.take() {
-            let lit = &seg[ls..];
-            if !lit.is_empty() {
-                let lit_norm = if self.options.case_sensitive {
-                    lit.to_string()
-                } else {
-                    lit.to_ascii_lowercase()
-                };
-                parts.push(SegmentPart::Literal(lit_norm));
-            }
+        if seg.contains(':') {
+            return Err(RouterError::RouteSegmentContainsMixedParamAndLiteral);
         }
-        if parts.is_empty() {
-            let lit_norm = if self.options.case_sensitive {
-                seg.to_string()
-            } else {
-                seg.to_ascii_lowercase()
-            };
-            parts.push(SegmentPart::Literal(lit_norm));
-        }
-        Ok(SegmentPattern { parts })
+        let lit_norm = if self.options.case_sensitive {
+            seg.to_string()
+        } else {
+            seg.to_ascii_lowercase()
+        };
+        Ok(SegmentPattern {
+            parts: vec![SegmentPart::Literal(lit_norm)],
+        })
     }
 }

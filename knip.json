@@ -1,0 +1,13 @@
+{
+  "$schema": "https://unpkg.com/knip@latest/schema.json",
+  "ignore": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/target/**",
+    "**/packages-ffi/**",
+    "benchmarks/**",
+    ".husky/**",
+    ".lintstagedrc.json"
+  ]
+}
