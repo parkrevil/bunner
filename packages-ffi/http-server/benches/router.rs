@@ -515,7 +515,7 @@ fn bench_lookup_phase(c: &mut Criterion, label: &'static str, file: &str, count:
     let routes = load_routes_file(file);
     let n = routes.len().min(count);
     let slice = &routes[..n];
-    let mut h = build_from_slice(slice);
+    let mut h: bunner_http_server::router::RouterHandle = build_from_slice(slice);
     // reset metrics before measuring
     h.reset_metrics();
     // warm priming

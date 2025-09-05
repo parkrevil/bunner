@@ -1,4 +1,4 @@
-import { suffix } from 'bun:ffi';
+import { CString, suffix, type Pointer } from 'bun:ffi';
 import { packageDirectorySync } from 'package-directory';
 
 import { isDevelopment, isTest } from './constants';
@@ -27,6 +27,12 @@ export function encodeCString(message: string) {
   buf[bytes.length] = 0;
 
   return buf;
+}
+
+export function stringPointerToJson<T>(ptr: Pointer): T {
+  const json = new CString(ptr);
+
+  return JSON.parse(json.toString()) as T;
 }
 
 /**

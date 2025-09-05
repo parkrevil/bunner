@@ -1,6 +1,7 @@
 //
 
 pub mod errors;
+pub mod ffi;
 mod interner;
 mod pattern;
 mod radix;
@@ -252,8 +253,7 @@ pub fn match_route_err(
 
 // fallback helpers removed (radix handles all)
 
-// Builder/Handle split (non-breaking addition)
-
+// Builder/Handle split (유지: 벤치/테스트 및 향후 최적화 경로)
 #[derive(Debug, Default)]
 pub struct RouterBuilder {
     radix: radix::RadixRouter,

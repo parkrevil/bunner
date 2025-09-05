@@ -1,163 +1,115 @@
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_uint, c_ulonglong};
 
-use super::errors::InsertError;
-use super::{self as router, Router, RouterOptions};
+use crate::router::{Router, RouterError};
 
 #[repr(C)]
-pub struct RouterHandle(pub *mut Router);
-
-#[unsafe(no_mangle)]
-pub extern "C" fn create_router() -> RouterHandle {
-    let boxed = Box::new(Router::new());
-    RouterHandle(Box::into_raw(boxed))
-}
+#[derive(Copy, Clone)]
+pub struct RouterPtr(pub *mut Router);
 
 #[repr(C)]
-pub struct RouterOptionsC {
-    pub case_sensitive: bool,
+pub struct FindRouteResult {
+    pub key: c_ulonglong,
+    pub error: u32,
 }
 
+// Router FFI - 중첩된 구조체
+#[repr(C)]
+pub struct RouterFfi {
+    pub add: extern "C" fn(RouterPtr, c_uint, *const c_char) -> *mut FindRouteResult,
+    pub find: extern "C" fn(RouterPtr, c_uint, *const c_char) -> *mut FindRouteResult,
+    pub seal: extern "C" fn(RouterPtr) -> (),
+    pub free_result: extern "C" fn(*mut FindRouteResult),
+}
+
+static ROUTER_FFI: RouterFfi = RouterFfi {
+    add,
+    find,
+    seal,
+    free_result,
+};
+
 #[unsafe(no_mangle)]
-pub extern "C" fn create_router_with_options(opts: RouterOptionsC) -> RouterHandle {
-    let options = RouterOptions {
-        case_sensitive: opts.case_sensitive,
-        enable_root_prune: true,
-        enable_static_full_map: true,
+pub extern "C" fn get_ffi() -> *const RouterFfi {
+    &ROUTER_FFI as *const RouterFfi
+}
+
+pub(crate) extern "C" fn add(
+    handle: RouterPtr,
+    method: c_uint,
+    path: *const c_char,
+) -> *mut FindRouteResult {
+    let c_str = unsafe { CStr::from_ptr(path) };
+    let path = c_str.to_string_lossy();
+    let router_ptr = handle.0;
+
+    if router_ptr.is_null() {
+        let res = Box::new(FindRouteResult {
+            key: 0,
+            error: RouterError::RoutePathEmpty as u32,
+        });
+        return Box::into_raw(res);
+    }
+
+    let router_mut = unsafe { &mut *router_ptr };
+    let res = match crate::router::register_route(router_mut, method, &path) {
+        Ok(k) => FindRouteResult {
+            key: k as c_ulonglong,
+            error: 0,
+        },
+        Err(e) => FindRouteResult {
+            key: 0,
+            error: e as u32,
+        },
     };
-    let boxed = Box::new(Router::with_options(options, None));
-    RouterHandle(Box::into_raw(boxed))
+    Box::into_raw(Box::new(res))
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn destroy_router(handle: RouterHandle) {
-    if !handle.0.is_null() {
-        unsafe {
-            drop(Box::from_raw(handle.0));
-        }
-    }
-}
-
-#[repr(C)]
-pub struct MatchKV {
-    pub key_ptr: *mut c_char,
-    pub val_ptr: *mut c_char,
-}
-
-#[repr(C)]
-pub struct MatchResultC {
-    pub route_key: c_ulonglong,
-    pub buf_ptr: *mut u8,
-    pub buf_len: usize,
-    pub offsets_ptr: *mut u32,
-    pub offsets_len: usize,
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn register_route(
-    handle: RouterHandle,
+pub(crate) extern "C" fn find(
+    handle: RouterPtr,
     method: c_uint,
     path: *const c_char,
-) -> c_ulonglong {
+) -> *mut FindRouteResult {
     let c_str = unsafe { CStr::from_ptr(path) };
     let path = c_str.to_string_lossy();
     let router_ptr = handle.0;
     if router_ptr.is_null() {
-        return 0;
-    }
-    let router_mut = unsafe { &mut *router_ptr };
-    match router::register_route(router_mut, method as u32, &path) {
-        Ok(k) => k as c_ulonglong,
-        Err(_) => 0,
-    }
-}
+        let res = Box::new(FindRouteResult {
+            key: 0,
+            error: RouterError::MatchPathEmpty as u32,
+        });
 
-#[unsafe(no_mangle)]
-pub extern "C" fn register_route_ex(
-    handle: RouterHandle,
-    method: c_uint,
-    path: *const c_char,
-) -> c_uint {
-    let c_str = unsafe { CStr::from_ptr(path) };
-    let path = c_str.to_string_lossy();
-    let router_ptr = handle.0;
-    if router_ptr.is_null() {
-        return 255; /* invalid handle */
+        return Box::into_raw(res);
     }
-    let router_mut = unsafe { &mut *router_ptr };
-    router::register_route_ex(router_mut, method as u32, &path)
-}
 
-#[unsafe(no_mangle)]
-pub extern "C" fn match_route(
-    handle: RouterHandle,
-    method: c_uint,
-    path: *const c_char,
-) -> MatchResultC {
-    let c_str = unsafe { CStr::from_ptr(path) };
-    let path = c_str.to_string_lossy();
-    let router_ptr = handle.0;
-    if router_ptr.is_null() {
-        return MatchResultC {
-            route_key: 0,
-            buf_ptr: std::ptr::null_mut(),
-            buf_len: 0,
-            offsets_ptr: std::ptr::null_mut(),
-            offsets_len: 0,
-        };
-    }
     let router_ref = unsafe { &*router_ptr };
-    if let Some((route_key, params)) = router::match_route(router_ref, method as u32, &path) {
-        let mut buf: Vec<u8> = Vec::new();
-        let mut offsets: Vec<u32> = Vec::with_capacity(params.len() * 2);
-        for (k, v) in params.iter() {
-            offsets.push(buf.len() as u32);
-            buf.extend_from_slice(k.as_bytes());
-            buf.push(0);
-            offsets.push(buf.len() as u32);
-            buf.extend_from_slice(v.as_bytes());
-            buf.push(0);
-        }
-        let mut buf_box = buf.into_boxed_slice();
-        let mut off_box = offsets.into_boxed_slice();
-        let out = MatchResultC {
-            route_key: route_key as c_ulonglong,
-            buf_ptr: buf_box.as_mut_ptr(),
-            buf_len: buf_box.len(),
-            offsets_ptr: off_box.as_mut_ptr(),
-            offsets_len: off_box.len(),
+    let res =
+        if let Some((route_key, _params)) = crate::router::match_route(router_ref, method, &path) {
+            FindRouteResult {
+                key: route_key as c_ulonglong,
+                error: 0,
+            }
+        } else {
+            FindRouteResult {
+                key: 0,
+                error: RouterError::MatchNotFound as u32,
+            }
         };
-        std::mem::forget(buf_box);
-        std::mem::forget(off_box);
-        return out;
-    }
-    MatchResultC {
-        route_key: 0,
-        buf_ptr: std::ptr::null_mut(),
-        buf_len: 0,
-        offsets_ptr: std::ptr::null_mut(),
-        offsets_len: 0,
-    }
+
+    Box::into_raw(Box::new(res))
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn free_match_result(res: MatchResultC) {
-    unsafe {
-        if !res.buf_ptr.is_null() && res.buf_len > 0 {
-            let _ = Vec::from_raw_parts(res.buf_ptr, res.buf_len, res.buf_len);
-        }
-        if !res.offsets_ptr.is_null() && res.offsets_len > 0 {
-            let _ = Vec::from_raw_parts(res.offsets_ptr, res.offsets_len, res.offsets_len);
-        }
-    }
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn seal_router(handle: RouterHandle) {
+pub(crate) extern "C" fn seal(handle: RouterPtr) {
     let router_ptr = handle.0;
-    if router_ptr.is_null() {
-        return;
-    }
     let router_mut = unsafe { &mut *router_ptr };
-    router::seal(router_mut);
+
+    crate::router::seal(router_mut);
+}
+
+pub(crate) extern "C" fn free_result(ptr: *mut FindRouteResult) {
+    if !ptr.is_null() {
+        unsafe {
+            let _ = Box::from_raw(ptr);
+        }
+    }
 }
