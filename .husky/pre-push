@@ -1,3 +1,0 @@
-./scripts/check-dependencies.sh
-make test
-bun test

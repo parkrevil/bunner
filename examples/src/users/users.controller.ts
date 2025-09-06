@@ -12,9 +12,7 @@ import { UsersService } from './users.service';
 
 @RestController('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {
-    console.log('UsersController constructor', this.usersService);
-  }
+  constructor(private readonly usersService: UsersService) {}
 
   @Get()
   getAll() {

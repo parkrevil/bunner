@@ -51,18 +51,18 @@ pub enum Method {
 pub struct Route {
     pub method: Method,
     pub path: String,
-    pub key: u64,
+    pub key: u16,
 }
 
 #[derive(Debug, Default)]
 pub struct MatchResult {
-    pub key: u64,
+    pub key: u16,
     pub params: Vec<(String, (usize, usize))>,
 }
 
 #[derive(Debug, Default)]
 pub struct MatchOffsets {
-    pub key: u64,
+    pub key: u16,
     pub params: Vec<(u32, (usize, usize))>,
 }
 

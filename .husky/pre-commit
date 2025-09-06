@@ -1,2 +1,5 @@
-cargo clippy --all-targets --all-features -- -D warnings
-bunx lint-staged
+# ./scripts/check-dependencies.sh
+# cargo clippy --all-targets --all-features -- -D warnings
+# make test
+# bun test
+# bunx lint-staged

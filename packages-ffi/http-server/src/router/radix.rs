@@ -61,7 +61,7 @@ pub struct RadixRouter {
     pub(super) enable_root_prune: bool,
     pub(super) enable_static_full_map: bool,
     // auto key allocator
-    pub(super) next_key: std::sync::atomic::AtomicU64,
+    pub(super) next_key: std::sync::atomic::AtomicU16,
 }
 
 impl RadixRouter {
@@ -194,11 +194,12 @@ impl RadixRouter {
             method_len_buckets: [0; METHOD_COUNT],
             enable_root_prune: options.enable_root_prune,
             enable_static_full_map: options.enable_static_full_map,
-            next_key: std::sync::atomic::AtomicU64::new(1),
+            next_key: std::sync::atomic::AtomicU16::new(1),
         };
         crate::router::log_avx2_once();
         s
     }
+
     pub fn seal(&mut self) {
         self.root.sealed = true;
         self.compress();
@@ -415,7 +416,7 @@ impl RadixRouter {
         fn collect_static(
             n: &node::RadixNode,
             buf: &mut String,
-            maps: &mut [FastHashMap<String, u64>; METHOD_COUNT],
+            maps: &mut [FastHashMap<String, u16>; METHOD_COUNT],
             case_sensitive: bool,
         ) {
             let base_len = buf.len();

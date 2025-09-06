@@ -1,17 +1,25 @@
+pub mod r#enum;
 pub mod errors;
 pub mod router;
+pub mod structure;
+pub mod util;
 
-use router::ffi::RouterPtr;
-use serde::Serialize;
-use std::{ffi::CString, os::raw::c_char};
+use router::ffi::{FindRouteResult, RouterPtr};
+use serde::{Deserialize, Serialize};
+use serde_qs as qs;
+use std::{
+    collections::HashMap,
+    ffi::{CStr, CString},
+    os::raw::{c_char, c_ulonglong},
+};
+use url::Url;
+
+use crate::r#enum::HttpMethod;
+use crate::errors::HttpServerError;
+use crate::structure::{AddRouteResult, FfiError, FfiResult, HandleRequestResult, Request};
+use crate::util::{make_ffi_error_result, make_ffi_result, serialize_to_cstring};
 
 pub type HttpServerHandle = *mut HttpServer;
-
-#[derive(Serialize)]
-struct RouteResult {
-    key: u64,
-    error: u32,
-}
 
 #[repr(C)]
 pub struct HttpServer {
@@ -33,15 +41,13 @@ pub extern "C" fn init() -> HttpServerHandle {
 /// After calling this function, the handle is dangling and must not be used again.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn destroy(handle: HttpServerHandle) {
-    if !handle.is_null() {
-        let http_server = unsafe { Box::from_raw(handle) };
+    let http_server = unsafe { Box::from_raw(handle) };
 
-        if !http_server.router.0.is_null() {
-            let _ = unsafe { Box::from_raw(http_server.router.0) };
-        }
-
-        drop(http_server);
+    if !http_server.router.0.is_null() {
+        let _ = unsafe { Box::from_raw(http_server.router.0) };
     }
+
+    drop(http_server);
 }
 
 /// Adds a new route to the router.
@@ -52,57 +58,96 @@ pub unsafe extern "C" fn destroy(handle: HttpServerHandle) {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn router_add(
     handle: HttpServerHandle,
-    method: u8,
+    method_num: u8,
     path: *const c_char,
 ) -> *mut c_char {
-    let http_server = unsafe { &*handle };
-    let result_ptr = router::ffi::add(http_server.router, method, path);
-
-    if result_ptr.is_null() {
-        let result = RouteResult { key: 0, error: 1 }; // Generic error
-        let json = serde_json::to_string(&result).unwrap();
-        return CString::new(json).unwrap().into_raw();
+    if handle.is_null() {
+        return make_ffi_error_result(FfiError {
+            code: HttpServerError::HandleIsNull.code(),
+            message: None,
+        });
     }
 
-    let result_box = unsafe { Box::from_raw(result_ptr) };
-    let result = RouteResult {
-        key: result_box.key,
-        error: result_box.error,
-    };
+    let method_option = HttpMethod::from_u8(method_num);
 
-    let json = serde_json::to_string(&result).unwrap();
-    CString::new(json).unwrap().into_raw()
+    if method_option.is_none() {
+        return make_ffi_error_result(FfiError {
+            code: HttpServerError::InvalidHttpMethod.code(),
+            message: None,
+        });
+    }
+
+    let http_server = unsafe { &*handle };
+    let router_mut = unsafe { &mut *http_server.router.0 };
+    let method = method_option.unwrap();
+    let path_str = unsafe { CStr::from_ptr(path) }.to_string_lossy();
+    let result = match crate::router::register_route(router_mut, method, &path_str) {
+        Ok(k) => AddRouteResult {
+            key: k,
+            error: 0,
+        },
+        Err(e) => AddRouteResult {
+            key: 0,
+            error: e as u32,
+        },
+    };
+    
+    make_ffi_result(Some(result), None)
 }
 
-/// Finds a route that matches the given method and path.
+/// Finds a route that matches the given method and path from a serialized JSON request.
 ///
 /// # Safety
 /// - The `handle` pointer must be a valid pointer returned by `init`.
-/// - The `path` pointer must point to a valid, null-terminated C string.
+/// - The `request_json` pointer must point to a valid, null-terminated C string.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn handle_request(
     handle: HttpServerHandle,
-    method: u8,
-    path: *const c_char,
+    request_data: *const c_char,
 ) -> *mut c_char {
     let http_server = unsafe { &*handle };
-    let result_ptr = router::ffi::find(http_server.router, method, path);
 
-    if result_ptr.is_null() {
-        let result = RouteResult { key: 0, error: 1 }; // Generic error
-        let json = serde_json::to_string(&result).unwrap();
-
-        return CString::new(json).unwrap().into_raw();
-    }
-
-    let result_box = unsafe { Box::from_raw(result_ptr) };
-    let result = RouteResult {
-        key: result_box.key,
-        error: result_box.error,
+    let request_str = match unsafe { CStr::from_ptr(request_data).to_str() } {
+        Ok(s) => s,
+        Err(e) => {
+            return make_ffi_error_result(FfiError {
+                code: HttpServerError::InvalidUtf8.code(),
+                message: Some(e.to_string()),
+            });
+        }
     };
 
-    let json = serde_json::to_string(&result).unwrap();
-    CString::new(json).unwrap().into_raw()
+    let request: Request = match serde_json::from_str(request_str) {
+        Ok(req) => req,
+        Err(_) => {
+            return make_ffi_error_result(FfiError {
+                code: HttpServerError::InvalidJsonString.code(),
+                message: Some("Invalid JSON format".to_string()),
+            });
+        }
+    };
+
+    let method = HttpMethod::from_str(request.http_method).unwrap_or(HttpMethod::Get);
+    let path_cstring = CString::new(request.url).unwrap();
+    let result_ptr = router::ffi::find(http_server.router, method, path_cstring.as_ptr());
+
+    if result_ptr.is_null() {
+        return make_ffi_error_result(FfiError {
+            code: HttpServerError::RouteNotFound.code(),
+            message: Some("Route not found".to_string()),
+        });
+    }
+
+    let result_box: Box<FindRouteResult> = unsafe { Box::from_raw(result_ptr) };
+
+    let success_result = HandleRequestResult {
+        key: result_box.key,
+        params: None, // TODO: Implement params
+        error: result_box.error,
+        error_message: None,
+    };
+
+    make_ffi_result(Some(success_result), None)
 }
 
 /// Seals the router, optimizing it for fast lookups. No routes can be added after sealing.

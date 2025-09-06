@@ -10,6 +10,7 @@ import type { HttpMethodValue } from '../types';
 import { toError } from './helpers';
 import type {
   AddRouteResult,
+  HandleRequestParams,
   HandleRequestResult,
   HttpServerSymbols,
 } from './interfaces';
@@ -34,8 +35,8 @@ export class RustCore {
             returns: FFIType.pointer,
           },
           handle_request: {
-            args: [FFIType.pointer, FFIType.u8, FFIType.cstring],
-            returns: FFIType.pointer,
+            args: [FFIType.u64, FFIType.cstring],
+            returns: FFIType.ptr,
           },
           router_seal: { args: [FFIType.pointer], returns: FFIType.void },
           free_string: { args: [FFIType.pointer], returns: FFIType.void },
@@ -63,29 +64,13 @@ export class RustCore {
     this.handle = handle;
   }
 
-  destroy(): void {
-    if (!this.handle) {
-      return;
-    }
-
-    this.symbols.destroy(this.handle);
-    this.close();
-  }
-
-  /**
-   * Handle a request
-   * @param method
-   * @param path
-   * @returns
-   */
-  handleRequest(method: HttpMethodValue, path: string) {
+  async handleRequest(params: HandleRequestParams): Promise<HandleRequestResult> {
     const resultPtr = this.symbols.handle_request(
       this.handle,
-      method as FFIType.u8,
-      encodeCString(path),
+      encodeCString(JSON.stringify(params)),
     );
 
-    if (resultPtr === null) {
+    if (!resultPtr) {
       throw toError();
     }
 
@@ -95,10 +80,10 @@ export class RustCore {
 
     const error = toError(result.error);
     if (error) {
-      throw error;
+      throw toError(result.error);
     }
 
-    return result.key;
+    return result;
   }
 
   /**

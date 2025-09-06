@@ -78,8 +78,8 @@ pub struct RadixNode {
     // node-local candidate stats for adaptive Top-K
     pub(super) cand_total_node: AtomicU64,
     pub(super) cand_samples_node: AtomicU64,
-    pub(super) routes: [u64; METHOD_COUNT],
-    pub(super) wildcard_routes: [u64; METHOD_COUNT],
+    pub(super) routes: [u16; METHOD_COUNT],
+    pub(super) wildcard_routes: [u16; METHOD_COUNT],
     pub(super) sealed: bool,
     pub(super) dirty: bool,
     // prefix compression (set by compress())

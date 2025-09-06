@@ -8,7 +8,7 @@ import type { Server } from 'bun';
 import { RouteHandler } from './route-handler';
 import { RustCore } from './rust-core';
 
-export class HttpServer extends BunnerApplication {
+export class BunnerHttpServer extends BunnerApplication {
   private server: Server | undefined;
   private rustCore: RustCore;
   private router: RouteHandler;

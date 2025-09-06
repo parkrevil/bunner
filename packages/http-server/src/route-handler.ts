@@ -1,4 +1,5 @@
 import type { Container } from '@bunner/core';
+import type { Server } from 'bun';
 
 import { HTTP_METHOD } from './constants';
 import {
@@ -8,6 +9,7 @@ import {
 } from './decorators';
 import { RustCore } from './rust-core';
 import type { HandlerFunction } from './types';
+import { BunnerRequest } from './bunner-request';
 
 export class RouteHandler {
   private container: Container;
@@ -79,25 +81,54 @@ export class RouteHandler {
 
   /**
    * Handle the request
-   * @param req - The request object
+   * @param rawReq - The raw request object
    * @returns
    */
-  async handleRequest(req: Request) {
-    if (!Object.hasOwn(HTTP_METHOD, req.method)) {
+  async handleRequest(rawReq: Request) {
+    if (!Object.hasOwn(HTTP_METHOD, rawReq.method)) {
       return new Response('Method not allowed', { status: 405 });
     }
 
-    const httpMethod = HTTP_METHOD[req.method as keyof typeof HTTP_METHOD];
-    const url = new URL(req.url);
+    const httpMethod = HTTP_METHOD[rawReq.method as keyof typeof HTTP_METHOD];
 
     try {
-      const routeKey = this.rustCore.handleRequest(httpMethod, url.pathname);
-      const handler = this.handlers.get(routeKey);
-      const result = await handler!();
+      let body: string | null = null;
 
-      return new Response(JSON.stringify(result), { status: 200 });
+      if (!(httpMethod === HTTP_METHOD.GET || httpMethod === HTTP_METHOD.HEAD || httpMethod === HTTP_METHOD.OPTIONS)) {
+        body = await rawReq.text();
+      }
+
+      const handleResult = await this.rustCore.handleRequest({
+        httpMethod,
+        url: rawReq.url,
+        headers: {},
+        body,
+      });
+      const handler = this.handlers.get(handleResult.key);
+
+      if (!handler) {
+        return new Response('Handler not found for route key', { status: 500 });
+      }
+/* 
+      const req = new BunnerRequest(rawReq, handleResult);
+      const res = new BunnerResponse();
+      const handlerResult = await handler(req, res);
+
+      if (handlerResult instanceof Response) {
+        return handlerResult;
+      }
+
+      if (res.isSent) {
+        return res.getResponse();
+      }
+      res.send(handlerResult);
+      return res.getResponse();
+ */
+      const result = await handler();
+
+      return new Response(result, { status: 501 });
     } catch (e) {
-      console.error(e, httpMethod, url.pathname);
+      console.error(e, rawReq.method, rawReq.url);
 
       return new Response('Internal server error', { status: 500 });
     }
