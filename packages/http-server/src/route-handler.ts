@@ -64,7 +64,10 @@ export class RouteHandler {
           try {
             const routeKey = this.rustCore.addRoute(httpMethod, fullPath);
 
-            this.handlers.set(routeKey, controllerInstance[handlerName]);
+            this.handlers.set(
+              routeKey,
+              controllerInstance[handlerName].bind(controllerInstance),
+            );
           } catch (e) {
             console.error(e, httpMethod, fullPath);
 
@@ -79,7 +82,7 @@ export class RouteHandler {
    * @param req - The request object
    * @returns
    */
-  handleRequest(req: Request) {
+  async handleRequest(req: Request) {
     if (!Object.hasOwn(HTTP_METHOD, req.method)) {
       return new Response('Method not allowed', { status: 405 });
     }
@@ -90,12 +93,9 @@ export class RouteHandler {
     try {
       const routeKey = this.rustCore.handleRequest(httpMethod, url.pathname);
       const handler = this.handlers.get(routeKey);
+      const result = await handler!();
 
-      if (!handler) {
-        return new Response('Not found', { status: 500 });
-      }
-
-      return handler();
+      return new Response(JSON.stringify(result), { status: 200 });
     } catch (e) {
       console.error(e, httpMethod, url.pathname);
 
