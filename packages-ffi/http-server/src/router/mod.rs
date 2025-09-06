@@ -1,11 +1,9 @@
-//
-
 pub mod errors;
-pub mod ffi;
 mod interner;
 mod pattern;
 mod radix;
 pub use crate::router::errors::RouterError;
+use crate::r#enum::HttpMethod;
 
 #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
 use std::sync::Once;
@@ -36,20 +34,9 @@ pub(crate) fn log_avx2_once() {
 pub(crate) fn log_avx2_once() { /* no-op when AVX2 is not available */
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Method {
-    GET,
-    POST,
-    PUT,
-    PATCH,
-    DELETE,
-    OPTIONS,
-    HEAD,
-}
-
 #[derive(Debug, Clone)]
 pub struct Route {
-    pub method: Method,
+    pub method: HttpMethod,
     pub path: String,
     pub key: u16,
 }
@@ -82,55 +69,38 @@ impl Router {
         }
     }
 
-    pub fn add(&mut self, method: Method, path: &str) -> Result<u64, errors::RouterError> {
+    pub fn add(&mut self, method: HttpMethod, path: &str) -> Result<u16, errors::RouterError> {
         self.radix.insert(method, path)
     }
 
-    pub fn find(&self, method: Method, path: &str) -> Option<MatchResult> {
+    pub fn find(&self, method: HttpMethod, path: &str) -> Option<MatchResult> {
         let norm = normalize_path(path);
         self.radix.find_norm(method, &norm)
     }
 }
 
-#[inline(always)]
-fn get_method_from_value(m: u8) -> Method {
-    match m {
-        0 => Method::GET,
-        1 => Method::POST,
-        2 => Method::PUT,
-        3 => Method::PATCH,
-        4 => Method::DELETE,
-        5 => Method::OPTIONS,
-        6 => Method::HEAD,
-        _ => Method::GET,
-    }
-}
-
 pub fn register_route(
     router: &mut Router,
-    method: u8,
+    method: HttpMethod,
     path: &str,
-) -> Result<u64, errors::RouterError> {
-    let method = get_method_from_value(method);
+) -> Result<u16, errors::RouterError> {
     router.radix.insert(method, path)
 }
 
-pub fn register_route_ex(router: &mut Router, method: u8, path: &str) -> u32 {
-    let method = get_method_from_value(method);
+pub fn register_route_ex(router: &mut Router, method: HttpMethod, path: &str) -> u16 {
     match router.radix.insert(method, path) {
-        Ok(k) => k as u32,
-        Err(e) => e as u32,
+        Ok(k) => k,
+        Err(e) => e.code(),
     }
 }
 
 pub fn match_route(
     router: &Router,
-    method: u8,
+    method: HttpMethod,
     path: &str,
-) -> Option<(u64, Vec<(String, String)>)> {
-    let method = get_method_from_value(method);
-    // Always normalize trailing slashes; do not collapse duplicate slashes
+) -> Option<(u16, Vec<(String, String)>)> {
     let norm = normalize_path(path);
+
     router.radix.find_norm(method, &norm).map(|m| {
         let mut out = Vec::with_capacity(m.params.len());
         for (name, (start, len)) in m.params.into_iter() {
@@ -222,25 +192,29 @@ pub(crate) fn path_is_allowed_ascii(path: &str) -> bool {
 
 pub fn match_route_err(
     router: &Router,
-    method: u8,
+    method: HttpMethod,
     path: &str,
-) -> Result<(u64, Vec<(String, String)>), RouterError> {
+) -> Result<(u16, Vec<(String, String)>), RouterError> {
     if path.is_empty() {
         return Err(RouterError::MatchPathEmpty);
     }
+
     if !path.is_ascii() {
         return Err(RouterError::MatchPathNotAscii);
     }
+
     if !path_is_allowed_ascii(path) {
         return Err(RouterError::MatchPathContainsDisallowedCharacters);
     }
-    let method = get_method_from_value(method);
+
     let norm = normalize_path(path);
+
     if !path_is_allowed_ascii(&norm) {
         return Err(RouterError::MatchPathContainsDisallowedCharacters);
     }
     if let Some(m) = router.radix.find_norm(method, &norm) {
         let mut out = Vec::with_capacity(m.params.len());
+
         for (name, (start, len)) in m.params.into_iter() {
             let val = &norm[start..start + len];
             out.push((name, val.to_string()));
@@ -265,19 +239,23 @@ impl RouterBuilder {
             radix: radix::RadixRouter::new(RouterOptions::default()),
         }
     }
+
     pub fn with_options(options: RouterOptions) -> Self {
         Self {
             radix: radix::RadixRouter::new(options),
         }
     }
-    pub fn add(mut self, method: Method, path: &str) -> Self {
+
+    pub fn add(mut self, method: HttpMethod, path: &str) -> Self {
         let _ = self.radix.insert(method, path);
         self
     }
+
     pub fn seal(mut self) -> Self {
         self.radix.seal();
         self
     }
+
     pub fn build(self) -> RouterHandle {
         RouterHandle { radix: self.radix }
     }
@@ -289,11 +267,11 @@ pub struct RouterHandle {
 }
 
 impl RouterHandle {
-    pub fn find(&self, method: Method, path: &str) -> Option<MatchResult> {
+    pub fn find(&self, method: HttpMethod, path: &str) -> Option<MatchResult> {
         self.radix.find(method, path)
     }
 
-    pub fn find_offsets(&self, method: Method, path: &str) -> Option<MatchOffsets> {
+    pub fn find_offsets(&self, method: HttpMethod, path: &str) -> Option<MatchOffsets> {
         let norm = normalize_path(path);
         self.radix.find_norm(method, norm.as_str()).map(|m| {
             let mut out = MatchOffsets {

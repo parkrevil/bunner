@@ -4,25 +4,12 @@ use parking_lot::Mutex;
 use smallvec::SmallVec;
 
 use super::RouterMetrics;
-use super::{Method, RouterOptions};
+use super::{RouterOptions};
 use crate::router::interner::Interner;
 
 pub(super) const METHOD_COUNT: usize = 7;
 pub(super) const METHOD_BIT: [u8; METHOD_COUNT] =
     [1 << 0, 1 << 1, 1 << 2, 1 << 3, 1 << 4, 1 << 5, 1 << 6];
-
-#[inline(always)]
-pub(super) fn method_index(m: Method) -> usize {
-    match m {
-        Method::GET => 0,
-        Method::POST => 1,
-        Method::PUT => 2,
-        Method::PATCH => 3,
-        Method::DELETE => 4,
-        Method::OPTIONS => 5,
-        Method::HEAD => 6,
-    }
-}
 
 mod alloc;
 mod compress;
@@ -54,7 +41,7 @@ pub struct RadixRouter {
     pub(super) root_param_first_present: [bool; METHOD_COUNT],
     pub(super) root_wildcard_present: [bool; METHOD_COUNT],
     // fast path: full static routes map by method (normalized path key)
-    pub(super) static_full_map: [FastHashMap<String, u64>; METHOD_COUNT],
+    pub(super) static_full_map: [FastHashMap<String, u16>; METHOD_COUNT],
     // root-level first segment length buckets (0..=63; bit63 means >=63)
     pub(super) method_len_buckets: [u64; METHOD_COUNT],
     // feature toggles (from RouterOptions)

@@ -1,4 +1,4 @@
-#[repr(u32)]
+#[repr(u16)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HttpServerError {
     HandleIsNull = 1,
@@ -8,7 +8,7 @@ pub enum HttpServerError {
 }
 
 impl HttpServerError {
-      pub fn code(self) -> u32 {
-          self as u32
+      pub fn code(self) -> u16 {
+          self as u16
       }
   }

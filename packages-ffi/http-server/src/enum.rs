@@ -11,6 +11,7 @@ pub enum HttpMethod {
 }
 
 impl HttpMethod {
+    #[inline(always)]
     pub fn from_u8(n: u8) -> Option<Self> {
         match n {
             0 => Some(Self::Get),
@@ -24,6 +25,7 @@ impl HttpMethod {
         }
     }
 
+    #[inline(always)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "GET" => Some(Self::Get),

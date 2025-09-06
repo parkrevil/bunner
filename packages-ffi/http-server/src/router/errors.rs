@@ -1,24 +1,30 @@
-#[repr(u32)]
+#[repr(u16)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RouterError {
     // Insert-time
-    RouteConflictOnDuplicatePath = 1001,
-    RoutePathSyntaxInvalid = 1002,
-    RouteWildcardSegmentNotAtEnd = 1003,
-    RoutePathContainsDisallowedCharacters = 1004,
-    RouteDuplicateParamNameInRoute = 1005,
-    RouterSealedCannotInsert = 1006,
-    RouteParamNameConflictAtSamePosition = 1007,
-    RoutePathEmpty = 1008,
-    RoutePathNotAscii = 1009,
-    RouteParamNameInvalidStart = 1010,
-    RouteParamNameInvalidChar = 1011,
-    RouteSegmentContainsMixedParamAndLiteral = 1012,
-    RouteWildcardAlreadyExistsForMethod = 1013,
+    RouteConflictOnDuplicatePath = 10001,
+    RoutePathSyntaxInvalid = 10002,
+    RouteWildcardSegmentNotAtEnd = 10003,
+    RoutePathContainsDisallowedCharacters = 10004,
+    RouteDuplicateParamNameInRoute = 10005,
+    RouterSealedCannotInsert = 10006,
+    RouteParamNameConflictAtSamePosition = 10007,
+    RoutePathEmpty = 10008,
+    RoutePathNotAscii = 10009,
+    RouteParamNameInvalidStart = 10010,
+    RouteParamNameInvalidChar = 10011,
+    RouteSegmentContainsMixedParamAndLiteral = 10012,
+    RouteWildcardAlreadyExistsForMethod = 10013,
     // Match-time
-    MatchNotFound = 1101,
-    MatchPathSyntaxInvalid = 1102,
-    MatchPathContainsDisallowedCharacters = 1103,
-    MatchPathEmpty = 1104,
-    MatchPathNotAscii = 1105,
+    MatchNotFound = 11001,
+    MatchPathSyntaxInvalid = 11002,
+    MatchPathContainsDisallowedCharacters = 11003,
+    MatchPathEmpty = 11004,
+    MatchPathNotAscii = 11005,
+}
+
+impl RouterError {
+  pub fn code(self) -> u16 {
+      self as u16
+  }
 }
