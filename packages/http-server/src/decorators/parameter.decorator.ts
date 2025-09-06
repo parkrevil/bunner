@@ -1,6 +1,6 @@
 import { EmitDecoratorMetadataError } from '@bunner/core';
 
-import { MetadataKey } from './constants';
+import { METADATA_KEY } from './constants';
 import type { RestHttpParamMetadata } from './interfaces';
 
 function createHttpParamDecorator(type: string) {
@@ -14,12 +14,15 @@ function createHttpParamDecorator(type: string) {
     }
 
     const existingParams: RestHttpParamMetadata[] =
-      Reflect.getMetadata(MetadataKey.RouteHandlerParam, target, propertyKey) ??
-      [];
+      Reflect.getMetadata(
+        METADATA_KEY.ROUTE_HANDLER_PARAMS,
+        target,
+        propertyKey,
+      ) ?? [];
     existingParams.push({ index, type });
 
     Reflect.defineMetadata(
-      MetadataKey.RouteHandlerParam,
+      METADATA_KEY.ROUTE_HANDLER_PARAMS,
       existingParams,
       target,
       propertyKey,

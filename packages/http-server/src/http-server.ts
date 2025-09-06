@@ -5,45 +5,40 @@ import {
 } from '@bunner/core';
 import type { Server } from 'bun';
 
+import { RouteHandler } from './route-handler';
 import { RustCore } from './rust-core';
-import { type HttpMethodValue } from './types';
 
 export class HttpServer extends BunnerApplication {
   private server: Server | undefined;
   private rustCore: RustCore;
+  private router: RouteHandler;
 
   constructor(rootModule: Class<BunnerRootModule>) {
     super(rootModule);
 
     this.server = undefined;
     this.rustCore = new RustCore();
+    this.router = new RouteHandler(this.container, this.rustCore);
   }
 
+  /**
+   * Initialize the server
+   */
   override async init() {
     await super.init();
     this.rustCore.init();
+    this.router.register();
   }
 
   /**
    * Start the server
    */
   start() {
-    this.rustCore.addRoute('GET', '/');
-    this.rustCore.addRoute('GET', '/users');
-    this.rustCore.addRoute('PUT', '/users/:id');
-    this.rustCore.addRoute('DELETE', '/users/:id');
-    this.rustCore.addRoute('PATCH', '/users/:id');
-    this.rustCore.addRoute('OPTIONS', '/users/:id');
-    this.rustCore.addRoute('HEAD', '/users/:id');
     this.rustCore.build();
 
     this.server = Bun.serve({
       port: 5000,
-      fetch: req => {
-        this.rustCore.handleRequest(req.method as HttpMethodValue, req.url);
-
-        return new Response('Hello, world!');
-      },
+      fetch: req => this.router.handleRequest(req),
     });
   }
 

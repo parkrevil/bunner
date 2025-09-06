@@ -10,7 +10,7 @@ import {
 
 import { PostsService } from './posts.service';
 
-@RestController()
+@RestController('posts')
 export class PostsController {
   constructor(private readonly postsService: PostsService) {}
 

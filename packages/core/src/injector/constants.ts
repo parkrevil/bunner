@@ -2,22 +2,22 @@
  * Reflect Metadata Key
  * @description The key for the reflect-metadata
  */
-export const ReflectMetadataKey = {
-  DesignParamtypes: 'design:paramtypes',
+export const REFLECT_METADATA_KEY = {
+  DESIGN_PARAM_TYPES: 'design:paramtypes',
 } as const;
 
 /**
  * Metadata Key Prefix
  * @description The prefix for the metadata key
  */
-export const MetadataKeyPrefix = 'bunner:core:';
+export const METADATA_KEY_PREFIX = 'b:c:';
 
 /**
  * Metadata keys for Bunner core framework
  * @description The metadata keys used by the Bunner core framework
  */
-export const MetadataKey = {
-  Module: Symbol(`${MetadataKeyPrefix}module`),
-  Injectable: Symbol(`${MetadataKeyPrefix}injectable`),
-  Inject: Symbol(`${MetadataKeyPrefix}inject`),
+export const METADATA_KEY = {
+  MODULE: Symbol(`${METADATA_KEY_PREFIX}m`),
+  INJECTABLE: Symbol(`${METADATA_KEY_PREFIX}ia`),
+  INJECT: Symbol(`${METADATA_KEY_PREFIX}i`),
 } as const;

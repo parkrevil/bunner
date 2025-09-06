@@ -1,7 +1,7 @@
 import { CString, suffix, type Pointer } from 'bun:ffi';
 import { packageDirectorySync } from 'package-directory';
 
-import { isDevelopment, isTest } from './constants';
+import { IS_DEVELOPMENT, IS_TEST } from './constants';
 import { textEncoder } from './instances';
 import type { Class } from './types';
 
@@ -42,7 +42,7 @@ export function stringPointerToJson<T>(ptr: Pointer): T {
  * @returns The path to the library
  */
 export function resolveRustLibPath(libName: string, cwd: string) {
-  const additionalName = isDevelopment || isTest ? '-dev' : '';
+  const additionalName = IS_DEVELOPMENT || IS_TEST ? '-dev' : '';
   const fileName =
     process.platform === 'win32'
       ? `${libName}${additionalName}.dll`

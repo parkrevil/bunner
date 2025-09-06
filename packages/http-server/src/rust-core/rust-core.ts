@@ -7,8 +7,12 @@ import { dlopen, FFIType, type Pointer } from 'bun:ffi';
 
 import type { HttpMethodValue } from '../types';
 
-import { RustHttpMethod } from './constants';
-import type { HttpServerSymbols } from './interfaces';
+import { toError } from './helpers';
+import type {
+  AddRouteResult,
+  HandleRequestResult,
+  HttpServerSymbols,
+} from './interfaces';
 
 export class RustCore {
   private symbols: HttpServerSymbols;
@@ -26,11 +30,11 @@ export class RustCore {
 
           // Router
           router_add: {
-            args: [FFIType.pointer, FFIType.u32, FFIType.cstring],
+            args: [FFIType.pointer, FFIType.u8, FFIType.cstring],
             returns: FFIType.pointer,
           },
           handle_request: {
-            args: [FFIType.pointer, FFIType.u32, FFIType.cstring],
+            args: [FFIType.pointer, FFIType.u8, FFIType.cstring],
             returns: FFIType.pointer,
           },
           router_seal: { args: [FFIType.pointer], returns: FFIType.void },
@@ -77,21 +81,24 @@ export class RustCore {
   handleRequest(method: HttpMethodValue, path: string) {
     const resultPtr = this.symbols.handle_request(
       this.handle,
-      RustHttpMethod[method],
+      method as FFIType.u8,
       encodeCString(path),
     );
 
     if (resultPtr === null) {
-      return null;
+      throw toError();
     }
 
-    const result = stringPointerToJson(resultPtr);
-
-    console.log(result);
+    const result = stringPointerToJson<HandleRequestResult>(resultPtr);
 
     this.symbols.free_string(resultPtr);
 
-    return result;
+    const error = toError(result.error);
+    if (error) {
+      throw error;
+    }
+
+    return result.key;
   }
 
   /**
@@ -103,21 +110,24 @@ export class RustCore {
   addRoute(method: HttpMethodValue, path: string) {
     const resultPtr = this.symbols.router_add(
       this.handle,
-      RustHttpMethod[method],
+      method as FFIType.u8,
       encodeCString(path),
     );
 
     if (resultPtr === null) {
-      return null;
+      throw toError();
     }
 
-    const result = stringPointerToJson(resultPtr);
-
-    console.log(result);
+    const result = stringPointerToJson<AddRouteResult>(resultPtr);
 
     this.symbols.free_string(resultPtr);
 
-    return result;
+    const error = toError(result.error);
+    if (error) {
+      throw error;
+    }
+
+    return result.key;
   }
 
   /**

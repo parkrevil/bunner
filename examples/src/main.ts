@@ -21,7 +21,7 @@ async function bootstrap() {
     logger.info(
       `rss: ${(mem.rss / 1024 / 1024).toFixed(2)}MB, heapTotal: ${(mem.heapTotal / 1024 / 1024).toFixed(2)}MB, heapUsed: ${(mem.heapUsed / 1024 / 1024).toFixed(2)}MB`,
     );
-  }, 1000);
+  }, 5000);
 }
 
 bootstrap().catch(console.error);

@@ -3,8 +3,8 @@ import type { BunnerRootModule } from './interfaces';
 import type { Class } from './types';
 
 export abstract class BunnerApplication {
-  private rootModule: BunnerRootModule;
-  private container: Container;
+  protected rootModule: BunnerRootModule;
+  protected container: Container;
 
   constructor(rootModule: Class<BunnerRootModule>) {
     this.rootModule = new rootModule();

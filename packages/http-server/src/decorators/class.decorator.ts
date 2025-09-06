@@ -1,4 +1,4 @@
-import { MetadataKey } from './constants';
+import { METADATA_KEY } from './constants';
 import type {
   RestControllerDecoratorOptions,
   RestControllerMetadata,
@@ -16,13 +16,12 @@ export function RestController(
 ): ClassDecorator {
   return function <T extends Function>(target: T) {
     const controllerMetadata: RestControllerMetadata = {
-      target,
       path,
       options,
     };
 
     Reflect.defineMetadata(
-      MetadataKey.RestController,
+      METADATA_KEY.REST_CONTROLLER,
       controllerMetadata,
       target,
     );

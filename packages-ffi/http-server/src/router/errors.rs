@@ -15,11 +15,10 @@ pub enum RouterError {
     RouteParamNameInvalidChar = 1011,
     RouteSegmentContainsMixedParamAndLiteral = 1012,
     RouteWildcardAlreadyExistsForMethod = 1013,
-
     // Match-time
-    MatchNotFound = 1014,
-    MatchPathSyntaxInvalid = 1015,
-    MatchPathContainsDisallowedCharacters = 1016,
-    MatchPathEmpty = 1017,
-    MatchPathNotAscii = 1018,
+    MatchNotFound = 1101,
+    MatchPathSyntaxInvalid = 1102,
+    MatchPathContainsDisallowedCharacters = 1103,
+    MatchPathEmpty = 1104,
+    MatchPathNotAscii = 1105,
 }

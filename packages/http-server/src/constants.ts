@@ -2,12 +2,12 @@
  * Http Method
  * @description The HTTP method
  */
-export const HttpMethod = {
-  Get: 'GET',
-  Post: 'POST',
-  Put: 'PUT',
-  Patch: 'PATCH',
-  Delete: 'DELETE',
-  Options: 'OPTIONS',
-  Head: 'HEAD',
+export const HTTP_METHOD = {
+  GET: 0,
+  POST: 1,
+  PUT: 2,
+  PATCH: 3,
+  DELETE: 4,
+  OPTIONS: 5,
+  HEAD: 6,
 } as const;

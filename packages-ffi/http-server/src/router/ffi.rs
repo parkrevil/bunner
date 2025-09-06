@@ -1,5 +1,5 @@
 use std::ffi::CStr;
-use std::os::raw::{c_char, c_uint, c_ulonglong};
+use std::os::raw::{c_char, c_ulonglong};
 
 use crate::router::{Router, RouterError};
 
@@ -16,8 +16,8 @@ pub struct FindRouteResult {
 // Router FFI - 중첩된 구조체
 #[repr(C)]
 pub struct RouterFfi {
-    pub add: extern "C" fn(RouterPtr, c_uint, *const c_char) -> *mut FindRouteResult,
-    pub find: extern "C" fn(RouterPtr, c_uint, *const c_char) -> *mut FindRouteResult,
+    pub add: extern "C" fn(RouterPtr, u8, *const c_char) -> *mut FindRouteResult,
+    pub find: extern "C" fn(RouterPtr, u8, *const c_char) -> *mut FindRouteResult,
     pub seal: extern "C" fn(RouterPtr) -> (),
     pub free_result: extern "C" fn(*mut FindRouteResult),
 }
@@ -36,7 +36,7 @@ pub extern "C" fn get_ffi() -> *const RouterFfi {
 
 pub(crate) extern "C" fn add(
     handle: RouterPtr,
-    method: c_uint,
+    method: u8,
     path: *const c_char,
 ) -> *mut FindRouteResult {
     let c_str = unsafe { CStr::from_ptr(path) };
@@ -67,7 +67,7 @@ pub(crate) extern "C" fn add(
 
 pub(crate) extern "C" fn find(
     handle: RouterPtr,
-    method: c_uint,
+    method: u8,
     path: *const c_char,
 ) -> *mut FindRouteResult {
     let c_str = unsafe { CStr::from_ptr(path) };

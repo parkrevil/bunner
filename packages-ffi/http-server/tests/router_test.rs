@@ -68,9 +68,9 @@ mod methods {
         #[test]
         fn unknown_method_maps_to_get_for_register_and_match() {
             let mut r = rapi::Router::with_options(RouterOptions::default(), None);
-            let k = rapi::register_route(&mut r, 999, "/mystery").unwrap();
+            let k = rapi::register_route(&mut r, 255, "/mystery").unwrap();
             rapi::seal(&mut r);
-            let m1 = rapi::match_route(&r, 999, "/mystery").unwrap();
+            let m1 = rapi::match_route(&r, 255, "/mystery").unwrap();
             assert_eq!(m1.0, k);
             let m2 = rapi::match_route(&r, 0, "/mystery").unwrap();
             assert_eq!(m2.0, k);

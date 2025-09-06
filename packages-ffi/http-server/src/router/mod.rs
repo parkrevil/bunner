@@ -93,7 +93,7 @@ impl Router {
 }
 
 #[inline(always)]
-fn method_from_u32(m: u32) -> Method {
+fn get_method_from_value(m: u8) -> Method {
     match m {
         0 => Method::GET,
         1 => Method::POST,
@@ -108,15 +108,15 @@ fn method_from_u32(m: u32) -> Method {
 
 pub fn register_route(
     router: &mut Router,
-    method: u32,
+    method: u8,
     path: &str,
 ) -> Result<u64, errors::RouterError> {
-    let method = method_from_u32(method);
+    let method = get_method_from_value(method);
     router.radix.insert(method, path)
 }
 
-pub fn register_route_ex(router: &mut Router, method: u32, path: &str) -> u32 {
-    let method = method_from_u32(method);
+pub fn register_route_ex(router: &mut Router, method: u8, path: &str) -> u32 {
+    let method = get_method_from_value(method);
     match router.radix.insert(method, path) {
         Ok(k) => k as u32,
         Err(e) => e as u32,
@@ -125,10 +125,10 @@ pub fn register_route_ex(router: &mut Router, method: u32, path: &str) -> u32 {
 
 pub fn match_route(
     router: &Router,
-    method: u32,
+    method: u8,
     path: &str,
 ) -> Option<(u64, Vec<(String, String)>)> {
-    let method = method_from_u32(method);
+    let method = get_method_from_value(method);
     // Always normalize trailing slashes; do not collapse duplicate slashes
     let norm = normalize_path(path);
     router.radix.find_norm(method, &norm).map(|m| {
@@ -222,7 +222,7 @@ pub(crate) fn path_is_allowed_ascii(path: &str) -> bool {
 
 pub fn match_route_err(
     router: &Router,
-    method: u32,
+    method: u8,
     path: &str,
 ) -> Result<(u64, Vec<(String, String)>), RouterError> {
     if path.is_empty() {
@@ -234,7 +234,7 @@ pub fn match_route_err(
     if !path_is_allowed_ascii(path) {
         return Err(RouterError::MatchPathContainsDisallowedCharacters);
     }
-    let method = method_from_u32(method);
+    let method = get_method_from_value(method);
     let norm = normalize_path(path);
     if !path_is_allowed_ascii(&norm) {
         return Err(RouterError::MatchPathContainsDisallowedCharacters);

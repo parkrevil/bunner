@@ -52,7 +52,7 @@ pub unsafe extern "C" fn destroy(handle: HttpServerHandle) {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn router_add(
     handle: HttpServerHandle,
-    method: u32,
+    method: u8,
     path: *const c_char,
 ) -> *mut c_char {
     let http_server = unsafe { &*handle };
@@ -82,7 +82,7 @@ pub unsafe extern "C" fn router_add(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn handle_request(
     handle: HttpServerHandle,
-    method: u32,
+    method: u8,
     path: *const c_char,
 ) -> *mut c_char {
     let http_server = unsafe { &*handle };

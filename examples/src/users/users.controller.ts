@@ -10,9 +10,7 @@ import {
 
 import { UsersService } from './users.service';
 
-@RestController('users', {
-  version: '2',
-})
+@RestController('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 

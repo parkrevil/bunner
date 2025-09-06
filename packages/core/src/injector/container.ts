@@ -2,7 +2,7 @@ import { isClass } from '../helpers';
 import type { BunnerRootModule } from '../interfaces';
 import type { Class } from '../types';
 
-import { MetadataKey, ReflectMetadataKey } from './constants';
+import { METADATA_KEY, REFLECT_METADATA_KEY } from './constants';
 import {
   isForwardRef,
   isUseClassProvider,
@@ -17,6 +17,7 @@ import type {
   InjectMetadata,
 } from './interfaces';
 import type {
+  Controller,
   DependencyGraphNode,
   DependencyProvider,
   InjectableMetadata,
@@ -32,16 +33,16 @@ import type {
 export class Container {
   private readonly rootModuleCls: Class<BunnerRootModule>;
   private readonly graph: Map<Class | ProviderToken, DependencyGraphNode>;
-  private readonly modules: Map<Class, object>;
-  private readonly providers: Map<ProviderToken, object>;
-  private readonly controllers: Map<Class, object>;
+  private readonly modules: Map<Class, InstanceType<any>>;
+  private readonly providers: Map<ProviderToken, InstanceType<any>>;
+  private controllers: Map<Class, InstanceType<any>>;
 
   constructor(rootModuleCls: Class<BunnerRootModule>) {
     this.rootModuleCls = rootModuleCls;
     this.graph = new Map<Class, DependencyGraphNode>();
-    this.modules = new Map<Class, object>();
-    this.providers = new Map<ProviderToken, object>();
-    this.controllers = new Map<Class, object>();
+    this.modules = new Map<Class, InstanceType<any>>();
+    this.providers = new Map<ProviderToken, InstanceType<any>>();
+    this.controllers = new Map<Class, InstanceType<any>>();
   }
 
   /**
@@ -54,6 +55,28 @@ export class Container {
     await this.resolveModule(this.rootModuleCls);
 
     console.log('✅ Dependency graph built and resolved');
+  }
+
+  /**
+   * Get the controllers with metadata
+   * @param metadataKey
+   * @returns
+   */
+  getControllers<Options>(metadataKey: string | symbol) {
+    return Array.from(this.controllers).map<Controller<Options>>(
+      ([cls, instance]) => {
+        const metadata = Reflect.getMetadata(metadataKey, cls);
+
+        if (!metadata) {
+          return;
+        }
+
+        return {
+          instance,
+          ...metadata,
+        };
+      },
+    );
   }
 
   /**
@@ -74,7 +97,7 @@ export class Container {
     }
 
     const metadata: ModuleMetadata = Reflect.getMetadata(
-      MetadataKey.Module,
+      METADATA_KEY.MODULE,
       cls,
     );
 
@@ -146,7 +169,7 @@ export class Container {
 
     if (cls) {
       const injectableMetadata: InjectableMetadata = Reflect.getMetadata(
-        MetadataKey.Injectable,
+        METADATA_KEY.INJECTABLE,
         cls,
       );
 
@@ -186,7 +209,7 @@ export class Container {
    */
   private getDependenciesFromConstructor(cls: Class) {
     const paramTypes = Reflect.getMetadata(
-      ReflectMetadataKey.DesignParamtypes,
+      REFLECT_METADATA_KEY.DESIGN_PARAM_TYPES,
       cls,
     );
 
@@ -195,7 +218,7 @@ export class Container {
     }
 
     const injectParams: InjectMetadata[] =
-      Reflect.getMetadata(MetadataKey.Inject, cls) ?? [];
+      Reflect.getMetadata(METADATA_KEY.INJECT, cls) ?? [];
     const dependencies: DependencyProvider[] = [];
 
     for (let i = 0; i < paramTypes.length; i++) {
@@ -231,7 +254,7 @@ export class Container {
 
     module = new moduleCls();
 
-    this.modules.set(moduleCls, module!);
+    this.modules.set(moduleCls, module);
 
     const node: DependencyGraphModule = this.graph.get(
       moduleCls,
@@ -273,7 +296,7 @@ export class Container {
 
     instance = new cls(...dependencies);
 
-    this.controllers.set(cls, instance!);
+    this.controllers.set(cls, instance);
 
     return instance;
   }

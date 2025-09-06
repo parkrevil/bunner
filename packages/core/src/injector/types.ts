@@ -70,3 +70,11 @@ export type DependencyGraphNode =
  * @description The provider for a dependency graph
  */
 export type DependencyProvider = ProviderToken | ForwardRef;
+
+/**
+ * Controller Instance
+ * @description The instance for a controller contains metadata and instance
+ */
+export type Controller<Options> = Options & {
+  instance: InstanceType<any>;
+};
