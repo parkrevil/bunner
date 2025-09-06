@@ -232,9 +232,6 @@ impl RadixRouter {
                 }
 
                 if let Some(ok) = self.find_from(nb, method, s, i, params) {
-                    self.static_hits
-                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-
                     return Some(ok);
                 }
             }
@@ -247,12 +244,10 @@ impl RadixRouter {
                 }
 
                 if let Some(ok) = self.find_from(nb, method, s, i, params) {
-                    self.static_hits
-                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-
                     return Some(ok);
                 }
             }
+            
             if let Some(next) = cur.get_static_ref(comp) {
                 prefetch_node(next);
 
@@ -261,8 +256,6 @@ impl RadixRouter {
                 }
 
                 if let Some(ok) = self.find_from(next, method, s, i, params) {
-                    self.static_hits
-                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     return Some(ok);
                 }
             }
@@ -272,18 +265,13 @@ impl RadixRouter {
                     if k.as_str() == comp {
                         prefetch_node(nb.as_ref());
 
-                        if crate::router::router_debug_enabled() {
-                            eprintln!("[router.find_from] static_keys SCAN HIT comp={}", comp);
-                        }
-
                         if let Some(ok) = self.find_from(nb.as_ref(), method, s, i, params) {
-                            self.static_hits
-                                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                             return Some(ok);
                         }
                     }
                 }
             }
+
             if !cur.static_children.is_empty()
                 && let Some(nb) = cur.static_children.get(comp)
             {
@@ -294,9 +282,6 @@ impl RadixRouter {
                 }
 
                 if let Some(ok) = self.find_from(nb.as_ref(), method, s, i, params) {
-                    self.static_hits
-                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-
                     return Some(ok);
                 }
             }
@@ -354,8 +339,9 @@ impl RadixRouter {
                         }
                     }
                 }
-                // Early pass B: try literal-first patterns in order of decreasing first literal length
+
                 let mut lit_idxs: SmallVec<[(usize, usize); 32]> = SmallVec::new();
+
                 for (idx, pat) in cur.patterns.iter().enumerate() {
                     if let Some(crate::router::pattern::SegmentPart::Literal(l0)) =
                         pat.parts.first()
@@ -364,30 +350,35 @@ impl RadixRouter {
                         lit_idxs.push((l0.len(), idx));
                     }
                 }
+
                 if !lit_idxs.is_empty() {
                     lit_idxs.sort_unstable_by(|a, b| b.0.cmp(&a.0));
+
                     for &(_, idx) in lit_idxs.iter() {
                         let pat = &cur.patterns[idx];
                         let child_nb = &cur.pattern_nodes[idx];
+
                         prefetch_node(child_nb.as_ref());
+
                         if let Some(kvs) = pattern::match_segment(seg, comp, pat) {
                             let checkpoint = params.len();
+
                             for (name, (off, len)) in kvs.into_iter() {
                                 params.push((name, (start + off, len)));
                             }
+
                             if let Some(ok) =
                                 self.find_from(child_nb.as_ref(), method, s, i, params)
                             {
                                 return Some(ok);
                             }
+
                             params.truncate(checkpoint);
                         }
                     }
                 }
                 // cache lookup (sealed only)
                 if self.root.sealed {
-                    self.cache_lookups
-                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     let mut h: u64 = 1469598103934665603; // FNV offset
                     for &b in comp.as_bytes() {
                         h ^= b as u64;
@@ -408,11 +399,6 @@ impl RadixRouter {
                         flags,
                     }) {
                         cand_idxs.extend(hit);
-                        self.cache_hits
-                            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    } else {
-                        self.cache_misses
-                            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     }
                 }
                 if cand_idxs.is_empty() {

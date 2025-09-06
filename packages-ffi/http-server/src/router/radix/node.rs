@@ -70,11 +70,6 @@ pub struct RadixNode {
     pub(super) pattern_last_lit_len: SmallVec<[u16; 32]>,
     // group indices by shape key to reduce linear scans on insert
     pub(super) pattern_shape_index: FastHashMap<u64, SmallVec<[usize; 16]>>,
-    // removed weak shape index for simplicity
-    // lightweight metrics (Relaxed) for tuning
-    pub(super) pfl_hits: AtomicU64,
-    pub(super) shape_hits: AtomicU64,
-    pub(super) shape_misses: AtomicU64,
     // node-local candidate stats for adaptive Top-K
     pub(super) cand_total_node: AtomicU64,
     pub(super) cand_samples_node: AtomicU64,
@@ -551,7 +546,6 @@ impl RadixNode {
         }
 
         if let Some(v) = self.pattern_first_literal.get(comp) {
-            self.pfl_hits.fetch_add(1, Ordering::Relaxed);
             for &i in v.iter() {
                 out.push(i);
             }

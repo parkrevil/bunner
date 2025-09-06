@@ -144,10 +144,8 @@ impl RadixRouter {
                 let tmp: SmallVec<[usize; 8]> = SmallVec::new();
                 let cand_indices: &[usize] =
                     if let Some(v) = current.pattern_shape_index.get(&shape_key) {
-                        current.shape_hits.fetch_add(1, Ordering::Relaxed);
                         v.as_slice()
                     } else {
-                        current.shape_misses.fetch_add(1, Ordering::Relaxed);
                         tmp.as_slice()
                     };
 

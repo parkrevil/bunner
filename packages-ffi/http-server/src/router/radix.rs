@@ -26,10 +26,6 @@ pub struct RadixRouter {
     // lightweight metrics
     pub(super) cand_total: std::sync::atomic::AtomicU64,
     pub(super) cand_samples: std::sync::atomic::AtomicU64,
-    pub(super) cache_hits: std::sync::atomic::AtomicU64,
-    pub(super) cache_lookups: std::sync::atomic::AtomicU64,
-    pub(super) cache_misses: std::sync::atomic::AtomicU64,
-    pub(super) static_hits: std::sync::atomic::AtomicU64,
     // arena for node allocations (prepared for full conversion)
     pub(super) arena: Bump,
     pub(super) interner: Interner,
@@ -166,10 +162,6 @@ impl RadixRouter {
             options,
             cand_total: std::sync::atomic::AtomicU64::new(0),
             cand_samples: std::sync::atomic::AtomicU64::new(0),
-            cache_hits: std::sync::atomic::AtomicU64::new(0),
-            cache_lookups: std::sync::atomic::AtomicU64::new(0),
-            cache_misses: std::sync::atomic::AtomicU64::new(0),
-            static_hits: std::sync::atomic::AtomicU64::new(0),
             arena: Bump::with_capacity(64 * 1024),
             interner: Interner::new(),
             cand_recent: Mutex::new(SmallVec::new()),
@@ -456,88 +448,5 @@ impl RadixRouter {
                 self.options.case_sensitive,
             );
         }
-    }
-
-    pub(super) fn collect_metrics(&self) -> RouterMetrics {
-        let mut out = RouterMetrics::default();
-        let mut stack: Vec<&node::RadixNode> = Vec::with_capacity(1024);
-        stack.push(&self.root);
-        while let Some(n) = stack.pop() {
-            out.pattern_first_literal_hits += n.pfl_hits.load(std::sync::atomic::Ordering::Relaxed);
-            out.shape_hits += n.shape_hits.load(std::sync::atomic::Ordering::Relaxed);
-            out.shape_misses += n.shape_misses.load(std::sync::atomic::Ordering::Relaxed);
-            // consider prefetch/static id map usage in future metrics here
-            for v in n.static_vals.iter() {
-                stack.push(v.as_ref());
-            }
-            for (_, v) in n.static_children.iter() {
-                stack.push(v.as_ref());
-            }
-            for v in n.pattern_nodes.iter() {
-                stack.push(v.as_ref());
-            }
-            if let Some(fc) = n.fused_child.as_ref() {
-                stack.push(fc.as_ref());
-            }
-        }
-        let samples = self.cand_samples.load(std::sync::atomic::Ordering::Relaxed) as f64;
-        let total = self.cand_total.load(std::sync::atomic::Ordering::Relaxed) as f64;
-        out.cand_avg = if samples > 0.0 { total / samples } else { 0.0 };
-        out.cache_hits = self.cache_hits.load(std::sync::atomic::Ordering::Relaxed);
-        out.cache_lookups = self
-            .cache_lookups
-            .load(std::sync::atomic::Ordering::Relaxed);
-        out.cache_misses = self.cache_misses.load(std::sync::atomic::Ordering::Relaxed);
-        out.static_hits = self.static_hits.load(std::sync::atomic::Ordering::Relaxed);
-        {
-            let buf = self.cand_recent.lock();
-            if !buf.is_empty() {
-                let mut v: Vec<u16> = buf.as_slice().to_vec();
-                v.sort_unstable();
-                let len = v.len();
-                let idx50: usize = ((len as f64) * 0.50).floor() as usize;
-                let idx99: usize = (((len as f64) * 0.99).floor() as usize).min(len - 1);
-                out.cand_p50 = v[idx50] as f64;
-                out.cand_p99 = v[idx99] as f64;
-            }
-        }
-        out
-    }
-
-    pub(super) fn reset_metrics(&mut self) {
-        // reset node-local counters
-        let mut stack: Vec<&mut node::RadixNode> = Vec::with_capacity(1024);
-        stack.push(&mut self.root);
-        while let Some(n) = stack.pop() {
-            n.pfl_hits.store(0, std::sync::atomic::Ordering::Relaxed);
-            n.shape_hits.store(0, std::sync::atomic::Ordering::Relaxed);
-            n.shape_misses
-                .store(0, std::sync::atomic::Ordering::Relaxed);
-            for v in n.static_vals.iter_mut() {
-                stack.push(v.as_mut());
-            }
-            for (_, v) in n.static_children.iter_mut() {
-                stack.push(v.as_mut());
-            }
-            for v in n.pattern_nodes.iter_mut() {
-                stack.push(v.as_mut());
-            }
-            if let Some(fc) = n.fused_child.as_mut() {
-                stack.push(fc.as_mut());
-            }
-        }
-        self.cand_total
-            .store(0, std::sync::atomic::Ordering::Relaxed);
-        self.cand_samples
-            .store(0, std::sync::atomic::Ordering::Relaxed);
-        self.cache_hits
-            .store(0, std::sync::atomic::Ordering::Relaxed);
-        self.cache_lookups
-            .store(0, std::sync::atomic::Ordering::Relaxed);
-        self.cache_misses
-            .store(0, std::sync::atomic::Ordering::Relaxed);
-        self.static_hits
-            .store(0, std::sync::atomic::Ordering::Relaxed);
-        self.cand_recent.lock().clear();
     }
 }
