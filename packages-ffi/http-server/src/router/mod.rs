@@ -285,26 +285,4 @@ impl RouterHandle {
             out
         })
     }
-
-    pub fn metrics(&self) -> RouterMetrics {
-        self.radix.collect_metrics()
-    }
-
-    pub fn reset_metrics(&mut self) {
-        self.radix.reset_metrics();
-    }
-}
-
-#[derive(Debug, Default, Clone, Copy)]
-pub struct RouterMetrics {
-    pub pattern_first_literal_hits: u64,
-    pub shape_hits: u64,
-    pub shape_misses: u64,
-    pub cand_avg: f64,
-    pub cache_hits: u64,
-    pub cache_lookups: u64,
-    pub cache_misses: u64,
-    pub cand_p50: f64,
-    pub cand_p99: f64,
-    pub static_hits: u64,
 }

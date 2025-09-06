@@ -42,20 +42,23 @@ impl PartialEq for SegmentPattern {
     }
 }
 
-pub fn pattern_score(p: &SegmentPattern) -> usize {
-    let mut s = 0usize;
-    let mut last_lit_len = 0usize;
+pub fn pattern_score(p: &SegmentPattern) -> u16 {
+    let mut s = 0u16;
+    let mut last_lit_len = 0u16;
+
     for part in p.parts.iter().rev() {
         if let SegmentPart::Literal(l) = part {
-            last_lit_len = l.len();
+            last_lit_len = l.len() as u16;
             break;
         }
     }
-    let mut param_count = 0usize;
+
+    let mut param_count = 0u16;
+
     for (idx, part) in p.parts.iter().enumerate() {
         match part {
             SegmentPart::Literal(l) => {
-                s += if idx == 0 { 600 } else { 120 } + l.len();
+                s += (if idx == 0 { 600 } else { 120 }) + l.len() as u16;
             }
             SegmentPart::Param { .. } => {
                 param_count += 1;
@@ -63,10 +66,13 @@ pub fn pattern_score(p: &SegmentPattern) -> usize {
             }
         }
     }
+
     s += last_lit_len.min(32) * 5;
+
     if param_count > 0 {
         s = s.saturating_sub((param_count - 1) * 6);
     }
+
     s
 }
 

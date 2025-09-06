@@ -3,7 +3,6 @@ use hashbrown::HashMap as FastHashMap;
 use parking_lot::Mutex;
 use smallvec::SmallVec;
 
-use super::RouterMetrics;
 use super::{RouterOptions};
 use crate::router::interner::Interner;
 

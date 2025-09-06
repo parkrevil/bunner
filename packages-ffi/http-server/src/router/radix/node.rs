@@ -63,11 +63,11 @@ pub struct RadixNode {
     // param-first patterns (indices) for quick fallback without full scan
     pub(super) pattern_param_first: SmallVec<[usize; 16]>,
     // cached specificity scores aligned with pattern_children
-    pub(super) pattern_scores: SmallVec<[usize; 32]>,
+    pub(super) pattern_scores: SmallVec<[u16; 32]>,
     // cached minimal segment length required by pattern
-    pub(super) pattern_min_len: SmallVec<[usize; 32]>,
+    pub(super) pattern_min_len: SmallVec<[u16; 32]>,
     // cached last literal length (0 if none)
-    pub(super) pattern_last_lit_len: SmallVec<[usize; 32]>,
+    pub(super) pattern_last_lit_len: SmallVec<[u16; 32]>,
     // group indices by shape key to reduce linear scans on insert
     pub(super) pattern_shape_index: FastHashMap<u64, SmallVec<[usize; 16]>>,
     // removed weak shape index for simplicity
@@ -482,28 +482,33 @@ impl RadixNode {
         self.pattern_scores.reserve(self.patterns.len());
         self.pattern_min_len.reserve(self.patterns.len());
         self.pattern_last_lit_len.reserve(self.patterns.len());
+
         for pat in self.patterns.iter() {
             self.pattern_scores.push(pattern_score(pat));
-            // compute minimal segment length: sum of literal lengths + 1 per param
-            let mut min_len = 0usize;
+
+            let mut min_len = 0u16;
+
             for part in pat.parts.iter() {
                 match part {
                     SegmentPart::Literal(l) => {
-                        min_len += l.len();
+                        min_len += l.len() as u16;
                     }
-                    // Param may match empty; be conservative (0)
-                    SegmentPart::Param { .. } => { /* 0 */ }
+                    SegmentPart::Param { .. } => {}
                 }
             }
+
             self.pattern_min_len.push(min_len);
-            // last literal length
-            let mut last_len = 0usize;
+
+            let mut last_len = 0u16;
+
             for part in pat.parts.iter().rev() {
                 if let SegmentPart::Literal(l) = part {
-                    last_len = l.len();
+                    last_len = l.len() as u16;
+
                     break;
                 }
             }
+
             self.pattern_last_lit_len.push(last_len);
         }
         // rebuild shape groups
@@ -517,7 +522,6 @@ impl RadixNode {
         debug_assert_eq!(self.patterns.len(), self.pattern_last_lit_len.len());
     }
 
-    /// Rebuild only shape indexes without touching scores.
     #[inline]
     pub(super) fn rebuild_shape_indices(&mut self) {
         self.pattern_shape_index.clear();
@@ -530,7 +534,7 @@ impl RadixNode {
     #[inline(always)]
     pub(super) fn pattern_candidates_for(&self, comp: &str) -> SmallVec<[usize; 8]> {
         let mut out: SmallVec<[usize; 8]> = SmallVec::new();
-        // AC-based multi-prefix fast path
+
         if let Some(ac) = self.ac_first_literals.as_ref() {
             for m in ac.find_overlapping_iter(comp) {
                 if m.start() == 0
@@ -545,7 +549,7 @@ impl RadixNode {
                 return out;
             }
         }
-        // exact literal key
+
         if let Some(v) = self.pattern_first_literal.get(comp) {
             self.pfl_hits.fetch_add(1, Ordering::Relaxed);
             for &i in v.iter() {
@@ -553,12 +557,11 @@ impl RadixNode {
             }
             return out;
         }
-        // head-byte prefilter for literal-first patterns
+
         if let Some(&b) = comp.as_bytes().first()
             && let Some(v) = self.pattern_first_lit_head.get(&b)
         {
             for &i in v.iter() {
-                // extra check to ensure prefix actually matches
                 if let Some(SegmentPart::Literal(l0)) =
                     self.patterns.get(i).and_then(|p| p.parts.first())
                     && comp.len() >= l0.len()
@@ -567,11 +570,12 @@ impl RadixNode {
                     out.push(i);
                 }
             }
+
             if !out.is_empty() {
                 return out;
             }
         }
-        // prefix matches in global order by walking pattern_children
+
         for (idx, pat) in self.patterns.iter().enumerate() {
             if let Some(SegmentPart::Literal(l0)) = pat.parts.first()
                 && comp.len() >= l0.len()

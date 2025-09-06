@@ -539,9 +539,9 @@ impl RadixRouter {
                             if let Some(&tb) = comp.as_bytes().last() {
                                 if let Some(vt) = cur.pattern_last_lit_tail.get(&tb) {
                                     for &idx in vt.iter() {
-                                        if comp_len >= *cur.pattern_min_len.get(idx).unwrap_or(&0)
+                                        if comp_len >= *cur.pattern_min_len.get(idx).unwrap_or(&0) as usize
                                             && comp_len
-                                                >= *cur.pattern_last_lit_len.get(idx).unwrap_or(&0)
+                                                >= *cur.pattern_last_lit_len.get(idx).unwrap_or(&0) as usize
                                             && mark_if_new(&mut seen_bits, idx)
                                         {
                                             cand_idxs.push(idx);
@@ -552,7 +552,7 @@ impl RadixRouter {
 
                             if cand_idxs.is_empty() {
                                 for (idx, minl) in cur.pattern_min_len.iter().enumerate() {
-                                    if comp_len >= *minl && mark_if_new(&mut seen_bits, idx) {
+                                    if comp_len >= *minl as usize && mark_if_new(&mut seen_bits, idx) {
                                         cand_idxs.push(idx);
                                     }
                                 }
@@ -610,7 +610,7 @@ impl RadixRouter {
 
                         for &i0 in cand_idxs.iter() {
                             scores_with_idx
-                                .push((cur.pattern_scores.get(i0).copied().unwrap_or(0), i0));
+                                .push((cur.pattern_scores.get(i0).copied().unwrap_or(0) as usize, i0));
                         }
 
                         let (left, _pivot, _right) =
