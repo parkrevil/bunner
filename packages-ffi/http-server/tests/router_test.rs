@@ -1,166 +1,130 @@
 #![allow(clippy::redundant_clone)]
 #![allow(clippy::field_reassign_with_default)]
-use bunner_http_server::router::{self as rapi, Method, RouterBuilder, RouterError, RouterOptions};
+use bunner_http_server::r#enum::HttpMethod;
+use bunner_http_server::router::{self as rapi, RouterBuilder, RouterError, RouterOptions};
 
 mod methods {
     use super::*;
 
-    mod basic {
-        use super::*;
-
-        #[test]
-        fn supports_all_http_methods() {
-            let h = RouterBuilder::with_options(RouterOptions::default())
-                .add(Method::GET, "/r")
-                .add(Method::POST, "/r")
-                .add(Method::PUT, "/r")
-                .add(Method::PATCH, "/r")
-                .add(Method::DELETE, "/r")
-                .add(Method::OPTIONS, "/r")
-                .add(Method::HEAD, "/r")
-                .seal()
-                .build();
-            let k_get = h.find(Method::GET, "/r").unwrap().key;
-            let k_post = h.find(Method::POST, "/r").unwrap().key;
-            let k_put = h.find(Method::PUT, "/r").unwrap().key;
-            let k_patch = h.find(Method::PATCH, "/r").unwrap().key;
-            let k_delete = h.find(Method::DELETE, "/r").unwrap().key;
-            let k_options = h.find(Method::OPTIONS, "/r").unwrap().key;
-            let k_head = h.find(Method::HEAD, "/r").unwrap().key;
-            assert!(
-                k_get != 0
-                    && k_post != 0
-                    && k_put != 0
-                    && k_patch != 0
-                    && k_delete != 0
-                    && k_options != 0
-                    && k_head != 0
-            );
-            assert!(h.find(Method::GET, "/r/x").is_none());
-            assert!(h.find(Method::HEAD, "/r").is_some());
-            assert!(h.find(Method::GET, "/r").is_some());
-            assert!(
-                h.find(Method::HEAD, "/r").unwrap().key != h.find(Method::GET, "/r").unwrap().key
-            );
-        }
+    #[test]
+    fn supports_all_http_methods() {
+        let h = RouterBuilder::with_options(RouterOptions::default())
+            .add(HttpMethod::Get, "/r")
+            .add(HttpMethod::Post, "/r")
+            .add(HttpMethod::Put, "/r")
+            .add(HttpMethod::Patch, "/r")
+            .add(HttpMethod::Delete, "/r")
+            .add(HttpMethod::Options, "/r")
+            .add(HttpMethod::Head, "/r")
+            .seal()
+            .build();
+        let k_get = h.find(HttpMethod::Get, "/r").unwrap().key;
+        let k_post = h.find(HttpMethod::Post, "/r").unwrap().key;
+        let k_put = h.find(HttpMethod::Put, "/r").unwrap().key;
+        let k_patch = h.find(HttpMethod::Patch, "/r").unwrap().key;
+        let k_delete = h.find(HttpMethod::Delete, "/r").unwrap().key;
+        let k_options = h.find(HttpMethod::Options, "/r").unwrap().key;
+        let k_head = h.find(HttpMethod::Head, "/r").unwrap().key;
+        assert!(
+            k_get != 0
+                && k_post != 0
+                && k_put != 0
+                && k_patch != 0
+                && k_delete != 0
+                && k_options != 0
+                && k_head != 0
+        );
+        assert!(h.find(HttpMethod::Get, "/r/x").is_none());
+        assert!(h.find(HttpMethod::Head, "/r").is_some());
+        assert!(h.find(HttpMethod::Get, "/r").is_some());
+        assert!(h.find(HttpMethod::Head, "/r").unwrap().key != h.find(HttpMethod::Get, "/r").unwrap().key);
     }
 
-    mod mask_prune {
-        use super::*;
-
-        #[test]
-        fn missing_method_is_none_both_before_and_after_seal() {
-            let h1 = RouterBuilder::with_options(RouterOptions::default())
-                .add(Method::GET, "/only-get")
-                .build();
-            assert!(h1.find(Method::POST, "/only-get").is_none());
-            let h2 = RouterBuilder::with_options(RouterOptions::default())
-                .add(Method::GET, "/only-get")
-                .seal()
-                .build();
-            assert!(h2.find(Method::POST, "/only-get").is_none());
-        }
+    #[test]
+    fn missing_method_is_none_both_before_and_after_seal() {
+        let h1 = RouterBuilder::with_options(RouterOptions::default())
+            .add(HttpMethod::Get, "/only-get")
+            .build();
+        assert!(h1.find(HttpMethod::Post, "/only-get").is_none());
+        let h2 = RouterBuilder::with_options(RouterOptions::default())
+            .add(HttpMethod::Get, "/only-get")
+            .seal()
+            .build();
+        assert!(h2.find(HttpMethod::Post, "/only-get").is_none());
     }
 
-    mod mapping {
-        use super::*;
+    #[test]
+    fn head_does_not_fallback_to_get_and_head_only() {
+        let h1 = RouterBuilder::with_options(RouterOptions::default())
+            .add(HttpMethod::Get, "/only-get")
+            .seal()
+            .build();
+        assert!(h1.find(HttpMethod::Head, "/only-get").is_none());
 
-        #[test]
-        fn unknown_method_maps_to_get_for_register_and_match() {
-            let mut r = rapi::Router::with_options(RouterOptions::default(), None);
-            let k = rapi::register_route(&mut r, 255, "/mystery").unwrap();
-            rapi::seal(&mut r);
-            let m1 = rapi::match_route(&r, 255, "/mystery").unwrap();
-            assert_eq!(m1.0, k);
-            let m2 = rapi::match_route(&r, 0, "/mystery").unwrap();
-            assert_eq!(m2.0, k);
-        }
-    }
-
-    mod head_only {
-        use super::*;
-
-        #[test]
-        fn head_does_not_fallback_to_get_and_head_only() {
-            let h1 = RouterBuilder::with_options(RouterOptions::default())
-                .add(Method::GET, "/only-get")
-                .seal()
-                .build();
-            assert!(h1.find(Method::HEAD, "/only-get").is_none());
-
-            let h2 = RouterBuilder::with_options(RouterOptions::default())
-                .add(Method::HEAD, "/head-only")
-                .seal()
-                .build();
-            assert!(h2.find(Method::GET, "/head-only").is_none());
-            assert!(h2.find(Method::HEAD, "/head-only").unwrap().key != 0);
-        }
+        let h2 = RouterBuilder::with_options(RouterOptions::default())
+            .add(HttpMethod::Head, "/head-only")
+            .seal()
+            .build();
+        assert!(h2.find(HttpMethod::Get, "/head-only").is_none());
+        assert!(h2.find(HttpMethod::Head, "/head-only").unwrap().key != 0);
     }
 }
 
-mod static_and_root {
+mod static_routes {
     use super::*;
 
-    mod root {
-        use super::*;
-
-        #[test]
-        fn matches_root_route() {
-            let h = RouterBuilder::with_options(RouterOptions::default())
-                .add(Method::GET, "/")
-                .seal()
-                .build();
-            assert!(h.find(Method::GET, "/").unwrap().key != 0);
-        }
-
-        #[test]
-        fn root_matches_with_leading_duplicate_slashes() {
-            let h = RouterBuilder::with_options(RouterOptions::default())
-                .add(Method::GET, "/")
-                .seal()
-                .build();
-            assert!(h.find(Method::GET, "////").is_some());
-        }
+    #[test]
+    fn matches_root_route() {
+        let h = RouterBuilder::with_options(RouterOptions::default())
+            .add(HttpMethod::Get, "/")
+            .seal()
+            .build();
+        assert!(h.find(HttpMethod::Get, "/").unwrap().key != 0);
     }
 
-    mod static_routes {
-        use super::*;
+    #[test]
+    fn root_matches_with_leading_duplicate_slashes() {
+        let h = RouterBuilder::with_options(RouterOptions::default())
+            .add(HttpMethod::Get, "/")
+            .seal()
+            .build();
+        assert!(h.find(HttpMethod::Get, "////").is_some());
+    }
 
-        #[test]
-        fn matches_static_routes_by_method() {
-            let h = RouterBuilder::with_options(RouterOptions::default())
-                .add(Method::GET, "/health")
-                .add(Method::POST, "/health")
-                .seal()
-                .build();
-            assert!(h.find(Method::GET, "/health").unwrap().key != 0);
-            assert!(h.find(Method::POST, "/health").unwrap().key != 0);
+    #[test]
+    fn matches_static_routes_by_method() {
+        let h = RouterBuilder::with_options(RouterOptions::default())
+            .add(HttpMethod::Get, "/health")
+            .add(HttpMethod::Post, "/health")
+            .seal()
+            .build();
+        assert!(h.find(HttpMethod::Get, "/health").unwrap().key != 0);
+        assert!(h.find(HttpMethod::Post, "/health").unwrap().key != 0);
+    }
+
+    #[test]
+    fn rejects_duplicate_static_route_for_same_method() {
+        let mut r = rapi::Router::with_options(RouterOptions::default(), None);
+        let k = rapi::register_route(&mut r, HttpMethod::Get, "/health").unwrap();
+        let code = rapi::register_route(&mut r, HttpMethod::Get, "/health");
+        assert_eq!(code, Err(RouterError::RouteConflictOnDuplicatePath));
+        rapi::seal(&mut r);
+        let m = rapi::match_route(&r, HttpMethod::Get, "/health").unwrap();
+        assert_eq!(m.0, k);
+    }
+
+    #[test]
+    fn heavy_static_routes_with_high_duplication_probability() {
+        let mut r = rapi::Router::with_options(RouterOptions::default(), None);
+        for i in 0..200u32 {
+            let path = format!("/assets/v1/css/{}.css", i);
+            assert!(rapi::register_route(&mut r, HttpMethod::Get, &path).is_ok());
         }
-
-        #[test]
-        fn rejects_duplicate_static_route_for_same_method() {
-            let mut r = rapi::Router::with_options(RouterOptions::default(), None);
-            let k = rapi::register_route(&mut r, 0, "/health").unwrap();
-            let code = rapi::register_route_ex(&mut r, 0, "/health");
-            assert_eq!(code, RouterError::RouteConflictOnDuplicatePath as u32);
-            rapi::seal(&mut r);
-            let m = rapi::match_route(&r, 0, "/health").unwrap();
-            assert_eq!(m.0, k);
-        }
-
-        #[test]
-        fn heavy_static_routes_with_high_duplication_probability() {
-            let mut r = rapi::Router::with_options(RouterOptions::default(), None);
-            for i in 0..200u32 {
-                let path = format!("/assets/v1/css/{}.css", i);
-                assert!(rapi::register_route(&mut r, 0, &path).is_ok());
-            }
-            rapi::seal(&mut r);
-            for i in [0u32, 1, 50, 100, 150, 199] {
-                let p = format!("/assets/v1/css/{}.css", i);
-                let m = rapi::match_route(&r, 0, &p).unwrap();
-                assert!(m.0 != 0);
-            }
+        rapi::seal(&mut r);
+        for i in [0u32, 1, 50, 100, 150, 199] {
+            let p = format!("/assets/v1/css/{}.css", i);
+            let m = rapi::match_route(&r, HttpMethod::Get, &p).unwrap();
+            assert!(m.0 != 0);
         }
     }
 }
@@ -168,84 +132,63 @@ mod static_and_root {
 mod normalization {
     use super::*;
 
-    mod trailing_slash {
-        use super::*;
-
-        #[test]
-        fn trailing_slash_is_always_ignored() {
-            let h = RouterBuilder::with_options(RouterOptions::default())
-                .add(Method::GET, "/api/users")
-                .seal()
-                .build();
-            assert!(h.find(Method::GET, "/api/users/").is_some());
-            assert!(h.find(Method::GET, "/api/users").is_some());
-        }
+    #[test]
+    fn trailing_slash_is_always_ignored() {
+        let h = RouterBuilder::with_options(RouterOptions::default())
+            .add(HttpMethod::Get, "/api/users")
+            .seal()
+            .build();
+        assert!(h.find(HttpMethod::Get, "/api/users/").is_some());
+        assert!(h.find(HttpMethod::Get, "/api/users").is_some());
     }
 
-    mod duplicate_slashes {
-        use super::*;
-
-        #[test]
-        fn duplicate_slashes_are_not_ignored() {
-            let h = RouterBuilder::with_options(RouterOptions::default())
-                .add(Method::GET, "/a/b")
-                .seal()
-                .build();
-            assert!(h.find(Method::GET, "/a//b").is_none());
-        }
-
-        #[test]
-        fn duplicate_slashes_fail_even_with_trailing_slashes() {
-            let h = RouterBuilder::with_options(RouterOptions::default())
-                .add(Method::GET, "/a/b")
-                .seal()
-                .build();
-            assert!(h.find(Method::GET, "/a//b///").is_none());
-        }
+    #[test]
+    fn duplicate_slashes_are_not_ignored() {
+        let h = RouterBuilder::with_options(RouterOptions::default())
+            .add(HttpMethod::Get, "/a/b")
+            .seal()
+            .build();
+        assert!(h.find(HttpMethod::Get, "/a//b").is_none());
+        assert!(h.find(HttpMethod::Get, "/a//b///").is_none());
     }
 
-    mod interactions {
-        use super::*;
-
-        #[test]
-        fn duplicate_slash_does_not_match_static_path() {
-            let h = RouterBuilder::with_options(RouterOptions::default())
-                .add(Method::GET, "/a/x/b")
-                .seal()
-                .build();
-            assert!(h.find(Method::GET, "/a//b").is_none());
-        }
-
-        #[test]
-        fn offsets_respect_trailing_slash_ignoring_only() {
-            let h = RouterBuilder::with_options(RouterOptions::default())
-                .add(Method::GET, "/p/:x/:y")
-                .seal()
-                .build();
-            let raw = "/p/AA/BB/";
-            let m = h.find_offsets(Method::GET, raw).unwrap();
-            assert!(m.key != 0);
-            let norm = "/p/AA/BB";
-            assert_eq!(m.params.len(), 2);
-            let (_idx1, (o1, l1)) = m.params[0];
-            let (_idx2, (o2, l2)) = m.params[1];
-            assert_eq!(&norm[o1..o1 + l1], "AA");
-            assert_eq!(&norm[o2..o2 + l2], "BB");
-        }
+    #[test]
+    fn duplicate_slash_does_not_match_static_path() {
+        let h = RouterBuilder::with_options(RouterOptions::default())
+            .add(HttpMethod::Get, "/a/x/b")
+            .seal()
+            .build();
+        assert!(h.find(HttpMethod::Get, "/a//b").is_none());
     }
 
-    mod negative {
-        use super::*;
+    #[test]
+    fn offsets_respect_trailing_slash_ignoring_only() {
+        let h = RouterBuilder::with_options(RouterOptions::default())
+            .add(HttpMethod::Get, "/p/:x/:y")
+            .seal()
+            .build();
+        let raw = "/p/AA/BB/";
+        let m = h.find_offsets(HttpMethod::Get, raw).unwrap();
+        assert!(m.key != 0);
+        let norm = "/p/AA/BB";
+        assert_eq!(m.params.len(), 2);
+        let (_idx1, (o1, l1)) = m.params[0];
+        let (_idx2, (o2, l2)) = m.params[1];
+        assert_eq!(&norm[o1..o1 + l1], "AA");
+        assert_eq!(&norm[o2..o2 + l2], "BB");
+    }
 
-        #[test]
-        fn duplicate_slashes_not_normalized_but_trailing_is() {
-            let h = RouterBuilder::with_options(RouterOptions::default())
-                .add(Method::GET, "/x/y")
-                .seal()
-                .build();
-            assert!(h.find(Method::GET, "/x//y").is_none());
-            assert!(h.find(Method::GET, "/x/y/").is_some());
-        }
+    #[test]
+    fn path_segments_like_dot_and_dotdot_are_treated_as_literals() {
+        let h = RouterBuilder::with_options(RouterOptions::default())
+            .add(HttpMethod::Get, "/a/./b")
+            .add(HttpMethod::Get, "/a/../b")
+            .seal()
+            .build();
+
+        assert!(h.find(HttpMethod::Get, "/a/./b").is_some());
+        assert!(h.find(HttpMethod::Get, "/a/../b").is_some());
+        assert!(h.find(HttpMethod::Get, "/a/b").is_none());
     }
 }
 
@@ -255,10 +198,10 @@ mod case_sensitivity {
     #[test]
     fn default_is_case_sensitive() {
         let h = RouterBuilder::with_options(RouterOptions::default())
-            .add(Method::GET, "/About")
+            .add(HttpMethod::Get, "/About")
             .seal()
             .build();
-        assert!(h.find(Method::GET, "/about").is_none());
+        assert!(h.find(HttpMethod::Get, "/about").is_none());
     }
 
     #[test]
@@ -266,11 +209,11 @@ mod case_sensitivity {
         let mut o = RouterOptions::default();
         o.case_sensitive = false;
         let h = RouterBuilder::with_options(o)
-            .add(Method::GET, "/About")
+            .add(HttpMethod::Get, "/About")
             .seal()
             .build();
-        assert!(h.find(Method::GET, "/about").is_some());
-        assert!(h.find(Method::GET, "/ABOUT").is_some());
+        assert!(h.find(HttpMethod::Get, "/about").is_some());
+        assert!(h.find(HttpMethod::Get, "/ABOUT").is_some());
     }
 
     #[test]
@@ -278,9 +221,9 @@ mod case_sensitivity {
         let mut o = RouterOptions::default();
         o.case_sensitive = false;
         let mut r = rapi::Router::with_options(o, None);
-        assert!(rapi::register_route(&mut r, 0, "/About").is_ok());
-        let code = rapi::register_route_ex(&mut r, 0, "/about");
-        assert_eq!(code, RouterError::RouteConflictOnDuplicatePath as u32);
+        assert!(rapi::register_route(&mut r, HttpMethod::Get, "/About").is_ok());
+        let code = rapi::register_route(&mut r, HttpMethod::Get, "/about");
+        assert_eq!(code, Err(RouterError::RouteConflictOnDuplicatePath));
     }
 
     #[test]
@@ -288,71 +231,138 @@ mod case_sensitivity {
         let mut o = RouterOptions::default();
         o.case_sensitive = false;
         let h = RouterBuilder::with_options(o).seal().build();
-        assert!(h.find(Method::GET, "/café").is_none());
-        assert!(h.find(Method::GET, "/Café").is_none());
+        assert!(h.find(HttpMethod::Get, "/café").is_none());
+        assert!(h.find(HttpMethod::Get, "/Café").is_none());
     }
 }
 
 mod params {
     use super::*;
 
-    mod basic {
-        use super::*;
-
-        #[test]
-        fn matches_named_params_and_returns_values() {
-            let mut r = rapi::Router::with_options(RouterOptions::default(), None);
-            let k = rapi::register_route(&mut r, 0, "/users/:id").unwrap();
-            rapi::seal(&mut r);
-            let m = rapi::match_route(&r, 0, "/users/123").unwrap();
-            assert_eq!(m.0, k);
-            assert_eq!(m.1.len(), 1);
-            assert_eq!(m.1[0].0.as_str(), "id");
-            assert_eq!(m.1[0].1.as_str(), "123");
-        }
-
-        #[test]
-        fn matches_multiple_params_across_two_segments() {
-            let mut r = rapi::Router::with_options(RouterOptions::default(), None);
-            let k = rapi::register_route(&mut r, 0, "/pkg/:name/:ver").unwrap();
-            rapi::seal(&mut r);
-            let m = rapi::match_route(&r, 0, "/pkg/foo/1.2.3").unwrap();
-            assert_eq!(m.0, k);
-            assert_eq!(m.1.len(), 2);
-            assert_eq!(m.1[0].0.as_str(), "name");
-            assert_eq!(m.1[0].1.as_str(), "foo");
-            assert_eq!(m.1[1].0.as_str(), "ver");
-            assert_eq!(m.1[1].1.as_str(), "1.2.3");
-        }
+    #[test]
+    fn matches_named_params_and_returns_values() {
+        let mut r = rapi::Router::with_options(RouterOptions::default(), None);
+        let k = rapi::register_route(&mut r, HttpMethod::Get, "/users/:id").unwrap();
+        rapi::seal(&mut r);
+        let m = rapi::match_route(&r, HttpMethod::Get, "/users/123").unwrap();
+        assert_eq!(m.0, k);
+        assert_eq!(m.1.len(), 1);
+        assert_eq!(m.1[0].0.as_str(), "id");
+        assert_eq!(m.1[0].1.as_str(), "123");
     }
 
-    mod offsets {
-        use super::*;
-
-        #[test]
-        fn returns_offsets_with_find_offsets() {
-            let h = RouterBuilder::with_options(RouterOptions::default())
-                .add(Method::GET, "/users/:id")
-                .seal()
-                .build();
-            let path = "/users/123";
-            let mo = h.find_offsets(Method::GET, path).unwrap();
-            assert!(mo.key != 0);
-            assert_eq!(mo.params.len(), 1);
-            let (_name_id, (off, len)) = mo.params[0];
-            assert_eq!(&path[off..off + len], "123");
-        }
+    #[test]
+    fn matches_multiple_params_across_two_segments() {
+        let mut r = rapi::Router::with_options(RouterOptions::default(), None);
+        let k = rapi::register_route(&mut r, HttpMethod::Get, "/pkg/:name/:ver").unwrap();
+        rapi::seal(&mut r);
+        let m = rapi::match_route(&r, HttpMethod::Get, "/pkg/foo/1.2.3").unwrap();
+        assert_eq!(m.0, k);
+        assert_eq!(m.1.len(), 2);
+        assert_eq!(m.1[0].0.as_str(), "name");
+        assert_eq!(m.1[0].1.as_str(), "foo");
+        assert_eq!(m.1[1].0.as_str(), "ver");
+        assert_eq!(m.1[1].1.as_str(), "1.2.3");
     }
 
-    mod name_collision {
-        use super::*;
+    #[test]
+    fn returns_offsets_with_find_offsets() {
+        let h = RouterBuilder::with_options(RouterOptions::default())
+            .add(HttpMethod::Get, "/users/:id")
+            .seal()
+            .build();
+        let path = "/users/123";
+        let mo = h.find_offsets(HttpMethod::Get, path).unwrap();
+        assert!(mo.key != 0);
+        assert_eq!(mo.params.len(), 1);
+        let (_name_id, (off, len)) = mo.params[0];
+        assert_eq!(&path[off..off + len], "123");
+    }
 
-        #[test]
-        fn duplicate_param_names_in_one_segment_is_syntax_error() {
-            let mut r = rapi::Router::with_options(RouterOptions::default(), None);
-            let code = rapi::register_route_ex(&mut r, 0, "/a/:x-:x");
-            assert_eq!(code, RouterError::RoutePathSyntaxInvalid as u32);
-        }
+    #[test]
+    fn multi_params_across_segments_offsets() {
+        let h = RouterBuilder::with_options(RouterOptions::default())
+            .add(HttpMethod::Get, "/pkg/:name/:ver")
+            .seal()
+            .build();
+        let path = "/pkg/lib/2.0.1";
+        let mo = h.find_offsets(HttpMethod::Get, path).unwrap();
+        assert!(mo.key != 0);
+        assert_eq!(mo.params.len(), 2);
+        let (_i1, (o1, l1)) = mo.params[0];
+        let (_i2, (o2, l2)) = mo.params[1];
+        assert_eq!(&path[o1..o1 + l1], "lib");
+        assert_eq!(&path[o2..o2 + l2], "2.0.1");
+    }
+}
+
+mod wildcard {
+    use super::*;
+
+    #[test]
+    fn matches_trailing_wildcard() {
+        let h = RouterBuilder::with_options(RouterOptions::default())
+            .add(HttpMethod::Get, "/files/*")
+            .seal()
+            .build();
+        assert!(h.find(HttpMethod::Get, "/files/a/b").is_some());
+    }
+
+    #[test]
+    fn captures_rest_of_path_for_wildcard_param() {
+        let mut r = rapi::Router::with_options(RouterOptions::default(), None);
+        let k = rapi::register_route(&mut r, HttpMethod::Get, "/files/*").unwrap();
+        rapi::seal(&mut r);
+        let m = rapi::match_route(&r, HttpMethod::Get, "/files/a/b").unwrap();
+        assert_eq!(m.0, k);
+        assert_eq!(m.1.len(), 1);
+        assert_eq!(m.1[0].0.as_str(), "*");
+        assert_eq!(m.1[0].1.as_str(), "a/b");
+    }
+
+    #[test]
+    fn allows_empty_or_slash_remainder_in_builder() {
+        let h = RouterBuilder::with_options(RouterOptions::default())
+            .add(HttpMethod::Get, "/w/*")
+            .seal()
+            .build();
+        assert!(h.find(HttpMethod::Get, "/w").is_some());
+        assert!(h.find(HttpMethod::Get, "/w/").is_some());
+    }
+
+    #[test]
+    fn matches_when_remainder_is_empty_or_slash() {
+        let mut r = rapi::Router::with_options(RouterOptions::default(), None);
+        let k = rapi::register_route(&mut r, HttpMethod::Get, "/files/*").unwrap();
+        rapi::seal(&mut r);
+        let m1 = rapi::match_route(&r, HttpMethod::Get, "/files").unwrap();
+        assert_eq!(m1.0, k);
+        assert_eq!(m1.1.len(), 0);
+        let m2 = rapi::match_route(&r, HttpMethod::Get, "/files/").unwrap();
+        assert_eq!(m2.0, k);
+    }
+
+    #[test]
+    fn wildcard_at_root_matches_any_non_root_path() {
+        let h = RouterBuilder::with_options(RouterOptions::default())
+            .add(HttpMethod::Get, "/*")
+            .seal()
+            .build();
+        assert!(h.find(HttpMethod::Get, "/a").is_some());
+        assert!(h.find(HttpMethod::Get, "/a/b").is_some());
+        assert!(h.find(HttpMethod::Get, "/").is_none());
+    }
+
+    #[test]
+    fn wildcard_offsets_after_normalization() {
+        let mut r = rapi::Router::with_options(RouterOptions::default(), None);
+        assert!(rapi::register_route(&mut r, HttpMethod::Get, "/files/*").is_ok());
+        rapi::seal(&mut r);
+        let m = rapi::match_route(&r, HttpMethod::Get, "/files//a/b///").unwrap();
+        assert!(m.0 != 0);
+        assert_eq!(m.1.len(), 1);
+        assert_eq!(m.1[0].0.as_str(), "*");
+        assert_eq!(m.1[0].1.as_str(), "a/b");
     }
 }
 
@@ -362,145 +372,45 @@ mod precedence {
     #[test]
     fn static_route_wins_over_wildcard_route() {
         let h = RouterBuilder::with_options(RouterOptions::default())
-            .add(Method::GET, "/user/*")
-            .add(Method::GET, "/user/me")
+            .add(HttpMethod::Get, "/user/*")
+            .add(HttpMethod::Get, "/user/me")
             .seal()
             .build();
-        assert!(h.find(Method::GET, "/user/me").is_some());
-        assert!(h.find(Method::GET, "/user/123").is_some());
+        assert!(h.find(HttpMethod::Get, "/user/me").is_some());
+        assert!(h.find(HttpMethod::Get, "/user/123").is_some());
     }
 
     #[test]
     fn static_vs_wildcard_precedence() {
         let h = RouterBuilder::with_options(RouterOptions::default())
-            .add(Method::GET, "/f/static")
-            .add(Method::GET, "/f/*")
+            .add(HttpMethod::Get, "/f/static")
+            .add(HttpMethod::Get, "/f/*")
             .seal()
             .build();
-        assert!(h.find(Method::GET, "/f/static").is_some());
-        assert!(h.find(Method::GET, "/f/abc").is_some());
+        assert!(h.find(HttpMethod::Get, "/f/static").is_some());
+        assert!(h.find(HttpMethod::Get, "/f/abc").is_some());
     }
 
     #[test]
     fn deep_mixed_static_wildcard_precedence() {
         let h = RouterBuilder::with_options(RouterOptions::default())
-            .add(Method::GET, "/a/b/c/d")
-            .add(Method::GET, "/a/*")
+            .add(HttpMethod::Get, "/a/b/c/d")
+            .add(HttpMethod::Get, "/a/*")
             .seal()
             .build();
-        assert!(h.find(Method::GET, "/a/b/c/d").is_some());
-        assert!(h.find(Method::GET, "/a/x/y").is_some());
-    }
-}
-
-mod wildcard {
-    use super::*;
-
-    mod matching {
-        use super::*;
-
-        #[test]
-        fn matches_trailing_wildcard_and_prefers_static_over_wildcard() {
-            let h = RouterBuilder::with_options(RouterOptions::default())
-                .add(Method::GET, "/files/*")
-                .add(Method::GET, "/app/static/*")
-                .add(Method::GET, "/app/static/index.html")
-                .seal()
-                .build();
-            assert!(h.find(Method::GET, "/files/a/b").is_some());
-            assert!(h.find(Method::GET, "/app/static/index.html").is_some());
-        }
-
-        #[test]
-        fn captures_rest_of_path_for_wildcard_param() {
-            let mut r = rapi::Router::with_options(RouterOptions::default(), None);
-            let k = rapi::register_route(&mut r, 0, "/files/*").unwrap();
-            rapi::seal(&mut r);
-            let m = rapi::match_route(&r, 0, "/files/a/b").unwrap();
-            assert_eq!(m.0, k);
-            assert_eq!(m.1.len(), 1);
-            assert_eq!(m.1[0].0.as_str(), "*");
-            assert_eq!(m.1[0].1.as_str(), "a/b");
-        }
-
-        #[test]
-        fn allows_empty_or_slash_remainder_in_builder() {
-            let h = RouterBuilder::with_options(RouterOptions::default())
-                .add(Method::GET, "/w/*")
-                .seal()
-                .build();
-            assert!(h.find(Method::GET, "/w").is_some());
-            assert!(h.find(Method::GET, "/w/").is_some());
-        }
-
-        #[test]
-        fn errors_when_wildcard_not_last_segment() {
-            let mut r = rapi::Router::with_options(RouterOptions::default(), None);
-            assert_eq!(
-                rapi::register_route_ex(&mut r, 0, "/a/*/b"),
-                RouterError::RouteWildcardSegmentNotAtEnd as u32
-            );
-        }
-
-        #[test]
-        fn matches_when_remainder_is_empty_or_slash() {
-            let mut r = rapi::Router::with_options(RouterOptions::default(), None);
-            let k = rapi::register_route(&mut r, 0, "/files/*").unwrap();
-            rapi::seal(&mut r);
-            let m1 = rapi::match_route(&r, 0, "/files").unwrap();
-            assert_eq!(m1.0, k);
-            assert_eq!(m1.1.len(), 0);
-            let m2 = rapi::match_route(&r, 0, "/files/").unwrap();
-            assert_eq!(m2.0, k);
-        }
+        assert!(h.find(HttpMethod::Get, "/a/b/c/d").is_some());
+        assert!(h.find(HttpMethod::Get, "/a/x/y").is_some());
     }
 
-    mod errors {
-        use super::*;
-
-        #[test]
-        fn errors_when_wildcard_not_last_segment() {
-            let mut r = rapi::Router::with_options(RouterOptions::default(), None);
-            let code = rapi::register_route_ex(&mut r, 0, "/x/*/y");
-            assert_eq!(code, RouterError::RouteWildcardSegmentNotAtEnd as u32);
-        }
-
-        #[test]
-        fn rejects_second_wildcard_on_same_node_for_method() {
-            let mut r = rapi::Router::with_options(RouterOptions::default(), None);
-            assert!(rapi::register_route(&mut r, 0, "/a/*").is_ok());
-            let code = rapi::register_route_ex(&mut r, 0, "/a/*");
-            assert_eq!(
-                code,
-                RouterError::RouteWildcardAlreadyExistsForMethod as u32
-            );
-        }
-    }
-
-    mod root {
-        use super::*;
-
-        #[test]
-        fn wildcard_at_root_matches_any_non_root_path() {
-            let h = RouterBuilder::with_options(RouterOptions::default())
-                .add(Method::GET, "/*")
-                .seal()
-                .build();
-            assert!(h.find(Method::GET, "/a").is_some());
-            assert!(h.find(Method::GET, "/a/b").is_some());
-            assert!(h.find(Method::GET, "/").is_none());
-        }
-
-        #[test]
-        fn root_explicit_route_wins_over_root_wildcard() {
-            let h = RouterBuilder::with_options(RouterOptions::default())
-                .add(Method::GET, "/")
-                .add(Method::GET, "/*")
-                .seal()
-                .build();
-            assert!(h.find(Method::GET, "/").is_some());
-            assert!(h.find(Method::GET, "/anything").is_some());
-        }
+    #[test]
+    fn root_explicit_route_wins_over_root_wildcard() {
+        let h = RouterBuilder::with_options(RouterOptions::default())
+            .add(HttpMethod::Get, "/")
+            .add(HttpMethod::Get, "/*")
+            .seal()
+            .build();
+        assert!(h.find(HttpMethod::Get, "/").is_some());
+        assert!(h.find(HttpMethod::Get, "/anything").is_some());
     }
 }
 
@@ -508,128 +418,183 @@ mod path_validation {
     use super::*;
 
     #[test]
-    fn syntax_error_for_empty_path() {
+    fn all_insert_error_variants_are_covered() {
+        // RoutePathEmpty
         let mut r = rapi::Router::with_options(RouterOptions::default(), None);
-        let code_empty = rapi::register_route_ex(&mut r, 0, "");
-        assert_eq!(code_empty, RouterError::RoutePathEmpty as u32);
-    }
-
-    #[test]
-    fn syntax_error_for_invalid_param_name_or_format() {
-        let mut r = rapi::Router::with_options(RouterOptions::default(), None);
-        let code = rapi::register_route_ex(&mut r, 0, "/a/:()");
-        assert_eq!(code, RouterError::RoutePathSyntaxInvalid as u32);
-    }
-
-    #[test]
-    fn non_ascii_path_is_syntax_error_on_register() {
-        let mut r = rapi::Router::with_options(RouterOptions::default(), None);
-        let ok = rapi::register_route(&mut r, 0, "/café");
-        assert!(ok.is_err());
-        let code = rapi::register_route_ex(&mut r, 0, "/café");
-        assert_eq!(code, RouterError::RoutePathNotAscii as u32);
-    }
-}
-
-mod insert_errors_exhaustive {
-    use super::*;
-
-    #[test]
-    fn invalid_param_name_start_is_rejected() {
-        let mut r = rapi::Router::with_options(RouterOptions::default(), None);
-        let code = rapi::register_route_ex(&mut r, 0, "/:1bad");
-        assert_eq!(code, RouterError::RouteParamNameInvalidStart as u32);
-    }
-
-    #[test]
-    fn invalid_param_name_char_is_rejected() {
-        let mut r = rapi::Router::with_options(RouterOptions::default(), None);
-        let code = rapi::register_route_ex(&mut r, 0, "/:bad-name");
-        assert_eq!(code, RouterError::RouteParamNameInvalidChar as u32);
-    }
-
-    #[test]
-    fn mixed_param_and_literal_in_segment_is_rejected() {
-        let mut r = rapi::Router::with_options(RouterOptions::default(), None);
-        let code = rapi::register_route_ex(&mut r, 0, "/a/a:bc");
         assert_eq!(
-            code,
-            RouterError::RouteSegmentContainsMixedParamAndLiteral as u32
+            rapi::register_route(&mut r, HttpMethod::Get, ""),
+            Err(RouterError::RoutePathEmpty)
         );
-    }
 
-    #[test]
-    fn disallowed_characters_in_path_are_rejected() {
+        // RoutePathNotAscii
+        let mut r = rapi::Router::with_options(RouterOptions::default(), None);
+        assert_eq!(
+            rapi::register_route(&mut r, HttpMethod::Get, "/café"),
+            Err(RouterError::RoutePathNotAscii)
+        );
+
+        // RoutePathContainsDisallowedCharacters
         let mut r = rapi::Router::with_options(RouterOptions::default(), None);
         for p in ["/a b", "/a?b", "/a#b", "/a%b"].iter() {
-            let code = rapi::register_route_ex(&mut r, 0, p);
             assert_eq!(
-                code,
-                RouterError::RoutePathContainsDisallowedCharacters as u32
+                rapi::register_route(&mut r, HttpMethod::Get, p),
+                Err(RouterError::RoutePathContainsDisallowedCharacters)
             );
         }
+
+        // RoutePathSyntaxInvalid
+        let mut r = rapi::Router::with_options(RouterOptions::default(), None);
+        assert_eq!(
+            rapi::register_route(&mut r, HttpMethod::Get, "/a/:()"),
+            Err(RouterError::RoutePathSyntaxInvalid)
+        );
+
+        // RouteParamNameInvalidStart
+        let mut r = rapi::Router::with_options(RouterOptions::default(), None);
+        assert_eq!(
+            rapi::register_route(&mut r, HttpMethod::Get, "/:1bad"),
+            Err(RouterError::RouteParamNameInvalidStart)
+        );
+
+        // RouteParamNameInvalidChar
+        let mut r = rapi::Router::with_options(RouterOptions::default(), None);
+        assert_eq!(
+            rapi::register_route(&mut r, HttpMethod::Get, "/:bad-name"),
+            Err(RouterError::RouteParamNameInvalidChar)
+        );
+
+        // RouteSegmentContainsMixedParamAndLiteral
+        let mut r = rapi::Router::with_options(RouterOptions::default(), None);
+        assert_eq!(
+            rapi::register_route(&mut r, HttpMethod::Get, "/a/a:bc"),
+            Err(RouterError::RouteSegmentContainsMixedParamAndLiteral)
+        );
+
+        // duplicate_param_names_in_one_segment_is_syntax_error
+        let mut r = rapi::Router::with_options(RouterOptions::default(), None);
+        let code = rapi::register_route(&mut r, HttpMethod::Get, "/a/:x-:x");
+        assert_eq!(code, Err(RouterError::RoutePathSyntaxInvalid));
+
+        // RouteDuplicateParamNameInRoute
+        let mut r = rapi::Router::with_options(RouterOptions::default(), None);
+        assert_eq!(
+            rapi::register_route(&mut r, HttpMethod::Get, "/a/:x/b/:x"),
+            Err(RouterError::RouteDuplicateParamNameInRoute)
+        );
+
+        // RouteWildcardSegmentNotAtEnd
+        let mut r = rapi::Router::with_options(RouterOptions::default(), None);
+        assert_eq!(
+            rapi::register_route(&mut r, HttpMethod::Get, "/a/*/b"),
+            Err(RouterError::RouteWildcardSegmentNotAtEnd)
+        );
+
+        // RouteWildcardAlreadyExistsForMethod
+        let mut r = rapi::Router::with_options(RouterOptions::default(), None);
+        assert!(rapi::register_route(&mut r, HttpMethod::Get, "/a/*").is_ok());
+        assert_eq!(
+            rapi::register_route(&mut r, HttpMethod::Get, "/a/*"),
+            Err(RouterError::RouteWildcardAlreadyExistsForMethod)
+        );
+
+        // RouteConflictOnDuplicatePath
+        let mut r = rapi::Router::with_options(RouterOptions::default(), None);
+        assert!(rapi::register_route(&mut r, HttpMethod::Get, "/dup").is_ok());
+        assert_eq!(
+            rapi::register_route(&mut r, HttpMethod::Get, "/dup"),
+            Err(RouterError::RouteConflictOnDuplicatePath)
+        );
+
+        // RouteParamNameConflictAtSamePosition
+        let mut r = rapi::Router::with_options(RouterOptions::default(), None);
+        assert!(rapi::register_route(&mut r, HttpMethod::Get, "/users/:id").is_ok());
+        assert_eq!(
+            rapi::register_route(&mut r, HttpMethod::Get, "/users/:name"),
+            Err(RouterError::RouteParamNameConflictAtSamePosition)
+        );
+
+        // RouterSealedCannotInsert
+        let mut r = rapi::Router::with_options(RouterOptions::default(), None);
+        assert!(rapi::register_route(&mut r, HttpMethod::Get, "/ok").is_ok());
+        rapi::seal(&mut r);
+        assert_eq!(
+            rapi::register_route(&mut r, HttpMethod::Get, "/x"),
+            Err(RouterError::RouterSealedCannotInsert)
+        );
     }
 }
 
-mod match_error_semantics {
+mod match_errors {
     use super::*;
 
     #[test]
-    fn empty_path_is_syntax_error_on_match() {
+    fn all_match_error_variants_are_covered() {
+        // MatchPathEmpty
         let r = rapi::Router::with_options(RouterOptions::default(), None);
-        let res = rapi::match_route_err(&r, 0, "");
-        assert!(res.is_err());
-        assert!(matches!(res.err().unwrap(), RouterError::MatchPathEmpty));
-    }
+        assert_eq!(
+            rapi::match_route_err(&r, HttpMethod::Get, ""),
+            Err(RouterError::MatchPathEmpty)
+        );
 
-    #[test]
-    fn non_ascii_path_is_rejected_on_match() {
+        // MatchPathNotAscii
         let r = rapi::Router::with_options(RouterOptions::default(), None);
-        let res = rapi::match_route_err(&r, 0, "/café");
-        assert!(matches!(res.err().unwrap(), RouterError::MatchPathNotAscii));
-    }
+        assert_eq!(
+            rapi::match_route_err(&r, HttpMethod::Get, "/café"),
+            Err(RouterError::MatchPathNotAscii)
+        );
 
-    #[test]
-    fn disallowed_characters_are_rejected_on_match() {
+        // MatchPathContainsDisallowedCharacters
         let r = rapi::Router::with_options(RouterOptions::default(), None);
         for p in ["/a b", "/a?b", "/a#b", "/a%b"].iter() {
-            let res = rapi::match_route_err(&r, 0, p);
-            assert!(matches!(
-                res.err().unwrap(),
-                RouterError::MatchPathContainsDisallowedCharacters
-            ));
+            assert_eq!(
+                rapi::match_route_err(&r, HttpMethod::Get, p),
+                Err(RouterError::MatchPathContainsDisallowedCharacters)
+            );
         }
-    }
 
-    #[test]
-    fn not_found_is_reported() {
+        // MatchNotFound
         let mut r = rapi::Router::with_options(RouterOptions::default(), None);
-        assert!(rapi::register_route(&mut r, 0, "/ok").is_ok());
+        assert!(rapi::register_route(&mut r, HttpMethod::Get, "/ok").is_ok());
         rapi::seal(&mut r);
-        let res = rapi::match_route_err(&r, 0, "/missing");
-        assert!(matches!(res.err().unwrap(), RouterError::MatchNotFound));
+        assert_eq!(
+            rapi::match_route_err(&r, HttpMethod::Get, "/missing"),
+            Err(RouterError::MatchNotFound)
+        );
+
+        // MatchPathSyntaxInvalid (Note: current implementation doesn't seem to produce this)
+        // Let's ensure no panic on strange but allowed inputs
+        let h = RouterBuilder::with_options(RouterOptions::default())
+            .add(HttpMethod::Get, "/:a")
+            .seal()
+            .build();
+        assert!(h.find(HttpMethod::Get, "/'()*,;=").is_some());
     }
 }
 
-mod lifecycle_sealing {
+mod lifecycle {
     use super::*;
 
     #[test]
     fn error_when_adding_after_seal() {
         let mut r = rapi::Router::with_options(RouterOptions::default(), None);
-        assert!(rapi::register_route(&mut r, 0, "/ok").is_ok());
+        assert!(rapi::register_route(&mut r, HttpMethod::Get, "/ok").is_ok());
         rapi::seal(&mut r);
-        let code_after_seal = rapi::register_route_ex(&mut r, 0, "/x");
-        assert_eq!(
-            code_after_seal,
-            RouterError::RouterSealedCannotInsert as u32
-        );
-        let m = rapi::match_route(&r, 0, "/ok").unwrap();
+        let code_after_seal = rapi::register_route(&mut r, HttpMethod::Get, "/x");
+        assert_eq!(code_after_seal, Err(RouterError::RouterSealedCannotInsert));
+        let m = rapi::match_route(&r, HttpMethod::Get, "/ok").unwrap();
         assert_eq!(m.0, 1);
+    }
+
+    #[test]
+    fn works_without_seal_for_matching() {
+        let h = RouterBuilder::with_options(RouterOptions::default())
+            .add(HttpMethod::Get, "/ok")
+            .build();
+        assert!(h.find(HttpMethod::Get, "/ok").is_some());
     }
 }
 
-mod lookup_optimizations {
+mod optimizations {
     use super::*;
 
     #[test]
@@ -637,23 +602,23 @@ mod lookup_optimizations {
         let mut o1 = RouterOptions::default();
         o1.enable_static_full_map = true;
         let h1 = RouterBuilder::with_options(o1)
-            .add(Method::GET, "/s/a")
-            .add(Method::GET, "/s/b")
+            .add(HttpMethod::Get, "/s/a")
+            .add(HttpMethod::Get, "/s/b")
             .seal()
             .build();
 
         let mut o2 = RouterOptions::default();
         o2.enable_static_full_map = false;
         let h2 = RouterBuilder::with_options(o2)
-            .add(Method::GET, "/s/a")
-            .add(Method::GET, "/s/b")
+            .add(HttpMethod::Get, "/s/a")
+            .add(HttpMethod::Get, "/s/b")
             .seal()
             .build();
 
         for p in ["/s/a", "/s/b", "/s/x"].iter() {
             assert_eq!(
-                h1.find(Method::GET, p).is_some(),
-                h2.find(Method::GET, p).is_some()
+                h1.find(HttpMethod::Get, p).is_some(),
+                h2.find(HttpMethod::Get, p).is_some()
             );
         }
     }
@@ -663,50 +628,25 @@ mod lookup_optimizations {
         let mut o1 = RouterOptions::default();
         o1.enable_root_prune = true;
         let h1 = RouterBuilder::with_options(o1)
-            .add(Method::GET, "/x/:p")
-            .add(Method::GET, "/y/static")
+            .add(HttpMethod::Get, "/x/:p")
+            .add(HttpMethod::Get, "/y/static")
             .seal()
             .build();
 
         let mut o2 = RouterOptions::default();
         o2.enable_root_prune = false;
         let h2 = RouterBuilder::with_options(o2)
-            .add(Method::GET, "/x/:p")
-            .add(Method::GET, "/y/static")
+            .add(HttpMethod::Get, "/x/:p")
+            .add(HttpMethod::Get, "/y/static")
             .seal()
             .build();
 
         for p in ["/x/abc", "/y/static", "/zzz"].iter() {
             assert_eq!(
-                h1.find(Method::GET, p).is_some(),
-                h2.find(Method::GET, p).is_some()
+                h1.find(HttpMethod::Get, p).is_some(),
+                h2.find(HttpMethod::Get, p).is_some()
             );
         }
-    }
-
-    #[test]
-    fn metrics_are_exposable_and_resettable() {
-        let h = RouterBuilder::with_options(RouterOptions::default())
-            .add(Method::GET, "/s/a")
-            .seal()
-            .build();
-        assert!(h.find(Method::GET, "/s/a").is_some());
-        let m1 = h.metrics();
-        let _ = (
-            m1.pattern_first_literal_hits,
-            m1.shape_hits,
-            m1.shape_misses,
-            m1.cand_avg,
-            m1.cache_hits,
-            m1.cache_lookups,
-            m1.cache_misses,
-            m1.cand_p50,
-            m1.cand_p99,
-            m1.static_hits,
-        );
-        let mut h2 = h;
-        h2.reset_metrics();
-        let _m2 = h2.metrics();
     }
 
     #[test]
@@ -714,10 +654,10 @@ mod lookup_optimizations {
         let mut o = RouterOptions::default();
         o.enable_root_prune = true;
         let h = RouterBuilder::with_options(o)
-            .add(Method::GET, "/*")
+            .add(HttpMethod::Get, "/*")
             .seal()
             .build();
-        assert!(h.find(Method::GET, "/a").is_some());
+        assert!(h.find(HttpMethod::Get, "/a").is_some());
     }
 
     #[test]
@@ -726,10 +666,10 @@ mod lookup_optimizations {
         o.enable_static_full_map = true;
         let long = "/a/b/c/d/e/f/g/h/i/j";
         let h = RouterBuilder::with_options(o)
-            .add(Method::GET, long)
+            .add(HttpMethod::Get, long)
             .seal()
             .build();
-        assert!(h.find(Method::GET, long).is_some());
+        assert!(h.find(HttpMethod::Get, long).is_some());
     }
 }
 
@@ -739,30 +679,11 @@ mod edge_cases {
     #[test]
     fn leading_and_trailing_slashes_variants() {
         let h = RouterBuilder::with_options(RouterOptions::default())
-            .add(Method::GET, "/edge")
+            .add(HttpMethod::Get, "/edge")
             .seal()
             .build();
-        assert!(h.find(Method::GET, "/edge/").is_some());
-        assert!(h.find(Method::GET, "////edge///").is_none());
-    }
-
-    #[test]
-    fn head_method_independence_from_get() {
-        let h = RouterBuilder::with_options(RouterOptions::default())
-            .add(Method::HEAD, "/head")
-            .seal()
-            .build();
-        assert!(h.find(Method::GET, "/head").is_none());
-        assert!(h.find(Method::HEAD, "/head").is_some());
-    }
-
-    #[test]
-    fn wildcard_does_not_match_root() {
-        let h = RouterBuilder::with_options(RouterOptions::default())
-            .add(Method::GET, "/*")
-            .seal()
-            .build();
-        assert!(h.find(Method::GET, "/").is_none());
+        assert!(h.find(HttpMethod::Get, "/edge/").is_some());
+        assert!(h.find(HttpMethod::Get, "////edge///").is_none());
     }
 
     #[test]
@@ -771,199 +692,60 @@ mod edge_cases {
         o.case_sensitive = false;
         o.enable_static_full_map = true;
         let h = RouterBuilder::with_options(o)
-            .add(Method::GET, "/Case")
+            .add(HttpMethod::Get, "/Case")
             .seal()
             .build();
-        assert!(h.find(Method::GET, "/case").is_some());
+        assert!(h.find(HttpMethod::Get, "/case").is_some());
     }
-}
-
-mod deep_tree {
-    use super::*;
 
     #[test]
     fn matches_deep_static_and_param_paths() {
         let h = RouterBuilder::with_options(RouterOptions::default())
-            .add(Method::GET, "/a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r/s/t/u/v")
-            .add(Method::GET, "/a/b/c/d/e/:x/g/h/i/j/k/l/m/n/o/p/q/r/s/t/u/v")
+            .add(HttpMethod::Get, "/a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r/s/t/u/v")
+            .add(HttpMethod::Get, "/a/b/c/d/e/:x/g/h/i/j/k/l/m/n/o/p/q/r/s/t/u/v")
             .seal()
             .build();
         assert!(h
-            .find(Method::GET, "/a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r/s/t/u/v")
+            .find(HttpMethod::Get, "/a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r/s/t/u/v")
             .is_some());
         assert!(h
-            .find(Method::GET, "/a/b/c/d/e/ZZ/g/h/i/j/k/l/m/n/o/p/q/r/s/t/u/v")
+            .find(HttpMethod::Get, "/a/b/c/d/e/ZZ/g/h/i/j/k/l/m/n/o/p/q/r/s/t/u/v")
             .is_some());
-        assert!(h.find(Method::GET, "/a/b/c/d/e").is_none());
+        assert!(h.find(HttpMethod::Get, "/a/b/c/d/e").is_none());
     }
-}
-
-mod normalization_negative {
-    use super::*;
-
-    #[test]
-    fn duplicate_slashes_not_normalized_but_trailing_is() {
-        let h = RouterBuilder::with_options(RouterOptions::default())
-            .add(Method::GET, "/x/y")
-            .seal()
-            .build();
-        assert!(h.find(Method::GET, "/x//y").is_none());
-        assert!(h.find(Method::GET, "/x/y/").is_some());
-    }
-}
-
-mod builder_no_seal {
-    use super::*;
-
-    #[test]
-    fn works_without_seal_for_matching() {
-        let h = RouterBuilder::with_options(RouterOptions::default())
-            .add(Method::GET, "/ok")
-            .build();
-        assert!(h.find(Method::GET, "/ok").is_some());
-    }
-}
-
-mod heavy_pattern_node {
-    use super::*;
 
     #[test]
     fn many_plain_param_patterns_under_same_node_match_correctly() {
         let h = RouterBuilder::with_options(RouterOptions::default())
-            .add(Method::GET, "/p/:n")
-            .add(Method::GET, "/p/x")
-            .add(Method::GET, "/p/a")
+            .add(HttpMethod::Get, "/p/:n")
+            .add(HttpMethod::Get, "/p/x")
+            .add(HttpMethod::Get, "/p/a")
             .seal()
             .build();
-        assert!(h.find(Method::GET, "/p/xyz").is_some());
-        assert!(h.find(Method::GET, "/p/x").is_some());
-        assert!(h.find(Method::GET, "/p/a").is_some());
+        assert!(h.find(HttpMethod::Get, "/p/xyz").is_some());
+        assert!(h.find(HttpMethod::Get, "/p/x").is_some());
+        assert!(h.find(HttpMethod::Get, "/p/a").is_some());
     }
-}
-
-mod options_combinations {
-    use super::*;
 
     #[test]
     fn case_insensitive_with_dup_and_trailing_works_together() {
         let mut o = RouterOptions::default();
         o.case_sensitive = false;
         let h = RouterBuilder::with_options(o)
-            .add(Method::GET, "/a/b")
+            .add(HttpMethod::Get, "/a/b")
             .seal()
             .build();
-        assert!(h.find(Method::GET, "/A//b/").is_none());
+        assert!(h.find(HttpMethod::Get, "/A//b/").is_none());
     }
-}
-
-mod register_route_returns {
-    use super::*;
-
-    #[test]
-    fn return_true_on_conflict_and_false_on_other_errors() {
-        let mut r = rapi::Router::with_options(RouterOptions::default(), None);
-        assert!(rapi::register_route(&mut r, 0, "/dup").is_ok());
-        assert_eq!(
-            rapi::register_route_ex(&mut r, 0, "/dup"),
-            RouterError::RouteConflictOnDuplicatePath as u32
-        );
-        let mut rs = rapi::Router::with_options(RouterOptions::default(), None);
-        assert_eq!(
-            rapi::register_route_ex(&mut rs, 0, ""),
-            RouterError::RoutePathEmpty as u32
-        );
-        let mut rw = rapi::Router::with_options(RouterOptions::default(), None);
-        assert_eq!(
-            rapi::register_route_ex(&mut rw, 0, "/x/*/y"),
-            RouterError::RouteWildcardSegmentNotAtEnd as u32
-        );
-        let mut rc = rapi::Router::with_options(RouterOptions::default(), None);
-        assert!(rapi::register_route(&mut rc, 0, "/users/:id").is_ok());
-        let code_conf = rapi::register_route_ex(&mut rc, 0, "/users/:name");
-        assert_eq!(
-            code_conf,
-            RouterError::RouteParamNameConflictAtSamePosition as u32
-        );
-    }
-}
-
-mod offsets_variants {
-    use super::*;
-
-    #[test]
-    fn multi_params_across_segments_offsets() {
-        let h = RouterBuilder::with_options(RouterOptions::default())
-            .add(Method::GET, "/pkg/:name/:ver")
-            .seal()
-            .build();
-        let path = "/pkg/lib/2.0.1";
-        let mo = h.find_offsets(Method::GET, path).unwrap();
-        assert!(mo.key != 0);
-        assert_eq!(mo.params.len(), 2);
-        let (_i1, (o1, l1)) = mo.params[0];
-        let (_i2, (o2, l2)) = mo.params[1];
-        assert_eq!(&path[o1..o1 + l1], "lib");
-        assert_eq!(&path[o2..o2 + l2], "2.0.1");
-    }
-
-    #[test]
-    fn wildcard_offsets_after_normalization() {
-        let mut r = rapi::Router::with_options(RouterOptions::default(), None);
-        assert!(rapi::register_route(&mut r, 0, "/files/*").is_ok());
-        rapi::seal(&mut r);
-        let m = rapi::match_route(&r, 0, "/files//a/b///").unwrap();
-        assert!(m.0 != 0);
-        assert_eq!(m.1.len(), 1);
-        assert_eq!(m.1[0].0.as_str(), "*");
-        assert_eq!(m.1[0].1.as_str(), "a/b");
-    }
-}
-
-mod param_name_collision_across_levels {
-    use super::*;
-
-    #[test]
-    fn same_param_name_in_different_segments_is_rejected_and_no_match() {
-        let mut r = rapi::Router::with_options(RouterOptions::default(), None);
-        assert_eq!(
-            rapi::register_route_ex(&mut r, 0, "/a/:x/b/:x"),
-            RouterError::RouteDuplicateParamNameInRoute as u32
-        );
-        rapi::seal(&mut r);
-        assert!(rapi::match_route(&r, 0, "/a/AA/b/BB").is_none());
-    }
-}
-
-mod metrics_semantics {
-    use super::*;
-
-    #[test]
-    fn pattern_candidate_cache_hits_when_repeated() {
-        let h = RouterBuilder::with_options(RouterOptions::default())
-            .add(Method::GET, "/pc/:a/:b")
-            .seal()
-            .build();
-        let mut h2 = h;
-        h2.reset_metrics();
-        assert!(h2.find(Method::GET, "/pc/aa/bb").is_some());
-        assert!(h2.find(Method::GET, "/pc/aa/bb").is_some());
-        let m = h2.metrics();
-        assert!(m.cache_lookups >= 1);
-        assert!(m.cache_hits >= 1);
-    }
-}
-
-mod interner_ids {
-    use super::*;
 
     #[test]
     fn same_param_name_has_same_id_across_calls() {
         let h = RouterBuilder::with_options(RouterOptions::default())
-            .add(Method::GET, "/u/:id")
+            .add(HttpMethod::Get, "/u/:id")
             .seal()
             .build();
-        let mo1 = h.find_offsets(Method::GET, "/u/1").unwrap();
-        let mo2 = h.find_offsets(Method::GET, "/u/2").unwrap();
+        let mo1 = h.find_offsets(HttpMethod::Get, "/u/1").unwrap();
+        let mo2 = h.find_offsets(HttpMethod::Get, "/u/2").unwrap();
         assert_eq!(mo1.params.len(), 1);
         assert_eq!(mo2.params.len(), 1);
         assert_eq!(mo1.params[0].0, mo2.params[0].0);

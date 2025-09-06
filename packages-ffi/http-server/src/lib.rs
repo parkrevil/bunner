@@ -4,22 +4,18 @@ pub mod router;
 pub mod structure;
 pub mod util;
 
-use router::ffi::{FindRouteResult, RouterPtr};
-use serde::{Deserialize, Serialize};
-use serde_qs as qs;
 use std::{
-    collections::HashMap,
     ffi::{CStr, CString},
-    os::raw::{c_char, c_ulonglong},
+    os::raw::c_char,
 };
-use url::Url;
 
 use crate::r#enum::HttpMethod;
 use crate::errors::HttpServerError;
-use crate::structure::{AddRouteResult, FfiError, FfiResult, HandleRequestResult, Request};
-use crate::util::{make_ffi_error_result, make_ffi_result, serialize_to_cstring};
+use crate::structure::{AddRouteResult, FfiError};
+use crate::util::{make_ffi_error_result, make_ffi_result};
 
 pub type HttpServerHandle = *mut HttpServer;
+pub struct RouterPtr(*mut router::Router);
 
 #[repr(C)]
 pub struct HttpServer {
@@ -102,16 +98,15 @@ pub unsafe extern "C" fn router_add(
 /// - The `request_json` pointer must point to a valid, null-terminated C string.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn handle_request(
-    handle: HttpServerHandle,
-    request_data: *const c_char,
+    _handle: HttpServerHandle,
+    _request_data: *const c_char,
 ) -> *mut c_char {
-    let http_server = unsafe { &*handle };
-
+/*     let http_server = unsafe { &*handle };
     let request_str = match unsafe { CStr::from_ptr(request_data).to_str() } {
         Ok(s) => s,
         Err(e) => {
             return make_ffi_error_result(FfiError {
-                code: HttpServerError::InvalidUtf8.code(),
+                code: HttpServerError::InvalidJsonString.code(),
                 message: Some(e.to_string()),
             });
         }
@@ -129,7 +124,7 @@ pub unsafe extern "C" fn handle_request(
 
     let method = HttpMethod::from_str(request.http_method).unwrap_or(HttpMethod::Get);
     let path_cstring = CString::new(request.url).unwrap();
-    let result_ptr = router::ffi::find(http_server.router, method, path_cstring.as_ptr());
+    let result_ptr = router::find(http_server.router, method, path_cstring.as_ptr());
 
     if result_ptr.is_null() {
         return make_ffi_error_result(FfiError {
@@ -147,7 +142,11 @@ pub unsafe extern "C" fn handle_request(
         error_message: None,
     };
 
-    make_ffi_result(Some(success_result), None)
+    make_ffi_result(Some(success_result), None) */
+    return make_ffi_error_result(FfiError {
+      code: HttpServerError::RouteNotFound.code(),
+      message: Some("Route not found".to_string()),
+  });
 }
 
 /// Seals the router, optimizing it for fast lookups. No routes can be added after sealing.
@@ -158,7 +157,7 @@ pub unsafe extern "C" fn handle_request(
 pub unsafe extern "C" fn router_seal(handle: HttpServerHandle) {
     let http_server = unsafe { &*handle };
 
-    router::ffi::seal(http_server.router)
+    router::seal(unsafe { &mut *http_server.router.0 })
 }
 
 /// Frees the memory for a C string that was allocated by Rust.

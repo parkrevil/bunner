@@ -5,8 +5,6 @@ use crate::router::pattern::{
 
 use super::new_node_box_from_arena_ptr;
 use super::{RadixRouter};
-use core::sync::atomic::Ordering;
-use smallvec::SmallVec;
 
 use crate::r#enum::HttpMethod;
 
@@ -140,42 +138,16 @@ impl RadixRouter {
 
                 current.dirty = true;
             } else {
-                let shape_key = crate::router::pattern::pattern_shape_key(pat);
-                let tmp: SmallVec<[usize; 8]> = SmallVec::new();
-                let cand_indices: &[usize] =
-                    if let Some(v) = current.pattern_shape_index.get(&shape_key) {
-                        v.as_slice()
-                    } else {
-                        tmp.as_slice()
-                    };
-
-                if cand_indices.is_empty() {
-                    for exist in current.patterns.iter() {
-                        if !pattern_compatible_policy(exist, pat) {
-                            return Err(RouterError::RouteParamNameConflictAtSamePosition);
-                        }
-
-                        if i == segments.len() - 1 {
-                            for (ea, eb) in exist.parts.iter().zip(pat.parts.iter()) {
-                                if let (SegmentPart::Param { .. }, SegmentPart::Param { .. }) =
-                                    (ea, eb)
-                                {}
-                            }
-                        }
+                for exist in current.patterns.iter() {
+                    if !pattern_compatible_policy(exist, pat) {
+                        return Err(RouterError::RouteParamNameConflictAtSamePosition);
                     }
-                } else {
-                    for &idx in cand_indices.iter() {
-                        let exist = &current.patterns[idx];
 
-                        if !pattern_compatible_policy(exist, pat) {
-                            return Err(RouterError::RouteParamNameConflictAtSamePosition);
-                        }
-
-                        if i == segments.len() - 1 {
-                            for (ea, eb) in exist.parts.iter().zip(pat.parts.iter()) {
-                                if let (SegmentPart::Param { .. }, SegmentPart::Param { .. }) =
-                                    (ea, eb)
-                                {}
+                    if i == segments.len() - 1 {
+                        for (ea, eb) in exist.parts.iter().zip(pat.parts.iter()) {
+                            if let (SegmentPart::Param { .. }, SegmentPart::Param { .. }) =
+                                (ea, eb)
+                            {
                             }
                         }
                     }
@@ -207,7 +179,6 @@ impl RadixRouter {
                     .insert(insert_pos, new_node_box_from_arena_ptr(arena_ptr));
                 current.pattern_scores.insert(insert_pos, score);
                 current.rebuild_pattern_index();
-                current.rebuild_shape_indices();
 
                 let child = current.pattern_nodes.get_mut(insert_pos).unwrap().as_mut();
 

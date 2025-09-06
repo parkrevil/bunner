@@ -1,8 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::borrow::Cow;
 
-use crate::r#enum::HttpStatusCode;
 
 #[derive(Serialize)]
 pub struct RouteResult {
@@ -30,13 +28,13 @@ pub struct AddRouteResult {
 pub struct HandleRequestResult {
     pub key: u16,
     pub params: Option<HashMap<String, String>>,
-    pub error: u32,
+    pub error: u16,
     pub error_message: Option<String>,
 }
 
 #[derive(Serialize)]
 pub struct FfiError {
-    pub code: u32,
+    pub code: u16,
     pub message: Option<String>,
 }
 

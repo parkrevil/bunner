@@ -1,7 +1,5 @@
 use bumpalo::Bump;
 use hashbrown::HashMap as FastHashMap;
-use parking_lot::Mutex;
-use smallvec::SmallVec;
 
 use super::{RouterOptions};
 use crate::router::interner::Interner;
@@ -23,14 +21,9 @@ pub use node::RadixNode;
 pub struct RadixRouter {
     pub(super) root: RadixNode,
     pub(super) options: RouterOptions,
-    // lightweight metrics
-    pub(super) cand_total: std::sync::atomic::AtomicU64,
-    pub(super) cand_samples: std::sync::atomic::AtomicU64,
     // arena for node allocations (prepared for full conversion)
     pub(super) arena: Bump,
     pub(super) interner: Interner,
-    // recent candidate sizes for p50/p99 approximation
-    pub(super) cand_recent: Mutex<SmallVec<[u16; 512]>>,
     // root-level method→first-byte bitmap for early prune (sealed only)
     pub(super) method_head_bits: [[u64; 4]; METHOD_COUNT],
     pub(super) root_param_first_present: [bool; METHOD_COUNT],
@@ -160,11 +153,8 @@ impl RadixRouter {
         let s = Self {
             root: RadixNode::default(),
             options,
-            cand_total: std::sync::atomic::AtomicU64::new(0),
-            cand_samples: std::sync::atomic::AtomicU64::new(0),
             arena: Bump::with_capacity(64 * 1024),
             interner: Interner::new(),
-            cand_recent: Mutex::new(SmallVec::new()),
             method_head_bits: [[0; 4]; METHOD_COUNT],
             root_param_first_present: [false; METHOD_COUNT],
             root_wildcard_present: [false; METHOD_COUNT],

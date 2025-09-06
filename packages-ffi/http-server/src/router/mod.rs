@@ -87,13 +87,6 @@ pub fn register_route(
     router.radix.insert(method, path)
 }
 
-pub fn register_route_ex(router: &mut Router, method: HttpMethod, path: &str) -> u16 {
-    match router.radix.insert(method, path) {
-        Ok(k) => k,
-        Err(e) => e.code(),
-    }
-}
-
 pub fn match_route(
     router: &Router,
     method: HttpMethod,
@@ -118,7 +111,6 @@ pub fn seal(router: &mut Router) {
 #[derive(Debug, Clone, Copy)]
 pub struct RouterOptions {
     pub case_sensitive: bool,
-    // performance/feature toggles
     pub enable_root_prune: bool,
     pub enable_static_full_map: bool,
 }
@@ -132,8 +124,6 @@ impl Default for RouterOptions {
         }
     }
 }
-
-// InsertError removed; use RouterError numeric codes
 
 fn normalize_path(path: &str) -> String {
     // Fast path: no trailing slash or single "/" → return as-is clone

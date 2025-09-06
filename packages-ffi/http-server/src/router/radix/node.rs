@@ -1,29 +1,11 @@
 use super::NodeBox;
-use aho_corasick::AhoCorasick;
-use core::sync::atomic::{AtomicU64, Ordering};
 use hashbrown::HashMap as FastHashMap;
-use parking_lot::RwLock;
 use smallvec::SmallVec;
 
 use crate::router::interner::Interner;
-use crate::router::pattern::{pattern_score, pattern_shape_key, SegmentPart, SegmentPattern};
+use crate::router::pattern::{pattern_score, SegmentPart, SegmentPattern};
 
 use super::METHOD_COUNT;
-
-// Reduce type complexity via clear aliases and small structs
-pub(super) type CandidateIndices = SmallVec<[usize; 32]>;
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(super) struct CandKey {
-    pub h: u64,
-    pub len_bucket: usize,
-    pub midx: usize,
-    pub head: u8,
-    pub tail: u8,
-    pub flags: u8,
-}
-
-type CandEntry = (CandKey, CandidateIndices, u64);
 
 pub(super) type StaticMap = FastHashMap<String, NodeBox>;
 pub(super) type StaticMapIdx = FastHashMap<String, super::NodeBox>;
@@ -51,28 +33,19 @@ pub struct RadixNode {
     // ordered view indices for fast iteration
     pub(super) pattern_children_idx: SmallVec<[usize; 16]>,
     // first literal -> indices in pattern_children (to reduce regex calls)
-    pub(super) pattern_first_literal: FastHashMap<String, SmallVec<[usize; 16]>>,
+    pub(super) pattern_first_literal: FastHashMap<String, SmallVec<[u16; 16]>>,
     // first literal head byte -> indices (fast prefix filtering)
-    pub(super) pattern_first_lit_head: FastHashMap<u8, SmallVec<[usize; 16]>>,
-    // second literal head byte (when first part is Param and second is Literal) -> indices
-    pub(super) pattern_second_lit_head: FastHashMap<u8, SmallVec<[usize; 16]>>,
-    // third literal head byte (Param-Lit-Param-Lit) -> indices
-    pub(super) pattern_third_lit_head: FastHashMap<u8, SmallVec<[usize; 16]>>,
+    pub(super) pattern_first_lit_head: FastHashMap<u8, SmallVec<[u16; 16]>>,
     // last literal tail byte -> indices (fast suffix filtering)
-    pub(super) pattern_last_lit_tail: FastHashMap<u8, SmallVec<[usize; 16]>>,
+    pub(super) pattern_last_lit_tail: FastHashMap<u8, SmallVec<[u16; 16]>>,
     // param-first patterns (indices) for quick fallback without full scan
-    pub(super) pattern_param_first: SmallVec<[usize; 16]>,
+    pub(super) pattern_param_first: SmallVec<[u16; 16]>,
     // cached specificity scores aligned with pattern_children
     pub(super) pattern_scores: SmallVec<[u16; 32]>,
     // cached minimal segment length required by pattern
     pub(super) pattern_min_len: SmallVec<[u16; 32]>,
     // cached last literal length (0 if none)
     pub(super) pattern_last_lit_len: SmallVec<[u16; 32]>,
-    // group indices by shape key to reduce linear scans on insert
-    pub(super) pattern_shape_index: FastHashMap<u64, SmallVec<[usize; 16]>>,
-    // node-local candidate stats for adaptive Top-K
-    pub(super) cand_total_node: AtomicU64,
-    pub(super) cand_samples_node: AtomicU64,
     pub(super) routes: [u16; METHOD_COUNT],
     pub(super) wildcard_routes: [u16; METHOD_COUNT],
     pub(super) sealed: bool,
@@ -87,73 +60,11 @@ pub struct RadixNode {
     // quick head/tail literal bitsets (256 bits each)
     pub(super) head_bits: [u64; 4],
     pub(super) tail_bits: [u64; 4],
-    // small per-node candidate cache: ((hash,len_bucket,method,head,tail,flags), indices, recency)
-    pub(super) cand_cache: RwLock<SmallVec<[CandEntry; 16]>>,
     // static keys lower_bound search hint
     pub(super) static_lb_hint: usize,
-    // Optional AC automaton for first-literal prefixes (built for large literal sets)
-    pub(super) ac_first_literals: Option<AhoCorasick>,
-    // Map from AC pattern id to pattern indices
-    pub(super) ac_first_map: Vec<SmallVec<[usize; 8]>>,
 }
 
 impl RadixNode {
-    #[inline]
-    pub(super) fn cand_cache_get(&self, key: CandKey) -> Option<CandidateIndices> {
-        if let Some(res) = {
-            if let Some(guard) = self.cand_cache.try_read() {
-                let mut found: Option<CandidateIndices> = None;
-                for entry in guard.iter() {
-                    if entry.0 == key {
-                        found = Some(entry.1.clone());
-                        break;
-                    }
-                }
-                found
-            } else {
-                None
-            }
-        } {
-            return Some(res);
-        }
-        // upgrade path: bump recency if we choose to; keep simple for now
-        None
-    }
-
-    #[inline]
-    pub(super) fn cand_cache_put(&self, key: CandKey, cand: &[usize]) {
-        if let Some(mut guard) = self.cand_cache.try_write() {
-            let mut max_tick = 0u64;
-            for e in guard.iter() {
-                if e.2 > max_tick {
-                    max_tick = e.2;
-                }
-            }
-            for entry in guard.iter_mut() {
-                if entry.0 == key {
-                    entry.1.clear();
-                    entry.1.extend_from_slice(cand);
-                    entry.2 = max_tick + 1;
-                    return;
-                }
-            }
-            let mut v: SmallVec<[usize; 32]> = SmallVec::new();
-            v.extend_from_slice(cand);
-            if guard.len() >= 16 {
-                let mut oldest = 0usize;
-                let mut oldest_tick = u64::MAX;
-                for (i, e) in guard.iter().enumerate() {
-                    if e.2 < oldest_tick {
-                        oldest_tick = e.2;
-                        oldest = i;
-                    }
-                }
-                guard.remove(oldest);
-            }
-            guard.push((key, v, max_tick + 1));
-        }
-        // fallback: if contended, skip caching to avoid blocking
-    }
     #[inline(always)]
     pub(super) fn get_static_ref(&self, key: &str) -> Option<&RadixNode> {
         if let Some(n) = self.static_children.get(key) {
@@ -365,75 +276,32 @@ impl RadixNode {
     pub(super) fn rebuild_pattern_index(&mut self) {
         self.pattern_first_literal.clear();
         self.pattern_first_lit_head.clear();
-        self.pattern_second_lit_head.clear();
-        self.pattern_third_lit_head.clear();
         self.pattern_last_lit_tail.clear();
         self.pattern_param_first.clear();
         self.head_bits = [0; 4];
         self.tail_bits = [0; 4];
-        self.ac_first_literals = None;
-        self.ac_first_map.clear();
+
         for (idx, pat) in self.patterns.iter().enumerate() {
             if let Some(SegmentPart::Literal(l0)) = pat.parts.first() {
                 let entry = self
                     .pattern_first_literal
                     .entry(l0.clone())
                     .or_insert_with(SmallVec::new);
-                entry.push(idx);
+                entry.push(idx as u16);
                 if let Some(&b) = l0.as_bytes().first() {
                     let entry2 = self
                         .pattern_first_lit_head
                         .entry(b)
                         .or_insert_with(SmallVec::new);
-                    entry2.push(idx);
+                    entry2.push(idx as u16);
                     let blk = (b as usize) >> 6;
                     let bit = 1u64 << ((b as usize) & 63);
                     self.head_bits[blk] |= bit;
                 }
-            } else if pat.parts.len() >= 2 {
-                if let (SegmentPart::Param { .. }, SegmentPart::Literal(l1)) =
-                    (&pat.parts[0], &pat.parts[1])
-                    && let Some(&b) = l1.as_bytes().first()
-                {
-                    let entry = self
-                        .pattern_second_lit_head
-                        .entry(b)
-                        .or_insert_with(SmallVec::new);
-                    entry.push(idx);
-                }
-                if pat.parts.len() >= 4
-                    && let (
-                        SegmentPart::Param { .. },
-                        SegmentPart::Literal(_l1),
-                        SegmentPart::Param { .. },
-                        SegmentPart::Literal(l3),
-                    ) = (&pat.parts[0], &pat.parts[1], &pat.parts[2], &pat.parts[3])
-                {
-                    if let Some(&b) = l3.as_bytes().first() {
-                        let entry = self
-                            .pattern_third_lit_head
-                            .entry(b)
-                            .or_insert_with(SmallVec::new);
-                        entry.push(idx);
-                    }
-                    if let Some(&tb) = l3.as_bytes().last() {
-                        let e = self
-                            .pattern_last_lit_tail
-                            .entry(tb)
-                            .or_insert_with(SmallVec::new);
-                        e.push(idx);
-                        let blk = (tb as usize) >> 6;
-                        let bit = 1u64 << ((tb as usize) & 63);
-                        self.tail_bits[blk] |= bit;
-                    }
-                }
-                if let SegmentPart::Param { .. } = &pat.parts[0] {
-                    self.pattern_param_first.push(idx);
-                }
             } else if let Some(SegmentPart::Param { .. }) = pat.parts.first() {
-                self.pattern_param_first.push(idx);
+                self.pattern_param_first.push(idx as u16);
             }
-            // also index last literal for literal-first single literal patterns
+
             if let Some(tb) = pat.parts.iter().rev().find_map(|p| {
                 if let SegmentPart::Literal(s) = p {
                     s.as_bytes().last().copied()
@@ -445,26 +313,10 @@ impl RadixNode {
                     .pattern_last_lit_tail
                     .entry(tb)
                     .or_insert_with(SmallVec::new);
-                e.push(idx);
+                e.push(idx as u16);
                 let blk = (tb as usize) >> 6;
                 let bit = 1u64 << ((tb as usize) & 63);
                 self.tail_bits[blk] |= bit;
-            }
-        }
-        // Build AC automaton for first-literal prefixes when there are many distinct literals
-        if self.pattern_first_literal.len() >= 16 {
-            let mut lits: Vec<String> = Vec::with_capacity(self.pattern_first_literal.len());
-            let mut maps: Vec<SmallVec<[usize; 8]>> =
-                Vec::with_capacity(self.pattern_first_literal.len());
-            for (lit, idxs) in self.pattern_first_literal.iter() {
-                lits.push(lit.clone());
-                let mut v: SmallVec<[usize; 8]> = SmallVec::new();
-                v.extend_from_slice(idxs.as_slice());
-                maps.push(v);
-            }
-            if let Ok(ac) = AhoCorasick::new(&lits) {
-                self.ac_first_literals = Some(ac);
-                self.ac_first_map = maps;
             }
         }
     }
@@ -506,44 +358,14 @@ impl RadixNode {
 
             self.pattern_last_lit_len.push(last_len);
         }
-        // rebuild shape groups
-        self.pattern_shape_index.clear();
-        for (idx, pat) in self.patterns.iter().enumerate() {
-            let key = pattern_shape_key(pat);
-            self.pattern_shape_index.entry(key).or_default().push(idx);
-        }
         debug_assert_eq!(self.patterns.len(), self.pattern_scores.len());
         debug_assert_eq!(self.patterns.len(), self.pattern_min_len.len());
         debug_assert_eq!(self.patterns.len(), self.pattern_last_lit_len.len());
     }
 
-    #[inline]
-    pub(super) fn rebuild_shape_indices(&mut self) {
-        self.pattern_shape_index.clear();
-        for (idx, pat) in self.patterns.iter().enumerate() {
-            let key = pattern_shape_key(pat);
-            self.pattern_shape_index.entry(key).or_default().push(idx);
-        }
-    }
-
     #[inline(always)]
-    pub(super) fn pattern_candidates_for(&self, comp: &str) -> SmallVec<[usize; 8]> {
-        let mut out: SmallVec<[usize; 8]> = SmallVec::new();
-
-        if let Some(ac) = self.ac_first_literals.as_ref() {
-            for m in ac.find_overlapping_iter(comp) {
-                if m.start() == 0
-                    && let Some(v) = self.ac_first_map.get(m.pattern().as_usize())
-                {
-                    for &i in v.iter() {
-                        out.push(i);
-                    }
-                }
-            }
-            if !out.is_empty() {
-                return out;
-            }
-        }
+    pub(super) fn pattern_candidates_for(&self, comp: &str) -> SmallVec<[u16; 8]> {
+        let mut out: SmallVec<[u16; 8]> = SmallVec::new();
 
         if let Some(v) = self.pattern_first_literal.get(comp) {
             for &i in v.iter() {
@@ -557,7 +379,7 @@ impl RadixNode {
         {
             for &i in v.iter() {
                 if let Some(SegmentPart::Literal(l0)) =
-                    self.patterns.get(i).and_then(|p| p.parts.first())
+                    self.patterns.get(i as usize).and_then(|p| p.parts.first())
                     && comp.len() >= l0.len()
                     && &comp[..l0.len()] == l0.as_str()
                 {
@@ -575,7 +397,7 @@ impl RadixNode {
                 && comp.len() >= l0.len()
                 && &comp[..l0.len()] == l0.as_str()
             {
-                out.push(idx);
+                out.push(idx as u16);
             }
         }
         out

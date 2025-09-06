@@ -76,36 +76,6 @@ pub fn pattern_score(p: &SegmentPattern) -> u16 {
     s
 }
 
-#[inline]
-fn fnv1a64(bytes: &[u8]) -> u64 {
-    const FNV_OFFSET: u64 = 0xcbf29ce484222325;
-    const FNV_PRIME: u64 = 0x100000001b3;
-    let mut hash = FNV_OFFSET;
-    for b in bytes {
-        hash ^= *b as u64;
-        hash = hash.wrapping_mul(FNV_PRIME);
-    }
-    hash
-}
-
-pub fn pattern_shape_key(p: &SegmentPattern) -> u64 {
-    let mut acc: u64 = 0;
-    for part in p.parts.iter() {
-        match part {
-            SegmentPart::Literal(l) => {
-                acc = acc.wrapping_mul(131).wrapping_add(b'L' as u64);
-                acc = acc.wrapping_mul(131).wrapping_add(fnv1a64(l.as_bytes()));
-            }
-            SegmentPart::Param { .. } => {
-                acc = acc.wrapping_mul(131).wrapping_add(b'P' as u64);
-            }
-        }
-    }
-    acc
-}
-
-// pattern_shape_weak_key removed (unused)
-
 pub fn pattern_compatible_policy(a: &SegmentPattern, b: &SegmentPattern) -> bool {
     if a.parts.len() != b.parts.len() {
         return true;
