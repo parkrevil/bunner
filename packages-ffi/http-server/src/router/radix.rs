@@ -32,9 +32,9 @@ pub struct RadixRouter {
     pub(super) static_full_map: [FastHashMap<String, u16>; METHOD_COUNT],
     // root-level first segment length buckets (0..=63; bit63 means >=63)
     pub(super) method_len_buckets: [u64; METHOD_COUNT],
-    // feature toggles (from RouterOptions)
-    pub(super) enable_root_prune: bool,
-    pub(super) enable_static_full_map: bool,
+    // performance/feature toggles
+    pub enable_root_prune: bool,
+    pub enable_static_full_map: bool,
     // auto key allocator
     pub(super) next_key: std::sync::atomic::AtomicU16,
 }
@@ -169,6 +169,59 @@ impl RadixRouter {
     }
 
     pub fn seal(&mut self) {
+        if self.root.sealed {
+            return;
+        }
+
+        // --- Automatic Optimization Logic ---
+        if self.options.automatic_optimization {
+            // 1. Auto-enable root pruning
+            let has_root_param_or_wildcard = {
+                let n = &self.root;
+                let mut has_dynamic = false;
+                for m in 0..METHOD_COUNT {
+                    if n.wildcard_routes[m] != 0 {
+                        has_dynamic = true;
+                        break;
+                    }
+                }
+                if !has_dynamic {
+                    has_dynamic = !n.pattern_param_first.is_empty();
+                }
+                has_dynamic
+            };
+
+            if !has_root_param_or_wildcard {
+                self.enable_root_prune = true;
+            }
+
+            // 2. Auto-enable static full map based on heuristics
+            let mut static_route_count = 0;
+            fn count_static(n: &node::RadixNode, count: &mut usize) {
+                for i in 0..METHOD_COUNT {
+                    if n.routes[i] != 0 {
+                        *count += 1;
+                    }
+                }
+                for v in n.static_vals.iter() {
+                    count_static(v.as_ref(), count);
+                }
+                for (_, v) in n.static_children.iter() {
+                    count_static(v.as_ref(), count);
+                }
+                if let Some(fc) = n.fused_child.as_ref() {
+                    count_static(fc.as_ref(), count);
+                }
+            }
+            count_static(&self.root, &mut static_route_count);
+
+            const STATIC_MAP_THRESHOLD: usize = 50;
+            if static_route_count >= STATIC_MAP_THRESHOLD {
+                self.enable_static_full_map = true;
+            }
+        }
+        // --- End of Automatic Optimization Logic ---
+
         self.root.sealed = true;
         self.compress();
         {

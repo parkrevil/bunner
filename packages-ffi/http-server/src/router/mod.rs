@@ -77,6 +77,26 @@ impl Router {
         let norm = normalize_path(path);
         self.radix.find_norm(method, &norm)
     }
+
+    pub fn find_offsets(&self, method: HttpMethod, path: &str) -> Option<MatchOffsets> {
+        let norm = normalize_path(path);
+        self.radix.find_norm(method, norm.as_str()).map(|m| {
+            let mut out = MatchOffsets {
+                key: m.key,
+                params: Vec::with_capacity(m.params.len()),
+            };
+            for (name, (off, len)) in m.params.into_iter() {
+                let id = self.radix.interner.intern(name.as_str());
+                out.params.push((id, (off, len)));
+            }
+            out
+        })
+    }
+
+    #[doc(hidden)]
+    pub fn internal_router(&self) -> &radix::RadixRouter {
+        &self.radix
+    }
 }
 
 pub fn register_route(
@@ -111,8 +131,10 @@ pub fn seal(router: &mut Router) {
 #[derive(Debug, Clone, Copy)]
 pub struct RouterOptions {
     pub case_sensitive: bool,
+    // performance/feature toggles
     pub enable_root_prune: bool,
     pub enable_static_full_map: bool,
+    pub automatic_optimization: bool,
 }
 
 impl Default for RouterOptions {
@@ -121,6 +143,7 @@ impl Default for RouterOptions {
             case_sensitive: true,
             enable_root_prune: false,
             enable_static_full_map: false,
+            automatic_optimization: true,
         }
     }
 }
@@ -246,33 +269,9 @@ impl RouterBuilder {
         self
     }
 
-    pub fn build(self) -> RouterHandle {
-        RouterHandle { radix: self.radix }
+    pub fn build(self) -> Router {
+        Router { radix: self.radix }
     }
 }
 
-#[derive(Debug)]
-pub struct RouterHandle {
-    radix: radix::RadixRouter,
-}
-
-impl RouterHandle {
-    pub fn find(&self, method: HttpMethod, path: &str) -> Option<MatchResult> {
-        self.radix.find(method, path)
-    }
-
-    pub fn find_offsets(&self, method: HttpMethod, path: &str) -> Option<MatchOffsets> {
-        let norm = normalize_path(path);
-        self.radix.find_norm(method, norm.as_str()).map(|m| {
-            let mut out = MatchOffsets {
-                key: m.key,
-                params: Vec::with_capacity(m.params.len()),
-            };
-            for (name, (off, len)) in m.params.into_iter() {
-                let id = self.radix.interner.intern(name.as_str());
-                out.params.push((id, (off, len)));
-            }
-            out
-        })
-    }
-}
+pub type RouterHandle = Router;
