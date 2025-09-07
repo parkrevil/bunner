@@ -5,13 +5,6 @@ mod radix;
 pub use crate::router::errors::RouterError;
 use crate::r#enum::HttpMethod;
 
-#[derive(Debug, Clone)]
-pub struct Route {
-    pub method: HttpMethod,
-    pub path: String,
-    pub key: u16,
-}
-
 #[derive(Debug, Default)]
 pub struct MatchResult {
     pub key: u16,
@@ -61,22 +54,6 @@ pub fn register_route(
     router.radix.insert(method, path)
 }
 
-pub fn match_route(
-    router: &Router,
-    method: HttpMethod,
-    path: &str,
-) -> Option<(u16, Vec<(String, String)>)> {
-    let norm = normalize_path(path);
-
-    router.radix.find_norm(method, &norm).map(|m| {
-        let mut out = Vec::with_capacity(m.params.len());
-        for (name, (start, len)) in m.params.into_iter() {
-            let val = &norm[start..start + len];
-            out.push((name, val.to_string()));
-        }
-        (m.key, out)
-    })
-}
 
 pub fn seal(router: &mut Router) {
     router.radix.seal();
@@ -155,7 +132,7 @@ pub(crate) fn path_is_allowed_ascii(path: &str) -> bool {
     true
 }
 
-pub fn match_route_err(
+pub fn match_route(
     router: &Router,
     method: HttpMethod,
     path: &str,
@@ -177,11 +154,13 @@ pub fn match_route_err(
     if !path_is_allowed_ascii(&norm) {
         return Err(RouterError::MatchPathContainsDisallowedCharacters);
     }
+
     if let Some(m) = router.radix.find_norm(method, &norm) {
         let mut out = Vec::with_capacity(m.params.len());
 
         for (name, (start, len)) in m.params.into_iter() {
             let val = &norm[start..start + len];
+
             out.push((name, val.to_string()));
         }
         Ok((m.key, out))

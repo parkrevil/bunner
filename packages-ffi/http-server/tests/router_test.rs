@@ -498,14 +498,14 @@ mod match_errors {
         // MatchPathEmpty
         let r = rapi::Router::with_options(RouterOptions::default(), None);
         assert_eq!(
-            rapi::match_route_err(&r, HttpMethod::Get, ""),
+            rapi::match_route(&r, HttpMethod::Get, ""),
             Err(RouterError::MatchPathEmpty)
         );
 
         // MatchPathNotAscii
         let r = rapi::Router::with_options(RouterOptions::default(), None);
         assert_eq!(
-            rapi::match_route_err(&r, HttpMethod::Get, "/café"),
+            rapi::match_route(&r, HttpMethod::Get, "/café"),
             Err(RouterError::MatchPathNotAscii)
         );
 
@@ -513,7 +513,7 @@ mod match_errors {
         let r = rapi::Router::with_options(RouterOptions::default(), None);
         for p in ["/a b", "/a?b", "/a#b", "/a%b"].iter() {
             assert_eq!(
-                rapi::match_route_err(&r, HttpMethod::Get, p),
+                rapi::match_route(&r, HttpMethod::Get, p),
                 Err(RouterError::MatchPathContainsDisallowedCharacters)
             );
         }
@@ -523,7 +523,7 @@ mod match_errors {
         assert!(rapi::register_route(&mut r, HttpMethod::Get, "/ok").is_ok());
         rapi::seal(&mut r);
         assert_eq!(
-            rapi::match_route_err(&r, HttpMethod::Get, "/missing"),
+            rapi::match_route(&r, HttpMethod::Get, "/missing"),
             Err(RouterError::MatchNotFound)
         );
 
