@@ -232,8 +232,21 @@ fn build_pruning_maps(tree: &mut RadixTree) {
 }
 
 fn build_static_map(tree: &mut RadixTree) {
-    for m in 0..HTTP_METHOD_COUNT {
-        tree.static_route_full_mapping[m].clear();
+    for m in 0..HTTP_METHOD_COUNT { tree.static_route_full_mapping[m].clear(); }
+    #[cfg(feature = "router-high")]
+    {
+        // Reserve capacity heuristically when high profile is enabled
+        let mut approx = 0usize;
+        super::traversal::traverse(&tree.root_node, |n| {
+            for i in 0..HTTP_METHOD_COUNT {
+                if n.routes[i] != 0 { approx += 1; }
+            }
+        });
+        if approx > 0 {
+            for m in 0..HTTP_METHOD_COUNT {
+                tree.static_route_full_mapping[m].reserve(approx / 2 + 8);
+            }
+        }
     }
     if tree.enable_static_route_full_mapping {
         let mut path_buf = String::from("");

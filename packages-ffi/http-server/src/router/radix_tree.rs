@@ -218,6 +218,15 @@ impl RadixTree {
             }
         }
 
+        // Phase B prep: pre-intern literals to reduce allocations during commit
+        for (_idx, _method, segs, _h, _l, _s) in pre.iter() {
+            for pat in segs.iter() {
+                if let Some(crate::router::pattern::SegmentPart::Literal(l0)) = pat.parts.first() {
+                    let _ = self.interner.intern(l0.as_str());
+                }
+            }
+        }
+
         // Phase B: preassign keys then commit; bucket sort for locality then preserve idx mapping
         pre.sort_by(|a, b| {
             // head byte asc, length asc, static-first
