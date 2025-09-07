@@ -1,5 +1,6 @@
 use bumpalo::Bump;
 use hashbrown::HashMap as FastHashMap;
+use hashbrown::HashSet as FastHashSet;
 
 use super::RouterOptions;
 use crate::router::interner::Interner;
@@ -100,7 +101,7 @@ impl RadixTree {
             .collect();
 
         let total = indexed.len();
-        let mut pre: Vec<(usize, HttpMethod, Vec<crate::router::pattern::SegmentPattern>, u8, usize, bool)> =
+        let mut pre: Vec<(usize, HttpMethod, Vec<crate::router::pattern::SegmentPattern>, u8, usize, bool, Vec<String>)> =
             Vec::with_capacity(total);
 
         if total > 1 {
@@ -168,8 +169,16 @@ impl RadixTree {
                         let parsed = super::radix_tree::insert::prepare_path_segments_standalone(&path);
                         match parsed {
                             Ok(segs) => {
+                                let mut lits: Vec<String> = Vec::new();
+                                for pat in segs.iter() {
+                                    for part in pat.parts.iter() {
+                                        if let crate::router::pattern::SegmentPart::Literal(l) = part {
+                                            lits.push(l.clone());
+                                        }
+                                    }
+                                }
                                 // ignore send error if receiver dropped
-                                let _ = txc.send(Ok((idx, method, segs, head, plen, is_static)));
+                                let _ = txc.send(Ok((idx, method, segs, head, plen, is_static, lits)));
                             }
                             Err(e) => {
                                 let _ = txc.send(Err((idx, e)));
@@ -188,7 +197,7 @@ impl RadixTree {
             let mut first_err: Option<super::errors::RouterError> = None;
             for msg in rx.iter() {
                 match msg {
-                    Ok((idx, method, segs, head, plen, is_static)) => pre.push((idx, method, segs, head, plen, is_static)),
+                    Ok((idx, method, segs, head, plen, is_static, lits)) => pre.push((idx, method, segs, head, plen, is_static, lits)),
                     Err((_idx, e)) => {
                         if first_err.is_none() {
                             first_err = Some(e);
@@ -207,7 +216,15 @@ impl RadixTree {
             // fast path: single item
             for (idx, method, path, head, plen, is_static) in indexed.into_iter() {
                 let segs = super::radix_tree::insert::prepare_path_segments_standalone(&path)?;
-                pre.push((idx, method, segs, head, plen, is_static));
+                let mut lits: Vec<String> = Vec::new();
+                for pat in segs.iter() {
+                    for part in pat.parts.iter() {
+                        if let crate::router::pattern::SegmentPart::Literal(l) = part {
+                            lits.push(l.clone());
+                        }
+                    }
+                }
+                pre.push((idx, method, segs, head, plen, is_static, lits));
             }
 
             #[cfg(feature = "test")]
@@ -218,14 +235,12 @@ impl RadixTree {
             }
         }
 
-        // Phase B prep: pre-intern literals to reduce allocations during commit
-        for (_idx, _method, segs, _h, _l, _s) in pre.iter() {
-            for pat in segs.iter() {
-                if let Some(crate::router::pattern::SegmentPart::Literal(l0)) = pat.parts.first() {
-                    let _ = self.interner.intern(l0.as_str());
-                }
-            }
+        // Phase B prep: thread-local literal sets merged, then intern unique literals once
+        let mut uniq: FastHashSet<String> = FastHashSet::new();
+        for (_idx, _method, _segs, _h, _l, _s, lits) in pre.iter() {
+            for s in lits.iter() { uniq.insert(s.clone()); }
         }
+        for s in uniq.iter() { let _ = self.interner.intern(s.as_str()); }
 
         // Phase B: preassign keys then commit; bucket sort for locality then preserve idx mapping
         pre.sort_by(|a, b| {
@@ -242,7 +257,7 @@ impl RadixTree {
             self.next_route_key.fetch_add(n as u16, Ordering::Relaxed)
         };
         let mut out = vec![0u16; n];
-        for (idx, method, segs, _h, _l, _s) in pre.into_iter() {
+        for (idx, method, segs, _h, _l, _s, _lits) in pre.into_iter() {
             let assigned = base + (idx as u16) + 1; // stored keys are +1 encoded
             // pass decoded value to helper (helper will re-encode)
             let k = self.insert_parsed_preassigned(method, segs, assigned - 1)?;
