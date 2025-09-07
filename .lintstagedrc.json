@@ -1,4 +1,7 @@
 {
   "*.{ts,json,md,css,yaml,yml}": ["bunx eslint --fix", "bunx prettier --write"],
-  "*.rs": ["rustfmt"]
+  "*.rs": [
+    "sh -c 'rustfmt \"$1\" && git add \"$1\"' --",
+    "echo Rust files formatted"
+  ]
 }

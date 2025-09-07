@@ -1,9 +1,9 @@
-use super::{RadixTree, node::RadixTreeNode, HTTP_METHOD_COUNT, STATIC_MAP_THRESHOLD};
-use super::{traversal::traverse, traversal::traverse_mut};
 use super::compression::compress_root_node;
 use super::mask::compute_mask;
 use super::memory::{shrink_node, warm_node};
 use super::static_map::collect_static;
+use super::{node::RadixTreeNode, RadixTree, HTTP_METHOD_COUNT, STATIC_MAP_THRESHOLD};
+use super::{traversal::traverse, traversal::traverse_mut};
 use crate::router::interner::Interner;
 
 pub(super) fn finalize(tree: &mut RadixTree) {
@@ -74,16 +74,46 @@ pub(super) fn finalize(tree: &mut RadixTree) {
     tree.root_parameter_first_present = [false; HTTP_METHOD_COUNT];
     tree.root_wildcard_present = [false; HTTP_METHOD_COUNT];
     tree.method_length_buckets = [0; HTTP_METHOD_COUNT];
-    
+
     build_pruning_maps(tree);
 
     shrink_node(&mut tree.root_node);
-    
+
     // Optional cache warm-up to reduce first-hit latency
     warm_node(&tree.root_node);
-    
+
     // Build static full maps for O(1) lookup when path is entirely static
     build_static_map(tree);
+
+    #[cfg(any(feature = "production", feature = "test"))]
+    {
+        // Runtime cleanup for production builds: free capacities not needed at runtime
+        super::traversal::traverse_mut(&mut tree.root_node, |n| {
+            // Pattern ordering aid not needed for runtime matching
+            n.pattern_children_idx.clear();
+            n.pattern_children_idx.shrink_to_fit();
+
+            // When static full map is used, per-node maps can be trimmed
+            if !tree.enable_static_route_full_mapping {
+                n.static_children_idx_ids.shrink_to_fit();
+                n.static_children.shrink_to_fit();
+            }
+        });
+
+        // Interner reverse table not needed for runtime matching
+        tree.interner.runtime_cleanup();
+
+        // If pruning disabled, drop bitmaps to minimal footprint
+        if !tree.enable_root_level_pruning {
+            tree.method_first_byte_bitmaps = [[0; 4]; super::HTTP_METHOD_COUNT];
+            tree.method_length_buckets = [0; super::HTTP_METHOD_COUNT];
+        }
+
+        // Static full map: shrink each map to fit
+        for m in 0..super::HTTP_METHOD_COUNT {
+            tree.static_route_full_mapping[m].shrink_to_fit();
+        }
+    }
 }
 
 fn compress_tree(tree: &mut RadixTree) {
@@ -232,14 +262,18 @@ fn build_pruning_maps(tree: &mut RadixTree) {
 }
 
 fn build_static_map(tree: &mut RadixTree) {
-    for m in 0..HTTP_METHOD_COUNT { tree.static_route_full_mapping[m].clear(); }
+    for m in 0..HTTP_METHOD_COUNT {
+        tree.static_route_full_mapping[m].clear();
+    }
     #[cfg(feature = "router-high")]
     {
         // Reserve capacity heuristically when high profile is enabled
         let mut approx = 0usize;
         super::traversal::traverse(&tree.root_node, |n| {
             for i in 0..HTTP_METHOD_COUNT {
-                if n.routes[i] != 0 { approx += 1; }
+                if n.routes[i] != 0 {
+                    approx += 1;
+                }
             }
         });
         if approx > 0 {
@@ -250,7 +284,11 @@ fn build_static_map(tree: &mut RadixTree) {
     }
     if tree.enable_static_route_full_mapping {
         let mut path_buf = String::from("");
-        collect_static(&tree.root_node, &mut path_buf, &mut tree.static_route_full_mapping);
+        collect_static(
+            &tree.root_node,
+            &mut path_buf,
+            &mut tree.static_route_full_mapping,
+        );
     }
 }
 
@@ -267,8 +305,7 @@ pub(super) fn rebuild_intern_ids(node: &mut RadixTreeNode, interner: &Interner) 
             node.static_key_ids.push(interner.intern(k.as_str()));
         }
 
-        if node.static_vals_idx.len() == node.static_keys.len() && node.static_keys.len() >= 16
-        {
+        if node.static_vals_idx.len() == node.static_keys.len() && node.static_keys.len() >= 16 {
             let mut size: usize = (node.static_keys.len() * 2).next_power_of_two();
             let max_size: usize = node.static_keys.len() * 8;
             let mut seed: u64 = 1469598103934665603;
@@ -369,7 +406,7 @@ pub(super) fn rebuild_pattern_meta(node: &mut RadixTreeNode) {
                 break;
             }
         }
-        
+
         let meta = super::node::PatternMeta::new(score, min_len, last_len);
         node.pattern_meta.push(meta);
     }
