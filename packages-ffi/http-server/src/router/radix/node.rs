@@ -8,6 +8,45 @@ use crate::router::pattern::{pattern_score, SegmentPart, SegmentPattern};
 
 use super::HTTP_METHOD_COUNT;
 
+/// 세그먼트의 리터럴 부분 또는 파라미터 값의 최대 길이
+pub const MAX_SEGMENT_PART_LENGTH: usize = 255;
+
+/// 패턴 메타데이터를 압축된 형태로 저장하는 구조체
+/// 입력값은 라우트 등록 시점에서 검증됨
+#[repr(packed)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PatternMeta {
+    /// 패턴 특이성 점수 (0-65535)
+    pub score: u16,
+    /// 세그먼트 최소 길이 (0-255)
+    pub min_len: u8,
+    /// 마지막 리터럴 길이 (0-255)
+    pub last_lit_len: u8,
+}
+
+impl PatternMeta {
+    /// 안전한 PatternMeta 생성자
+    /// 입력값은 이미 검증된 상태여야 함 (라우트 등록 시점에서 검증됨)
+    pub fn new(score: u16, min_len: u16, last_lit_len: u16) -> Self {
+        Self {
+            score,
+            min_len: min_len as u8,
+            last_lit_len: last_lit_len as u8,
+        }
+    }
+
+    /// 패턴이 너무 긴지 검증
+    pub fn is_valid_pattern_length(min_len: u16, last_lit_len: u16) -> bool {
+        is_valid_segment_part_length(min_len as usize) && is_valid_segment_part_length(last_lit_len as usize)
+    }
+
+}
+
+/// 세그먼트 부분(리터럴 또는 파라미터 값)의 길이가 유효한지 확인
+pub fn is_valid_segment_part_length(len: usize) -> bool {
+    len <= MAX_SEGMENT_PART_LENGTH
+}
+
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
     pub struct NodeFlags: u8 {
@@ -55,12 +94,8 @@ pub struct RadixTreeNode {
     pub(super) pattern_last_lit_tail: FastHashMap<u8, SmallVec<[u16; 16]>>,
     // param-first patterns (indices) for quick fallback without full scan
     pub(super) pattern_param_first: SmallVec<[u16; 16]>,
-    // cached specificity scores aligned with pattern_children
-    pub(super) pattern_scores: SmallVec<[u16; 32]>,
-    // cached minimal segment length required by pattern
-    pub(super) pattern_min_len: SmallVec<[u16; 32]>,
-    // cached last literal length (0 if none)
-    pub(super) pattern_last_lit_len: SmallVec<[u16; 32]>,
+    // 압축된 패턴 메타데이터 (기존 3개 SmallVec을 1개로 통합)
+    pub(super) pattern_meta: SmallVec<[PatternMeta; 4]>,
     pub(super) routes: [u16; HTTP_METHOD_COUNT],
     pub(super) wildcard_routes: [u16; HTTP_METHOD_COUNT],
     pub(super) flags: NodeFlags,
@@ -368,18 +403,13 @@ impl RadixTreeNode {
 
     #[inline]
     pub(super) fn rebuild_pattern_meta(&mut self) {
-        self.pattern_scores.clear();
-        self.pattern_min_len.clear();
-        self.pattern_last_lit_len.clear();
-        self.pattern_scores.reserve(self.patterns.len());
-        self.pattern_min_len.reserve(self.patterns.len());
-        self.pattern_last_lit_len.reserve(self.patterns.len());
+        self.pattern_meta.clear();
+        self.pattern_meta.reserve(self.patterns.len());
 
         for pat in self.patterns.iter() {
-            self.pattern_scores.push(pattern_score(pat));
+            let score = pattern_score(pat);
 
             let mut min_len = 0u16;
-
             for part in pat.parts.iter() {
                 match part {
                     SegmentPart::Literal(l) => {
@@ -389,23 +419,20 @@ impl RadixTreeNode {
                 }
             }
 
-            self.pattern_min_len.push(min_len);
-
             let mut last_len = 0u16;
-
             for part in pat.parts.iter().rev() {
                 if let SegmentPart::Literal(l) = part {
                     last_len = l.len() as u16;
-
                     break;
                 }
             }
 
-            self.pattern_last_lit_len.push(last_len);
+            // PatternMeta 생성 (입력값은 이미 검증됨)
+            let meta = PatternMeta::new(score, min_len, last_len);
+            self.pattern_meta.push(meta);
         }
-        debug_assert_eq!(self.patterns.len(), self.pattern_scores.len());
-        debug_assert_eq!(self.patterns.len(), self.pattern_min_len.len());
-        debug_assert_eq!(self.patterns.len(), self.pattern_last_lit_len.len());
+        
+        debug_assert_eq!(self.patterns.len(), self.pattern_meta.len());
     }
 
     #[inline(always)]

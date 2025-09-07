@@ -225,10 +225,10 @@ impl RadixTreeRouter {
             if cand_len > 1 {
                 let mut scores_with_idx: SmallVec<[(u16, u16); 64]> = SmallVec::with_capacity(cand_len);
                 for &i0 in cand_idxs.iter() {
-                    scores_with_idx.push((
-                        cur.pattern_scores.get(i0 as usize).copied().unwrap_or(0),
-                        i0,
-                    ));
+                    let score = cur.pattern_meta.get(i0 as usize)
+                        .map(|meta| meta.score)
+                        .unwrap_or(0);
+                    scores_with_idx.push((score, i0));
                 }
                 scores_with_idx.sort_unstable_by_key(|&(s, _)| core::cmp::Reverse(s));
                 cand_idxs.clear();
@@ -327,31 +327,6 @@ impl RadixTreeRouter {
         }
     }
 
-    #[inline]
-    pub fn find_route(&self, method: HttpMethod, path: &str) -> Option<super::super::RouteMatchResult> {
-        if !path.is_ascii() {
-            return None;
-        }
-
-        if path == "/" {
-            let method_idx = method as usize;
-            let route_key = self.root_node.routes[method_idx];
-
-            if route_key != 0 {
-                return Some(super::super::RouteMatchResult {
-                    route_key: Self::decode_route_key(route_key),
-                    parameter_offsets: vec![],
-                });
-            }
-
-            return None;
-        }
-
-        let norm = super::super::normalize_path(path);
-
-        self.find_normalized_route(method, norm.as_str())
-    }
-
     #[inline(always)]
     pub fn find_normalized_route(
         &self,
@@ -361,6 +336,7 @@ impl RadixTreeRouter {
         if !normalized_path.is_ascii() {
             return None;
         }
+
 
         let method_idx = method as usize;
 

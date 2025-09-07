@@ -16,12 +16,14 @@ pub enum RouterError {
     RouteSegmentContainsMixedParamAndLiteral = 10012,
     RouteWildcardAlreadyExistsForMethod = 10013,
     MaxRoutesExceeded = 10014,
+    PatternTooLong = 10015,
     // Match-time
     MatchNotFound = 11001,
     MatchPathSyntaxInvalid = 11002,
     MatchPathContainsDisallowedCharacters = 11003,
     MatchPathEmpty = 11004,
     MatchPathNotAscii = 11005,
+    MatchPathTooLong = 11006,
 }
 
 impl RouterError {

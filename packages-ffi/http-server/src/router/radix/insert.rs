@@ -5,6 +5,7 @@ use crate::router::pattern::{
 
 use super::create_node_box_from_arena_pointer;
 use super::{RadixTreeRouter};
+use super::node::PatternMeta;
 
 use crate::r#enum::HttpMethod;
 
@@ -27,7 +28,7 @@ impl RadixTreeRouter {
                 .next_route_key
                 .load(std::sync::atomic::Ordering::Relaxed);
             
-            if current_key > super::MAX_ROUTES {
+            if current_key >= super::MAX_ROUTES {
                 return Err(RouterError::MaxRoutesExceeded);
             }
 
@@ -67,6 +68,30 @@ impl RadixTreeRouter {
 
         for seg in segments.iter() {
             let pat = self.parse_segment(seg)?;
+
+            // 패턴 길이 검증 (안정성 보장)
+            let mut min_len = 0u16;
+            let mut last_lit_len = 0u16;
+            
+            for part in pat.parts.iter() {
+                match part {
+                    SegmentPart::Literal(l) => {
+                        min_len += l.len() as u16;
+                    }
+                    SegmentPart::Param { .. } => {}
+                }
+            }
+            
+            for part in pat.parts.iter().rev() {
+                if let SegmentPart::Literal(l) = part {
+                    last_lit_len = l.len() as u16;
+                    break;
+                }
+            }
+
+            if !PatternMeta::is_valid_pattern_length(min_len, last_lit_len) {
+                return Err(RouterError::PatternTooLong);
+            }
 
             for part in pat.parts.iter() {
                 if let SegmentPart::Param { name, .. } = part {
@@ -170,19 +195,22 @@ impl RadixTreeRouter {
                     continue;
                 }
 
-                if current.pattern_scores.len() != current.patterns.len() {
+                if current.pattern_meta.len() != current.patterns.len() {
                     current.rebuild_pattern_meta();
                 }
 
                 let score = pattern_score(pat);
-                let pos_opt = current.pattern_scores.iter().position(|&sc| sc < score);
+                let pos_opt = current.pattern_meta.iter().position(|&meta| meta.score < score);
                 let insert_pos = pos_opt.unwrap_or(current.patterns.len());
 
                 current.patterns.insert(insert_pos, pat.clone());
                 current
                     .pattern_nodes
                     .insert(insert_pos, create_node_box_from_arena_pointer(arena_ptr));
-                current.pattern_scores.insert(insert_pos, score);
+                
+                // 임시로 score만 저장, 나중에 rebuild_pattern_meta에서 완전한 메타데이터 생성
+                let temp_meta = PatternMeta::new(score, 0, 0);
+                current.pattern_meta.insert(insert_pos, temp_meta);
                 current.rebuild_pattern_index();
 
                 let current_mask = current.method_mask();

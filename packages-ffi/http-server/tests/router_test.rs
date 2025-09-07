@@ -376,6 +376,7 @@ mod precedence {
 
 mod path_validation {
     use super::*;
+    use bunner_http_server::router::radix::node::MAX_SEGMENT_PART_LENGTH;
 
     #[test]
     fn all_insert_error_variants_are_covered() {
@@ -480,6 +481,66 @@ mod path_validation {
         assert_eq!(
             r.add( HttpMethod::Get, "/x"),
             Err(RouterError::RouterSealedCannotInsert)
+        );
+    }
+
+    #[test]
+    fn rejects_overly_long_segment_literal() {
+        let mut r = rapi::Router::with_configuration(RouterOptions::default(), None);
+        // 256자의 리터럴 세그먼트 생성
+        let long_segment = "a".repeat(MAX_SEGMENT_PART_LENGTH + 1);
+        let path = format!("/{}", long_segment);
+        assert_eq!(
+            r.add(HttpMethod::Get, &path),
+            Err(RouterError::PatternTooLong)
+        );
+
+        // 복합 세그먼트에서도 리터럴 부분의 합이 255자를 초과하는 경우
+        let long_prefix = "a".repeat(128);
+        let long_suffix = "b".repeat(MAX_SEGMENT_PART_LENGTH - 128 + 1);
+        let composite_path = format!("/{}-{}:id", long_prefix, long_suffix);
+        // 현재 파서는 복합 세그먼트를 지원하지 않으므로 SyntaxInvalid가 반환됨.
+        // 만약 파서가 이를 지원하게 되면, PatternTooLong을 반환해야 함.
+        assert!(matches!(
+            r.add(HttpMethod::Get, &composite_path),
+            Err(RouterError::RouteSegmentContainsMixedParamAndLiteral)
+        ));
+    }
+
+    #[test]
+    fn rejects_various_unsupported_segment_patterns() {
+        let mut r = rapi::Router::with_configuration(RouterOptions::default(), None);
+
+        // Case 1: 파라미터 이름에 유효하지 않은 문자가 포함된 경우 (예: '.')
+        let invalid_param_patterns = vec![
+            "/report/:file.zip",
+            "/:name.jpg",
+        ];
+        for pattern in invalid_param_patterns {
+            let result = r.add(HttpMethod::Get, pattern);
+            assert!(
+                matches!(result, Err(RouterError::RouteParamNameInvalidChar)),
+                "Pattern '{}' should be rejected due to invalid characters in param name",
+                pattern
+            );
+        }
+
+        // Case 2: 리터럴과 파라미터가 혼합된 경우 (':'가 맨 앞에 오지 않음)
+        let mixed_segment_pattern = "/user-:id";
+        let result = r.add(HttpMethod::Get, mixed_segment_pattern);
+        assert!(
+            matches!(result, Err(RouterError::RouteSegmentContainsMixedParamAndLiteral)),
+            "Pattern '{}' should be rejected as a mixed literal and param segment",
+            mixed_segment_pattern
+        );
+
+        // Case 3: 비어있는 파라미터 이름
+        let empty_param_name = "/users/:";
+        let result_empty = r.add(HttpMethod::Get, empty_param_name);
+        assert!(
+            matches!(result_empty, Err(RouterError::RoutePathSyntaxInvalid)),
+            "Pattern '{}' should be rejected due to an empty parameter name",
+            empty_param_name
         );
     }
 }
@@ -622,6 +683,48 @@ mod optimizations {
         r.add(HttpMethod::Get, long).unwrap();
         r.finalize_routes();
         assert!(r.find(HttpMethod::Get, long).is_ok());
+    }
+
+    #[test]
+    fn root_pruning_correctly_filters_requests() {
+        let mut opts = RouterOptions::default();
+        // 자동 최적화가 켜져 있고 수동으로 비활성화하지 않았으므로,
+        // 루트에 동적 경로가 없으면 루트 가지치기가 활성화되어야 합니다.
+        opts.enable_automatic_optimization = true;
+
+        let mut r = Router::with_configuration(opts, None);
+        r.add(HttpMethod::Get, "/foo/bar").unwrap();
+        r.add(HttpMethod::Get, "/bar/baz").unwrap();
+        r.add(HttpMethod::Post, "/bar/qux").unwrap();
+
+        r.finalize_routes();
+
+        // 내부 상태를 확인하여 최적화가 활성화되었는지 검증합니다.
+        let radix = r.get_internal_radix_router();
+        assert!(radix.enable_root_level_pruning, "Root pruning should be auto-enabled");
+
+        // 성공 케이스: 등록된 경로들은 정상적으로 찾아져야 합니다.
+        assert!(r.find(HttpMethod::Get, "/foo/bar").is_ok());
+        assert!(r.find(HttpMethod::Get, "/bar/baz").is_ok());
+        assert!(r.find(HttpMethod::Post, "/bar/qux").is_ok());
+
+        // 실패 케이스 (가지치기 대상):
+        // 루트 바로 아래에는 'f'와 'b'로 시작하는 경로만 존재합니다.
+        // 따라서 'z'나 'a'로 시작하는 경로는 조기에 필터링되어야 합니다.
+        assert!(
+            matches!(r.find(HttpMethod::Get, "/zoo"), Err(RouterError::MatchNotFound)),
+            "Request for '/zoo' should be pruned at the root"
+        );
+        assert!(
+            matches!(r.find(HttpMethod::Get, "/apple"), Err(RouterError::MatchNotFound)),
+            "Request for '/apple' should be pruned at the root"
+        );
+
+        // 다른 HTTP 메서드에 대한 요청도 가지치기 되어야 합니다.
+        assert!(
+            matches!(r.find(HttpMethod::Get, "/bar/qux"), Err(RouterError::MatchNotFound)),
+            "GET request for a POST-only route should not be found"
+        );
     }
 }
 
@@ -779,11 +882,11 @@ mod enable_automatic_optimizations {
             let path = format!("/route{}", i);
             match r.add(HttpMethod::Get, &path) {
                 Ok(_) => {
-                    println!("Added route: /route{}", i);
+                    println!("Successfully added route: /route{}", i);
                     continue;
                 }
                 Err(e) => {
-                    print!("Error adding route: /route{}", i);
+                    println!("Failed to add route: /route{} - Error: {:?}", i, e);
                     got_err = Some(e);
                     break;
                 }
@@ -792,5 +895,198 @@ mod enable_automatic_optimizations {
 
         assert!(got_err.is_some(), "Route limit was not reached within test bounds");
         assert!(matches!(got_err.unwrap(), RouterError::MaxRoutesExceeded));
+    }
+}
+
+#[cfg(test)]
+mod parameter_value_validation {
+    use super::*;
+    use bunner_http_server::router::radix::node::MAX_SEGMENT_PART_LENGTH;
+
+    #[test]
+    fn rejects_parameter_value_exceeding_length_limit() {
+        let mut r = Router::with_configuration(RouterOptions::default(), None);
+        r.add(HttpMethod::Get, "/users/:id").unwrap();
+        r.finalize_routes();
+
+        // 255자 파라미터 값 (허용)
+        let long_but_valid_id = "a".repeat(MAX_SEGMENT_PART_LENGTH);
+        let valid_path = format!("/users/{}", long_but_valid_id);
+        let match_result = r.find(HttpMethod::Get, &valid_path);
+        assert!(match_result.is_ok(), "Should successfully match a 255-character parameter value");
+        if let Ok((_, params)) = match_result {
+            assert_eq!(params[0].1, long_but_valid_id);
+        }
+
+        // 256자 파라미터 값 (거부)
+        let too_long_id = "b".repeat(MAX_SEGMENT_PART_LENGTH + 1);
+        let invalid_path = format!("/users/{}", too_long_id);
+        let match_result_fail = r.find(HttpMethod::Get, &invalid_path);
+        assert!(
+            matches!(match_result_fail, Err(RouterError::MatchNotFound)),
+            "Should fail to match a 256-character parameter value and return MatchNotFound"
+        );
+    }
+
+    #[test]
+    fn allows_long_wildcard_value() {
+        let mut r = Router::with_configuration(RouterOptions::default(), None);
+        r.add(HttpMethod::Get, "/assets/*").unwrap();
+        r.finalize_routes();
+
+        // 와일드카드 값은 현재 길이 제한이 없으므로 매우 긴 값도 허용되어야 함
+        let very_long_path_segment = "a".repeat(1000);
+        let path = format!("/assets/css/themes/{}", very_long_path_segment);
+        let match_result = r.find(HttpMethod::Get, &path);
+        assert!(match_result.is_ok(), "Wildcard should match a very long path");
+        if let Ok((_, params)) = match_result {
+            assert_eq!(params[0].0, "*");
+            assert_eq!(params[0].1, format!("css/themes/{}", very_long_path_segment));
+        }
+    }
+}
+
+#[cfg(test)]
+mod malicious_inputs {
+    use super::*;
+
+    #[test]
+    fn handles_extremely_deep_paths() {
+        let mut r = Router::with_configuration(RouterOptions::default(), None);
+        let deep_path = "/".to_string() + &"a/".repeat(100) + ":id";
+        
+        // 등록 시도 (세그먼트 개수는 제한 없으므로 성공해야 함)
+        assert!(r.add(HttpMethod::Get, &deep_path).is_ok());
+        r.finalize_routes();
+
+        let request_path = "/".to_string() + &"a/".repeat(100) + "123";
+        let result = r.find(HttpMethod::Get, &request_path);
+        
+        assert!(result.is_ok(), "Should handle extremely deep paths");
+        if let Ok((_, params)) = result {
+            assert_eq!(params.len(), 1);
+            assert_eq!(params[0].0, "id");
+            assert_eq!(params[0].1, "123");
+        }
+    }
+
+    #[test]
+    fn handles_path_with_many_parameters() {
+        let mut r = Router::with_configuration(RouterOptions::default(), None);
+        // 30개의 파라미터를 가진 경로
+        let mut path = String::new();
+        for i in 0..30 {
+            path.push_str(&format!("/:param{}", i));
+        }
+        
+        assert!(r.add(HttpMethod::Get, &path).is_ok());
+        r.finalize_routes();
+
+        let mut request_path = String::new();
+        for i in 0..30 {
+            request_path.push_str(&format!("/value{}", i));
+        }
+
+        let result = r.find(HttpMethod::Get, &request_path);
+        assert!(result.is_ok(), "Should handle paths with a large number of parameters");
+        if let Ok((_, params)) = result {
+            assert_eq!(params.len(), 30);
+            for i in 0..30 {
+                assert_eq!(params[i].0, format!("param{}", i));
+                assert_eq!(params[i].1, format!("value{}", i));
+            }
+        }
+    }
+
+    #[test]
+    fn rejects_path_with_extremely_long_non_matching_segment() {
+        let mut r = Router::with_configuration(RouterOptions::default(), None);
+        r.add(HttpMethod::Get, "/a/b/c").unwrap();
+        r.finalize_routes();
+        
+        // 10,000자의 매칭되지 않는 세그먼트
+        let long_segment = "x".repeat(10000);
+        let path = format!("/a/{}/c", long_segment);
+
+        // 검색 시 매우 긴 입력에 대해 DoS에 빠지지 않고 즉시 실패해야 함
+        let result = r.find(HttpMethod::Get, &path);
+        assert!(matches!(result, Err(RouterError::MatchNotFound)));
+    }
+
+    #[test]
+    fn handles_repetitive_path_patterns_efficiently() {
+        let mut r = Router::with_configuration(RouterOptions::default(), None);
+        // 유사하지만 다른 경로들을 많이 등록 (최적화 로직 테스트)
+        for i in 0..50 {
+            r.add(HttpMethod::Get, &format!("/path/a{}/end", i)).unwrap();
+            r.add(HttpMethod::Get, &format!("/path/b{}/end", i)).unwrap();
+        }
+        r.finalize_routes();
+
+        assert!(r.find(HttpMethod::Get, "/path/a25/end").is_ok());
+        assert!(r.find(HttpMethod::Get, "/path/b40/end").is_ok());
+        assert!(r.find(HttpMethod::Get, "/path/c10/end").is_err());
+    }
+}
+
+mod security_validation {
+    use super::*;
+
+    #[test]
+    fn directory_traversal_is_treated_as_literal() {
+        let mut router = Router::new();
+        router.add(HttpMethod::Get, "/users/../posts").unwrap();
+
+        // Ensure it matches the literal path including "..", not the "normalized" path
+        assert!(router.find(HttpMethod::Get, "/users/../posts").is_ok());
+        assert!(router.find(HttpMethod::Get, "/posts").is_err());
+    }
+
+    #[test]
+    fn rejects_paths_with_null_bytes() {
+        let mut router = Router::new();
+        let path_with_null = "/file/image.jpg\0.txt";
+
+        // Test adding a route with a null byte
+        let add_result = router.add(HttpMethod::Get, path_with_null);
+        assert_eq!(
+            add_result,
+            Err(RouterError::RoutePathContainsDisallowedCharacters)
+        );
+
+        // Test finding a route with a null byte
+        router.add(HttpMethod::Get, "/file/:name").unwrap();
+        let find_result = router.find(HttpMethod::Get, path_with_null);
+        assert_eq!(
+            find_result,
+            Err(RouterError::MatchPathContainsDisallowedCharacters)
+        );
+    }
+
+    #[test]
+    fn rejects_paths_with_percent_encoded_special_chars() {
+        let mut router = Router::new();
+
+        // Percent-encoded slash (%2f)
+        let path_with_encoded_slash = "/a/b%2fc";
+        assert_eq!(
+            router.add(HttpMethod::Get, path_with_encoded_slash),
+            Err(RouterError::RoutePathContainsDisallowedCharacters)
+        );
+        assert_eq!(
+            router.find(HttpMethod::Get, path_with_encoded_slash),
+            Err(RouterError::MatchPathContainsDisallowedCharacters)
+        );
+
+        // Percent-encoded dot (%2e) - part of a traversal attempt
+        let path_with_encoded_traversal = "/a/%2e%2e/b";
+        assert_eq!(
+            router.add(HttpMethod::Get, path_with_encoded_traversal),
+            Err(RouterError::RoutePathContainsDisallowedCharacters)
+        );
+        assert_eq!(
+            router.find(HttpMethod::Get, path_with_encoded_traversal),
+            Err(RouterError::MatchPathContainsDisallowedCharacters)
+        );
     }
 }

@@ -21,7 +21,7 @@ mod alloc;
 mod compress;
 mod find;
 mod insert;
-pub(super) mod node;
+pub mod node;
 
 use alloc::{create_node_box_from_arena_pointer, NodeBox};
 pub use node::RadixTreeNode;
@@ -393,7 +393,7 @@ impl RadixTreeRouter {
             n.patterns.shrink_to_fit();
             n.pattern_nodes.shrink_to_fit();
             n.pattern_first_literal.shrink_to_fit();
-            n.pattern_scores.shrink_to_fit();
+            n.pattern_meta.shrink_to_fit();
             for (_, v) in n.static_children.iter_mut() {
                 shrink_node(v.as_mut());
             }

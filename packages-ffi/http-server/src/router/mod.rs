@@ -1,8 +1,9 @@
 pub mod errors;
 mod interner;
+pub mod radix;
 mod pattern;
-mod radix;
-pub use crate::router::errors::RouterError;
+
+pub use errors::RouterError;
 use crate::r#enum::HttpMethod;
 
 #[derive(Debug, Default)]
