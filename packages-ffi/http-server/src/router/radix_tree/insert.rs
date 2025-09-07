@@ -55,8 +55,7 @@ impl RadixTree {
                 current = find_or_create_pattern_child(current, pat, arena_ptr)?;
             }
             
-            let current_mask = current.method_mask();
-            current.set_method_mask(current_mask | (1 << (method as usize)));
+            // method mask is delayed to finalize()
             current.set_dirty(true);
         }
 
@@ -161,8 +160,7 @@ fn handle_wildcard_insert(node: &mut RadixTreeNode, method: HttpMethod, index: u
     let key = next_route_key.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     node.wildcard_routes[method_idx] = key + 1;
     
-    let current_mask = node.method_mask();
-    node.set_method_mask(current_mask | (1 << method_idx));
+    // method mask is delayed to finalize()
     node.set_dirty(true);
 
     Ok(key)

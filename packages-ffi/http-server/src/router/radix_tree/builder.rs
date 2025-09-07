@@ -96,8 +96,6 @@ fn build_indices(tree: &mut RadixTree) {
     compute_mask(&mut tree.root_node);
 }
 
-// compute_mask moved to mask.rs
-
 fn count_static(root: &RadixTreeNode, count: &mut usize) {
     traverse(root, |n| {
         for i in 0..HTTP_METHOD_COUNT {

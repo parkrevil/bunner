@@ -12,7 +12,7 @@ pub(super) fn compute_mask(n: &mut RadixTreeNode) -> u8 {
         }
     }
 
-    let mut m = n.method_mask();
+    let mut m = _m;
 
     for child in n.static_vals.iter_mut() {
         m |= compute_mask(child.as_mut());
