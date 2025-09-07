@@ -171,13 +171,6 @@ impl RadixRouter {
             {
                 prefetch_node(nb);
 
-                if crate::router::router_debug_enabled() {
-                    eprintln!(
-                        "[router.find_from] static_id_fast HIT comp={} key_id={}",
-                        comp, key_id
-                    );
-                }
-
                 if let Some(ok) = self.find_from(nb, method, s, i, params) {
                     return Some(ok);
                 }
@@ -186,10 +179,6 @@ impl RadixRouter {
             if let Some(nb) = cur.get_static_fast(comp) {
                 prefetch_node(nb);
 
-                if crate::router::router_debug_enabled() {
-                    eprintln!("[router.find_from] static_fast HIT comp={}", comp);
-                }
-
                 if let Some(ok) = self.find_from(nb, method, s, i, params) {
                     return Some(ok);
                 }
@@ -197,10 +186,6 @@ impl RadixRouter {
             
             if let Some(next) = cur.get_static_ref(comp) {
                 prefetch_node(next);
-
-                if crate::router::router_debug_enabled() {
-                    eprintln!("[router.find_from] static_ref HIT comp={}", comp);
-                }
 
                 if let Some(ok) = self.find_from(next, method, s, i, params) {
                     return Some(ok);
@@ -223,10 +208,6 @@ impl RadixRouter {
                 && let Some(nb) = cur.static_children.get(comp)
             {
                 prefetch_node(nb.as_ref());
-
-                if crate::router::router_debug_enabled() {
-                    eprintln!("[router.find_from] static_children MAP HIT comp={}", comp);
-                }
 
                 if let Some(ok) = self.find_from(nb.as_ref(), method, s, i, params) {
                     return Some(ok);
@@ -351,13 +332,6 @@ impl RadixRouter {
             return None;
         }
 
-        if crate::router::router_debug_enabled() {
-            eprintln!(
-                "[router.find] method={:?} path={}",
-                method, path
-            );
-        }
-
         if path == "/" {
             let method_idx = method as usize;
             let key = self.root.routes[method_idx];
@@ -373,10 +347,6 @@ impl RadixRouter {
         }
 
         let norm = super::super::normalize_path(path);
-
-        if crate::router::router_debug_enabled() {
-            eprintln!("[router.find] normalized={} (from {})", norm, path);
-        }
 
         self.find_norm(method, norm.as_str())
     }
@@ -407,10 +377,6 @@ impl RadixRouter {
         if self.root.sealed && self.enable_static_full_map {
             if let Some(&rk) = self.static_full_map[method_idx].get(norm_path)
              {
-                if crate::router::router_debug_enabled() {
-                    eprintln!("[router.find_norm] static_full_map hit key={}", rk);
-                }
-
                 return Some(super::super::MatchResult {
                     key: Self::decode_key(rk),
                     params: vec![],
@@ -440,13 +406,6 @@ impl RadixRouter {
 
                     if head_present_any != 0 && (self.method_head_bits[method_idx][blk] & bit) == 0
                     {
-                        if crate::router::router_debug_enabled() {
-                            eprintln!(
-                                "[router.prune] head miss hb={} idx={} head_bits_blk={:b}",
-                                hb, method_idx, self.method_head_bits[method_idx][blk]
-                            );
-                        }
-
                         return None;
                     }
 

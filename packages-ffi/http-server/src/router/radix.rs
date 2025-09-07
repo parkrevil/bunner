@@ -164,7 +164,6 @@ impl RadixRouter {
             enable_static_full_map: options.enable_static_full_map,
             next_key: std::sync::atomic::AtomicU16::new(1),
         };
-        crate::router::log_avx2_once();
         s
     }
 

@@ -5,35 +5,6 @@ mod radix;
 pub use crate::router::errors::RouterError;
 use crate::r#enum::HttpMethod;
 
-#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
-use std::sync::Once;
-use std::sync::OnceLock;
-
-static DEBUG_FLAG: OnceLock<bool> = OnceLock::new();
-#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
-static SIMD_LOG_ONCE: Once = Once::new();
-
-#[inline]
-pub(crate) fn router_debug_enabled() -> bool {
-    *DEBUG_FLAG.get_or_init(|| match std::env::var("BUNNER_ROUTER_DEBUG") {
-        Ok(val) => matches!(val.as_str(), "1" | "true" | "TRUE"),
-        Err(_) => false,
-    })
-}
-
-#[inline]
-#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
-pub(crate) fn log_avx2_once() {
-    SIMD_LOG_ONCE.call_once(|| {
-        eprintln!("[router] AVX2 enabled");
-    });
-}
-
-#[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
-#[inline]
-pub(crate) fn log_avx2_once() { /* no-op when AVX2 is not available */
-}
-
 #[derive(Debug, Clone)]
 pub struct Route {
     pub method: HttpMethod,
