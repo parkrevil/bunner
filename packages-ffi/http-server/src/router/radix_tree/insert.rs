@@ -1,16 +1,16 @@
 use crate::router::errors::RouterError;
 use crate::router::pattern::{
-    pattern_compatible_policy, pattern_is_pure_static, pattern_score, SegmentPart, SegmentPattern,
+    SegmentPart, SegmentPattern, pattern_compatible_policy, pattern_is_pure_static, pattern_score,
 };
 
+use super::RadixTree;
 use super::create_node_box_from_arena_pointer;
-use super::{RadixTreeRouter};
 use super::node::PatternMeta;
 
 use crate::r#enum::HttpMethod;
 
-impl RadixTreeRouter {
-    pub fn insert_route(&mut self, method: HttpMethod, path: &str) -> Result<u16, RouterError> {
+impl RadixTree {
+    pub fn insert(&mut self, method: HttpMethod, path: &str) -> Result<u16, RouterError> {
         if self.root_node.is_sealed() {
             return Err(RouterError::RouterSealedCannotInsert);
         }
@@ -27,7 +27,7 @@ impl RadixTreeRouter {
             let current_key = self
                 .next_route_key
                 .load(std::sync::atomic::Ordering::Relaxed);
-            
+
             if current_key >= super::MAX_ROUTES {
                 return Err(RouterError::MaxRoutesExceeded);
             }
@@ -38,7 +38,8 @@ impl RadixTreeRouter {
 
             self.root_node.routes[method_idx] = key + 1;
             let current_mask = self.root_node.method_mask();
-            self.root_node.set_method_mask(current_mask | (1 << method_idx));
+            self.root_node
+                .set_method_mask(current_mask | (1 << method_idx));
             self.root_node.set_dirty(true);
             return Ok(key);
         }
@@ -72,7 +73,7 @@ impl RadixTreeRouter {
             // 패턴 길이 검증 (안정성 보장)
             let mut min_len = 0u16;
             let mut last_lit_len = 0u16;
-            
+
             for part in pat.parts.iter() {
                 match part {
                     SegmentPart::Literal(l) => {
@@ -81,7 +82,7 @@ impl RadixTreeRouter {
                     SegmentPart::Param { .. } => {}
                 }
             }
-            
+
             for part in pat.parts.iter().rev() {
                 if let SegmentPart::Literal(l) = part {
                     last_lit_len = l.len() as u16;
@@ -89,7 +90,7 @@ impl RadixTreeRouter {
                 }
             }
 
-            if !PatternMeta::is_valid_pattern_length(min_len, last_lit_len) {
+            if !PatternMeta::is_valid_length(min_len, last_lit_len) {
                 return Err(RouterError::PatternTooLong);
             }
 
@@ -107,7 +108,7 @@ impl RadixTreeRouter {
         }
 
         let mut current = &mut self.root_node;
-        let arena_ptr: *const bumpalo::Bump = &self.memory_arena;
+        let arena_ptr: *const bumpalo::Bump = &self.arena;
         let mut _total_params = 0usize;
 
         for (i, (seg, pat)) in segments.iter().zip(parsed_segments.iter()).enumerate() {
@@ -148,7 +149,7 @@ impl RadixTreeRouter {
                 current.set_method_mask(current_mask | (1 << method_idx));
 
                 if current.static_keys.len() == current.static_vals.len() {
-                    let interner = &self.string_interner;
+                    let interner = &self.interner;
                     let mut pairs: Vec<(u32, String, super::NodeBox)> = current
                         .static_keys
                         .iter()
@@ -175,8 +176,7 @@ impl RadixTreeRouter {
 
                     if i == segments.len() - 1 {
                         for (ea, eb) in exist.parts.iter().zip(pat.parts.iter()) {
-                            if let (SegmentPart::Param { .. }, SegmentPart::Param { .. }) =
-                                (ea, eb)
+                            if let (SegmentPart::Param { .. }, SegmentPart::Param { .. }) = (ea, eb)
                             {
                             }
                         }
@@ -200,14 +200,17 @@ impl RadixTreeRouter {
                 }
 
                 let score = pattern_score(pat);
-                let pos_opt = current.pattern_meta.iter().position(|&meta| meta.score < score);
+                let pos_opt = current
+                    .pattern_meta
+                    .iter()
+                    .position(|&meta| meta.score < score);
                 let insert_pos = pos_opt.unwrap_or(current.patterns.len());
 
                 current.patterns.insert(insert_pos, pat.clone());
                 current
                     .pattern_nodes
                     .insert(insert_pos, create_node_box_from_arena_pointer(arena_ptr));
-                
+
                 // 임시로 score만 저장, 나중에 rebuild_pattern_meta에서 완전한 메타데이터 생성
                 let temp_meta = PatternMeta::new(score, 0, 0);
                 current.pattern_meta.insert(insert_pos, temp_meta);
@@ -216,7 +219,7 @@ impl RadixTreeRouter {
                 let current_mask = current.method_mask();
                 current.set_method_mask(current_mask | (1 << method_idx));
                 current.set_dirty(true);
-                
+
                 let child = current.pattern_nodes.get_mut(insert_pos).unwrap().as_mut();
                 current = child;
             }
@@ -229,11 +232,11 @@ impl RadixTreeRouter {
         let current_key = self
             .next_route_key
             .load(std::sync::atomic::Ordering::Relaxed);
-            
+
         if current_key > super::MAX_ROUTES {
             return Err(RouterError::MaxRoutesExceeded);
         }
-        
+
         let key = self
             .next_route_key
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -262,7 +265,7 @@ impl RadixTreeRouter {
 
             while j < bytes.len() {
                 let b = bytes[j];
-                
+
                 if !(b.is_ascii_alphanumeric() || b == b'_') {
                     break;
                 }
@@ -285,7 +288,7 @@ impl RadixTreeRouter {
             if !(nb[0].is_ascii_alphabetic() || nb[0] == b'_') {
                 return Err(RouterError::RouteParamNameInvalidStart);
             }
-            
+
             for &c in &nb[1..] {
                 if !(c.is_ascii_alphanumeric() || c == b'_') {
                     return Err(RouterError::RouteParamNameInvalidChar);

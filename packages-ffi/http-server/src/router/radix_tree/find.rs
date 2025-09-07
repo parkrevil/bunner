@@ -2,7 +2,7 @@ use crate::router::pattern;
 use smallvec::SmallVec;
 use std::borrow::Cow;
 
-use super::RadixTreeRouter;
+use super::RadixTree;
 use crate::r#enum::HttpMethod;
 
 #[inline(always)]
@@ -40,11 +40,12 @@ unsafe fn starts_with_cs_avx2(hay: &[u8], pre: &[u8]) -> bool {
     true
 }
 
-impl RadixTreeRouter {
+impl RadixTree {
     #[inline(always)]
     fn decode_route_key(stored: u16) -> u16 {
         if stored > 0 { stored - 1 } else { 0 }
     }
+
     #[inline(always)]
     fn skip_slashes(&self, s: &str, mut i: usize) -> usize {
         let bs = s.as_bytes();
@@ -145,7 +146,9 @@ impl RadixTreeRouter {
                 return miss();
             }
 
-            if self.root_node.is_sealed() && (cur.method_mask() & super::HTTP_METHOD_BIT_MASKS[method_idx]) == 0 {
+            if self.root_node.is_sealed()
+                && (cur.method_mask() & super::HTTP_METHOD_BIT_MASKS[method_idx]) == 0
+            {
                 #[cold]
                 fn miss_method() -> Option<super::super::RouteMatchResult> {
                     None
@@ -167,7 +170,7 @@ impl RadixTreeRouter {
 
             let comp: &str = comp_cow.as_ref();
 
-            if let Some(route_key_id) = self.string_interner.get(comp)
+            if let Some(route_key_id) = self.interner.get(comp)
                 && let Some(nb) = cur.get_static_id_fast(route_key_id)
             {
                 prefetch_node(nb);
@@ -184,7 +187,7 @@ impl RadixTreeRouter {
                     return Some(ok);
                 }
             }
-            
+
             if let Some(next) = cur.get_static_ref(comp) {
                 prefetch_node(next);
 
@@ -198,7 +201,9 @@ impl RadixTreeRouter {
                     if k.as_str() == comp {
                         prefetch_node(nb.as_ref());
 
-                        if let Some(ok) = self.find_from(nb.as_ref(), method, s, i, parameter_offsets) {
+                        if let Some(ok) =
+                            self.find_from(nb.as_ref(), method, s, i, parameter_offsets)
+                        {
                             return Some(ok);
                         }
                     }
@@ -223,9 +228,12 @@ impl RadixTreeRouter {
 
             let cand_len = cand_idxs.len();
             if cand_len > 1 {
-                let mut scores_with_idx: SmallVec<[(u16, u16); 64]> = SmallVec::with_capacity(cand_len);
+                let mut scores_with_idx: SmallVec<[(u16, u16); 64]> =
+                    SmallVec::with_capacity(cand_len);
                 for &i0 in cand_idxs.iter() {
-                    let score = cur.pattern_meta.get(i0 as usize)
+                    let score = cur
+                        .pattern_meta
+                        .get(i0 as usize)
                         .map(|meta| meta.score)
                         .unwrap_or(0);
                     scores_with_idx.push((score, i0));
@@ -252,7 +260,9 @@ impl RadixTreeRouter {
                             parameter_offsets.push((name, (start + off, len)));
                         }
 
-                        if let Some(ok) = self.find_from(child_nb.as_ref(), method, s, i, parameter_offsets) {
+                        if let Some(ok) =
+                            self.find_from(child_nb.as_ref(), method, s, i, parameter_offsets)
+                        {
                             return Some(ok);
                         } else {
                             parameter_offsets.truncate(checkpoint);
@@ -274,7 +284,8 @@ impl RadixTreeRouter {
                         parameter_offsets.push((name, (start + off, len)));
                     }
 
-                    if let Some(ok) = self.find_from(next.as_ref(), method, s, i, parameter_offsets) {
+                    if let Some(ok) = self.find_from(next.as_ref(), method, s, i, parameter_offsets)
+                    {
                         return Some(ok);
                     } else {
                         parameter_offsets.truncate(checkpoint);
@@ -328,7 +339,7 @@ impl RadixTreeRouter {
     }
 
     #[inline(always)]
-    pub fn find_normalized_route(
+    pub fn find_normalized(
         &self,
         method: HttpMethod,
         normalized_path: &str,
@@ -336,7 +347,6 @@ impl RadixTreeRouter {
         if !normalized_path.is_ascii() {
             return None;
         }
-
 
         let method_idx = method as usize;
 
@@ -351,55 +361,57 @@ impl RadixTreeRouter {
             return None;
         }
 
-        if self.root_node.is_sealed() && self.enable_static_route_full_mapping {
-            if let Some(&rk) = self.static_route_full_mapping[method_idx].get(normalized_path)
-             {
-                return Some(super::super::RouteMatchResult {
-                    route_key: Self::decode_route_key(rk),
-                    parameter_offsets: vec![],
-                });
-            }
+        if self.root_node.is_sealed()
+            && self.enable_static_route_full_mapping
+            && let Some(&rk) = self.static_route_full_mapping[method_idx].get(normalized_path)
+        {
+            return Some(super::super::RouteMatchResult {
+                route_key: Self::decode_route_key(rk),
+                parameter_offsets: vec![],
+            });
         }
 
-        if self.root_node.is_sealed() && self.enable_root_level_pruning {
-            if !self.root_parameter_first_present[method_idx] && !self.root_wildcard_present[method_idx]
-            {
-                let bs = normalized_path.as_bytes();
-                let mut i = 0usize;
+        if self.root_node.is_sealed()
+            && self.enable_root_level_pruning
+            && !self.root_parameter_first_present[method_idx]
+            && !self.root_wildcard_present[method_idx]
+        {
+            let bs = normalized_path.as_bytes();
+            let mut i = 0usize;
 
-                while i < bs.len() && bs[i] == b'/' {
-                    i += 1;
+            while i < bs.len() && bs[i] == b'/' {
+                i += 1;
+            }
+
+            if i < bs.len() {
+                let hb = bs[i];
+
+                let blk = (hb as usize) >> 6;
+                let bit = 1u64 << ((hb as usize) & 63);
+                let head_present_any = self.method_first_byte_bitmaps[method_idx][0]
+                    | self.method_first_byte_bitmaps[method_idx][1]
+                    | self.method_first_byte_bitmaps[method_idx][2]
+                    | self.method_first_byte_bitmaps[method_idx][3];
+
+                if head_present_any != 0
+                    && (self.method_first_byte_bitmaps[method_idx][blk] & bit) == 0
+                {
+                    return None;
                 }
 
-                if i < bs.len() {
-                    let hb = bs[i];
+                let mut j = i;
 
-                    let blk = (hb as usize) >> 6;
-                    let bit = 1u64 << ((hb as usize) & 63);
-                    let head_present_any = self.method_first_byte_bitmaps[method_idx][0]
-                        | self.method_first_byte_bitmaps[method_idx][1]
-                        | self.method_first_byte_bitmaps[method_idx][2]
-                        | self.method_first_byte_bitmaps[method_idx][3];
+                while j < bs.len() && bs[j] != b'/' {
+                    j += 1;
+                }
 
-                    if head_present_any != 0 && (self.method_first_byte_bitmaps[method_idx][blk] & bit) == 0
-                    {
-                        return None;
-                    }
+                let seg_len = (j - i).min(63) as u32;
+                let lbit = 1u64 << seg_len;
 
-                    let mut j = i;
-
-                    while j < bs.len() && bs[j] != b'/' {
-                        j += 1;
-                    }
-
-                    let seg_len = (j - i).min(63) as u32;
-                    let lbit = 1u64 << seg_len;
-
-                    if self.method_length_buckets[method_idx] != 0
-                        && (self.method_length_buckets[method_idx] & lbit) == 0
-                    {
-                        return None;
-                    }
+                if self.method_length_buckets[method_idx] != 0
+                    && (self.method_length_buckets[method_idx] & lbit) == 0
+                {
+                    return None;
                 }
             }
         }
@@ -419,8 +431,12 @@ impl RadixTreeRouter {
 
         let mut parameter_offsets: SmallVec<[(String, (usize, usize)); 8]> = SmallVec::new();
 
-        let res = self.find_from(&self.root_node, method, normalized_path, 0, &mut parameter_offsets);
-
-        res
+        self.find_from(
+            &self.root_node,
+            method,
+            normalized_path,
+            0,
+            &mut parameter_offsets,
+        )
     }
 }

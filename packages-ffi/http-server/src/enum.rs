@@ -8,6 +8,8 @@ pub enum HttpMethod {
     Delete = 4,
     Options = 5,
     Head = 6,
+    Trace,
+    Connect,
 }
 
 impl HttpMethod {
@@ -24,23 +26,32 @@ impl HttpMethod {
             _ => None,
         }
     }
+}
 
-    #[inline(always)]
-    pub fn from_str(s: &str) -> Option<Self> {
+#[derive(Debug, PartialEq, Eq)]
+pub struct ParseHttpMethodError;
+
+impl std::str::FromStr for HttpMethod {
+    type Err = ParseHttpMethodError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "GET" => Some(Self::Get),
-            "POST" => Some(Self::Post),
-            "PUT" => Some(Self::Put),
-            "PATCH" => Some(Self::Patch),
-            "DELETE" => Some(Self::Delete),
-            "OPTIONS" => Some(Self::Options),
-            "HEAD" => Some(Self::Head),
-            _ => None,
+            "GET" => Ok(Self::Get),
+            "POST" => Ok(Self::Post),
+            "PUT" => Ok(Self::Put),
+            "DELETE" => Ok(Self::Delete),
+            "PATCH" => Ok(Self::Patch),
+            "HEAD" => Ok(Self::Head),
+            "OPTIONS" => Ok(Self::Options),
+            "TRACE" => Ok(Self::Trace),
+            "CONNECT" => Ok(Self::Connect),
+            _ => Err(ParseHttpMethodError),
         }
     }
 }
 
 #[repr(u16)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HttpStatusCode {
     OK = 200,
     BadRequest = 400,

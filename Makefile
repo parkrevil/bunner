@@ -1,8 +1,7 @@
-.PHONY: lint, format, test, bench
+.PHONY: lint, format, test
 
 lint:
-	cargo clippy --fix --allow-dirty --all-targets --all-features -- -D warnings
-
+	cargo clippy --all-targets --all-features -- -D warnings
 format: 
 	cargo fmt --all
 

@@ -16,16 +16,12 @@ bumpalo = "3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 memchr = "2"
-aho-corasick = "1.1.3"
 serde_qs = "0.15"
 url = "2.5"
 bitflags = "2"
 
 [dev-dependencies]
-criterion.workspace = true
 libc.workspace = true
-jemalloc-ctl.workspace = true
-jemallocator.workspace = true
 rstest.workspace = true
 
 [features]

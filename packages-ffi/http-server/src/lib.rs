@@ -24,10 +24,11 @@ pub struct HttpServer {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn init() -> HttpServerHandle {
-    let router = Box::into_raw(Box::new(router::Router::new()));
+    let router = Box::into_raw(Box::new(router::Router::new(None)));
     let server = Box::new(HttpServer {
         router: RouterPtr(router),
     });
+
     Box::into_raw(server)
 }
 
@@ -79,16 +80,13 @@ pub unsafe extern "C" fn router_add(
     let method = method_option.unwrap();
     let path_str = unsafe { CStr::from_ptr(path) }.to_string_lossy();
     let result = match router_mut.add(method, &path_str) {
-        Ok(k) => AddRouteResult {
-            key: k,
-            error: 0,
-        },
+        Ok(k) => AddRouteResult { key: k, error: 0 },
         Err(e) => AddRouteResult {
             key: 0,
             error: e as u32,
         },
     };
-    
+
     make_ffi_result(Some(result), None)
 }
 
@@ -102,7 +100,7 @@ pub unsafe extern "C" fn handle_request(
     _handle: HttpServerHandle,
     _request_data: *const c_char,
 ) -> *mut c_char {
-/*     let http_server = unsafe { &*handle };
+    /*     let http_server = unsafe { &*handle };
     let request_str = match unsafe { CStr::from_ptr(request_data).to_str() } {
         Ok(s) => s,
         Err(e) => {
@@ -123,7 +121,7 @@ pub unsafe extern "C" fn handle_request(
         }
     };
 
-    let method = HttpMethod::from_str(request.http_method).unwrap_or(HttpMethod::Get);
+    let method = request.http_method.parse().unwrap_or(HttpMethod::Get);
     let path_cstring = CString::new(request.url).unwrap();
     let result_ptr = router::find(http_server.router, method, path_cstring.as_ptr());
 
@@ -144,10 +142,10 @@ pub unsafe extern "C" fn handle_request(
     };
 
     make_ffi_result(Some(success_result), None) */
-    return make_ffi_error_result(FfiError {
-      code: HttpServerError::RouteNotFound.code(),
-      message: Some("Route not found".to_string()),
-  });
+    make_ffi_error_result(FfiError {
+        code: HttpServerError::RouteNotFound.code(),
+        message: Some("Route not found".to_string()),
+    })
 }
 
 /// Seals the router, optimizing it for fast lookups. No routes can be added after sealing.
@@ -158,7 +156,7 @@ pub unsafe extern "C" fn handle_request(
 pub unsafe extern "C" fn router_seal(handle: HttpServerHandle) {
     let http_server = unsafe { &*handle };
 
-    unsafe { &mut *http_server.router.0 }.finalize_routes()
+    unsafe { &mut *http_server.router.0 }.finalize()
 }
 
 /// Frees the memory for a C string that was allocated by Rust.

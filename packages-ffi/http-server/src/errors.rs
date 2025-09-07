@@ -9,7 +9,7 @@ pub enum HttpServerError {
 }
 
 impl HttpServerError {
-      pub fn code(self) -> u16 {
-          self as u16
-      }
-  }
+    pub fn code(self) -> u16 {
+        self as u16
+    }
+}

@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-
 #[derive(Serialize)]
 pub struct RouteResult {
     pub key: u16,

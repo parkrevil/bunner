@@ -161,7 +161,7 @@ pub fn match_segment(seg: &str, seg_l: &str, pat: &SegmentPattern) -> Option<Cap
                     return None;
                 }
 
-                if !crate::router::radix::node::is_valid_segment_part_length(end - i) {
+                if !crate::router::radix_tree::node::is_valid_segment_length(end - i) {
                     return None;
                 }
 
@@ -175,9 +175,5 @@ pub fn match_segment(seg: &str, seg_l: &str, pat: &SegmentPattern) -> Option<Cap
         idx += 1;
     }
 
-    if i == seg.len() {
-        Some(out)
-    } else {
-        None
-    }
+    if i == seg.len() { Some(out) } else { None }
 }

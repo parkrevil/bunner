@@ -1,32 +1,24 @@
 use super::NodeBox;
+use bitflags::bitflags;
 use hashbrown::HashMap as FastHashMap;
 use smallvec::SmallVec;
-use bitflags::bitflags;
 
 use crate::router::interner::Interner;
-use crate::router::pattern::{pattern_score, SegmentPart, SegmentPattern};
+use crate::router::pattern::{SegmentPart, SegmentPattern, pattern_score};
 
 use super::HTTP_METHOD_COUNT;
 
-/// 세그먼트의 리터럴 부분 또는 파라미터 값의 최대 길이
-pub const MAX_SEGMENT_PART_LENGTH: usize = 255;
+pub const MAX_SEGMENT_LENGTH: usize = 255;
 
-/// 패턴 메타데이터를 압축된 형태로 저장하는 구조체
-/// 입력값은 라우트 등록 시점에서 검증됨
-#[repr(packed)]
+#[repr(C, packed)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PatternMeta {
-    /// 패턴 특이성 점수 (0-65535)
     pub score: u16,
-    /// 세그먼트 최소 길이 (0-255)
     pub min_len: u8,
-    /// 마지막 리터럴 길이 (0-255)
     pub last_lit_len: u8,
 }
 
 impl PatternMeta {
-    /// 안전한 PatternMeta 생성자
-    /// 입력값은 이미 검증된 상태여야 함 (라우트 등록 시점에서 검증됨)
     pub fn new(score: u16, min_len: u16, last_lit_len: u16) -> Self {
         Self {
             score,
@@ -35,16 +27,13 @@ impl PatternMeta {
         }
     }
 
-    /// 패턴이 너무 긴지 검증
-    pub fn is_valid_pattern_length(min_len: u16, last_lit_len: u16) -> bool {
-        is_valid_segment_part_length(min_len as usize) && is_valid_segment_part_length(last_lit_len as usize)
+    pub fn is_valid_length(min_len: u16, last_lit_len: u16) -> bool {
+        is_valid_segment_length(min_len as usize) && is_valid_segment_length(last_lit_len as usize)
     }
-
 }
 
-/// 세그먼트 부분(리터럴 또는 파라미터 값)의 길이가 유효한지 확인
-pub fn is_valid_segment_part_length(len: usize) -> bool {
-    len <= MAX_SEGMENT_PART_LENGTH
+pub fn is_valid_segment_length(len: usize) -> bool {
+    len <= MAX_SEGMENT_LENGTH
 }
 
 bitflags! {
@@ -52,12 +41,6 @@ bitflags! {
     pub struct NodeFlags: u8 {
         const SEALED = 0b00000001;
         const DIRTY = 0b00000010;
-        const HAS_WILDCARD = 0b00000100;
-        const HAS_PARAMS = 0b00001000;
-        const HAS_STATIC_CHILDREN = 0b00010000;
-        const HAS_PATTERN_CHILDREN = 0b00100000;
-        const IS_LEAF = 0b01000000;
-        const IS_ROOT = 0b10000000;
     }
 }
 
@@ -68,7 +51,6 @@ pub(super) type StaticMapIdx = FastHashMap<String, super::NodeBox>;
 pub struct RadixTreeNode {
     // optimize small number of siblings before promoting to map
     pub(super) static_keys: SmallVec<[String; 16]>,
-    pub(super) static_keys_lower: SmallVec<[String; 16]>,
     pub(super) static_vals: SmallVec<[NodeBox; 16]>,
     // index-based mirror for arena-backed nodes (built during sealing)
     pub(super) static_vals_idx: SmallVec<[super::NodeBox; 16]>,
@@ -90,8 +72,6 @@ pub struct RadixTreeNode {
     pub(super) pattern_first_literal: FastHashMap<String, SmallVec<[u16; 16]>>,
     // first literal head byte -> indices (fast prefix filtering)
     pub(super) pattern_first_lit_head: FastHashMap<u8, SmallVec<[u16; 16]>>,
-    // last literal tail byte -> indices (fast suffix filtering)
-    pub(super) pattern_last_lit_tail: FastHashMap<u8, SmallVec<[u16; 16]>>,
     // param-first patterns (indices) for quick fallback without full scan
     pub(super) pattern_param_first: SmallVec<[u16; 16]>,
     // 압축된 패턴 메타데이터 (기존 3개 SmallVec을 1개로 통합)
@@ -106,11 +86,6 @@ pub struct RadixTreeNode {
     pub(super) fused_child: Option<NodeBox>,
     // index-based mirror for arena-backed nodes (built during sealing)
     pub(super) fused_child_idx: Option<super::NodeBox>,
-    // quick head/tail literal bitsets (256 bits each)
-    pub(super) head_bits: [u64; 4],
-    pub(super) tail_bits: [u64; 4],
-    // static keys lower_bound search hint
-    pub(super) static_lb_hint: usize,
 }
 
 impl RadixTreeNode {
@@ -193,24 +168,9 @@ impl RadixTreeNode {
                     return Some(self.static_vals_idx[pos].as_ref());
                 }
             } else {
-                // binary search on sorted static_keys with lower_bound hint
+                // binary search on sorted static_keys
                 let mut lo = 0usize;
                 let mut hi = self.static_keys.len();
-                if self.static_lb_hint < hi {
-                    // narrow window around last hit
-                    let hint = self.static_lb_hint;
-                    // expand by powers of two to bracket the key
-                    let mut l = hint;
-                    let mut r = hint + 1;
-                    while l > 0 && self.static_keys[l - 1].as_str() > key {
-                        l = l.saturating_sub(2);
-                    }
-                    while r < hi && self.static_keys[r].as_str() < key {
-                        r = (r + 2).min(hi);
-                    }
-                    lo = l;
-                    hi = r;
-                }
                 while lo < hi {
                     let mid = (lo + hi) >> 1;
                     let cmp = self.static_keys[mid].as_str().cmp(key);
@@ -219,13 +179,6 @@ impl RadixTreeNode {
                     } else if cmp.is_gt() {
                         hi = mid;
                     } else {
-                        // update hint
-                        // SAFETY: mid < len
-                        // This hint is best-effort; races are benign as read-only here
-                        // (mutable updates happen during seal/insert phases only)
-                        // Using Relaxed semantics via plain store
-                        // self.static_lb_hint = mid; // field is not atomic but only used in reads in find path; writes are rare
-                        // However, &self is immutable; keep as interior mutable via cell if needed. For now, skip update.
                         return Some(self.static_vals_idx[mid].as_ref());
                     }
                 }
@@ -262,16 +215,16 @@ impl RadixTreeNode {
 
     pub(super) fn rebuild_intern_ids(&mut self, interner: &Interner) {
         self.static_key_ids.clear();
-        self.static_keys_lower.clear();
         self.static_hash_table.clear();
         self.static_hash_seed = 0;
+
         if !self.static_keys.is_empty() {
             self.static_key_ids.reserve(self.static_keys.len());
+
             for k in self.static_keys.iter() {
                 self.static_key_ids.push(interner.intern(k.as_str()));
-                self.static_keys_lower.push(k.to_ascii_lowercase());
             }
-            // Build MPHF-like table when many keys
+
             if self.static_vals_idx.len() == self.static_keys.len() && self.static_keys.len() >= 16
             {
                 let mut size: usize = (self.static_keys.len() * 2).next_power_of_two();
@@ -356,10 +309,7 @@ impl RadixTreeNode {
     pub(super) fn rebuild_pattern_index(&mut self) {
         self.pattern_first_literal.clear();
         self.pattern_first_lit_head.clear();
-        self.pattern_last_lit_tail.clear();
         self.pattern_param_first.clear();
-        self.head_bits = [0; 4];
-        self.tail_bits = [0; 4];
 
         for (idx, pat) in self.patterns.iter().enumerate() {
             if let Some(SegmentPart::Literal(l0)) = pat.parts.first() {
@@ -374,29 +324,9 @@ impl RadixTreeNode {
                         .entry(b)
                         .or_insert_with(SmallVec::new);
                     entry2.push(idx as u16);
-                    let blk = (b as usize) >> 6;
-                    let bit = 1u64 << ((b as usize) & 63);
-                    self.head_bits[blk] |= bit;
                 }
             } else if let Some(SegmentPart::Param { .. }) = pat.parts.first() {
                 self.pattern_param_first.push(idx as u16);
-            }
-
-            if let Some(tb) = pat.parts.iter().rev().find_map(|p| {
-                if let SegmentPart::Literal(s) = p {
-                    s.as_bytes().last().copied()
-                } else {
-                    None
-                }
-            }) {
-                let e = self
-                    .pattern_last_lit_tail
-                    .entry(tb)
-                    .or_insert_with(SmallVec::new);
-                e.push(idx as u16);
-                let blk = (tb as usize) >> 6;
-                let bit = 1u64 << ((tb as usize) & 63);
-                self.tail_bits[blk] |= bit;
             }
         }
     }
@@ -431,7 +361,7 @@ impl RadixTreeNode {
             let meta = PatternMeta::new(score, min_len, last_len);
             self.pattern_meta.push(meta);
         }
-        
+
         debug_assert_eq!(self.patterns.len(), self.pattern_meta.len());
     }
 
@@ -475,5 +405,3 @@ impl RadixTreeNode {
         out
     }
 }
-
-// removed unused helper methods

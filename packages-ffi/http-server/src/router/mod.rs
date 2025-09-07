@@ -1,10 +1,10 @@
 pub mod errors;
 mod interner;
-pub mod radix;
 mod pattern;
+pub mod radix_tree;
 
-pub use errors::RouterError;
 use crate::r#enum::HttpMethod;
+pub use errors::RouterError;
 
 #[derive(Debug, Default)]
 pub struct RouteMatchResult {
@@ -14,22 +14,18 @@ pub struct RouteMatchResult {
 
 #[derive(Debug, Default)]
 pub struct Router {
-    radix_tree: radix::RadixTreeRouter,
+    radix_tree: radix_tree::RadixTree,
 }
 
 impl Router {
-    pub fn new() -> Self {
-        Self::with_configuration(RouterOptions::default(), None)
-    }
-
-    pub fn with_configuration(configuration: RouterOptions, _default_route_key: Option<u64>) -> Self {
+    pub fn new(options: Option<RouterOptions>) -> Self {
         Self {
-            radix_tree: radix::RadixTreeRouter::new(configuration),
+            radix_tree: radix_tree::RadixTree::new(options.unwrap_or_default()),
         }
     }
 
     pub fn add(&mut self, method: HttpMethod, path: &str) -> Result<u16, errors::RouterError> {
-        self.radix_tree.insert_route(method, path)
+        self.radix_tree.insert(method, path)
     }
 
     pub fn find(
@@ -55,10 +51,12 @@ impl Router {
             return Err(RouterError::MatchPathContainsDisallowedCharacters);
         }
 
-        if let Some(match_result) = self.radix_tree.find_normalized_route(method, &normalized_path) {
+        if let Some(match_result) = self.radix_tree.find_normalized(method, &normalized_path) {
             let mut parameter_pairs = Vec::with_capacity(match_result.parameter_offsets.len());
 
-            for (parameter_name, (start_offset, length)) in match_result.parameter_offsets.into_iter() {
+            for (parameter_name, (start_offset, length)) in
+                match_result.parameter_offsets.into_iter()
+            {
                 let parameter_value = &normalized_path[start_offset..start_offset + length];
 
                 parameter_pairs.push((parameter_name, parameter_value.to_string()));
@@ -70,16 +68,15 @@ impl Router {
         }
     }
 
-    pub fn finalize_routes(&mut self) {
-        self.radix_tree.finalize_routes();
+    pub fn finalize(&mut self) {
+        self.radix_tree.finalize();
     }
 
-    #[doc(hidden)]
-    pub fn get_internal_radix_router(&self) -> &radix::RadixTreeRouter {
+    #[cfg(feature = "test")]
+    pub fn get_internal_radix_router(&self) -> &radix_tree::RadixTree {
         &self.radix_tree
     }
 }
-
 
 #[derive(Debug, Clone, Copy)]
 pub struct RouterOptions {
@@ -153,7 +150,3 @@ pub(crate) fn is_path_character_allowed(path: &str) -> bool {
     }
     true
 }
-
-
-
-pub type RouterHandle = Router;

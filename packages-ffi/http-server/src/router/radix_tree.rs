@@ -1,7 +1,7 @@
 use bumpalo::Bump;
 use hashbrown::HashMap as FastHashMap;
 
-use super::{RouterOptions};
+use super::RouterOptions;
 use crate::router::interner::Interner;
 
 pub(super) const HTTP_METHOD_COUNT: usize = 7;
@@ -16,23 +16,22 @@ pub(super) const MAX_ROUTES: u16 = 100;
 
 const STATIC_MAP_THRESHOLD: usize = 50;
 
-
 mod alloc;
 mod compress;
 mod find;
 mod insert;
 pub mod node;
 
-use alloc::{create_node_box_from_arena_pointer, NodeBox};
+use alloc::{NodeBox, create_node_box_from_arena_pointer};
 pub use node::RadixTreeNode;
 
 #[derive(Debug, Default)]
-pub struct RadixTreeRouter {
+pub struct RadixTree {
     pub(super) root_node: RadixTreeNode,
-    pub(super) configuration: RouterOptions,
+    pub(super) options: RouterOptions,
     // arena for node allocations (prepared for full conversion)
-    pub(super) memory_arena: Bump,
-    pub(super) string_interner: Interner,
+    pub(super) arena: Bump,
+    pub(super) interner: Interner,
     // root-level method→first-byte bitmap for early prune (sealed only)
     pub(super) method_first_byte_bitmaps: [[u64; 4]; HTTP_METHOD_COUNT],
     pub(super) root_parameter_first_present: [bool; HTTP_METHOD_COUNT],
@@ -48,7 +47,7 @@ pub struct RadixTreeRouter {
     pub(super) next_route_key: std::sync::atomic::AtomicU16,
 }
 
-impl RadixTreeRouter {
+impl RadixTree {
     pub fn compress_tree(&mut self) {
         self.invalidate_all_indices();
         compress::compress_root_node(&mut self.root_node);
@@ -92,7 +91,7 @@ impl RadixTreeRouter {
                 if let Some(fc) = node.fused_child.as_ref() {
                     node.fused_child_idx = Some(NodeBox(fc.0));
                 }
-                node.rebuild_intern_ids(&self.string_interner);
+                node.rebuild_intern_ids(&self.interner);
                 node.set_dirty(false);
             }
             for child in node.static_vals.iter_mut() {
@@ -159,11 +158,11 @@ impl RadixTreeRouter {
         }
     }
     pub fn new(configuration: RouterOptions) -> Self {
-        let s = Self {
+        Self {
             root_node: RadixTreeNode::default(),
-            configuration,
-            memory_arena: Bump::with_capacity(64 * 1024),
-            string_interner: Interner::new(),
+            options: configuration,
+            arena: Bump::with_capacity(64 * 1024),
+            interner: Interner::new(),
             method_first_byte_bitmaps: [[0; 4]; HTTP_METHOD_COUNT],
             root_parameter_first_present: [false; HTTP_METHOD_COUNT],
             root_wildcard_present: [false; HTTP_METHOD_COUNT],
@@ -172,17 +171,16 @@ impl RadixTreeRouter {
             enable_root_level_pruning: configuration.enable_root_level_pruning,
             enable_static_route_full_mapping: configuration.enable_static_route_full_mapping,
             next_route_key: std::sync::atomic::AtomicU16::new(1),
-        };
-        s
+        }
     }
 
-    pub fn finalize_routes(&mut self) {
+    pub fn finalize(&mut self) {
         if self.root_node.is_sealed() {
             return;
         }
 
         // --- Automatic Optimization Logic ---
-        if self.configuration.enable_automatic_optimization {
+        if self.options.enable_automatic_optimization {
             // 1. Auto-enable root pruning
             let has_root_param_or_wildcard = {
                 let n = &self.root_node;
@@ -278,7 +276,7 @@ impl RadixTreeRouter {
                 sort_node(fc.as_mut(), interner);
             }
         }
-        sort_node(&mut self.root_node, &self.string_interner);
+        sort_node(&mut self.root_node, &self.interner);
         self.build_indices();
         // build root-level bitmaps and flags
         self.method_first_byte_bitmaps = [[0; 4]; HTTP_METHOD_COUNT];
