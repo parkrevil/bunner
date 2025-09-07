@@ -127,10 +127,10 @@ impl RadixTreeNode {
                 if let Some(node) = self.static_children_idx_ids.get(&id) {
                     return Some(node.as_ref());
                 }
-                if !self.static_key_ids.is_empty() {
-                    if let Ok(pos) = self.static_key_ids.binary_search(&id) {
-                        return Some(self.static_vals_idx[pos].as_ref());
-                    }
+                if !self.static_key_ids.is_empty()
+                    && let Ok(pos) = self.static_key_ids.binary_search(&id)
+                {
+                    return Some(self.static_vals_idx[pos].as_ref());
                 }
             }
 
@@ -212,6 +212,7 @@ impl RadixTreeNode {
 
     #[inline]
     pub(super) fn pattern_candidates_for(&self, comp: &str) -> SmallVec<[u16; 8]> {
+        debug_assert!(comp.is_ascii());
         let mut out: SmallVec<[u16; 8]> = SmallVec::new();
 
         if let Some(v) = self.pattern_first_literal.get(comp) {
@@ -248,5 +249,19 @@ impl RadixTreeNode {
             }
         }
         out
+    }
+
+    #[cfg(feature = "test")]
+    pub fn get_child_for_test(&self, key: &str) -> Option<&RadixTreeNode> {
+        // After finalize, children are in static_keys and static_vals_idx for binary search
+        if let Ok(pos) = self.static_keys.binary_search_by(|k| k.as_str().cmp(key)) {
+            return Some(self.static_vals[pos].as_ref());
+        }
+        None
+    }
+
+    #[cfg(feature = "test")]
+    pub fn get_static_keys_for_test(&self) -> &SmallVec<[String; 16]> {
+        &self.static_keys
     }
 }

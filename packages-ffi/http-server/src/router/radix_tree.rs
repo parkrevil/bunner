@@ -5,8 +5,6 @@ use super::RouterOptions;
 use crate::router::interner::Interner;
 
 pub(super) const HTTP_METHOD_COUNT: usize = 7;
-pub(super) const HTTP_METHOD_BIT_MASKS: [u8; HTTP_METHOD_COUNT] =
-    [1 << 0, 1 << 1, 1 << 2, 1 << 3, 1 << 4, 1 << 5, 1 << 6];
 
 #[cfg(not(feature = "test"))]
 pub(super) const MAX_ROUTES: u16 = 65_535;
@@ -21,6 +19,12 @@ mod find;
 mod insert;
 pub mod node;
 mod builder;
+pub mod traversal;
+mod mask;
+mod compression;
+mod memory;
+mod static_map;
+mod indices;
 
 use alloc::{NodeBox, create_node_box_from_arena_pointer};
 pub use node::RadixTreeNode;

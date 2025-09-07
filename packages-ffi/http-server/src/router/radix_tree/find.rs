@@ -41,13 +41,38 @@ unsafe fn starts_with_cs_avx2(hay: &[u8], pre: &[u8]) -> bool {
     true
 }
 
+fn handle_end_of_path(
+    node: &RadixTreeNode,
+    method: HttpMethod,
+    parameter_offsets: &mut SmallVec<[(String, (usize, usize)); INITIAL_PARAMETER_OFFSETS_CAPACITY]>,
+) -> Option<super::super::RouteMatchResult> {
+    let method_idx = method as usize;
+    let rk = node.routes[method_idx];
+
+    if rk != 0 {
+        return Some(super::super::RouteMatchResult {
+            route_key: RadixTree::decode_route_key(rk),
+            parameter_offsets: parameter_offsets.clone().into_vec(),
+        });
+    }
+
+    let wildcard_route_key = node.wildcard_routes[method_idx];
+    if wildcard_route_key != 0 {
+        return Some(super::super::RouteMatchResult {
+            route_key: RadixTree::decode_route_key(wildcard_route_key),
+            parameter_offsets: parameter_offsets.clone().into_vec(),
+        });
+    }
+
+    None
+}
+
 fn find_pattern_child<'a>(
     tree: &'a RadixTree,
     node: &'a RadixTreeNode,
     method: HttpMethod,
     path: &str,
     segment: &str,
-    path_offset: usize,
     segment_offset: usize,
     parameter_offsets: &mut SmallVec<[(String, (usize, usize)); INITIAL_PARAMETER_OFFSETS_CAPACITY]>,
 ) -> Option<super::super::RouteMatchResult> {
@@ -83,7 +108,9 @@ fn find_pattern_child<'a>(
                 parameter_offsets.push((name, (segment_offset + off, len)));
             }
 
-            if let Some(ok) = tree.find_from(child_nb.as_ref(), method, path, path_offset, parameter_offsets) {
+            let path_offset = segment_offset + segment.len();
+            if let Some(ok) = tree.find_from(child_nb.as_ref(), method, path, path_offset, parameter_offsets)
+            {
                 return Some(ok);
             } else {
                 parameter_offsets.truncate(checkpoint);
@@ -113,18 +140,14 @@ fn handle_wildcard(
 
     let rest_len = if cap_start <= path.len() { path.len() - cap_start } else { 0 };
 
-    let checkpoint = parameter_offsets.len();
     if rest_len > 0 {
         parameter_offsets.push(("*".to_string(), (cap_start, rest_len)));
     }
 
-    let result = Some(super::super::RouteMatchResult {
+    Some(super::super::RouteMatchResult {
         route_key: RadixTree::decode_route_key(wildcard_route_key),
         parameter_offsets: parameter_offsets.clone().into_vec(),
-    });
-
-    parameter_offsets.truncate(checkpoint);
-    result
+    })
 }
 
 impl RadixTree {
@@ -147,135 +170,51 @@ impl RadixTree {
         node: &super::node::RadixTreeNode,
         method: HttpMethod,
         s: &str,
-        mut i: usize,
+        i: usize,
         parameter_offsets: &mut SmallVec<[(String, (usize, usize)); INITIAL_PARAMETER_OFFSETS_CAPACITY]>,
     ) -> Option<super::super::RouteMatchResult> {
-        let mut cur = node;
-        i = self.skip_slashes(s, i);
+        let current_i = self.skip_slashes(s, i);
 
-        loop {
-            if let Some(edge) = cur.fused_edge.as_ref() {
-                let rem = &s[i..];
-                let ok = {
-                    let hb = rem.as_bytes();
-                    let pb = edge.as_bytes();
-                    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
-                    {
-                        if pb.len() >= 32 {
-                            unsafe { starts_with_cs_avx2(hb, pb) }
-                        } else {
-                            hb.starts_with(pb)
-                        }
-                    }
-                    #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
-                    {
-                        hb.starts_with(pb)
-                    }
-                };
-
-                if ok {
-                    let mut ni = i + edge.len();
-
-                    ni = self.skip_slashes(s, ni);
-
-                    if let Some(child_nb) = cur.fused_child_idx.as_ref() {
-                        cur = child_nb.as_ref();
-                        i = ni;
-
-                        continue;
-                    }
-
-                    if let Some(child) = cur.fused_child.as_ref() {
-                        cur = child.as_ref();
-                        i = ni;
-
-                        continue;
-                    }
-                } else {
-                    #[cold]
-                    fn miss_fused() -> Option<super::super::RouteMatchResult> {
-                        None
-                    }
-
-                    return miss_fused();
-                }
-            }
-
-            let method_idx = method as usize;
-            let wildcard_route_key = cur.wildcard_routes[method_idx];
-
-            if i >= s.len() {
-                let rk = cur.routes[method_idx];
-
-                if rk != 0 {
-                    let out_parameter_offsets = core::mem::take(parameter_offsets).into_vec();
-
-                    return Some(super::super::RouteMatchResult {
-                        route_key: Self::decode_route_key(rk),
-                        parameter_offsets: out_parameter_offsets,
-                    });
-                }
-
-                if wildcard_route_key != 0 {
-                    let out_parameter_offsets = core::mem::take(parameter_offsets).into_vec();
-
-                    return Some(super::super::RouteMatchResult {
-                        route_key: Self::decode_route_key(wildcard_route_key),
-                        parameter_offsets: out_parameter_offsets,
-                    });
-                }
-
-                #[cold]
-                fn miss() -> Option<super::super::RouteMatchResult> {
-                    None
-                }
-
-                return miss();
-            }
-
-            if self.root_node.is_sealed()
-                && (cur.method_mask() & super::HTTP_METHOD_BIT_MASKS[method_idx]) == 0
-            {
-                #[cold]
-                fn miss_method() -> Option<super::super::RouteMatchResult> {
-                    None
-                }
-
-                return miss_method();
-            }
-
-            let start = i;
-
-            if let Some(pos) = memchr::memchr(b'/', &s.as_bytes()[i..]) {
-                i += pos;
-            } else {
-                i = s.len();
-            }
-
-            let seg = &s[start..i];
-            
-            if let Some(next_node) = cur.get_static_child(seg, self.interner.get(seg)) {
-                prefetch_node(next_node);
-                if let Some(result) = self.find_from(next_node, method, s, i, parameter_offsets) {
-                    return Some(result);
-                }
+        if let Some(edge) = &node.fused_edge {
+            let rem = &s[current_i..];
+            if !rem.starts_with(edge.as_str()) {
+                return None;
             }
             
-            if let Some(result) = find_pattern_child(self, cur, method, s, seg, i, start, parameter_offsets) {
-                return Some(result);
+            let next_i = current_i + edge.len();
+            if let Some(child) = &node.fused_child {
+                 return self.find_from(child, method, s, next_i, parameter_offsets);
             }
-
-            if let Some(result) = handle_wildcard(cur, method, s, start, parameter_offsets) {
-                return Some(result);
-            }
-
-            #[cold]
-            fn miss2() -> Option<super::super::RouteMatchResult> {
-                None
-            }
-
-            return miss2();
+            return None;
         }
+
+        if current_i >= s.len() {
+            return handle_end_of_path(node, method, parameter_offsets);
+        }
+
+        let start = current_i;
+        let next_slash = s[start..].find('/').map_or(s.len(), |pos| start + pos);
+        let seg = &s[start..next_slash];
+
+        if let Some(next_node) = node.get_static_child(seg, self.interner.get(seg)) {
+            prefetch_node(next_node);
+            if let Some(result) = self.find_from(next_node, method, s, next_slash, parameter_offsets) {
+                return Some(result);
+            }
+        }
+        
+        if let Some(result) = find_pattern_child(self, node, method, s, seg, start, parameter_offsets) {
+            return Some(result);
+        }
+
+        let checkpoint = parameter_offsets.len();
+        if let Some(result) = handle_wildcard(node, method, s, start, parameter_offsets) {
+            return Some(result);
+        }
+        parameter_offsets.truncate(checkpoint);
+
+
+        None
     }
 
     #[inline(always)]
