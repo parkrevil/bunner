@@ -1,23 +1,22 @@
 #![allow(clippy::redundant_clone)]
 #![allow(clippy::field_reassign_with_default)]
 use bunner_http_server::r#enum::HttpMethod;
-use bunner_http_server::router::{self as rapi, RouterBuilder, RouterError, RouterOptions};
+use bunner_http_server::router::{self as rapi, Router, RouterError, RouterOptions};
 
 mod methods {
     use super::*;
 
     #[test]
     fn supports_all_http_methods() {
-        let r = RouterBuilder::with_options(RouterOptions::default())
-            .add(HttpMethod::Get, "/r")
-            .add(HttpMethod::Post, "/r")
-            .add(HttpMethod::Put, "/r")
-            .add(HttpMethod::Patch, "/r")
-            .add(HttpMethod::Delete, "/r")
-            .add(HttpMethod::Options, "/r")
-            .add(HttpMethod::Head, "/r")
-            .seal()
-            .build();
+        let mut r = Router::with_options(RouterOptions::default(), None);
+        r.add(HttpMethod::Get, "/r").unwrap();
+        r.add(HttpMethod::Post, "/r").unwrap();
+        r.add(HttpMethod::Put, "/r").unwrap();
+        r.add(HttpMethod::Patch, "/r").unwrap();
+        r.add(HttpMethod::Delete, "/r").unwrap();
+        r.add(HttpMethod::Options, "/r").unwrap();
+        r.add(HttpMethod::Head, "/r").unwrap();
+        r.seal();
         let k_get = r.find(HttpMethod::Get, "/r").unwrap().key;
         let k_post = r.find(HttpMethod::Post, "/r").unwrap().key;
         let k_put = r.find(HttpMethod::Put, "/r").unwrap().key;
@@ -42,29 +41,25 @@ mod methods {
 
     #[test]
     fn missing_method_is_none_both_before_and_after_seal() {
-        let r1 = RouterBuilder::with_options(RouterOptions::default())
-            .add(HttpMethod::Get, "/only-get")
-            .build();
+        let mut r1 = Router::with_options(RouterOptions::default(), None);
+        r1.add(HttpMethod::Get, "/only-get").unwrap();
         assert!(r1.find(HttpMethod::Post, "/only-get").is_none());
-        let r2 = RouterBuilder::with_options(RouterOptions::default())
-            .add(HttpMethod::Get, "/only-get")
-            .seal()
-            .build();
+        let mut r2 = Router::with_options(RouterOptions::default(), None);
+        r2.add(HttpMethod::Get, "/only-get").unwrap();
+        r2.seal();
         assert!(r2.find(HttpMethod::Post, "/only-get").is_none());
     }
 
     #[test]
     fn head_does_not_fallback_to_get_and_head_only() {
-        let r1 = RouterBuilder::with_options(RouterOptions::default())
-            .add(HttpMethod::Get, "/only-get")
-            .seal()
-            .build();
+        let mut r1 = Router::with_options(RouterOptions::default(), None);
+        r1.add(HttpMethod::Get, "/only-get").unwrap();
+        r1.seal();
         assert!(r1.find(HttpMethod::Head, "/only-get").is_none());
 
-        let r2 = RouterBuilder::with_options(RouterOptions::default())
-            .add(HttpMethod::Head, "/head-only")
-            .seal()
-            .build();
+        let mut r2 = Router::with_options(RouterOptions::default(), None);
+        r2.add(HttpMethod::Head, "/head-only").unwrap();
+        r2.seal();
         assert!(r2.find(HttpMethod::Get, "/head-only").is_none());
         assert!(r2.find(HttpMethod::Head, "/head-only").unwrap().key != 0);
     }
@@ -75,29 +70,26 @@ mod static_routes {
 
     #[test]
     fn matches_root_route() {
-        let r = RouterBuilder::with_options(RouterOptions::default())
-            .add(HttpMethod::Get, "/")
-            .seal()
-            .build();
+        let mut r = Router::with_options(RouterOptions::default(), None);
+        r.add(HttpMethod::Get, "/").unwrap();
+        r.seal();
         assert!(r.find(HttpMethod::Get, "/").unwrap().key != 0);
     }
 
     #[test]
     fn root_matches_with_leading_duplicate_slashes() {
-        let r = RouterBuilder::with_options(RouterOptions::default())
-            .add(HttpMethod::Get, "/")
-            .seal()
-            .build();
+        let mut r = Router::with_options(RouterOptions::default(), None);
+        r.add(HttpMethod::Get, "/").unwrap();
+        r.seal();
         assert!(r.find(HttpMethod::Get, "////").is_some());
     }
 
     #[test]
     fn matches_static_routes_by_method() {
-        let r = RouterBuilder::with_options(RouterOptions::default())
-            .add(HttpMethod::Get, "/health")
-            .add(HttpMethod::Post, "/health")
-            .seal()
-            .build();
+        let mut r = Router::with_options(RouterOptions::default(), None);
+        r.add(HttpMethod::Get, "/health").unwrap();
+        r.add(HttpMethod::Post, "/health").unwrap();
+        r.seal();
         assert!(r.find(HttpMethod::Get, "/health").unwrap().key != 0);
         assert!(r.find(HttpMethod::Post, "/health").unwrap().key != 0);
     }
@@ -134,39 +126,35 @@ mod normalization {
 
     #[test]
     fn trailing_slash_is_always_ignored() {
-        let r = RouterBuilder::with_options(RouterOptions::default())
-            .add(HttpMethod::Get, "/api/users")
-            .seal()
-            .build();
+        let mut r = Router::with_options(RouterOptions::default(), None);
+        r.add(HttpMethod::Get, "/api/users").unwrap();
+        r.seal();
         assert!(r.find(HttpMethod::Get, "/api/users/").is_some());
         assert!(r.find(HttpMethod::Get, "/api/users").is_some());
     }
 
     #[test]
     fn duplicate_slashes_are_not_ignored() {
-        let r = RouterBuilder::with_options(RouterOptions::default())
-            .add(HttpMethod::Get, "/a/b")
-            .seal()
-            .build();
+        let mut r = Router::with_options(RouterOptions::default(), None);
+        r.add(HttpMethod::Get, "/a/b").unwrap();
+        r.seal();
         assert!(r.find(HttpMethod::Get, "/a//b").is_none());
         assert!(r.find(HttpMethod::Get, "/a//b///").is_none());
     }
 
     #[test]
     fn duplicate_slash_does_not_match_static_path() {
-        let r = RouterBuilder::with_options(RouterOptions::default())
-            .add(HttpMethod::Get, "/a/x/b")
-            .seal()
-            .build();
+        let mut r = Router::with_options(RouterOptions::default(), None);
+        r.add(HttpMethod::Get, "/a/x/b").unwrap();
+        r.seal();
         assert!(r.find(HttpMethod::Get, "/a//b").is_none());
     }
 
     #[test]
     fn trailing_slash_ignoring_works_with_params() {
-        let r = RouterBuilder::with_options(RouterOptions::default())
-            .add(HttpMethod::Get, "/p/:x/:y")
-            .seal()
-            .build();
+        let mut r = Router::with_options(RouterOptions::default(), None);
+        r.add(HttpMethod::Get, "/p/:x/:y").unwrap();
+        r.seal();
         let raw = "/p/AA/BB/";
         let m = r.find(HttpMethod::Get, raw).unwrap();
         assert!(m.key != 0);
@@ -183,11 +171,10 @@ mod normalization {
 
     #[test]
     fn path_segments_like_dot_and_dotdot_are_treated_as_literals() {
-        let r = RouterBuilder::with_options(RouterOptions::default())
-            .add(HttpMethod::Get, "/a/./b")
-            .add(HttpMethod::Get, "/a/../b")
-            .seal()
-            .build();
+        let mut r = Router::with_options(RouterOptions::default(), None);
+        r.add(HttpMethod::Get, "/a/./b").unwrap();
+            r.add(HttpMethod::Get, "/a/../b").unwrap();
+        r.seal();
 
         assert!(r.find(HttpMethod::Get, "/a/./b").is_some());
         assert!(r.find(HttpMethod::Get, "/a/../b").is_some());
@@ -200,10 +187,9 @@ mod case_sensitivity {
 
     #[test]
     fn always_case_sensitive() {
-        let r = RouterBuilder::with_options(RouterOptions::default())
-            .add(HttpMethod::Get, "/About")
-            .seal()
-            .build();
+        let mut r = Router::with_options(RouterOptions::default(), None);
+        r.add(HttpMethod::Get, "/About").unwrap();
+        r.seal();
         assert!(r.find(HttpMethod::Get, "/about").is_none());
         assert!(r.find(HttpMethod::Get, "/About").is_some());
     }
@@ -211,7 +197,8 @@ mod case_sensitivity {
     #[test]
     fn non_ascii_paths_are_rejected() {
         let o = RouterOptions::default();
-        let r = RouterBuilder::with_options(o).seal().build();
+        let mut r = Router::with_options(o, None);
+        r.seal();
         assert!(r.find(HttpMethod::Get, "/café").is_none());
         assert!(r.find(HttpMethod::Get, "/Café").is_none());
     }
@@ -248,10 +235,9 @@ mod params {
 
     #[test]
     fn returns_params_with_find() {
-        let r = RouterBuilder::with_options(RouterOptions::default())
-            .add(HttpMethod::Get, "/users/:id")
-            .seal()
-            .build();
+        let mut r = Router::with_options(RouterOptions::default(), None);
+        r.add(HttpMethod::Get, "/users/:id").unwrap();
+        r.seal();
         let path = "/users/123";
         let mo = r.find(HttpMethod::Get, path).unwrap();
         assert!(mo.key != 0);
@@ -265,10 +251,9 @@ mod params {
 
     #[test]
     fn multi_params_across_segments() {
-        let r = RouterBuilder::with_options(RouterOptions::default())
-            .add(HttpMethod::Get, "/pkg/:name/:ver")
-            .seal()
-            .build();
+        let mut r = Router::with_options(RouterOptions::default(), None);
+        r.add(HttpMethod::Get, "/pkg/:name/:ver").unwrap();
+        r.seal();
         let path = "/pkg/lib/2.0.1";
         let mo = r.find(HttpMethod::Get, path).unwrap();
         assert!(mo.key != 0);
@@ -289,10 +274,9 @@ mod wildcard {
 
     #[test]
     fn matches_trailing_wildcard() {
-        let r = RouterBuilder::with_options(RouterOptions::default())
-            .add(HttpMethod::Get, "/files/*")
-            .seal()
-            .build();
+        let mut r = Router::with_options(RouterOptions::default(), None);
+        r.add(HttpMethod::Get, "/files/*").unwrap();
+        r.seal();
         assert!(r.find(HttpMethod::Get, "/files/a/b").is_some());
     }
 
@@ -310,10 +294,9 @@ mod wildcard {
 
     #[test]
     fn allows_empty_or_slash_remainder_in_builder() {
-        let r = RouterBuilder::with_options(RouterOptions::default())
-            .add(HttpMethod::Get, "/w/*")
-            .seal()
-            .build();
+        let mut r = Router::with_options(RouterOptions::default(), None);
+        r.add(HttpMethod::Get, "/w/*").unwrap();
+        r.seal();
         assert!(r.find(HttpMethod::Get, "/w").is_some());
         assert!(r.find(HttpMethod::Get, "/w/").is_some());
     }
@@ -332,10 +315,9 @@ mod wildcard {
 
     #[test]
     fn wildcard_at_root_matches_any_non_root_path() {
-        let r = RouterBuilder::with_options(RouterOptions::default())
-            .add(HttpMethod::Get, "/*")
-            .seal()
-            .build();
+        let mut r = Router::with_options(RouterOptions::default(), None);
+        r.add(HttpMethod::Get, "/*").unwrap();
+        r.seal();
         assert!(r.find(HttpMethod::Get, "/a").is_some());
         assert!(r.find(HttpMethod::Get, "/a/b").is_some());
         assert!(r.find(HttpMethod::Get, "/").is_none());
@@ -359,44 +341,40 @@ mod precedence {
 
     #[test]
     fn static_route_wins_over_wildcard_route() {
-        let r = RouterBuilder::with_options(RouterOptions::default())
-            .add(HttpMethod::Get, "/user/*")
-            .add(HttpMethod::Get, "/user/me")
-            .seal()
-            .build();
+        let mut r = Router::with_options(RouterOptions::default(), None);
+        r.add(HttpMethod::Get, "/user/*").unwrap();
+            r.add(HttpMethod::Get, "/user/me").unwrap();
+        r.seal();
         assert!(r.find(HttpMethod::Get, "/user/me").is_some());
         assert!(r.find(HttpMethod::Get, "/user/123").is_some());
     }
 
     #[test]
     fn static_vs_wildcard_precedence() {
-        let r = RouterBuilder::with_options(RouterOptions::default())
-            .add(HttpMethod::Get, "/f/static")
-            .add(HttpMethod::Get, "/f/*")
-            .seal()
-            .build();
+        let mut r = Router::with_options(RouterOptions::default(), None);
+        r.add(HttpMethod::Get, "/f/static").unwrap();
+            r.add(HttpMethod::Get, "/f/*").unwrap();
+        r.seal();
         assert!(r.find(HttpMethod::Get, "/f/static").is_some());
         assert!(r.find(HttpMethod::Get, "/f/abc").is_some());
     }
 
     #[test]
     fn deep_mixed_static_wildcard_precedence() {
-        let r = RouterBuilder::with_options(RouterOptions::default())
-            .add(HttpMethod::Get, "/a/b/c/d")
-            .add(HttpMethod::Get, "/a/*")
-            .seal()
-            .build();
+        let mut r = Router::with_options(RouterOptions::default(), None);
+        r.add(HttpMethod::Get, "/a/b/c/d").unwrap();
+            r.add(HttpMethod::Get, "/a/*").unwrap();
+        r.seal();
         assert!(r.find(HttpMethod::Get, "/a/b/c/d").is_some());
         assert!(r.find(HttpMethod::Get, "/a/x/y").is_some());
     }
 
     #[test]
     fn root_explicit_route_wins_over_root_wildcard() {
-        let r = RouterBuilder::with_options(RouterOptions::default())
-            .add(HttpMethod::Get, "/")
-            .add(HttpMethod::Get, "/*")
-            .seal()
-            .build();
+        let mut r = Router::with_options(RouterOptions::default(), None);
+        r.add(HttpMethod::Get, "/").unwrap();
+            r.add(HttpMethod::Get, "/*").unwrap();
+        r.seal();
         assert!(r.find(HttpMethod::Get, "/").is_some());
         assert!(r.find(HttpMethod::Get, "/anything").is_some());
     }
@@ -551,10 +529,9 @@ mod match_errors {
 
         // MatchPathSyntaxInvalid (Note: current implementation doesn't seem to produce this)
         // Let's ensure no panic on strange but allowed inputs
-        let r = RouterBuilder::with_options(RouterOptions::default())
-            .add(HttpMethod::Get, "/:a")
-            .seal()
-            .build();
+        let mut r = Router::with_options(RouterOptions::default(), None);
+        r.add(HttpMethod::Get, "/:a").unwrap();
+        r.seal();
         assert!(r.find(HttpMethod::Get, "/'()*,;=").is_some());
     }
 }
@@ -575,9 +552,8 @@ mod lifecycle {
 
     #[test]
     fn works_without_seal_for_matching() {
-        let r = RouterBuilder::with_options(RouterOptions::default())
-            .add(HttpMethod::Get, "/ok")
-            .build();
+        let mut r = Router::with_options(RouterOptions::default(), None);
+        r.add(HttpMethod::Get, "/ok").unwrap();
         assert!(r.find(HttpMethod::Get, "/ok").is_some());
     }
 }
@@ -589,19 +565,17 @@ mod optimizations {
     fn functional_equivalence_with_and_without_static_full_map() {
         let mut o1 = RouterOptions::default();
         o1.enable_static_full_map = true;
-        let r1 = RouterBuilder::with_options(o1)
-            .add(HttpMethod::Get, "/s/a")
-            .add(HttpMethod::Get, "/s/b")
-            .seal()
-            .build();
+        let mut r1 = Router::with_options(o1, None);
+        r1.add(HttpMethod::Get, "/s/a").unwrap();
+        r1.add(HttpMethod::Get, "/s/b").unwrap();
+        r1.seal();
 
         let mut o2 = RouterOptions::default();
         o2.enable_static_full_map = false;
-        let r2 = RouterBuilder::with_options(o2)
-            .add(HttpMethod::Get, "/s/a")
-            .add(HttpMethod::Get, "/s/b")
-            .seal()
-            .build();
+        let mut r2 = Router::with_options(o2, None);
+        r2.add(HttpMethod::Get, "/s/a").unwrap();
+        r2.add(HttpMethod::Get, "/s/b").unwrap();
+        r2.seal();
 
         for p in ["/s/a", "/s/b", "/s/x"].iter() {
             assert_eq!(
@@ -615,19 +589,17 @@ mod optimizations {
     fn functional_equivalence_with_and_without_root_prune() {
         let mut o1 = RouterOptions::default();
         o1.enable_root_prune = true;
-        let r1 = RouterBuilder::with_options(o1)
-            .add(HttpMethod::Get, "/x/:p")
-            .add(HttpMethod::Get, "/y/static")
-            .seal()
-            .build();
+        let mut r1 = Router::with_options(o1, None);
+        r1.add(HttpMethod::Get, "/x/:p").unwrap();
+        r1.add(HttpMethod::Get, "/y/static").unwrap();
+        r1.seal();
 
         let mut o2 = RouterOptions::default();
         o2.enable_root_prune = false;
-        let r2 = RouterBuilder::with_options(o2)
-            .add(HttpMethod::Get, "/x/:p")
-            .add(HttpMethod::Get, "/y/static")
-            .seal()
-            .build();
+        let mut r2 = Router::with_options(o2, None);
+        r2.add(HttpMethod::Get, "/x/:p").unwrap();
+        r2.add(HttpMethod::Get, "/y/static").unwrap();
+        r2.seal();
 
         for p in ["/x/abc", "/y/static", "/zzz"].iter() {
             assert_eq!(
@@ -641,10 +613,9 @@ mod optimizations {
     fn root_prune_does_not_false_negative_with_wildcard_at_root() {
         let mut o = RouterOptions::default();
         o.enable_root_prune = true;
-        let r = RouterBuilder::with_options(o)
-            .add(HttpMethod::Get, "/*")
-            .seal()
-            .build();
+        let mut r = Router::with_options(o, None);
+        r.add(HttpMethod::Get, "/*").unwrap();
+        r.seal();
         assert!(r.find(HttpMethod::Get, "/a").is_some());
     }
 
@@ -653,10 +624,9 @@ mod optimizations {
         let mut o = RouterOptions::default();
         o.enable_static_full_map = true;
         let long = "/a/b/c/d/e/f/g/h/i/j";
-        let r = RouterBuilder::with_options(o)
-            .add(HttpMethod::Get, long)
-            .seal()
-            .build();
+        let mut r = Router::with_options(o, None);
+        r.add(HttpMethod::Get, long).unwrap();
+        r.seal();
         assert!(r.find(HttpMethod::Get, long).is_some());
     }
 }
@@ -666,21 +636,19 @@ mod edge_cases {
 
     #[test]
     fn leading_and_trailing_slashes_variants() {
-        let r = RouterBuilder::with_options(RouterOptions::default())
-            .add(HttpMethod::Get, "/edge")
-            .seal()
-            .build();
+        let mut r = Router::with_options(RouterOptions::default(), None);
+        r.add(HttpMethod::Get, "/edge").unwrap();
+        r.seal();
         assert!(r.find(HttpMethod::Get, "/edge/").is_some());
         assert!(r.find(HttpMethod::Get, "////edge///").is_none());
     }
 
     #[test]
     fn matches_deep_static_and_param_paths() {
-        let r = RouterBuilder::with_options(RouterOptions::default())
-            .add(HttpMethod::Get, "/a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r/s/t/u/v")
-            .add(HttpMethod::Get, "/a/b/c/d/e/:x/g/h/i/j/k/l/m/n/o/p/q/r/s/t/u/v")
-            .seal()
-            .build();
+        let mut r = Router::with_options(RouterOptions::default(), None);
+        r.add(HttpMethod::Get, "/a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r/s/t/u/v").unwrap();
+            r.add(HttpMethod::Get, "/a/b/c/d/e/:x/g/h/i/j/k/l/m/n/o/p/q/r/s/t/u/v").unwrap();
+        r.seal();
         assert!(r
             .find(HttpMethod::Get, "/a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r/s/t/u/v")
             .is_some());
@@ -692,12 +660,11 @@ mod edge_cases {
 
     #[test]
     fn many_plain_param_patterns_under_same_node_match_correctly() {
-        let r = RouterBuilder::with_options(RouterOptions::default())
-            .add(HttpMethod::Get, "/p/:n")
-            .add(HttpMethod::Get, "/p/x")
-            .add(HttpMethod::Get, "/p/a")
-            .seal()
-            .build();
+        let mut r = Router::with_options(RouterOptions::default(), None);
+        r.add(HttpMethod::Get, "/p/:n").unwrap();
+            r.add(HttpMethod::Get, "/p/x").unwrap();
+            r.add(HttpMethod::Get, "/p/a").unwrap();
+        r.seal();
         assert!(r.find(HttpMethod::Get, "/p/xyz").is_some());
         assert!(r.find(HttpMethod::Get, "/p/x").is_some());
         assert!(r.find(HttpMethod::Get, "/p/a").is_some());
@@ -706,20 +673,18 @@ mod edge_cases {
     #[test]
     fn case_sensitive_with_dup_and_trailing_works_together() {
         let o = RouterOptions::default();
-        let r = RouterBuilder::with_options(o)
-            .add(HttpMethod::Get, "/a/b")
-            .seal()
-            .build();
+        let mut r = Router::with_options(o, None);
+        r.add(HttpMethod::Get, "/a/b").unwrap();
+        r.seal();
         assert!(r.find(HttpMethod::Get, "/A//b/").is_none());
         assert!(r.find(HttpMethod::Get, "/a/b").is_some());
     }
 
     #[test]
     fn same_param_name_has_same_id_across_calls() {
-        let r = RouterBuilder::with_options(RouterOptions::default())
-            .add(HttpMethod::Get, "/u/:id")
-            .seal()
-            .build();
+        let mut r = Router::with_options(RouterOptions::default(), None);
+        r.add(HttpMethod::Get, "/u/:id").unwrap();
+        r.seal();
         let mo1 = r.find(HttpMethod::Get, "/u/1").unwrap();
         let mo2 = r.find(HttpMethod::Get, "/u/2").unwrap();
         assert_eq!(mo1.params.len(), 1);
@@ -733,50 +698,47 @@ mod automatic_optimizations {
 
     #[test]
     fn auto_enables_root_prune_when_no_root_dynamics() {
-        let r = RouterBuilder::with_options(RouterOptions::default())
-            .add(HttpMethod::Get, "/static")
-            .add(HttpMethod::Get, "/another")
-            .seal()
-            .build();
+        let mut r = Router::with_options(RouterOptions::default(), None);
+        r.add(HttpMethod::Get, "/static").unwrap();
+            r.add(HttpMethod::Get, "/another").unwrap();
+        r.seal();
         assert!(r.internal_router().enable_root_prune);
     }
 
     #[test]
     fn does_not_auto_enable_root_prune_with_root_param() {
-        let r = RouterBuilder::with_options(RouterOptions::default())
-            .add(HttpMethod::Get, "/:id")
-            .seal()
-            .build();
+        let mut r = Router::with_options(RouterOptions::default(), None);
+        r.add(HttpMethod::Get, "/:id").unwrap();
+        r.seal();
         assert!(!r.internal_router().enable_root_prune);
     }
 
     #[test]
     fn does_not_auto_enable_root_prune_with_root_wildcard() {
-        let r = RouterBuilder::with_options(RouterOptions::default())
-            .add(HttpMethod::Get, "/*")
-            .seal()
-            .build();
+        let mut r = Router::with_options(RouterOptions::default(), None);
+        r.add(HttpMethod::Get, "/*").unwrap();
+        r.seal();
         assert!(!r.internal_router().enable_root_prune);
     }
 
     #[test]
     fn auto_enables_static_map_when_threshold_is_met() {
-        let mut builder = RouterBuilder::with_options(RouterOptions::default());
+        let mut r = Router::with_options(RouterOptions::default(), None);
         for i in 0..50 {
             // Threshold is 50
-            builder = builder.add(HttpMethod::Get, &format!("/static/{}", i));
+            r.add(HttpMethod::Get, &format!("/static/{}", i)).unwrap();
         }
-        let r = builder.seal().build();
+        r.seal();
         assert!(r.internal_router().enable_static_full_map);
     }
 
     #[test]
     fn does_not_auto_enable_static_map_below_threshold() {
-        let mut builder = RouterBuilder::with_options(RouterOptions::default());
+        let mut r = Router::with_options(RouterOptions::default(), None);
         for i in 0..49 {
-            builder = builder.add(HttpMethod::Get, &format!("/static/{}", i));
+            r.add(HttpMethod::Get, &format!("/static/{}", i)).unwrap();
         }
-        let r = builder.seal().build();
+        r.seal();
         assert!(!r.internal_router().enable_static_full_map);
     }
 
@@ -786,11 +748,11 @@ mod automatic_optimizations {
         opts.automatic_optimization = false;
 
         // Conditions are met for both optimizations
-        let mut builder = RouterBuilder::with_options(opts);
+        let mut r = Router::with_options(opts, None);
         for i in 0..50 {
-            builder = builder.add(HttpMethod::Get, &format!("/static/{}", i));
+            r.add(HttpMethod::Get, &format!("/static/{}", i)).unwrap();
         }
-        let r = builder.seal().build();
+        r.seal();
 
         // But they should not be enabled
         assert!(!r.internal_router().enable_root_prune);
@@ -805,11 +767,10 @@ mod automatic_optimizations {
         opts.enable_static_full_map = true;
 
         // Conditions are NOT met for auto-optimization
-        let r = RouterBuilder::with_options(opts)
-            .add(HttpMethod::Get, "/*") // Disables auto root prune
-            .add(HttpMethod::Get, "/one") // Not enough for auto static map
-            .seal()
-            .build();
+        let mut r = Router::with_options(opts, None);
+        r.add(HttpMethod::Get, "/*").unwrap();
+        r.add(HttpMethod::Get, "/one").unwrap();
+        r.seal();
 
         // But they should be enabled due to manual override
         assert!(r.internal_router().enable_root_prune);

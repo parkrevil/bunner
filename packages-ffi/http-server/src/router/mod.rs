@@ -72,6 +72,10 @@ impl Router {
         self.radix.find_norm(method, &norm)
     }
 
+    pub fn seal(&mut self) {
+        self.radix.seal();
+    }
+
     #[doc(hidden)]
     pub fn internal_router(&self) -> &radix::RadixRouter {
         &self.radix
@@ -215,37 +219,5 @@ pub fn match_route_err(
     }
 }
 
-#[derive(Debug, Default)]
-pub struct RouterBuilder {
-    radix: radix::RadixRouter,
-}
-
-impl RouterBuilder {
-    pub fn new() -> Self {
-        Self {
-            radix: radix::RadixRouter::new(RouterOptions::default()),
-        }
-    }
-
-    pub fn with_options(options: RouterOptions) -> Self {
-        Self {
-            radix: radix::RadixRouter::new(options),
-        }
-    }
-
-    pub fn add(mut self, method: HttpMethod, path: &str) -> Self {
-        let _ = self.radix.insert(method, path);
-        self
-    }
-
-    pub fn seal(mut self) -> Self {
-        self.radix.seal();
-        self
-    }
-
-    pub fn build(self) -> Router {
-        Router { radix: self.radix }
-    }
-}
 
 pub type RouterHandle = Router;
