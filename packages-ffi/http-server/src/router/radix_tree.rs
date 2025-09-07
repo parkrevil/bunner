@@ -81,15 +81,22 @@ impl RadixTree {
     where
         I: IntoIterator<Item = (HttpMethod, String)>,
     {
-        // Phase A: parallel preprocess (normalize/parse)
-        let indexed: Vec<(usize, HttpMethod, String)> = entries
+        // Phase A: parallel preprocess (normalize/parse) with light metadata
+        let indexed: Vec<(usize, HttpMethod, String, u8, usize, bool)> = entries
             .into_iter()
             .enumerate()
-            .map(|(i, (m, p))| (i, m, p))
+            .map(|(i, (m, p))| {
+                let bs = p.as_bytes();
+                let mut j = 0usize;
+                while j < bs.len() && bs[j] == b'/' { j += 1; }
+                let head = if j < bs.len() { bs[j] } else { 0 };
+                let is_static_guess = !p.contains(':') && !p.contains("/*") && !p.ends_with('*');
+                (i, m, p.to_string(), head, bs.len(), is_static_guess)
+            })
             .collect();
 
         let total = indexed.len();
-        let mut pre: Vec<(usize, HttpMethod, Vec<crate::router::pattern::SegmentPattern>)> =
+        let mut pre: Vec<(usize, HttpMethod, Vec<crate::router::pattern::SegmentPattern>, u8, usize, bool)> =
             Vec::with_capacity(total);
 
         if total > 1 {
@@ -113,7 +120,7 @@ impl RadixTree {
             }
 
             let chunk_size = total.div_ceil(workers);
-            let chunk_refs: Vec<&[(usize, HttpMethod, String)]> = indexed.chunks(chunk_size).collect();
+            let chunk_refs: Vec<&[(usize, HttpMethod, String, u8, usize, bool)]> = indexed.chunks(chunk_size).collect();
             let mut handles = Vec::with_capacity(chunk_refs.len());
 
             #[cfg(feature = "test")]
@@ -127,7 +134,7 @@ impl RadixTree {
 
             for chunk in chunk_refs.into_iter() {
                 let txc = tx.clone();
-                let local: Vec<(usize, HttpMethod, String)> = chunk.to_vec();
+                let local: Vec<(usize, HttpMethod, String, u8, usize, bool)> = chunk.to_vec();
 
                 #[cfg(feature = "test")]
                 let barrier_clone = start_barrier.clone();
@@ -153,12 +160,12 @@ impl RadixTree {
                         }
                     }
 
-                    for (idx, method, path) in local.into_iter() {
+                    for (idx, method, path, head, plen, is_static) in local.into_iter() {
                         let parsed = super::radix_tree::insert::prepare_path_segments_standalone(&path);
                         match parsed {
                             Ok(segs) => {
                                 // ignore send error if receiver dropped
-                                let _ = txc.send(Ok((idx, method, segs)));
+                                let _ = txc.send(Ok((idx, method, segs, head, plen, is_static)));
                             }
                             Err(e) => {
                                 let _ = txc.send(Err((idx, e)));
@@ -177,7 +184,7 @@ impl RadixTree {
             let mut first_err: Option<super::errors::RouterError> = None;
             for msg in rx.iter() {
                 match msg {
-                    Ok((idx, method, segs)) => pre.push((idx, method, segs)),
+                    Ok((idx, method, segs, head, plen, is_static)) => pre.push((idx, method, segs, head, plen, is_static)),
                     Err((_idx, e)) => {
                         if first_err.is_none() {
                             first_err = Some(e);
@@ -194,9 +201,9 @@ impl RadixTree {
             }
         } else {
             // fast path: single item
-            for (idx, method, path) in indexed.into_iter() {
+            for (idx, method, path, head, plen, is_static) in indexed.into_iter() {
                 let segs = super::radix_tree::insert::prepare_path_segments_standalone(&path)?;
-                pre.push((idx, method, segs));
+                pre.push((idx, method, segs, head, plen, is_static));
             }
 
             #[cfg(feature = "test")]
@@ -207,11 +214,25 @@ impl RadixTree {
             }
         }
 
-        // Phase B: ultra-light single commit preserving order
-        pre.sort_by_key(|(idx, _, _)| *idx);
-        let mut out = vec![0u16; pre.len()];
-        for (idx, method, segs) in pre.into_iter() {
-            let k = self.insert_parsed(method, segs)?;
+        // Phase B: preassign keys then commit; bucket sort for locality then preserve idx mapping
+        pre.sort_by(|a, b| {
+            // head byte asc, length asc, static-first
+            let (ah, al, asg) = (a.3, a.4, a.5);
+            let (bh, bl, bsg) = (b.3, b.4, b.5);
+            ah.cmp(&bh).then_with(|| al.cmp(&bl)).then_with(|| bsg.cmp(&asg))
+        });
+        let n = pre.len();
+        let base = {
+            use std::sync::atomic::Ordering;
+            let cur = self.next_route_key.load(Ordering::Relaxed);
+            if cur as usize + n >= MAX_ROUTES as usize { return Err(super::errors::RouterError::MaxRoutesExceeded); }
+            self.next_route_key.fetch_add(n as u16, Ordering::Relaxed)
+        };
+        let mut out = vec![0u16; n];
+        for (idx, method, segs, _h, _l, _s) in pre.into_iter() {
+            let assigned = base + (idx as u16) + 1; // stored keys are +1 encoded
+            // pass decoded value to helper (helper will re-encode)
+            let k = self.insert_parsed_preassigned(method, segs, assigned - 1)?;
             out[idx] = k;
         }
         Ok(out)

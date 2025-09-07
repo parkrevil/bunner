@@ -63,6 +63,45 @@ impl RadixTree {
         assign_route_key(current, method, &self.next_route_key)
     }
 
+    pub(super) fn insert_parsed_preassigned(
+        &mut self,
+        method: HttpMethod,
+        parsed_segments: Vec<SegmentPattern>,
+        assigned_key: u16,
+    ) -> Result<u16, RouterError> {
+        if self.root_node.is_sealed() {
+            return Err(RouterError::RouterSealedCannotInsert);
+        }
+        self.root_node.set_dirty(true);
+
+        let mut current = &mut self.root_node;
+        let arena_ptr: *const bumpalo::Bump = &self.arena;
+
+        for (i, pat) in parsed_segments.iter().enumerate() {
+            let seg = pat.parts.iter().map(|p| match p {
+                SegmentPart::Literal(s) => s.clone(),
+                SegmentPart::Param { name } => format!(":{}", name),
+            }).collect::<Vec<String>>().join("");
+
+            if seg == "*" {
+                return handle_wildcard_insert_preassigned(current, method, i, parsed_segments.len(), assigned_key);
+            }
+
+            if pattern_is_pure_static(pat, &seg) {
+                current = current.descend_static_mut_with_alloc(seg.to_string(), || {
+                    create_node_box_from_arena_pointer(arena_ptr)
+                });
+                sort_static_children(current, &self.interner);
+            } else {
+                current = find_or_create_pattern_child(current, pat, arena_ptr)?;
+            }
+            // Do not set method_mask here; delayed to finalize for bulk path
+            current.set_dirty(true);
+        }
+
+        assign_route_key_preassigned(current, method, assigned_key)
+    }
+
     pub(super) fn prepare_path_segments(&self, path: &str) -> Result<Vec<SegmentPattern>, RouterError> {
         prepare_path_segments_standalone(path)
     }
@@ -129,6 +168,27 @@ fn handle_wildcard_insert(node: &mut RadixTreeNode, method: HttpMethod, index: u
     Ok(key)
 }
 
+fn handle_wildcard_insert_preassigned(
+    node: &mut RadixTreeNode,
+    method: HttpMethod,
+    index: usize,
+    total_segments: usize,
+    assigned_key: u16,
+) -> Result<u16, RouterError> {
+    if index != total_segments - 1 {
+        return Err(RouterError::RouteWildcardSegmentNotAtEnd);
+    }
+    let method_idx = method as usize;
+    if node.wildcard_routes[method_idx] != 0 {
+        return Err(RouterError::RouteWildcardAlreadyExistsForMethod);
+    }
+    let k = assigned_key;
+    if k == 0 { return Err(RouterError::MaxRoutesExceeded); }
+    node.wildcard_routes[method_idx] = k + 1;
+    node.set_dirty(true);
+    Ok(k)
+}
+
 fn assign_route_key(node: &mut RadixTreeNode, method: HttpMethod, next_route_key: &AtomicU16) -> Result<u16, RouterError> {
     let method_idx = method as usize;
     if node.routes[method_idx] != 0 {
@@ -146,6 +206,21 @@ fn assign_route_key(node: &mut RadixTreeNode, method: HttpMethod, next_route_key
     node.set_dirty(true);
 
     Ok(key)
+}
+
+fn assign_route_key_preassigned(
+    node: &mut RadixTreeNode,
+    method: HttpMethod,
+    assigned_key: u16,
+) -> Result<u16, RouterError> {
+    let method_idx = method as usize;
+    if node.routes[method_idx] != 0 {
+        return Err(RouterError::RouteConflictOnDuplicatePath);
+    }
+    if assigned_key == 0 { return Err(RouterError::MaxRoutesExceeded); }
+    node.routes[method_idx] = assigned_key + 1;
+    node.set_dirty(true);
+    Ok(assigned_key)
 }
 
 // Helper for SegmentPart

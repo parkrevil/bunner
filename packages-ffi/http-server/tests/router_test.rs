@@ -240,7 +240,6 @@ mod bulk_registration {
         #[test]
         fn registers_multiple_and_preserves_order() {
             let mut r = Router::new(None);
-            r.reset_bulk_metrics();
             let entries = vec![
                 (HttpMethod::Get, "/a".to_string()),
                 (HttpMethod::Post, "/b".to_string()),
@@ -254,11 +253,28 @@ mod bulk_registration {
             for w in out.windows(2) {
                 assert_eq!(w[0] + 1, w[1]);
             }
-            // When cores > 1, ensure we actually had concurrent workers
+        }
+
+        #[test]
+        fn uses_multiple_workers_on_large_batch_when_possible() {
+            let mut r = Router::new(None);
+            r.reset_bulk_metrics();
+            let mut entries = Vec::new();
+            for i in 0..50 { entries.push((HttpMethod::Get, format!("/c{i}"))); }
+            let _ = r.add_bulk(entries);
             let (used, max_active) = r.bulk_metrics();
             if used > 1 {
-                assert!(max_active > 1, "expected concurrent workers, got used={}, max_active={}", used, max_active);
+                assert!(max_active > 1);
             }
+        }
+    
+        #[test]
+        fn uses_single_worker_for_tiny_batch() {
+            let mut r = Router::new(None);
+            r.reset_bulk_metrics();
+            let _ = r.add_bulk(vec![(HttpMethod::Get, "/t1".to_string())]);
+            let (used, _max_active) = r.bulk_metrics();
+            assert_eq!(used, 1);
         }
     }
     
@@ -364,6 +380,40 @@ mod bulk_registration {
                 (HttpMethod::Get, "/dup".to_string()),
             ]);
             assert_eq!(res, Err(RouterError::RouteConflictOnDuplicatePath));
+        }
+
+        #[test]
+        fn all_or_nothing_when_any_error_in_batch() {
+            let mut r = rapi::Router::new(None);
+            let res = r.add_bulk(vec![
+                (HttpMethod::Get, "/ok".to_string()),
+                (HttpMethod::Get, "/a/*/b".to_string()), // invalid wildcard position
+            ]);
+            assert_eq!(res, Err(RouterError::RouteWildcardSegmentNotAtEnd));
+            r.finalize();
+            assert_eq!(
+                r.find(HttpMethod::Get, "/ok"),
+                Err(RouterError::MatchNotFound),
+                "no partial commit should have occurred",
+            );
+        }
+
+        #[test]
+        fn when_max_routes_limit_is_exceeded_no_partial_commit() {
+            let opts = RouterOptions::default();
+            let mut r = Router::new(Some(opts));
+            // build entries intentionally exceeding the test MAX_ROUTES(100)
+            let entries: Vec<(HttpMethod, String)> = (0..=150)
+                .map(|i| (HttpMethod::Get, format!("/r{i}")))
+                .collect();
+            let res = r.add_bulk(entries);
+            assert!(matches!(res, Err(RouterError::MaxRoutesExceeded)));
+            r.finalize();
+            assert_eq!(
+                r.find(HttpMethod::Get, "/r0"),
+                Err(RouterError::MatchNotFound),
+                "no routes should be visible after overflow error",
+            );
         }
 
         #[test]

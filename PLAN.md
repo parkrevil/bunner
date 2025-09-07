@@ -16,10 +16,10 @@
 - Phase A (parallel preprocess):
   - ~~Normalize + parse on worker threads~~
   - Pre-intern literals in thread-local buffers; dedup before merging to main interner
-  - Emit `ParsedEntry { idx, method, segments, head_byte, path_len }`
-  - Stable bucket sort: head_byte → path_len → static-first to improve locality
+  - ~~Emit `ParsedEntry { idx, method, segments, head_byte, path_len }`~~
+  - ~~Stable bucket sort: head_byte → path_len → static-first to improve locality~~
 - Phase B (ultra-light single commit):
-  - Pre-assign keys: `base = next_route_key.fetch_add(N)`; `key[i] = base + i`
+  - ~~Pre-assign keys: `base = next_route_key.fetch_add(N)`; `key[i] = base + i`~~
   - Commit loop only descends/creates nodes; sets `dirty` flags; defers masks/indices/build to finalize
   - ~~No per-insert index/mask rebuilds, no per-insert map shuffles~~
 - Post: call existing `finalize()` once to compress/build indices/masks/pruning/static map
@@ -37,7 +37,7 @@
 - Enforce `MAX_ROUTES` consistently per feature; keep `MaxRoutesExceeded` error.
 
 ## SIMD/CPU Paths
-- Keep AVX2 path (already present). Add NEON as future optional feature stub; not required initially.
+- ~~Keep AVX2 path (already present).~~ Add NEON as future optional feature stub; not required initially.
 
 ## Non-Goals (defer)
 - ART conversion, compressed pointers, generational GC. Too invasive relative to current goals.
@@ -49,7 +49,7 @@
 
 ## Rollout Steps
 1) Feature gates for limits/capacities/defaults + `RouteKey` alias.
-2) Implement `bulk_insert_ordered` (parallel parse + single commit).
+~~2) Implement `bulk_insert_ordered` (parallel parse + single commit).~~
 3) Optional `router-runtime-cleanup` and `router-metrics` features.
 4) (벤치마크는 TS FFI 경유로만 진행하므로 여기서는 제외)
 
