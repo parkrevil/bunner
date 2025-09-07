@@ -27,3 +27,7 @@ libc.workspace = true
 jemalloc-ctl.workspace = true
 jemallocator.workspace = true
 rstest.workspace = true
+
+[features]
+default = []
+test = []

@@ -23,6 +23,14 @@ impl RadixTreeRouter {
                 return Err(RouterError::RouteConflictOnDuplicatePath);
             }
 
+            let current_key = self
+                .next_route_key
+                .load(std::sync::atomic::Ordering::Relaxed);
+            
+            if current_key > super::MAX_ROUTES {
+                return Err(RouterError::MaxRoutesExceeded);
+            }
+
             let key = self
                 .next_route_key
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -190,6 +198,14 @@ impl RadixTreeRouter {
             return Err(RouterError::RouteConflictOnDuplicatePath);
         }
 
+        let current_key = self
+            .next_route_key
+            .load(std::sync::atomic::Ordering::Relaxed);
+            
+        if current_key > super::MAX_ROUTES {
+            return Err(RouterError::MaxRoutesExceeded);
+        }
+        
         let key = self
             .next_route_key
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);

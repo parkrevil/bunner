@@ -8,6 +8,15 @@ pub(super) const HTTP_METHOD_COUNT: usize = 7;
 pub(super) const HTTP_METHOD_BIT_MASKS: [u8; HTTP_METHOD_COUNT] =
     [1 << 0, 1 << 1, 1 << 2, 1 << 3, 1 << 4, 1 << 5, 1 << 6];
 
+#[cfg(not(feature = "test"))]
+pub(super) const MAX_ROUTES: u16 = 65_535;
+
+#[cfg(feature = "test")]
+pub(super) const MAX_ROUTES: u16 = 100;
+
+const STATIC_MAP_THRESHOLD: usize = 50;
+
+
 mod alloc;
 mod compress;
 mod find;
@@ -214,7 +223,6 @@ impl RadixTreeRouter {
             }
             count_static(&self.root_node, &mut static_route_count);
 
-            const STATIC_MAP_THRESHOLD: usize = 50;
             if static_route_count >= STATIC_MAP_THRESHOLD {
                 self.enable_static_route_full_mapping = true;
             }

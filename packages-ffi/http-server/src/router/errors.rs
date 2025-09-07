@@ -15,6 +15,7 @@ pub enum RouterError {
     RouteParamNameInvalidChar = 10011,
     RouteSegmentContainsMixedParamAndLiteral = 10012,
     RouteWildcardAlreadyExistsForMethod = 10013,
+    MaxRoutesExceeded = 10014,
     // Match-time
     MatchNotFound = 11001,
     MatchPathSyntaxInvalid = 11002,

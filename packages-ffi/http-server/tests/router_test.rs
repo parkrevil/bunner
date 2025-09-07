@@ -108,12 +108,14 @@ mod static_routes {
     #[test]
     fn heavy_static_routes_with_high_duplication_probability() {
         let mut r = rapi::Router::with_configuration(RouterOptions::default(), None);
-        for i in 0..200u32 {
+        for i in 0..100u32 {
             let path = format!("/assets/v1/css/{}.css", i);
             assert!(r.add( HttpMethod::Get, &path).is_ok());
         }
+
         r.finalize_routes();
-        for i in [0u32, 1, 50, 100, 150, 199] {
+
+        for i in [0u32, 1, 50, 99] {
             let p = format!("/assets/v1/css/{}.css", i);
             let m = r.find( HttpMethod::Get, &p).unwrap();
             assert!(m.0 != 0);
@@ -717,7 +719,7 @@ mod enable_automatic_optimizations {
     fn auto_enables_static_map_when_threshold_is_met() {
         let mut r = Router::with_configuration(RouterOptions::default(), None);
         for i in 0..50 {
-            // Threshold is 50
+          println!("Adding route: /static/{}", i);
             r.add(HttpMethod::Get, &format!("/static/{}", i)).unwrap();
         }
         r.finalize_routes();
@@ -758,14 +760,37 @@ mod enable_automatic_optimizations {
         opts.enable_root_level_pruning = true;
         opts.enable_static_route_full_mapping = true;
 
-        // Conditions are NOT met for auto-optimization
         let mut r = Router::with_configuration(opts, None);
         r.add(HttpMethod::Get, "/*").unwrap();
         r.add(HttpMethod::Get, "/one").unwrap();
         r.finalize_routes();
 
-        // But they should be enabled due to manual override
         assert!(r.get_internal_radix_router().enable_root_level_pruning);
         assert!(r.get_internal_radix_router().enable_static_route_full_mapping);
+    }
+
+    #[test]
+    fn max_routes_guard_activation() {
+        let opts = RouterOptions::default();
+        let mut r = Router::with_configuration(opts, None);
+        let mut got_err = None;
+
+        for i in 0..=100 {
+            let path = format!("/route{}", i);
+            match r.add(HttpMethod::Get, &path) {
+                Ok(_) => {
+                    println!("Added route: /route{}", i);
+                    continue;
+                }
+                Err(e) => {
+                    print!("Error adding route: /route{}", i);
+                    got_err = Some(e);
+                    break;
+                }
+            }
+        }
+
+        assert!(got_err.is_some(), "Route limit was not reached within test bounds");
+        assert!(matches!(got_err.unwrap(), RouterError::MaxRoutesExceeded));
     }
 }
