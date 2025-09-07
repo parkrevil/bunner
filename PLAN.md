@@ -42,7 +42,8 @@
 - Enforce `MAX_ROUTES` consistently per feature; keep `MaxRoutesExceeded` error.
 
 ## SIMD/CPU Paths
-- ~~Keep AVX2 path (already present).~~ Add NEON as future optional feature stub; not required initially.
+- ~~Keep AVX2 path (already present).~~ 
+- Add NEON as future optional feature stub; not required initially.
 
 ## Non-Goals (defer)
 - ART conversion, compressed pointers, generational GC. Too invasive relative to current goals.
@@ -54,7 +55,7 @@
 
 ## Rollout Steps
 1) Feature gates for limits/capacities/defaults + `RouteKey` alias.
-~~2) Implement `bulk_insert_ordered` (parallel parse + single commit).~~
+2) ~~Implement `bulk_insert_ordered` (parallel parse + single commit).~~
 3) Optional `router-runtime-cleanup` and `router-metrics` features.
 4) (벤치마크는 TS FFI 경유로만 진행하므로 여기서는 제외)
 
