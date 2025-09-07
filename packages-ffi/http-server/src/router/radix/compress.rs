@@ -1,6 +1,6 @@
-use super::node::RadixNode;
+use super::node::RadixTreeNode;
 
-fn can_compress_here(n: &RadixNode) -> bool {
+fn can_compress_here(n: &RadixTreeNode) -> bool {
     n.patterns.is_empty()
         && !n.routes.iter().any(|k| *k != 0)
         && !n.wildcard_routes.iter().any(|k| *k != 0)
@@ -8,7 +8,7 @@ fn can_compress_here(n: &RadixNode) -> bool {
         && n.static_keys.len() <= 1
 }
 
-fn compress_node(n: &mut RadixNode) {
+fn compress_node(n: &mut RadixTreeNode) {
     if let Some(c) = n.pattern_nodes.first_mut() {
         compress_node(c.as_mut());
     }
@@ -72,6 +72,6 @@ fn compress_node(n: &mut RadixNode) {
     n.fused_child = Some(child);
 }
 
-pub(super) fn compress_root(root: &mut RadixNode) {
+pub(super) fn compress_root_node(root: &mut RadixTreeNode) {
     compress_node(root);
 }

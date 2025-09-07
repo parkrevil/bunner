@@ -1,30 +1,30 @@
 use bumpalo::Bump;
 use core::ptr::NonNull;
 
-use super::RadixNode;
+use super::RadixTreeNode;
 
 #[repr(transparent)]
 #[derive(Clone)]
-pub(super) struct NodeBox(pub(super) NonNull<RadixNode>);
+pub(super) struct NodeBox(pub(super) NonNull<RadixTreeNode>);
 
 impl NodeBox {
     #[inline(always)]
     pub fn from_arena(arena: &Bump) -> Self {
-        let node_ref: &mut RadixNode = arena.alloc(RadixNode::default());
+        let node_ref: &mut RadixTreeNode = arena.alloc(RadixTreeNode::default());
         Self(NonNull::from(node_ref))
     }
     #[inline(always)]
-    pub fn as_ref(&self) -> &RadixNode {
+    pub fn as_ref(&self) -> &RadixTreeNode {
         unsafe { self.0.as_ref() }
     }
     #[inline(always)]
-    pub fn as_mut(&mut self) -> &mut RadixNode {
+    pub fn as_mut(&mut self) -> &mut RadixTreeNode {
         unsafe { self.0.as_mut() }
     }
 }
 
 impl core::ops::Deref for NodeBox {
-    type Target = RadixNode;
+    type Target = RadixTreeNode;
     #[inline(always)]
     fn deref(&self) -> &Self::Target {
         self.as_ref()
@@ -47,7 +47,7 @@ impl core::fmt::Debug for NodeBox {
 }
 
 #[inline(always)]
-pub(super) fn new_node_box_from_arena_ptr(arena_ptr: *const Bump) -> NodeBox {
+pub(super) fn create_node_box_from_arena_pointer(arena_ptr: *const Bump) -> NodeBox {
     let arena_ref = unsafe { &*arena_ptr };
     NodeBox::from_arena(arena_ref)
 }

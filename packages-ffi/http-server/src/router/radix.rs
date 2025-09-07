@@ -4,8 +4,8 @@ use hashbrown::HashMap as FastHashMap;
 use super::{RouterOptions};
 use crate::router::interner::Interner;
 
-pub(super) const METHOD_COUNT: usize = 7;
-pub(super) const METHOD_BIT: [u8; METHOD_COUNT] =
+pub(super) const HTTP_METHOD_COUNT: usize = 7;
+pub(super) const HTTP_METHOD_BIT_MASKS: [u8; HTTP_METHOD_COUNT] =
     [1 << 0, 1 << 1, 1 << 2, 1 << 3, 1 << 4, 1 << 5, 1 << 6];
 
 mod alloc;
@@ -14,39 +14,39 @@ mod find;
 mod insert;
 pub(super) mod node;
 
-use alloc::{new_node_box_from_arena_ptr, NodeBox};
-pub use node::RadixNode;
+use alloc::{create_node_box_from_arena_pointer, NodeBox};
+pub use node::RadixTreeNode;
 
 #[derive(Debug, Default)]
-pub struct RadixRouter {
-    pub(super) root: RadixNode,
-    pub(super) options: RouterOptions,
+pub struct RadixTreeRouter {
+    pub(super) root_node: RadixTreeNode,
+    pub(super) configuration: RouterOptions,
     // arena for node allocations (prepared for full conversion)
-    pub(super) arena: Bump,
-    pub(super) interner: Interner,
+    pub(super) memory_arena: Bump,
+    pub(super) string_interner: Interner,
     // root-level method→first-byte bitmap for early prune (sealed only)
-    pub(super) method_head_bits: [[u64; 4]; METHOD_COUNT],
-    pub(super) root_param_first_present: [bool; METHOD_COUNT],
-    pub(super) root_wildcard_present: [bool; METHOD_COUNT],
+    pub(super) method_first_byte_bitmaps: [[u64; 4]; HTTP_METHOD_COUNT],
+    pub(super) root_parameter_first_present: [bool; HTTP_METHOD_COUNT],
+    pub(super) root_wildcard_present: [bool; HTTP_METHOD_COUNT],
     // fast path: full static routes map by method (normalized path key)
-    pub(super) static_full_map: [FastHashMap<String, u16>; METHOD_COUNT],
+    pub(super) static_route_full_mapping: [FastHashMap<String, u16>; HTTP_METHOD_COUNT],
     // root-level first segment length buckets (0..=63; bit63 means >=63)
-    pub(super) method_len_buckets: [u64; METHOD_COUNT],
+    pub(super) method_length_buckets: [u64; HTTP_METHOD_COUNT],
     // performance/feature toggles
-    pub enable_root_prune: bool,
-    pub enable_static_full_map: bool,
+    pub enable_root_level_pruning: bool,
+    pub enable_static_route_full_mapping: bool,
     // auto key allocator
-    pub(super) next_key: std::sync::atomic::AtomicU16,
+    pub(super) next_route_key: std::sync::atomic::AtomicU16,
 }
 
-impl RadixRouter {
-    pub fn compress(&mut self) {
-        self.invalidate_indices();
-        compress::compress_root(&mut self.root);
+impl RadixTreeRouter {
+    pub fn compress_tree(&mut self) {
+        self.invalidate_all_indices();
+        compress::compress_root_node(&mut self.root_node);
     }
     pub(super) fn build_indices(&mut self) {
-        let mut stack: Vec<*mut RadixNode> = Vec::with_capacity(1024);
-        stack.push(&mut self.root as *mut _);
+        let mut stack: Vec<*mut RadixTreeNode> = Vec::with_capacity(1024);
+        stack.push(&mut self.root_node as *mut _);
         while let Some(ptr) = stack.pop() {
             let node = unsafe { &mut *ptr };
             if node.dirty {
@@ -83,7 +83,7 @@ impl RadixRouter {
                 if let Some(fc) = node.fused_child.as_ref() {
                     node.fused_child_idx = Some(NodeBox(fc.0));
                 }
-                node.rebuild_intern_ids(&self.interner);
+                node.rebuild_intern_ids(&self.string_interner);
                 node.dirty = false;
             }
             for child in node.static_vals.iter_mut() {
@@ -100,9 +100,9 @@ impl RadixRouter {
             }
         }
         // post-order pass to compute method masks accurately
-        fn compute_mask(n: &mut RadixNode) -> u8 {
+        fn compute_mask(n: &mut RadixTreeNode) -> u8 {
             let mut m: u8 = 0;
-            for i in 0..METHOD_COUNT {
+            for i in 0..HTTP_METHOD_COUNT {
                 if n.routes[i] != 0 || n.wildcard_routes[i] != 0 {
                     m |= 1 << i;
                 }
@@ -122,13 +122,13 @@ impl RadixRouter {
             n.method_mask = m;
             m
         }
-        compute_mask(&mut self.root);
+        compute_mask(&mut self.root_node);
         // debug seal dump removed
     }
     #[inline]
-    pub(super) fn invalidate_indices(&mut self) {
-        let mut stack: Vec<*mut RadixNode> = Vec::with_capacity(1024);
-        stack.push(&mut self.root as *mut _);
+    pub(super) fn invalidate_all_indices(&mut self) {
+        let mut stack: Vec<*mut RadixTreeNode> = Vec::with_capacity(1024);
+        stack.push(&mut self.root_node as *mut _);
         while let Some(ptr) = stack.pop() {
             let node = unsafe { &mut *ptr };
             node.static_vals_idx.clear();
@@ -149,36 +149,36 @@ impl RadixRouter {
             }
         }
     }
-    pub fn new(options: RouterOptions) -> Self {
+    pub fn new(configuration: RouterOptions) -> Self {
         let s = Self {
-            root: RadixNode::default(),
-            options,
-            arena: Bump::with_capacity(64 * 1024),
-            interner: Interner::new(),
-            method_head_bits: [[0; 4]; METHOD_COUNT],
-            root_param_first_present: [false; METHOD_COUNT],
-            root_wildcard_present: [false; METHOD_COUNT],
-            static_full_map: Default::default(),
-            method_len_buckets: [0; METHOD_COUNT],
-            enable_root_prune: options.enable_root_prune,
-            enable_static_full_map: options.enable_static_full_map,
-            next_key: std::sync::atomic::AtomicU16::new(1),
+            root_node: RadixTreeNode::default(),
+            configuration,
+            memory_arena: Bump::with_capacity(64 * 1024),
+            string_interner: Interner::new(),
+            method_first_byte_bitmaps: [[0; 4]; HTTP_METHOD_COUNT],
+            root_parameter_first_present: [false; HTTP_METHOD_COUNT],
+            root_wildcard_present: [false; HTTP_METHOD_COUNT],
+            static_route_full_mapping: Default::default(),
+            method_length_buckets: [0; HTTP_METHOD_COUNT],
+            enable_root_level_pruning: configuration.enable_root_level_pruning,
+            enable_static_route_full_mapping: configuration.enable_static_route_full_mapping,
+            next_route_key: std::sync::atomic::AtomicU16::new(1),
         };
         s
     }
 
-    pub fn seal(&mut self) {
-        if self.root.sealed {
+    pub fn finalize_routes(&mut self) {
+        if self.root_node.sealed {
             return;
         }
 
         // --- Automatic Optimization Logic ---
-        if self.options.automatic_optimization {
+        if self.configuration.enable_automatic_optimization {
             // 1. Auto-enable root pruning
             let has_root_param_or_wildcard = {
-                let n = &self.root;
+                let n = &self.root_node;
                 let mut has_dynamic = false;
-                for m in 0..METHOD_COUNT {
+                for m in 0..HTTP_METHOD_COUNT {
                     if n.wildcard_routes[m] != 0 {
                         has_dynamic = true;
                         break;
@@ -191,13 +191,13 @@ impl RadixRouter {
             };
 
             if !has_root_param_or_wildcard {
-                self.enable_root_prune = true;
+                self.enable_root_level_pruning = true;
             }
 
             // 2. Auto-enable static full map based on heuristics
             let mut static_route_count = 0;
-            fn count_static(n: &node::RadixNode, count: &mut usize) {
-                for i in 0..METHOD_COUNT {
+            fn count_static(n: &node::RadixTreeNode, count: &mut usize) {
+                for i in 0..HTTP_METHOD_COUNT {
                     if n.routes[i] != 0 {
                         *count += 1;
                     }
@@ -212,20 +212,20 @@ impl RadixRouter {
                     count_static(fc.as_ref(), count);
                 }
             }
-            count_static(&self.root, &mut static_route_count);
+            count_static(&self.root_node, &mut static_route_count);
 
             const STATIC_MAP_THRESHOLD: usize = 50;
             if static_route_count >= STATIC_MAP_THRESHOLD {
-                self.enable_static_full_map = true;
+                self.enable_static_route_full_mapping = true;
             }
         }
         // --- End of Automatic Optimization Logic ---
 
-        self.root.sealed = true;
-        self.compress();
+        self.root_node.sealed = true;
+        self.compress_tree();
         {
-            let mut stack: Vec<*mut RadixNode> = Vec::with_capacity(1024);
-            stack.push(&mut self.root as *mut _);
+            let mut stack: Vec<*mut RadixTreeNode> = Vec::with_capacity(1024);
+            stack.push(&mut self.root_node as *mut _);
             while let Some(ptr) = stack.pop() {
                 let node = unsafe { &mut *ptr };
                 node.dirty = true;
@@ -243,7 +243,7 @@ impl RadixRouter {
                 }
             }
         }
-        fn sort_node(n: &mut RadixNode, interner: &Interner) {
+        fn sort_node(n: &mut RadixTreeNode, interner: &Interner) {
             if !n.static_keys.is_empty() && n.static_keys.len() == n.static_vals.len() {
                 let mut pairs: Vec<(u32, String, NodeBox)> = n
                     .static_keys
@@ -270,16 +270,16 @@ impl RadixRouter {
                 sort_node(fc.as_mut(), interner);
             }
         }
-        sort_node(&mut self.root, &self.interner);
+        sort_node(&mut self.root_node, &self.string_interner);
         self.build_indices();
         // build root-level bitmaps and flags
-        self.method_head_bits = [[0; 4]; METHOD_COUNT];
-        self.root_param_first_present = [false; METHOD_COUNT];
-        self.root_wildcard_present = [false; METHOD_COUNT];
-        self.method_len_buckets = [0; METHOD_COUNT];
+        self.method_first_byte_bitmaps = [[0; 4]; HTTP_METHOD_COUNT];
+        self.root_parameter_first_present = [false; HTTP_METHOD_COUNT];
+        self.root_wildcard_present = [false; HTTP_METHOD_COUNT];
+        self.method_length_buckets = [0; HTTP_METHOD_COUNT];
         {
-            let n = &self.root;
-            for m in 0..METHOD_COUNT {
+            let n = &self.root_node;
+            for m in 0..HTTP_METHOD_COUNT {
                 if n.wildcard_routes[m] != 0 {
                     self.root_wildcard_present[m] = true;
                 }
@@ -291,17 +291,17 @@ impl RadixRouter {
                     let blk = (b as usize) >> 6;
                     let bit = 1u64 << ((b as usize) & 63);
                     let mask = n.method_mask;
-                    for mi in 0..METHOD_COUNT {
+                    for mi in 0..HTTP_METHOD_COUNT {
                         if (mask & (1 << mi)) != 0 {
-                            self.method_head_bits[mi][blk] |= bit;
+                            self.method_first_byte_bitmaps[mi][blk] |= bit;
                         }
                     }
                 }
                 let l = edge.len().min(63) as u32;
                 let mask = n.method_mask;
-                for mi in 0..METHOD_COUNT {
+                for mi in 0..HTTP_METHOD_COUNT {
                     if (mask & (1 << mi)) != 0 {
-                        self.method_len_buckets[mi] |= 1u64 << l;
+                        self.method_length_buckets[mi] |= 1u64 << l;
                     }
                 }
             }
@@ -310,17 +310,17 @@ impl RadixRouter {
                     let blk = (b as usize) >> 6;
                     let bit = 1u64 << ((b as usize) & 63);
                     let mask = n.method_mask;
-                    for m in 0..METHOD_COUNT {
+                    for m in 0..HTTP_METHOD_COUNT {
                         if (mask & (1 << m)) != 0 {
-                            self.method_head_bits[m][blk] |= bit;
+                            self.method_first_byte_bitmaps[m][blk] |= bit;
                         }
                     }
                 }
                 let l = k.len().min(63) as u32;
                 let mask = n.method_mask;
-                for m in 0..METHOD_COUNT {
+                for m in 0..HTTP_METHOD_COUNT {
                     if (mask & (1 << m)) != 0 {
-                        self.method_len_buckets[m] |= 1u64 << l;
+                        self.method_length_buckets[m] |= 1u64 << l;
                     }
                 }
             }
@@ -330,17 +330,17 @@ impl RadixRouter {
                     let blk = (b as usize) >> 6;
                     let bit = 1u64 << ((b as usize) & 63);
                     let mask = n.method_mask;
-                    for m in 0..METHOD_COUNT {
+                    for m in 0..HTTP_METHOD_COUNT {
                         if (mask & (1 << m)) != 0 {
-                            self.method_head_bits[m][blk] |= bit;
+                            self.method_first_byte_bitmaps[m][blk] |= bit;
                         }
                     }
                 }
                 let l = k.len().min(63) as u32;
                 let mask = n.method_mask;
-                for m in 0..METHOD_COUNT {
+                for m in 0..HTTP_METHOD_COUNT {
                     if (mask & (1 << m)) != 0 {
-                        self.method_len_buckets[m] |= 1u64 << l;
+                        self.method_length_buckets[m] |= 1u64 << l;
                     }
                 }
             }
@@ -348,9 +348,9 @@ impl RadixRouter {
                 let blk = (hb as usize) >> 6;
                 let bit = 1u64 << ((hb as usize) & 63);
                 let mask = n.method_mask;
-                for m in 0..METHOD_COUNT {
+                for m in 0..HTTP_METHOD_COUNT {
                     if (mask & (1 << m)) != 0 {
-                        self.method_head_bits[m][blk] |= bit;
+                        self.method_first_byte_bitmaps[m][blk] |= bit;
                     }
                 }
             }
@@ -359,9 +359,9 @@ impl RadixRouter {
                 if let Some(crate::router::pattern::SegmentPart::Literal(l0)) = pat.parts.first() {
                     let l = l0.len().min(63) as u32;
                     let mask = n.method_mask;
-                    for m in 0..METHOD_COUNT {
+                    for m in 0..HTTP_METHOD_COUNT {
                         if (mask & (1 << m)) != 0 {
-                            self.method_len_buckets[m] |= 1u64 << l;
+                            self.method_length_buckets[m] |= 1u64 << l;
                         }
                     }
                 } else {
@@ -370,14 +370,14 @@ impl RadixRouter {
             }
             if !n.pattern_param_first.is_empty() {
                 let mask = n.method_mask;
-                for m in 0..METHOD_COUNT {
+                for m in 0..HTTP_METHOD_COUNT {
                     if (mask & (1 << m)) != 0 {
-                        self.root_param_first_present[m] = true;
+                        self.root_parameter_first_present[m] = true;
                     }
                 }
             }
         }
-        fn shrink_node(n: &mut RadixNode) {
+        fn shrink_node(n: &mut RadixTreeNode) {
             n.static_keys.shrink_to_fit();
             n.static_vals.shrink_to_fit();
             n.static_vals_idx.shrink_to_fit();
@@ -396,9 +396,9 @@ impl RadixRouter {
                 shrink_node(fc.as_mut());
             }
         }
-        shrink_node(&mut self.root);
+        shrink_node(&mut self.root_node);
         // Optional cache warm-up to reduce first-hit latency
-        fn warm_node(n: &node::RadixNode) {
+        fn warm_node(n: &node::RadixTreeNode) {
             // touch children to pull into cache
             for v in n.static_vals.iter() {
                 let _ = v.as_ref().routes[0];
@@ -425,15 +425,15 @@ impl RadixRouter {
                 warm_node(fc.as_ref());
             }
         }
-        warm_node(&self.root);
+        warm_node(&self.root_node);
         // Build static full maps for O(1) lookup when path is entirely static
-        for m in 0..METHOD_COUNT {
-            self.static_full_map[m].clear();
+        for m in 0..HTTP_METHOD_COUNT {
+            self.static_route_full_mapping[m].clear();
         }
         fn collect_static(
-            n: &node::RadixNode,
+            n: &node::RadixTreeNode,
             buf: &mut String,
-            maps: &mut [FastHashMap<String, u16>; METHOD_COUNT],
+            maps: &mut [FastHashMap<String, u16>; HTTP_METHOD_COUNT],
         ) {
             let base_len = buf.len();
             if let Some(edge) = n.fused_edge.as_ref() {
@@ -474,12 +474,12 @@ impl RadixRouter {
             }
             buf.truncate(base_len);
         }
-        if self.enable_static_full_map {
+        if self.enable_static_route_full_mapping {
             let mut path_buf = String::from("");
             collect_static(
-                &self.root,
+                &self.root_node,
                 &mut path_buf,
-                &mut self.static_full_map,
+                &mut self.static_route_full_mapping,
             );
         }
     }

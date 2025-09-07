@@ -2,11 +2,11 @@ use crate::router::pattern;
 use smallvec::SmallVec;
 use std::borrow::Cow;
 
-use super::RadixRouter;
+use super::RadixTreeRouter;
 use crate::r#enum::HttpMethod;
 
 #[inline(always)]
-fn prefetch_node(_n: &super::node::RadixNode) {
+fn prefetch_node(_n: &super::node::RadixTreeNode) {
     #[cfg(target_arch = "x86_64")]
     unsafe {
         let p = _n as *const _ as *const i8;
@@ -40,9 +40,9 @@ unsafe fn starts_with_cs_avx2(hay: &[u8], pre: &[u8]) -> bool {
     true
 }
 
-impl RadixRouter {
+impl RadixTreeRouter {
     #[inline(always)]
-    fn decode_key(stored: u16) -> u16 {
+    fn decode_route_key(stored: u16) -> u16 {
         if stored > 0 { stored - 1 } else { 0 }
     }
     #[inline(always)]
@@ -56,12 +56,12 @@ impl RadixRouter {
     #[inline(always)]
     fn find_from(
         &self,
-        node: &super::node::RadixNode,
+        node: &super::node::RadixTreeNode,
         method: HttpMethod,
         s: &str,
         mut i: usize,
-        params: &mut SmallVec<[(String, (usize, usize)); 8]>,
-    ) -> Option<super::super::MatchResult> {
+        parameter_offsets: &mut SmallVec<[(String, (usize, usize)); 8]>,
+    ) -> Option<super::super::RouteMatchResult> {
         let mut cur = node;
         i = self.skip_slashes(s, i);
 
@@ -105,7 +105,7 @@ impl RadixRouter {
                     }
                 } else {
                     #[cold]
-                    fn miss_fused() -> Option<super::super::MatchResult> {
+                    fn miss_fused() -> Option<super::super::RouteMatchResult> {
                         None
                     }
 
@@ -114,39 +114,40 @@ impl RadixRouter {
             }
 
             let method_idx = method as usize;
-            let wildcard_key = cur.wildcard_routes[method_idx];
+            let wildcard_route_key = cur.wildcard_routes[method_idx];
 
             if i >= s.len() {
                 let rk = cur.routes[method_idx];
 
                 if rk != 0 {
-                    let out_params = core::mem::take(params).into_vec();
+                    let out_parameter_offsets = core::mem::take(parameter_offsets).into_vec();
 
-                    return Some(super::super::MatchResult {
-                        key: Self::decode_key(rk),
-                        params: out_params,
+                    return Some(super::super::RouteMatchResult {
+                        route_key: Self::decode_route_key(rk),
+                        parameter_offsets: out_parameter_offsets,
                     });
                 }
 
-                if wildcard_key != 0 {
-                    let out_params = core::mem::take(params).into_vec();
+                if wildcard_route_key != 0 {
+                    let out_parameter_offsets = core::mem::take(parameter_offsets).into_vec();
 
-                    return Some(super::super::MatchResult {
-                        key: Self::decode_key(wildcard_key),
-                        params: out_params,
+                    return Some(super::super::RouteMatchResult {
+                        route_key: Self::decode_route_key(wildcard_route_key),
+                        parameter_offsets: out_parameter_offsets,
                     });
                 }
 
                 #[cold]
-                fn miss() -> Option<super::super::MatchResult> {
+                fn miss() -> Option<super::super::RouteMatchResult> {
                     None
                 }
+
                 return miss();
             }
 
-            if self.root.sealed && (cur.method_mask & super::METHOD_BIT[method_idx]) == 0 {
+            if self.root_node.sealed && (cur.method_mask & super::HTTP_METHOD_BIT_MASKS[method_idx]) == 0 {
                 #[cold]
-                fn miss_method() -> Option<super::super::MatchResult> {
+                fn miss_method() -> Option<super::super::RouteMatchResult> {
                     None
                 }
 
@@ -166,12 +167,12 @@ impl RadixRouter {
 
             let comp: &str = comp_cow.as_ref();
 
-            if let Some(key_id) = self.interner.get(comp)
-                && let Some(nb) = cur.get_static_id_fast(key_id)
+            if let Some(route_key_id) = self.string_interner.get(comp)
+                && let Some(nb) = cur.get_static_id_fast(route_key_id)
             {
                 prefetch_node(nb);
 
-                if let Some(ok) = self.find_from(nb, method, s, i, params) {
+                if let Some(ok) = self.find_from(nb, method, s, i, parameter_offsets) {
                     return Some(ok);
                 }
             }
@@ -179,7 +180,7 @@ impl RadixRouter {
             if let Some(nb) = cur.get_static_fast(comp) {
                 prefetch_node(nb);
 
-                if let Some(ok) = self.find_from(nb, method, s, i, params) {
+                if let Some(ok) = self.find_from(nb, method, s, i, parameter_offsets) {
                     return Some(ok);
                 }
             }
@@ -187,7 +188,7 @@ impl RadixRouter {
             if let Some(next) = cur.get_static_ref(comp) {
                 prefetch_node(next);
 
-                if let Some(ok) = self.find_from(next, method, s, i, params) {
+                if let Some(ok) = self.find_from(next, method, s, i, parameter_offsets) {
                     return Some(ok);
                 }
             }
@@ -197,7 +198,7 @@ impl RadixRouter {
                     if k.as_str() == comp {
                         prefetch_node(nb.as_ref());
 
-                        if let Some(ok) = self.find_from(nb.as_ref(), method, s, i, params) {
+                        if let Some(ok) = self.find_from(nb.as_ref(), method, s, i, parameter_offsets) {
                             return Some(ok);
                         }
                     }
@@ -209,7 +210,7 @@ impl RadixRouter {
             {
                 prefetch_node(nb.as_ref());
 
-                if let Some(ok) = self.find_from(nb.as_ref(), method, s, i, params) {
+                if let Some(ok) = self.find_from(nb.as_ref(), method, s, i, parameter_offsets) {
                     return Some(ok);
                 }
             }
@@ -245,16 +246,16 @@ impl RadixRouter {
                     prefetch_node(child_nb.as_ref());
 
                     if let Some(kvs) = pattern::match_segment(seg, comp, pat) {
-                        let checkpoint = params.len();
+                        let checkpoint = parameter_offsets.len();
 
                         for (name, (off, len)) in kvs.into_iter() {
-                            params.push((name, (start + off, len)));
+                            parameter_offsets.push((name, (start + off, len)));
                         }
 
-                        if let Some(ok) = self.find_from(child_nb.as_ref(), method, s, i, params) {
+                        if let Some(ok) = self.find_from(child_nb.as_ref(), method, s, i, parameter_offsets) {
                             return Some(ok);
                         } else {
-                            params.truncate(checkpoint);
+                            parameter_offsets.truncate(checkpoint);
                         }
                     }
 
@@ -267,21 +268,21 @@ impl RadixRouter {
                 prefetch_node(next.as_ref());
 
                 if let Some(kvs) = pattern::match_segment(seg, comp, pat) {
-                    let checkpoint = params.len();
+                    let checkpoint = parameter_offsets.len();
 
                     for (name, (off, len)) in kvs.into_iter() {
-                        params.push((name, (start + off, len)));
+                        parameter_offsets.push((name, (start + off, len)));
                     }
 
-                    if let Some(ok) = self.find_from(next.as_ref(), method, s, i, params) {
+                    if let Some(ok) = self.find_from(next.as_ref(), method, s, i, parameter_offsets) {
                         return Some(ok);
                     } else {
-                        params.truncate(checkpoint);
+                        parameter_offsets.truncate(checkpoint);
                     }
                 }
             }
 
-            if wildcard_key != 0 {
+            if wildcard_route_key != 0 {
                 let mut cap_start = start;
 
                 if cap_start < s.len() && s.as_bytes()[cap_start] == b'/' {
@@ -295,30 +296,30 @@ impl RadixRouter {
                 };
 
                 if rest_len == 0 {
-                    let out_params = params.clone().into_vec();
+                    let out_parameter_offsets = parameter_offsets.clone().into_vec();
 
-                    return Some(super::super::MatchResult {
-                        key: Self::decode_key(wildcard_key),
-                        params: out_params,
+                    return Some(super::super::RouteMatchResult {
+                        route_key: Self::decode_route_key(wildcard_route_key),
+                        parameter_offsets: out_parameter_offsets,
                     });
                 } else {
-                    let checkpoint = params.len();
+                    let checkpoint = parameter_offsets.len();
 
-                    params.push(("*".to_string(), (cap_start, rest_len)));
+                    parameter_offsets.push(("*".to_string(), (cap_start, rest_len)));
 
-                    let out = Some(super::super::MatchResult {
-                        key: Self::decode_key(wildcard_key),
-                        params: params.clone().into_vec(),
+                    let out = Some(super::super::RouteMatchResult {
+                        route_key: Self::decode_route_key(wildcard_route_key),
+                        parameter_offsets: parameter_offsets.clone().into_vec(),
                     });
 
-                    params.truncate(checkpoint);
+                    parameter_offsets.truncate(checkpoint);
 
                     return out;
                 }
             }
 
             #[cold]
-            fn miss2() -> Option<super::super::MatchResult> {
+            fn miss2() -> Option<super::super::RouteMatchResult> {
                 None
             }
 
@@ -327,19 +328,19 @@ impl RadixRouter {
     }
 
     #[inline]
-    pub fn find(&self, method: HttpMethod, path: &str) -> Option<super::super::MatchResult> {
+    pub fn find_route(&self, method: HttpMethod, path: &str) -> Option<super::super::RouteMatchResult> {
         if !path.is_ascii() {
             return None;
         }
 
         if path == "/" {
             let method_idx = method as usize;
-            let key = self.root.routes[method_idx];
+            let route_key = self.root_node.routes[method_idx];
 
-            if key != 0 {
-                return Some(super::super::MatchResult {
-                    key: Self::decode_key(key),
-                    params: vec![],
+            if route_key != 0 {
+                return Some(super::super::RouteMatchResult {
+                    route_key: Self::decode_route_key(route_key),
+                    parameter_offsets: vec![],
                 });
             }
 
@@ -348,46 +349,46 @@ impl RadixRouter {
 
         let norm = super::super::normalize_path(path);
 
-        self.find_norm(method, norm.as_str())
+        self.find_normalized_route(method, norm.as_str())
     }
 
     #[inline(always)]
-    pub fn find_norm(
+    pub fn find_normalized_route(
         &self,
         method: HttpMethod,
-        norm_path: &str,
-    ) -> Option<super::super::MatchResult> {
-        if !norm_path.is_ascii() {
+        normalized_path: &str,
+    ) -> Option<super::super::RouteMatchResult> {
+        if !normalized_path.is_ascii() {
             return None;
         }
 
         let method_idx = method as usize;
 
-        if norm_path.as_bytes().iter().all(|&b| b == b'/') {
-            let key = self.root.routes[method_idx];
-            if key != 0 {
-                return Some(super::super::MatchResult {
-                    key: Self::decode_key(key),
-                    params: vec![],
+        if normalized_path.as_bytes().iter().all(|&b| b == b'/') {
+            let route_key = self.root_node.routes[method_idx];
+            if route_key != 0 {
+                return Some(super::super::RouteMatchResult {
+                    route_key: Self::decode_route_key(route_key),
+                    parameter_offsets: vec![],
                 });
             }
             return None;
         }
 
-        if self.root.sealed && self.enable_static_full_map {
-            if let Some(&rk) = self.static_full_map[method_idx].get(norm_path)
+        if self.root_node.sealed && self.enable_static_route_full_mapping {
+            if let Some(&rk) = self.static_route_full_mapping[method_idx].get(normalized_path)
              {
-                return Some(super::super::MatchResult {
-                    key: Self::decode_key(rk),
-                    params: vec![],
+                return Some(super::super::RouteMatchResult {
+                    route_key: Self::decode_route_key(rk),
+                    parameter_offsets: vec![],
                 });
             }
         }
 
-        if self.root.sealed && self.enable_root_prune {
-            if !self.root_param_first_present[method_idx] && !self.root_wildcard_present[method_idx]
+        if self.root_node.sealed && self.enable_root_level_pruning {
+            if !self.root_parameter_first_present[method_idx] && !self.root_wildcard_present[method_idx]
             {
-                let bs = norm_path.as_bytes();
+                let bs = normalized_path.as_bytes();
                 let mut i = 0usize;
 
                 while i < bs.len() && bs[i] == b'/' {
@@ -399,12 +400,12 @@ impl RadixRouter {
 
                     let blk = (hb as usize) >> 6;
                     let bit = 1u64 << ((hb as usize) & 63);
-                    let head_present_any = self.method_head_bits[method_idx][0]
-                        | self.method_head_bits[method_idx][1]
-                        | self.method_head_bits[method_idx][2]
-                        | self.method_head_bits[method_idx][3];
+                    let head_present_any = self.method_first_byte_bitmaps[method_idx][0]
+                        | self.method_first_byte_bitmaps[method_idx][1]
+                        | self.method_first_byte_bitmaps[method_idx][2]
+                        | self.method_first_byte_bitmaps[method_idx][3];
 
-                    if head_present_any != 0 && (self.method_head_bits[method_idx][blk] & bit) == 0
+                    if head_present_any != 0 && (self.method_first_byte_bitmaps[method_idx][blk] & bit) == 0
                     {
                         return None;
                     }
@@ -418,8 +419,8 @@ impl RadixRouter {
                     let seg_len = (j - i).min(63) as u32;
                     let lbit = 1u64 << seg_len;
 
-                    if self.method_len_buckets[method_idx] != 0
-                        && (self.method_len_buckets[method_idx] & lbit) == 0
+                    if self.method_length_buckets[method_idx] != 0
+                        && (self.method_length_buckets[method_idx] & lbit) == 0
                     {
                         return None;
                     }
@@ -427,22 +428,22 @@ impl RadixRouter {
             }
         }
 
-        if norm_path == "/" {
-            let key = self.root.routes[method_idx];
+        if normalized_path == "/" {
+            let route_key = self.root_node.routes[method_idx];
 
-            if key != 0 {
-                return Some(super::super::MatchResult {
-                    key: Self::decode_key(key),
-                    params: vec![],
+            if route_key != 0 {
+                return Some(super::super::RouteMatchResult {
+                    route_key: Self::decode_route_key(route_key),
+                    parameter_offsets: vec![],
                 });
             }
 
             return None;
         }
 
-        let mut params: SmallVec<[(String, (usize, usize)); 8]> = SmallVec::new();
+        let mut parameter_offsets: SmallVec<[(String, (usize, usize)); 8]> = SmallVec::new();
 
-        let res = self.find_from(&self.root, method, norm_path, 0, &mut params);
+        let res = self.find_from(&self.root_node, method, normalized_path, 0, &mut parameter_offsets);
 
         res
     }

@@ -158,7 +158,7 @@ pub unsafe extern "C" fn handle_request(
 pub unsafe extern "C" fn router_seal(handle: HttpServerHandle) {
     let http_server = unsafe { &*handle };
 
-    unsafe { &mut *http_server.router.0 }.seal()
+    unsafe { &mut *http_server.router.0 }.finalize_routes()
 }
 
 /// Frees the memory for a C string that was allocated by Rust.

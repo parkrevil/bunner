@@ -5,13 +5,13 @@ use smallvec::SmallVec;
 use crate::router::interner::Interner;
 use crate::router::pattern::{pattern_score, SegmentPart, SegmentPattern};
 
-use super::METHOD_COUNT;
+use super::HTTP_METHOD_COUNT;
 
 pub(super) type StaticMap = FastHashMap<String, NodeBox>;
 pub(super) type StaticMapIdx = FastHashMap<String, super::NodeBox>;
 
 #[derive(Debug, Default)]
-pub struct RadixNode {
+pub struct RadixTreeNode {
     // optimize small number of siblings before promoting to map
     pub(super) static_keys: SmallVec<[String; 16]>,
     pub(super) static_keys_lower: SmallVec<[String; 16]>,
@@ -46,8 +46,8 @@ pub struct RadixNode {
     pub(super) pattern_min_len: SmallVec<[u16; 32]>,
     // cached last literal length (0 if none)
     pub(super) pattern_last_lit_len: SmallVec<[u16; 32]>,
-    pub(super) routes: [u16; METHOD_COUNT],
-    pub(super) wildcard_routes: [u16; METHOD_COUNT],
+    pub(super) routes: [u16; HTTP_METHOD_COUNT],
+    pub(super) wildcard_routes: [u16; HTTP_METHOD_COUNT],
     pub(super) sealed: bool,
     pub(super) dirty: bool,
     // prefix compression (set by compress())
@@ -64,9 +64,9 @@ pub struct RadixNode {
     pub(super) static_lb_hint: usize,
 }
 
-impl RadixNode {
+impl RadixTreeNode {
     #[inline(always)]
-    pub(super) fn get_static_ref(&self, key: &str) -> Option<&RadixNode> {
+    pub(super) fn get_static_ref(&self, key: &str) -> Option<&RadixTreeNode> {
         if let Some(n) = self.static_children.get(key) {
             return Some(n.as_ref());
         }
@@ -77,7 +77,7 @@ impl RadixNode {
     }
 
     #[inline(always)]
-    pub(super) fn get_static_fast(&self, key: &str) -> Option<&RadixNode> {
+    pub(super) fn get_static_fast(&self, key: &str) -> Option<&RadixTreeNode> {
         // MPHF-like quick path
         if !self.static_hash_table.is_empty()
             && self.static_vals_idx.len() == self.static_keys.len()
@@ -155,7 +155,7 @@ impl RadixNode {
     }
 
     #[inline(always)]
-    pub(super) fn get_static_id_fast(&self, key_id: u32) -> Option<&RadixNode> {
+    pub(super) fn get_static_id_fast(&self, key_id: u32) -> Option<&RadixTreeNode> {
         if let Some(nb) = self.static_children_idx_ids.get(&key_id) {
             return Some(nb.as_ref());
         }
@@ -248,7 +248,7 @@ impl RadixNode {
         &mut self,
         key: String,
         alloc: F,
-    ) -> &mut RadixNode
+    ) -> &mut RadixTreeNode
     where
         F: FnOnce() -> NodeBox,
     {

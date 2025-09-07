@@ -6,29 +6,29 @@ pub use crate::router::errors::RouterError;
 use crate::r#enum::HttpMethod;
 
 #[derive(Debug, Default)]
-pub struct MatchResult {
-    pub key: u16,
-    pub params: Vec<(String, (usize, usize))>,
+pub struct RouteMatchResult {
+    pub route_key: u16,
+    pub parameter_offsets: Vec<(String, (usize, usize))>,
 }
 
 #[derive(Debug, Default)]
 pub struct Router {
-    radix: radix::RadixRouter,
+    radix_tree: radix::RadixTreeRouter,
 }
 
 impl Router {
     pub fn new() -> Self {
-        Self::with_options(RouterOptions::default(), None)
+        Self::with_configuration(RouterOptions::default(), None)
     }
 
-    pub fn with_options(options: RouterOptions, _default_key: Option<u64>) -> Self {
+    pub fn with_configuration(configuration: RouterOptions, _default_route_key: Option<u64>) -> Self {
         Self {
-            radix: radix::RadixRouter::new(options),
+            radix_tree: radix::RadixTreeRouter::new(configuration),
         }
     }
 
     pub fn add(&mut self, method: HttpMethod, path: &str) -> Result<u16, errors::RouterError> {
-        self.radix.insert(method, path)
+        self.radix_tree.insert_route(method, path)
     }
 
     pub fn find(
@@ -44,84 +44,86 @@ impl Router {
             return Err(RouterError::MatchPathNotAscii);
         }
 
-        if !path_is_allowed_ascii(path) {
+        if !is_path_character_allowed(path) {
             return Err(RouterError::MatchPathContainsDisallowedCharacters);
         }
 
-        let norm = normalize_path(path);
+        let normalized_path = normalize_path(path);
 
-        if !path_is_allowed_ascii(&norm) {
+        if !is_path_character_allowed(&normalized_path) {
             return Err(RouterError::MatchPathContainsDisallowedCharacters);
         }
 
-        if let Some(m) = self.radix.find_norm(method, &norm) {
-            let mut out = Vec::with_capacity(m.params.len());
+        if let Some(match_result) = self.radix_tree.find_normalized_route(method, &normalized_path) {
+            let mut parameter_pairs = Vec::with_capacity(match_result.parameter_offsets.len());
 
-            for (name, (start, len)) in m.params.into_iter() {
-                let val = &norm[start..start + len];
-                out.push((name, val.to_string()));
+            for (parameter_name, (start_offset, length)) in match_result.parameter_offsets.into_iter() {
+                let parameter_value = &normalized_path[start_offset..start_offset + length];
+
+                parameter_pairs.push((parameter_name, parameter_value.to_string()));
             }
-            Ok((m.key, out))
+
+            Ok((match_result.route_key, parameter_pairs))
         } else {
             Err(RouterError::MatchNotFound)
         }
     }
 
-    pub fn seal(&mut self) {
-        self.radix.seal();
+    pub fn finalize_routes(&mut self) {
+        self.radix_tree.finalize_routes();
     }
 
     #[doc(hidden)]
-    pub fn internal_router(&self) -> &radix::RadixRouter {
-        &self.radix
+    pub fn get_internal_radix_router(&self) -> &radix::RadixTreeRouter {
+        &self.radix_tree
     }
 }
 
 
 #[derive(Debug, Clone, Copy)]
 pub struct RouterOptions {
-    // performance/feature toggles
-    pub enable_root_prune: bool,
-    pub enable_static_full_map: bool,
-    pub automatic_optimization: bool,
+    pub enable_root_level_pruning: bool,
+    pub enable_static_route_full_mapping: bool,
+    pub enable_automatic_optimization: bool,
 }
 
 impl Default for RouterOptions {
     fn default() -> Self {
         Self {
-            enable_root_prune: false,
-            enable_static_full_map: false,
-            automatic_optimization: true,
+            enable_root_level_pruning: false,
+            enable_static_route_full_mapping: false,
+            enable_automatic_optimization: true,
         }
     }
 }
 
 fn normalize_path(path: &str) -> String {
-    // Fast path: no trailing slash or single "/" → return as-is clone
     if path.len() <= 1 || path.as_bytes().last().is_none() || path.as_bytes().last() != Some(&b'/')
     {
         return path.to_string();
     }
-    // Remove trailing slashes while keeping single root
-    let mut end = path.len();
-    while end > 1 && path.as_bytes()[end - 1] == b'/' {
-        end -= 1;
+
+    let mut end_position = path.len();
+
+    while end_position > 1 && path.as_bytes()[end_position - 1] == b'/' {
+        end_position -= 1;
     }
-    if end == path.len() {
+
+    if end_position == path.len() {
         return path.to_string();
     }
-    path[..end].to_string()
+
+    path[..end_position].to_string()
 }
 
 #[inline]
-pub(crate) fn path_is_allowed_ascii(path: &str) -> bool {
-    // RFC3986-safe subset for path: unreserved + sub-delims + ':' '@' '/' and '.'
-    // Exclude '%', '?' and '#', and any control/space
-    for &b in path.as_bytes() {
-        if b <= 0x20 {
+pub(crate) fn is_path_character_allowed(path: &str) -> bool {
+    for &byte_value in path.as_bytes() {
+        if byte_value <= 0x20 {
             return false;
         }
-        match b {
+
+        match byte_value {
             b'a'..=b'z'
             | b'A'..=b'Z'
             | b'0'..=b'9'

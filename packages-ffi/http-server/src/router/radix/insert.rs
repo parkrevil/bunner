@@ -3,33 +3,33 @@ use crate::router::pattern::{
     pattern_compatible_policy, pattern_is_pure_static, pattern_score, SegmentPart, SegmentPattern,
 };
 
-use super::new_node_box_from_arena_ptr;
-use super::{RadixRouter};
+use super::create_node_box_from_arena_pointer;
+use super::{RadixTreeRouter};
 
 use crate::r#enum::HttpMethod;
 
-impl RadixRouter {
-    pub fn insert(&mut self, method: HttpMethod, path: &str) -> Result<u16, RouterError> {
-        if self.root.sealed {
+impl RadixTreeRouter {
+    pub fn insert_route(&mut self, method: HttpMethod, path: &str) -> Result<u16, RouterError> {
+        if self.root_node.sealed {
             return Err(RouterError::RouterSealedCannotInsert);
         }
 
-        self.invalidate_indices();
+        self.invalidate_all_indices();
 
         let method_idx = method as usize;
 
         if path == "/" {
-            if self.root.routes[method_idx] != 0 {
+            if self.root_node.routes[method_idx] != 0 {
                 return Err(RouterError::RouteConflictOnDuplicatePath);
             }
 
             let key = self
-                .next_key
+                .next_route_key
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
-            self.root.routes[method_idx] = key + 1;
-            self.root.method_mask |= 1 << method_idx;
-            self.root.dirty = true;
+            self.root_node.routes[method_idx] = key + 1;
+            self.root_node.method_mask |= 1 << method_idx;
+            self.root_node.dirty = true;
             return Ok(key);
         }
 
@@ -43,7 +43,7 @@ impl RadixRouter {
 
         let norm = super::super::normalize_path(path);
 
-        if !super::super::path_is_allowed_ascii(&norm) {
+        if !super::super::is_path_character_allowed(&norm) {
             return Err(RouterError::RoutePathContainsDisallowedCharacters);
         }
 
@@ -72,8 +72,8 @@ impl RadixRouter {
             parsed_segments.push(pat);
         }
 
-        let mut current = &mut self.root;
-        let arena_ptr: *const bumpalo::Bump = &self.arena;
+        let mut current = &mut self.root_node;
+        let arena_ptr: *const bumpalo::Bump = &self.memory_arena;
         let mut _total_params = 0usize;
 
         for (i, (seg, pat)) in segments.iter().zip(parsed_segments.iter()).enumerate() {
@@ -87,7 +87,7 @@ impl RadixRouter {
                 }
 
                 let key = self
-                    .next_key
+                    .next_route_key
                     .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
                 current.wildcard_routes[method_idx] = key + 1;
@@ -107,12 +107,12 @@ impl RadixRouter {
 
             if pattern_is_pure_static(pat, &key_seg) {
                 current = current.descend_static_mut_with_alloc(key_seg, || {
-                    new_node_box_from_arena_ptr(arena_ptr)
+                    create_node_box_from_arena_pointer(arena_ptr)
                 });
                 current.method_mask |= 1 << method_idx;
 
                 if current.static_keys.len() == current.static_vals.len() {
-                    let interner = &self.interner;
+                    let interner = &self.string_interner;
                     let mut pairs: Vec<(u32, String, super::NodeBox)> = current
                         .static_keys
                         .iter()
@@ -170,7 +170,7 @@ impl RadixRouter {
                 current.patterns.insert(insert_pos, pat.clone());
                 current
                     .pattern_nodes
-                    .insert(insert_pos, new_node_box_from_arena_ptr(arena_ptr));
+                    .insert(insert_pos, create_node_box_from_arena_pointer(arena_ptr));
                 current.pattern_scores.insert(insert_pos, score);
                 current.rebuild_pattern_index();
 
@@ -187,7 +187,7 @@ impl RadixRouter {
         }
 
         let key = self
-            .next_key
+            .next_route_key
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
         current.routes[method_idx] = key + 1;
