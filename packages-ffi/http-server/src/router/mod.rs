@@ -31,9 +31,40 @@ impl Router {
         self.radix.insert(method, path)
     }
 
-    pub fn find(&self, method: HttpMethod, path: &str) -> Option<MatchResult> {
+    pub fn find(
+        &self,
+        method: HttpMethod,
+        path: &str,
+    ) -> Result<(u16, Vec<(String, String)>), RouterError> {
+        if path.is_empty() {
+            return Err(RouterError::MatchPathEmpty);
+        }
+
+        if !path.is_ascii() {
+            return Err(RouterError::MatchPathNotAscii);
+        }
+
+        if !path_is_allowed_ascii(path) {
+            return Err(RouterError::MatchPathContainsDisallowedCharacters);
+        }
+
         let norm = normalize_path(path);
-        self.radix.find_norm(method, &norm)
+
+        if !path_is_allowed_ascii(&norm) {
+            return Err(RouterError::MatchPathContainsDisallowedCharacters);
+        }
+
+        if let Some(m) = self.radix.find_norm(method, &norm) {
+            let mut out = Vec::with_capacity(m.params.len());
+
+            for (name, (start, len)) in m.params.into_iter() {
+                let val = &norm[start..start + len];
+                out.push((name, val.to_string()));
+            }
+            Ok((m.key, out))
+        } else {
+            Err(RouterError::MatchNotFound)
+        }
     }
 
     pub fn seal(&mut self) {
@@ -46,18 +77,6 @@ impl Router {
     }
 }
 
-pub fn register_route(
-    router: &mut Router,
-    method: HttpMethod,
-    path: &str,
-) -> Result<u16, errors::RouterError> {
-    router.radix.insert(method, path)
-}
-
-
-pub fn seal(router: &mut Router) {
-    router.radix.seal();
-}
 
 #[derive(Debug, Clone, Copy)]
 pub struct RouterOptions {
@@ -132,42 +151,6 @@ pub(crate) fn path_is_allowed_ascii(path: &str) -> bool {
     true
 }
 
-pub fn match_route(
-    router: &Router,
-    method: HttpMethod,
-    path: &str,
-) -> Result<(u16, Vec<(String, String)>), RouterError> {
-    if path.is_empty() {
-        return Err(RouterError::MatchPathEmpty);
-    }
-
-    if !path.is_ascii() {
-        return Err(RouterError::MatchPathNotAscii);
-    }
-
-    if !path_is_allowed_ascii(path) {
-        return Err(RouterError::MatchPathContainsDisallowedCharacters);
-    }
-
-    let norm = normalize_path(path);
-
-    if !path_is_allowed_ascii(&norm) {
-        return Err(RouterError::MatchPathContainsDisallowedCharacters);
-    }
-
-    if let Some(m) = router.radix.find_norm(method, &norm) {
-        let mut out = Vec::with_capacity(m.params.len());
-
-        for (name, (start, len)) in m.params.into_iter() {
-            let val = &norm[start..start + len];
-
-            out.push((name, val.to_string()));
-        }
-        Ok((m.key, out))
-    } else {
-        Err(RouterError::MatchNotFound)
-    }
-}
 
 
 pub type RouterHandle = Router;

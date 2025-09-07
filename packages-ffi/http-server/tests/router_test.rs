@@ -17,13 +17,13 @@ mod methods {
         r.add(HttpMethod::Options, "/r").unwrap();
         r.add(HttpMethod::Head, "/r").unwrap();
         r.seal();
-        let k_get = r.find(HttpMethod::Get, "/r").unwrap().key;
-        let k_post = r.find(HttpMethod::Post, "/r").unwrap().key;
-        let k_put = r.find(HttpMethod::Put, "/r").unwrap().key;
-        let k_patch = r.find(HttpMethod::Patch, "/r").unwrap().key;
-        let k_delete = r.find(HttpMethod::Delete, "/r").unwrap().key;
-        let k_options = r.find(HttpMethod::Options, "/r").unwrap().key;
-        let k_head = r.find(HttpMethod::Head, "/r").unwrap().key;
+        let k_get = r.find(HttpMethod::Get, "/r").unwrap().0;
+        let k_post = r.find(HttpMethod::Post, "/r").unwrap().0;
+        let k_put = r.find(HttpMethod::Put, "/r").unwrap().0;
+        let k_patch = r.find(HttpMethod::Patch, "/r").unwrap().0;
+        let k_delete = r.find(HttpMethod::Delete, "/r").unwrap().0;
+        let k_options = r.find(HttpMethod::Options, "/r").unwrap().0;
+        let k_head = r.find(HttpMethod::Head, "/r").unwrap().0;
         assert!(
             k_get != 0
                 && k_post != 0
@@ -33,21 +33,21 @@ mod methods {
                 && k_options != 0
                 && k_head != 0
         );
-        assert!(r.find(HttpMethod::Get, "/r/x").is_none());
-        assert!(r.find(HttpMethod::Head, "/r").is_some());
-        assert!(r.find(HttpMethod::Get, "/r").is_some());
-        assert!(r.find(HttpMethod::Head, "/r").unwrap().key != r.find(HttpMethod::Get, "/r").unwrap().key);
+        assert!(r.find(HttpMethod::Get, "/r/x").is_err());
+        assert!(r.find(HttpMethod::Head, "/r").is_ok());
+        assert!(r.find(HttpMethod::Get, "/r").is_ok());
+        assert!(r.find(HttpMethod::Head, "/r").unwrap().0 != r.find(HttpMethod::Get, "/r").unwrap().0);
     }
 
     #[test]
     fn missing_method_is_none_both_before_and_after_seal() {
         let mut r1 = Router::with_options(RouterOptions::default(), None);
         r1.add(HttpMethod::Get, "/only-get").unwrap();
-        assert!(r1.find(HttpMethod::Post, "/only-get").is_none());
+        assert!(r1.find(HttpMethod::Post, "/only-get").is_err());
         let mut r2 = Router::with_options(RouterOptions::default(), None);
         r2.add(HttpMethod::Get, "/only-get").unwrap();
         r2.seal();
-        assert!(r2.find(HttpMethod::Post, "/only-get").is_none());
+        assert!(r2.find(HttpMethod::Post, "/only-get").is_err());
     }
 
     #[test]
@@ -55,13 +55,13 @@ mod methods {
         let mut r1 = Router::with_options(RouterOptions::default(), None);
         r1.add(HttpMethod::Get, "/only-get").unwrap();
         r1.seal();
-        assert!(r1.find(HttpMethod::Head, "/only-get").is_none());
+        assert!(r1.find(HttpMethod::Head, "/only-get").is_err());
 
         let mut r2 = Router::with_options(RouterOptions::default(), None);
         r2.add(HttpMethod::Head, "/head-only").unwrap();
         r2.seal();
-        assert!(r2.find(HttpMethod::Get, "/head-only").is_none());
-        assert!(r2.find(HttpMethod::Head, "/head-only").unwrap().key != 0);
+        assert!(r2.find(HttpMethod::Get, "/head-only").is_err());
+        assert!(r2.find(HttpMethod::Head, "/head-only").unwrap().0 != 0);
     }
 }
 
@@ -73,7 +73,7 @@ mod static_routes {
         let mut r = Router::with_options(RouterOptions::default(), None);
         r.add(HttpMethod::Get, "/").unwrap();
         r.seal();
-        assert!(r.find(HttpMethod::Get, "/").unwrap().key != 0);
+        assert!(r.find(HttpMethod::Get, "/").unwrap().0 != 0);
     }
 
     #[test]
@@ -81,7 +81,7 @@ mod static_routes {
         let mut r = Router::with_options(RouterOptions::default(), None);
         r.add(HttpMethod::Get, "/").unwrap();
         r.seal();
-        assert!(r.find(HttpMethod::Get, "////").is_some());
+        assert!(r.find(HttpMethod::Get, "////").is_ok());
     }
 
     #[test]
@@ -90,18 +90,18 @@ mod static_routes {
         r.add(HttpMethod::Get, "/health").unwrap();
         r.add(HttpMethod::Post, "/health").unwrap();
         r.seal();
-        assert!(r.find(HttpMethod::Get, "/health").unwrap().key != 0);
-        assert!(r.find(HttpMethod::Post, "/health").unwrap().key != 0);
+        assert!(r.find(HttpMethod::Get, "/health").unwrap().0 != 0);
+        assert!(r.find(HttpMethod::Post, "/health").unwrap().0 != 0);
     }
 
     #[test]
     fn rejects_duplicate_static_route_for_same_method() {
         let mut r = rapi::Router::with_options(RouterOptions::default(), None);
-        let k = rapi::register_route(&mut r, HttpMethod::Get, "/health").unwrap();
-        let code = rapi::register_route(&mut r, HttpMethod::Get, "/health");
+        let k = r.add(HttpMethod::Get, "/health").unwrap();
+        let code = r.add(HttpMethod::Get, "/health");
         assert_eq!(code, Err(RouterError::RouteConflictOnDuplicatePath));
-        rapi::seal(&mut r);
-        let m = rapi::match_route(&r, HttpMethod::Get, "/health").unwrap();
+        r.seal();
+        let m = r.find( HttpMethod::Get, "/health").unwrap();
         assert_eq!(m.0, k);
     }
 
@@ -110,12 +110,12 @@ mod static_routes {
         let mut r = rapi::Router::with_options(RouterOptions::default(), None);
         for i in 0..200u32 {
             let path = format!("/assets/v1/css/{}.css", i);
-            assert!(rapi::register_route(&mut r, HttpMethod::Get, &path).is_ok());
+            assert!(r.add( HttpMethod::Get, &path).is_ok());
         }
-        rapi::seal(&mut r);
+        r.seal();
         for i in [0u32, 1, 50, 100, 150, 199] {
             let p = format!("/assets/v1/css/{}.css", i);
-            let m = rapi::match_route(&r, HttpMethod::Get, &p).unwrap();
+            let m = r.find( HttpMethod::Get, &p).unwrap();
             assert!(m.0 != 0);
         }
     }
@@ -129,8 +129,8 @@ mod normalization {
         let mut r = Router::with_options(RouterOptions::default(), None);
         r.add(HttpMethod::Get, "/api/users").unwrap();
         r.seal();
-        assert!(r.find(HttpMethod::Get, "/api/users/").is_some());
-        assert!(r.find(HttpMethod::Get, "/api/users").is_some());
+        assert!(r.find(HttpMethod::Get, "/api/users/").is_ok());
+        assert!(r.find(HttpMethod::Get, "/api/users").is_ok());
     }
 
     #[test]
@@ -138,8 +138,8 @@ mod normalization {
         let mut r = Router::with_options(RouterOptions::default(), None);
         r.add(HttpMethod::Get, "/a/b").unwrap();
         r.seal();
-        assert!(r.find(HttpMethod::Get, "/a//b").is_none());
-        assert!(r.find(HttpMethod::Get, "/a//b///").is_none());
+        assert!(r.find(HttpMethod::Get, "/a//b").is_err());
+        assert!(r.find(HttpMethod::Get, "/a//b///").is_err());
     }
 
     #[test]
@@ -147,7 +147,7 @@ mod normalization {
         let mut r = Router::with_options(RouterOptions::default(), None);
         r.add(HttpMethod::Get, "/a/x/b").unwrap();
         r.seal();
-        assert!(r.find(HttpMethod::Get, "/a//b").is_none());
+        assert!(r.find(HttpMethod::Get, "/a//b").is_err());
     }
 
     #[test]
@@ -157,16 +157,13 @@ mod normalization {
         r.seal();
         let raw = "/p/AA/BB/";
         let m = r.find(HttpMethod::Get, raw).unwrap();
-        assert!(m.key != 0);
-        assert_eq!(m.params.len(), 2);
-        assert_eq!(m.params[0].0, "x");
-        assert_eq!(m.params[1].0, "y");
-        // 파라미터 값은 오프셋과 길이로 저장되므로 직접 비교할 수 없음
-        // 대신 오프셋과 길이가 올바른지 확인
-        assert!(m.params[0].1.0 < raw.len());
-        assert!(m.params[0].1.1 > 0);
-        assert!(m.params[1].1.0 < raw.len());
-        assert!(m.params[1].1.1 > 0);
+        assert!(m.0 != 0);
+        assert_eq!(m.1.len(), 2);
+        assert_eq!(m.1[0].0, "x");
+        assert_eq!(m.1[1].0, "y");
+        // 파라미터 값이 직접 문자열로 제공됨
+        assert_eq!(m.1[0].1, "AA");
+        assert_eq!(m.1[1].1, "BB");
     }
 
     #[test]
@@ -176,9 +173,9 @@ mod normalization {
             r.add(HttpMethod::Get, "/a/../b").unwrap();
         r.seal();
 
-        assert!(r.find(HttpMethod::Get, "/a/./b").is_some());
-        assert!(r.find(HttpMethod::Get, "/a/../b").is_some());
-        assert!(r.find(HttpMethod::Get, "/a/b").is_none());
+        assert!(r.find(HttpMethod::Get, "/a/./b").is_ok());
+        assert!(r.find(HttpMethod::Get, "/a/../b").is_ok());
+        assert!(r.find(HttpMethod::Get, "/a/b").is_err());
     }
 }
 
@@ -190,8 +187,8 @@ mod case_sensitivity {
         let mut r = Router::with_options(RouterOptions::default(), None);
         r.add(HttpMethod::Get, "/About").unwrap();
         r.seal();
-        assert!(r.find(HttpMethod::Get, "/about").is_none());
-        assert!(r.find(HttpMethod::Get, "/About").is_some());
+        assert!(r.find(HttpMethod::Get, "/about").is_err());
+        assert!(r.find(HttpMethod::Get, "/About").is_ok());
     }
 
     #[test]
@@ -199,8 +196,8 @@ mod case_sensitivity {
         let o = RouterOptions::default();
         let mut r = Router::with_options(o, None);
         r.seal();
-        assert!(r.find(HttpMethod::Get, "/café").is_none());
-        assert!(r.find(HttpMethod::Get, "/Café").is_none());
+        assert!(r.find(HttpMethod::Get, "/café").is_err());
+        assert!(r.find(HttpMethod::Get, "/Café").is_err());
     }
 }
 
@@ -210,9 +207,9 @@ mod params {
     #[test]
     fn matches_named_params_and_returns_values() {
         let mut r = rapi::Router::with_options(RouterOptions::default(), None);
-        let k = rapi::register_route(&mut r, HttpMethod::Get, "/users/:id").unwrap();
-        rapi::seal(&mut r);
-        let m = rapi::match_route(&r, HttpMethod::Get, "/users/123").unwrap();
+        let k = r.add( HttpMethod::Get, "/users/:id").unwrap();
+        r.seal();
+        let m = r.find( HttpMethod::Get, "/users/123").unwrap();
         assert_eq!(m.0, k);
         assert_eq!(m.1.len(), 1);
         assert_eq!(m.1[0].0.as_str(), "id");
@@ -222,9 +219,9 @@ mod params {
     #[test]
     fn matches_multiple_params_across_two_segments() {
         let mut r = rapi::Router::with_options(RouterOptions::default(), None);
-        let k = rapi::register_route(&mut r, HttpMethod::Get, "/pkg/:name/:ver").unwrap();
-        rapi::seal(&mut r);
-        let m = rapi::match_route(&r, HttpMethod::Get, "/pkg/foo/1.2.3").unwrap();
+        let k = r.add( HttpMethod::Get, "/pkg/:name/:ver").unwrap();
+        r.seal();
+        let m = r.find( HttpMethod::Get, "/pkg/foo/1.2.3").unwrap();
         assert_eq!(m.0, k);
         assert_eq!(m.1.len(), 2);
         assert_eq!(m.1[0].0.as_str(), "name");
@@ -240,13 +237,11 @@ mod params {
         r.seal();
         let path = "/users/123";
         let mo = r.find(HttpMethod::Get, path).unwrap();
-        assert!(mo.key != 0);
-        assert_eq!(mo.params.len(), 1);
-        assert_eq!(mo.params[0].0, "id");
-        // 파라미터 값은 오프셋과 길이로 저장되므로 직접 비교할 수 없음
-        // 대신 오프셋과 길이가 올바른지 확인
-        assert!(mo.params[0].1.0 < path.len());
-        assert!(mo.params[0].1.1 > 0);
+        assert!(mo.0 != 0);
+        assert_eq!(mo.1.len(), 1);
+        assert_eq!(mo.1[0].0, "id");
+        // 파라미터 값이 직접 문자열로 제공됨
+        assert_eq!(mo.1[0].1, "123");
     }
 
     #[test]
@@ -256,16 +251,13 @@ mod params {
         r.seal();
         let path = "/pkg/lib/2.0.1";
         let mo = r.find(HttpMethod::Get, path).unwrap();
-        assert!(mo.key != 0);
-        assert_eq!(mo.params.len(), 2);
-        assert_eq!(mo.params[0].0, "name");
-        assert_eq!(mo.params[1].0, "ver");
-        // 파라미터 값은 오프셋과 길이로 저장되므로 직접 비교할 수 없음
-        // 대신 오프셋과 길이가 올바른지 확인
-        assert!(mo.params[0].1.0 < path.len());
-        assert!(mo.params[0].1.1 > 0);
-        assert!(mo.params[1].1.0 < path.len());
-        assert!(mo.params[1].1.1 > 0);
+        assert!(mo.0 != 0);
+        assert_eq!(mo.1.len(), 2);
+        assert_eq!(mo.1[0].0, "name");
+        assert_eq!(mo.1[1].0, "ver");
+        // 파라미터 값이 직접 문자열로 제공됨
+        assert_eq!(mo.1[0].1, "lib");
+        assert_eq!(mo.1[1].1, "2.0.1");
     }
 }
 
@@ -277,15 +269,15 @@ mod wildcard {
         let mut r = Router::with_options(RouterOptions::default(), None);
         r.add(HttpMethod::Get, "/files/*").unwrap();
         r.seal();
-        assert!(r.find(HttpMethod::Get, "/files/a/b").is_some());
+        assert!(r.find(HttpMethod::Get, "/files/a/b").is_ok());
     }
 
     #[test]
     fn captures_rest_of_path_for_wildcard_param() {
         let mut r = rapi::Router::with_options(RouterOptions::default(), None);
-        let k = rapi::register_route(&mut r, HttpMethod::Get, "/files/*").unwrap();
-        rapi::seal(&mut r);
-        let m = rapi::match_route(&r, HttpMethod::Get, "/files/a/b").unwrap();
+        let k = r.add( HttpMethod::Get, "/files/*").unwrap();
+        r.seal();
+        let m = r.find( HttpMethod::Get, "/files/a/b").unwrap();
         assert_eq!(m.0, k);
         assert_eq!(m.1.len(), 1);
         assert_eq!(m.1[0].0.as_str(), "*");
@@ -297,19 +289,19 @@ mod wildcard {
         let mut r = Router::with_options(RouterOptions::default(), None);
         r.add(HttpMethod::Get, "/w/*").unwrap();
         r.seal();
-        assert!(r.find(HttpMethod::Get, "/w").is_some());
-        assert!(r.find(HttpMethod::Get, "/w/").is_some());
+        assert!(r.find(HttpMethod::Get, "/w").is_ok());
+        assert!(r.find(HttpMethod::Get, "/w/").is_ok());
     }
 
     #[test]
     fn matches_when_remainder_is_empty_or_slash() {
         let mut r = rapi::Router::with_options(RouterOptions::default(), None);
-        let k = rapi::register_route(&mut r, HttpMethod::Get, "/files/*").unwrap();
-        rapi::seal(&mut r);
-        let m1 = rapi::match_route(&r, HttpMethod::Get, "/files").unwrap();
+        let k = r.add( HttpMethod::Get, "/files/*").unwrap();
+        r.seal();
+        let m1 = r.find( HttpMethod::Get, "/files").unwrap();
         assert_eq!(m1.0, k);
         assert_eq!(m1.1.len(), 0);
-        let m2 = rapi::match_route(&r, HttpMethod::Get, "/files/").unwrap();
+        let m2 = r.find( HttpMethod::Get, "/files/").unwrap();
         assert_eq!(m2.0, k);
     }
 
@@ -318,17 +310,17 @@ mod wildcard {
         let mut r = Router::with_options(RouterOptions::default(), None);
         r.add(HttpMethod::Get, "/*").unwrap();
         r.seal();
-        assert!(r.find(HttpMethod::Get, "/a").is_some());
-        assert!(r.find(HttpMethod::Get, "/a/b").is_some());
-        assert!(r.find(HttpMethod::Get, "/").is_none());
+        assert!(r.find(HttpMethod::Get, "/a").is_ok());
+        assert!(r.find(HttpMethod::Get, "/a/b").is_ok());
+        assert!(r.find(HttpMethod::Get, "/").is_err());
     }
 
     #[test]
     fn wildcard_offsets_after_normalization() {
         let mut r = rapi::Router::with_options(RouterOptions::default(), None);
-        assert!(rapi::register_route(&mut r, HttpMethod::Get, "/files/*").is_ok());
-        rapi::seal(&mut r);
-        let m = rapi::match_route(&r, HttpMethod::Get, "/files//a/b///").unwrap();
+        assert!(r.add( HttpMethod::Get, "/files/*").is_ok());
+        r.seal();
+        let m = r.find( HttpMethod::Get, "/files//a/b///").unwrap();
         assert!(m.0 != 0);
         assert_eq!(m.1.len(), 1);
         assert_eq!(m.1[0].0.as_str(), "*");
@@ -345,8 +337,8 @@ mod precedence {
         r.add(HttpMethod::Get, "/user/*").unwrap();
             r.add(HttpMethod::Get, "/user/me").unwrap();
         r.seal();
-        assert!(r.find(HttpMethod::Get, "/user/me").is_some());
-        assert!(r.find(HttpMethod::Get, "/user/123").is_some());
+        assert!(r.find(HttpMethod::Get, "/user/me").is_ok());
+        assert!(r.find(HttpMethod::Get, "/user/123").is_ok());
     }
 
     #[test]
@@ -355,8 +347,8 @@ mod precedence {
         r.add(HttpMethod::Get, "/f/static").unwrap();
             r.add(HttpMethod::Get, "/f/*").unwrap();
         r.seal();
-        assert!(r.find(HttpMethod::Get, "/f/static").is_some());
-        assert!(r.find(HttpMethod::Get, "/f/abc").is_some());
+        assert!(r.find(HttpMethod::Get, "/f/static").is_ok());
+        assert!(r.find(HttpMethod::Get, "/f/abc").is_ok());
     }
 
     #[test]
@@ -365,8 +357,8 @@ mod precedence {
         r.add(HttpMethod::Get, "/a/b/c/d").unwrap();
             r.add(HttpMethod::Get, "/a/*").unwrap();
         r.seal();
-        assert!(r.find(HttpMethod::Get, "/a/b/c/d").is_some());
-        assert!(r.find(HttpMethod::Get, "/a/x/y").is_some());
+        assert!(r.find(HttpMethod::Get, "/a/b/c/d").is_ok());
+        assert!(r.find(HttpMethod::Get, "/a/x/y").is_ok());
     }
 
     #[test]
@@ -375,8 +367,8 @@ mod precedence {
         r.add(HttpMethod::Get, "/").unwrap();
             r.add(HttpMethod::Get, "/*").unwrap();
         r.seal();
-        assert!(r.find(HttpMethod::Get, "/").is_some());
-        assert!(r.find(HttpMethod::Get, "/anything").is_some());
+        assert!(r.find(HttpMethod::Get, "/").is_ok());
+        assert!(r.find(HttpMethod::Get, "/anything").is_ok());
     }
 }
 
@@ -388,14 +380,14 @@ mod path_validation {
         // RoutePathEmpty
         let mut r = rapi::Router::with_options(RouterOptions::default(), None);
         assert_eq!(
-            rapi::register_route(&mut r, HttpMethod::Get, ""),
+            r.add( HttpMethod::Get, ""),
             Err(RouterError::RoutePathEmpty)
         );
 
         // RoutePathNotAscii
         let mut r = rapi::Router::with_options(RouterOptions::default(), None);
         assert_eq!(
-            rapi::register_route(&mut r, HttpMethod::Get, "/café"),
+            r.add( HttpMethod::Get, "/café"),
             Err(RouterError::RoutePathNotAscii)
         );
 
@@ -403,7 +395,7 @@ mod path_validation {
         let mut r = rapi::Router::with_options(RouterOptions::default(), None);
         for p in ["/a b", "/a?b", "/a#b", "/a%b"].iter() {
             assert_eq!(
-                rapi::register_route(&mut r, HttpMethod::Get, p),
+                r.add( HttpMethod::Get, p),
                 Err(RouterError::RoutePathContainsDisallowedCharacters)
             );
         }
@@ -411,80 +403,80 @@ mod path_validation {
         // RoutePathSyntaxInvalid
         let mut r = rapi::Router::with_options(RouterOptions::default(), None);
         assert_eq!(
-            rapi::register_route(&mut r, HttpMethod::Get, "/a/:()"),
+            r.add( HttpMethod::Get, "/a/:()"),
             Err(RouterError::RoutePathSyntaxInvalid)
         );
 
         // RouteParamNameInvalidStart
         let mut r = rapi::Router::with_options(RouterOptions::default(), None);
         assert_eq!(
-            rapi::register_route(&mut r, HttpMethod::Get, "/:1bad"),
+            r.add( HttpMethod::Get, "/:1bad"),
             Err(RouterError::RouteParamNameInvalidStart)
         );
 
         // RouteParamNameInvalidChar
         let mut r = rapi::Router::with_options(RouterOptions::default(), None);
         assert_eq!(
-            rapi::register_route(&mut r, HttpMethod::Get, "/:bad-name"),
+            r.add( HttpMethod::Get, "/:bad-name"),
             Err(RouterError::RouteParamNameInvalidChar)
         );
 
         // RouteSegmentContainsMixedParamAndLiteral
         let mut r = rapi::Router::with_options(RouterOptions::default(), None);
         assert_eq!(
-            rapi::register_route(&mut r, HttpMethod::Get, "/a/a:bc"),
+            r.add( HttpMethod::Get, "/a/a:bc"),
             Err(RouterError::RouteSegmentContainsMixedParamAndLiteral)
         );
 
         // duplicate_param_names_in_one_segment_is_syntax_error
         let mut r = rapi::Router::with_options(RouterOptions::default(), None);
-        let code = rapi::register_route(&mut r, HttpMethod::Get, "/a/:x-:x");
+        let code = r.add( HttpMethod::Get, "/a/:x-:x");
         assert_eq!(code, Err(RouterError::RoutePathSyntaxInvalid));
 
         // RouteDuplicateParamNameInRoute
         let mut r = rapi::Router::with_options(RouterOptions::default(), None);
         assert_eq!(
-            rapi::register_route(&mut r, HttpMethod::Get, "/a/:x/b/:x"),
+            r.add( HttpMethod::Get, "/a/:x/b/:x"),
             Err(RouterError::RouteDuplicateParamNameInRoute)
         );
 
         // RouteWildcardSegmentNotAtEnd
         let mut r = rapi::Router::with_options(RouterOptions::default(), None);
         assert_eq!(
-            rapi::register_route(&mut r, HttpMethod::Get, "/a/*/b"),
+            r.add( HttpMethod::Get, "/a/*/b"),
             Err(RouterError::RouteWildcardSegmentNotAtEnd)
         );
 
         // RouteWildcardAlreadyExistsForMethod
         let mut r = rapi::Router::with_options(RouterOptions::default(), None);
-        assert!(rapi::register_route(&mut r, HttpMethod::Get, "/a/*").is_ok());
+        assert!(r.add( HttpMethod::Get, "/a/*").is_ok());
         assert_eq!(
-            rapi::register_route(&mut r, HttpMethod::Get, "/a/*"),
+            r.add( HttpMethod::Get, "/a/*"),
             Err(RouterError::RouteWildcardAlreadyExistsForMethod)
         );
 
         // RouteConflictOnDuplicatePath
         let mut r = rapi::Router::with_options(RouterOptions::default(), None);
-        assert!(rapi::register_route(&mut r, HttpMethod::Get, "/dup").is_ok());
+        assert!(r.add( HttpMethod::Get, "/dup").is_ok());
         assert_eq!(
-            rapi::register_route(&mut r, HttpMethod::Get, "/dup"),
+            r.add( HttpMethod::Get, "/dup"),
             Err(RouterError::RouteConflictOnDuplicatePath)
         );
 
         // RouteParamNameConflictAtSamePosition
         let mut r = rapi::Router::with_options(RouterOptions::default(), None);
-        assert!(rapi::register_route(&mut r, HttpMethod::Get, "/users/:id").is_ok());
+        assert!(r.add( HttpMethod::Get, "/users/:id").is_ok());
         assert_eq!(
-            rapi::register_route(&mut r, HttpMethod::Get, "/users/:name"),
+            r.add( HttpMethod::Get, "/users/:name"),
             Err(RouterError::RouteParamNameConflictAtSamePosition)
         );
 
         // RouterSealedCannotInsert
         let mut r = rapi::Router::with_options(RouterOptions::default(), None);
-        assert!(rapi::register_route(&mut r, HttpMethod::Get, "/ok").is_ok());
-        rapi::seal(&mut r);
+        assert!(r.add( HttpMethod::Get, "/ok").is_ok());
+        r.seal();
         assert_eq!(
-            rapi::register_route(&mut r, HttpMethod::Get, "/x"),
+            r.add( HttpMethod::Get, "/x"),
             Err(RouterError::RouterSealedCannotInsert)
         );
     }
@@ -498,14 +490,14 @@ mod match_errors {
         // MatchPathEmpty
         let r = rapi::Router::with_options(RouterOptions::default(), None);
         assert_eq!(
-            rapi::match_route(&r, HttpMethod::Get, ""),
+            r.find( HttpMethod::Get, ""),
             Err(RouterError::MatchPathEmpty)
         );
 
         // MatchPathNotAscii
         let r = rapi::Router::with_options(RouterOptions::default(), None);
         assert_eq!(
-            rapi::match_route(&r, HttpMethod::Get, "/café"),
+            r.find( HttpMethod::Get, "/café"),
             Err(RouterError::MatchPathNotAscii)
         );
 
@@ -513,17 +505,17 @@ mod match_errors {
         let r = rapi::Router::with_options(RouterOptions::default(), None);
         for p in ["/a b", "/a?b", "/a#b", "/a%b"].iter() {
             assert_eq!(
-                rapi::match_route(&r, HttpMethod::Get, p),
+                r.find( HttpMethod::Get, p),
                 Err(RouterError::MatchPathContainsDisallowedCharacters)
             );
         }
 
         // MatchNotFound
         let mut r = rapi::Router::with_options(RouterOptions::default(), None);
-        assert!(rapi::register_route(&mut r, HttpMethod::Get, "/ok").is_ok());
-        rapi::seal(&mut r);
+        assert!(r.add( HttpMethod::Get, "/ok").is_ok());
+        r.seal();
         assert_eq!(
-            rapi::match_route(&r, HttpMethod::Get, "/missing"),
+            r.find( HttpMethod::Get, "/missing"),
             Err(RouterError::MatchNotFound)
         );
 
@@ -532,7 +524,7 @@ mod match_errors {
         let mut r = Router::with_options(RouterOptions::default(), None);
         r.add(HttpMethod::Get, "/:a").unwrap();
         r.seal();
-        assert!(r.find(HttpMethod::Get, "/'()*,;=").is_some());
+        assert!(r.find(HttpMethod::Get, "/'()*,;=").is_ok());
     }
 }
 
@@ -542,11 +534,11 @@ mod lifecycle {
     #[test]
     fn error_when_adding_after_seal() {
         let mut r = rapi::Router::with_options(RouterOptions::default(), None);
-        assert!(rapi::register_route(&mut r, HttpMethod::Get, "/ok").is_ok());
-        rapi::seal(&mut r);
-        let code_after_seal = rapi::register_route(&mut r, HttpMethod::Get, "/x");
+        assert!(r.add( HttpMethod::Get, "/ok").is_ok());
+        r.seal();
+        let code_after_seal = r.add( HttpMethod::Get, "/x");
         assert_eq!(code_after_seal, Err(RouterError::RouterSealedCannotInsert));
-        let m = rapi::match_route(&r, HttpMethod::Get, "/ok").unwrap();
+        let m = r.find( HttpMethod::Get, "/ok").unwrap();
         assert_eq!(m.0, 1);
     }
 
@@ -554,7 +546,7 @@ mod lifecycle {
     fn works_without_seal_for_matching() {
         let mut r = Router::with_options(RouterOptions::default(), None);
         r.add(HttpMethod::Get, "/ok").unwrap();
-        assert!(r.find(HttpMethod::Get, "/ok").is_some());
+        assert!(r.find(HttpMethod::Get, "/ok").is_ok());
     }
 }
 
@@ -579,8 +571,8 @@ mod optimizations {
 
         for p in ["/s/a", "/s/b", "/s/x"].iter() {
             assert_eq!(
-                r1.find(HttpMethod::Get, p).is_some(),
-                r2.find(HttpMethod::Get, p).is_some()
+                r1.find(HttpMethod::Get, p).is_ok(),
+                r2.find(HttpMethod::Get, p).is_ok()
             );
         }
     }
@@ -603,8 +595,8 @@ mod optimizations {
 
         for p in ["/x/abc", "/y/static", "/zzz"].iter() {
             assert_eq!(
-                r1.find(HttpMethod::Get, p).is_some(),
-                r2.find(HttpMethod::Get, p).is_some()
+                r1.find(HttpMethod::Get, p).is_ok(),
+                r2.find(HttpMethod::Get, p).is_ok()
             );
         }
     }
@@ -616,7 +608,7 @@ mod optimizations {
         let mut r = Router::with_options(o, None);
         r.add(HttpMethod::Get, "/*").unwrap();
         r.seal();
-        assert!(r.find(HttpMethod::Get, "/a").is_some());
+        assert!(r.find(HttpMethod::Get, "/a").is_ok());
     }
 
     #[test]
@@ -627,7 +619,7 @@ mod optimizations {
         let mut r = Router::with_options(o, None);
         r.add(HttpMethod::Get, long).unwrap();
         r.seal();
-        assert!(r.find(HttpMethod::Get, long).is_some());
+        assert!(r.find(HttpMethod::Get, long).is_ok());
     }
 }
 
@@ -639,8 +631,8 @@ mod edge_cases {
         let mut r = Router::with_options(RouterOptions::default(), None);
         r.add(HttpMethod::Get, "/edge").unwrap();
         r.seal();
-        assert!(r.find(HttpMethod::Get, "/edge/").is_some());
-        assert!(r.find(HttpMethod::Get, "////edge///").is_none());
+        assert!(r.find(HttpMethod::Get, "/edge/").is_ok());
+        assert!(r.find(HttpMethod::Get, "////edge///").is_err());
     }
 
     #[test]
@@ -651,11 +643,11 @@ mod edge_cases {
         r.seal();
         assert!(r
             .find(HttpMethod::Get, "/a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r/s/t/u/v")
-            .is_some());
+            .is_ok());
         assert!(r
             .find(HttpMethod::Get, "/a/b/c/d/e/ZZ/g/h/i/j/k/l/m/n/o/p/q/r/s/t/u/v")
-            .is_some());
-        assert!(r.find(HttpMethod::Get, "/a/b/c/d/e").is_none());
+            .is_ok());
+        assert!(r.find(HttpMethod::Get, "/a/b/c/d/e").is_err());
     }
 
     #[test]
@@ -665,9 +657,9 @@ mod edge_cases {
             r.add(HttpMethod::Get, "/p/x").unwrap();
             r.add(HttpMethod::Get, "/p/a").unwrap();
         r.seal();
-        assert!(r.find(HttpMethod::Get, "/p/xyz").is_some());
-        assert!(r.find(HttpMethod::Get, "/p/x").is_some());
-        assert!(r.find(HttpMethod::Get, "/p/a").is_some());
+        assert!(r.find(HttpMethod::Get, "/p/xyz").is_ok());
+        assert!(r.find(HttpMethod::Get, "/p/x").is_ok());
+        assert!(r.find(HttpMethod::Get, "/p/a").is_ok());
     }
 
     #[test]
@@ -676,8 +668,8 @@ mod edge_cases {
         let mut r = Router::with_options(o, None);
         r.add(HttpMethod::Get, "/a/b").unwrap();
         r.seal();
-        assert!(r.find(HttpMethod::Get, "/A//b/").is_none());
-        assert!(r.find(HttpMethod::Get, "/a/b").is_some());
+        assert!(r.find(HttpMethod::Get, "/A//b/").is_err());
+        assert!(r.find(HttpMethod::Get, "/a/b").is_ok());
     }
 
     #[test]
@@ -687,9 +679,9 @@ mod edge_cases {
         r.seal();
         let mo1 = r.find(HttpMethod::Get, "/u/1").unwrap();
         let mo2 = r.find(HttpMethod::Get, "/u/2").unwrap();
-        assert_eq!(mo1.params.len(), 1);
-        assert_eq!(mo2.params.len(), 1);
-        assert_eq!(mo1.params[0].0, mo2.params[0].0);
+        assert_eq!(mo1.1.len(), 1);
+        assert_eq!(mo2.1.len(), 1);
+        assert_eq!(mo1.1[0].0, mo2.1[0].0);
     }
 }
 

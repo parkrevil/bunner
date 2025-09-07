@@ -78,7 +78,7 @@ pub unsafe extern "C" fn router_add(
     let router_mut = unsafe { &mut *http_server.router.0 };
     let method = method_option.unwrap();
     let path_str = unsafe { CStr::from_ptr(path) }.to_string_lossy();
-    let result = match crate::router::register_route(router_mut, method, &path_str) {
+    let result = match router_mut.add(method, &path_str) {
         Ok(k) => AddRouteResult {
             key: k,
             error: 0,
@@ -158,7 +158,7 @@ pub unsafe extern "C" fn handle_request(
 pub unsafe extern "C" fn router_seal(handle: HttpServerHandle) {
     let http_server = unsafe { &*handle };
 
-    router::seal(unsafe { &mut *http_server.router.0 })
+    unsafe { &mut *http_server.router.0 }.seal()
 }
 
 /// Frees the memory for a C string that was allocated by Rust.
