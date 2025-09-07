@@ -16,8 +16,6 @@ bumpalo = "3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 memchr = "2"
-serde_qs = "0.15"
-url = "2.5"
 bitflags = "2"
 
 [dev-dependencies]
