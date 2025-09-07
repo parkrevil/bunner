@@ -145,7 +145,7 @@ impl RadixTreeRouter {
                 return miss();
             }
 
-            if self.root_node.sealed && (cur.method_mask & super::HTTP_METHOD_BIT_MASKS[method_idx]) == 0 {
+            if self.root_node.is_sealed() && (cur.method_mask() & super::HTTP_METHOD_BIT_MASKS[method_idx]) == 0 {
                 #[cold]
                 fn miss_method() -> Option<super::super::RouteMatchResult> {
                     None
@@ -375,7 +375,7 @@ impl RadixTreeRouter {
             return None;
         }
 
-        if self.root_node.sealed && self.enable_static_route_full_mapping {
+        if self.root_node.is_sealed() && self.enable_static_route_full_mapping {
             if let Some(&rk) = self.static_route_full_mapping[method_idx].get(normalized_path)
              {
                 return Some(super::super::RouteMatchResult {
@@ -385,7 +385,7 @@ impl RadixTreeRouter {
             }
         }
 
-        if self.root_node.sealed && self.enable_root_level_pruning {
+        if self.root_node.is_sealed() && self.enable_root_level_pruning {
             if !self.root_parameter_first_present[method_idx] && !self.root_wildcard_present[method_idx]
             {
                 let bs = normalized_path.as_bytes();

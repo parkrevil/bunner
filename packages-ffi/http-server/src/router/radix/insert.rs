@@ -10,7 +10,7 @@ use crate::r#enum::HttpMethod;
 
 impl RadixTreeRouter {
     pub fn insert_route(&mut self, method: HttpMethod, path: &str) -> Result<u16, RouterError> {
-        if self.root_node.sealed {
+        if self.root_node.is_sealed() {
             return Err(RouterError::RouterSealedCannotInsert);
         }
 
@@ -28,8 +28,9 @@ impl RadixTreeRouter {
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
             self.root_node.routes[method_idx] = key + 1;
-            self.root_node.method_mask |= 1 << method_idx;
-            self.root_node.dirty = true;
+            let current_mask = self.root_node.method_mask();
+            self.root_node.set_method_mask(current_mask | (1 << method_idx));
+            self.root_node.set_dirty(true);
             return Ok(key);
         }
 
@@ -91,8 +92,9 @@ impl RadixTreeRouter {
                     .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
                 current.wildcard_routes[method_idx] = key + 1;
-                current.method_mask |= 1 << method_idx;
-                current.dirty = true;
+                let current_mask = current.method_mask();
+                current.set_method_mask(current_mask | (1 << method_idx));
+                current.set_dirty(true);
 
                 return Ok(key);
             }
@@ -109,7 +111,8 @@ impl RadixTreeRouter {
                 current = current.descend_static_mut_with_alloc(key_seg, || {
                     create_node_box_from_arena_pointer(arena_ptr)
                 });
-                current.method_mask |= 1 << method_idx;
+                let current_mask = current.method_mask();
+                current.set_method_mask(current_mask | (1 << method_idx));
 
                 if current.static_keys.len() == current.static_vals.len() {
                     let interner = &self.string_interner;
@@ -130,7 +133,7 @@ impl RadixTreeRouter {
                     }
                 }
 
-                current.dirty = true;
+                current.set_dirty(true);
             } else {
                 for exist in current.patterns.iter() {
                     if !pattern_compatible_policy(exist, pat) {
@@ -174,10 +177,11 @@ impl RadixTreeRouter {
                 current.pattern_scores.insert(insert_pos, score);
                 current.rebuild_pattern_index();
 
+                let current_mask = current.method_mask();
+                current.set_method_mask(current_mask | (1 << method_idx));
+                current.set_dirty(true);
+                
                 let child = current.pattern_nodes.get_mut(insert_pos).unwrap().as_mut();
-
-                current.method_mask |= 1 << method_idx;
-                current.dirty = true;
                 current = child;
             }
         }
@@ -191,8 +195,9 @@ impl RadixTreeRouter {
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
         current.routes[method_idx] = key + 1;
-        current.method_mask |= 1 << method_idx;
-        current.dirty = true;
+        let current_mask = current.method_mask();
+        current.set_method_mask(current_mask | (1 << method_idx));
+        current.set_dirty(true);
 
         Ok(key)
     }

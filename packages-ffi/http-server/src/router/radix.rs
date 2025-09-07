@@ -49,9 +49,9 @@ impl RadixTreeRouter {
         stack.push(&mut self.root_node as *mut _);
         while let Some(ptr) = stack.pop() {
             let node = unsafe { &mut *ptr };
-            if node.dirty {
+            if node.is_dirty() {
                 // recompute method mask lazily from children and own routes (will correct in post pass)
-                node.method_mask = 0;
+                node.set_method_mask(0);
                 node.static_vals_idx.clear();
                 node.static_children_idx.clear();
                 node.pattern_children_idx.clear();
@@ -84,7 +84,7 @@ impl RadixTreeRouter {
                     node.fused_child_idx = Some(NodeBox(fc.0));
                 }
                 node.rebuild_intern_ids(&self.string_interner);
-                node.dirty = false;
+                node.set_dirty(false);
             }
             for child in node.static_vals.iter_mut() {
                 stack.push(child.as_mut() as *mut _);
@@ -119,7 +119,7 @@ impl RadixTreeRouter {
             if let Some(fc) = n.fused_child.as_mut() {
                 m |= compute_mask(fc.as_mut());
             }
-            n.method_mask = m;
+            n.set_method_mask(m);
             m
         }
         compute_mask(&mut self.root_node);
@@ -168,7 +168,7 @@ impl RadixTreeRouter {
     }
 
     pub fn finalize_routes(&mut self) {
-        if self.root_node.sealed {
+        if self.root_node.is_sealed() {
             return;
         }
 
@@ -221,14 +221,14 @@ impl RadixTreeRouter {
         }
         // --- End of Automatic Optimization Logic ---
 
-        self.root_node.sealed = true;
+        self.root_node.set_sealed(true);
         self.compress_tree();
         {
             let mut stack: Vec<*mut RadixTreeNode> = Vec::with_capacity(1024);
             stack.push(&mut self.root_node as *mut _);
             while let Some(ptr) = stack.pop() {
                 let node = unsafe { &mut *ptr };
-                node.dirty = true;
+                node.set_dirty(true);
                 for child in node.static_vals.iter_mut() {
                     stack.push(child.as_mut() as *mut _);
                 }
@@ -290,7 +290,7 @@ impl RadixTreeRouter {
                     let b = b0;
                     let blk = (b as usize) >> 6;
                     let bit = 1u64 << ((b as usize) & 63);
-                    let mask = n.method_mask;
+                    let mask = n.method_mask();
                     for mi in 0..HTTP_METHOD_COUNT {
                         if (mask & (1 << mi)) != 0 {
                             self.method_first_byte_bitmaps[mi][blk] |= bit;
@@ -298,7 +298,7 @@ impl RadixTreeRouter {
                     }
                 }
                 let l = edge.len().min(63) as u32;
-                let mask = n.method_mask;
+                let mask = n.method_mask();
                 for mi in 0..HTTP_METHOD_COUNT {
                     if (mask & (1 << mi)) != 0 {
                         self.method_length_buckets[mi] |= 1u64 << l;
@@ -309,7 +309,7 @@ impl RadixTreeRouter {
                 if let Some(&b) = k.as_bytes().first() {
                     let blk = (b as usize) >> 6;
                     let bit = 1u64 << ((b as usize) & 63);
-                    let mask = n.method_mask;
+                    let mask = n.method_mask();
                     for m in 0..HTTP_METHOD_COUNT {
                         if (mask & (1 << m)) != 0 {
                             self.method_first_byte_bitmaps[m][blk] |= bit;
@@ -317,7 +317,7 @@ impl RadixTreeRouter {
                     }
                 }
                 let l = k.len().min(63) as u32;
-                let mask = n.method_mask;
+                let mask = n.method_mask();
                 for m in 0..HTTP_METHOD_COUNT {
                     if (mask & (1 << m)) != 0 {
                         self.method_length_buckets[m] |= 1u64 << l;
@@ -329,7 +329,7 @@ impl RadixTreeRouter {
                 if let Some(&b) = k.as_bytes().first() {
                     let blk = (b as usize) >> 6;
                     let bit = 1u64 << ((b as usize) & 63);
-                    let mask = n.method_mask;
+                    let mask = n.method_mask();
                     for m in 0..HTTP_METHOD_COUNT {
                         if (mask & (1 << m)) != 0 {
                             self.method_first_byte_bitmaps[m][blk] |= bit;
@@ -337,7 +337,7 @@ impl RadixTreeRouter {
                     }
                 }
                 let l = k.len().min(63) as u32;
-                let mask = n.method_mask;
+                let mask = n.method_mask();
                 for m in 0..HTTP_METHOD_COUNT {
                     if (mask & (1 << m)) != 0 {
                         self.method_length_buckets[m] |= 1u64 << l;
@@ -347,7 +347,7 @@ impl RadixTreeRouter {
             for (&hb, _) in n.pattern_first_lit_head.iter() {
                 let blk = (hb as usize) >> 6;
                 let bit = 1u64 << ((hb as usize) & 63);
-                let mask = n.method_mask;
+                let mask = n.method_mask();
                 for m in 0..HTTP_METHOD_COUNT {
                     if (mask & (1 << m)) != 0 {
                         self.method_first_byte_bitmaps[m][blk] |= bit;
@@ -358,7 +358,7 @@ impl RadixTreeRouter {
             for pat in n.patterns.iter() {
                 if let Some(crate::router::pattern::SegmentPart::Literal(l0)) = pat.parts.first() {
                     let l = l0.len().min(63) as u32;
-                    let mask = n.method_mask;
+                    let mask = n.method_mask();
                     for m in 0..HTTP_METHOD_COUNT {
                         if (mask & (1 << m)) != 0 {
                             self.method_length_buckets[m] |= 1u64 << l;
@@ -369,7 +369,7 @@ impl RadixTreeRouter {
                 }
             }
             if !n.pattern_param_first.is_empty() {
-                let mask = n.method_mask;
+                let mask = n.method_mask();
                 for m in 0..HTTP_METHOD_COUNT {
                     if (mask & (1 << m)) != 0 {
                         self.root_parameter_first_present[m] = true;

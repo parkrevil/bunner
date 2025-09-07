@@ -1,11 +1,26 @@
 use super::NodeBox;
 use hashbrown::HashMap as FastHashMap;
 use smallvec::SmallVec;
+use bitflags::bitflags;
 
 use crate::router::interner::Interner;
 use crate::router::pattern::{pattern_score, SegmentPart, SegmentPattern};
 
 use super::HTTP_METHOD_COUNT;
+
+bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+    pub struct NodeFlags: u8 {
+        const SEALED = 0b00000001;
+        const DIRTY = 0b00000010;
+        const HAS_WILDCARD = 0b00000100;
+        const HAS_PARAMS = 0b00001000;
+        const HAS_STATIC_CHILDREN = 0b00010000;
+        const HAS_PATTERN_CHILDREN = 0b00100000;
+        const IS_LEAF = 0b01000000;
+        const IS_ROOT = 0b10000000;
+    }
+}
 
 pub(super) type StaticMap = FastHashMap<String, NodeBox>;
 pub(super) type StaticMapIdx = FastHashMap<String, super::NodeBox>;
@@ -48,15 +63,14 @@ pub struct RadixTreeNode {
     pub(super) pattern_last_lit_len: SmallVec<[u16; 32]>,
     pub(super) routes: [u16; HTTP_METHOD_COUNT],
     pub(super) wildcard_routes: [u16; HTTP_METHOD_COUNT],
-    pub(super) sealed: bool,
-    pub(super) dirty: bool,
+    pub(super) flags: NodeFlags,
+    // bitmask of methods present in this subtree (including this node)
+    pub(super) method_mask: u8,
     // prefix compression (set by compress())
     pub(super) fused_edge: Option<String>,
     pub(super) fused_child: Option<NodeBox>,
     // index-based mirror for arena-backed nodes (built during sealing)
     pub(super) fused_child_idx: Option<super::NodeBox>,
-    // bitmask of methods present in this subtree (including this node)
-    pub(super) method_mask: u8,
     // quick head/tail literal bitsets (256 bits each)
     pub(super) head_bits: [u64; 4],
     pub(super) tail_bits: [u64; 4],
@@ -65,6 +79,37 @@ pub struct RadixTreeNode {
 }
 
 impl RadixTreeNode {
+    // Flag accessor methods
+    #[inline(always)]
+    pub(super) fn is_sealed(&self) -> bool {
+        self.flags.contains(NodeFlags::SEALED)
+    }
+
+    #[inline(always)]
+    pub(super) fn set_sealed(&mut self, sealed: bool) {
+        self.flags.set(NodeFlags::SEALED, sealed);
+    }
+
+    #[inline(always)]
+    pub(super) fn is_dirty(&self) -> bool {
+        self.flags.contains(NodeFlags::DIRTY)
+    }
+
+    #[inline(always)]
+    pub(super) fn set_dirty(&mut self, dirty: bool) {
+        self.flags.set(NodeFlags::DIRTY, dirty);
+    }
+
+    #[inline(always)]
+    pub(super) fn method_mask(&self) -> u8 {
+        self.method_mask
+    }
+
+    #[inline(always)]
+    pub(super) fn set_method_mask(&mut self, mask: u8) {
+        self.method_mask = mask;
+    }
+
     #[inline(always)]
     pub(super) fn get_static_ref(&self, key: &str) -> Option<&RadixTreeNode> {
         if let Some(n) = self.static_children.get(key) {
