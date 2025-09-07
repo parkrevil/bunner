@@ -81,6 +81,10 @@ impl RadixTree {
     where
         I: IntoIterator<Item = (HttpMethod, String)>,
     {
+        if self.root_node.is_sealed() {
+            return Err(super::errors::RouterError::RouterSealedCannotInsert);
+        }
+        
         // Phase A: parallel preprocess (normalize/parse) with light metadata
         let indexed: Vec<(usize, HttpMethod, String, u8, usize, bool)> = entries
             .into_iter()
