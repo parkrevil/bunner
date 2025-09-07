@@ -48,12 +48,6 @@ pub struct MatchResult {
 }
 
 #[derive(Debug, Default)]
-pub struct MatchOffsets {
-    pub key: u16,
-    pub params: Vec<(u32, (usize, usize))>,
-}
-
-#[derive(Debug, Default)]
 pub struct Router {
     radix: radix::RadixRouter,
 }
@@ -76,21 +70,6 @@ impl Router {
     pub fn find(&self, method: HttpMethod, path: &str) -> Option<MatchResult> {
         let norm = normalize_path(path);
         self.radix.find_norm(method, &norm)
-    }
-
-    pub fn find_offsets(&self, method: HttpMethod, path: &str) -> Option<MatchOffsets> {
-        let norm = normalize_path(path);
-        self.radix.find_norm(method, norm.as_str()).map(|m| {
-            let mut out = MatchOffsets {
-                key: m.key,
-                params: Vec::with_capacity(m.params.len()),
-            };
-            for (name, (off, len)) in m.params.into_iter() {
-                let id = self.radix.interner.intern(name.as_str());
-                out.params.push((id, (off, len)));
-            }
-            out
-        })
     }
 
     #[doc(hidden)]
@@ -236,9 +215,6 @@ pub fn match_route_err(
     }
 }
 
-// fallback helpers removed (radix handles all)
-
-// Builder/Handle split (유지: 벤치/테스트 및 향후 최적화 경로)
 #[derive(Debug, Default)]
 pub struct RouterBuilder {
     radix: radix::RadixRouter,
