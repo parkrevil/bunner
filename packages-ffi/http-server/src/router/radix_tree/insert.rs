@@ -20,6 +20,18 @@ impl RadixTree {
         }
 
         let parsed_segments = self.prepare_path_segments(path)?;
+        self.insert_parsed(method, parsed_segments)
+    }
+
+    pub(super) fn insert_parsed(
+        &mut self,
+        method: HttpMethod,
+        parsed_segments: Vec<SegmentPattern>,
+    ) -> Result<u16, RouterError> {
+        if self.root_node.is_sealed() {
+            return Err(RouterError::RouterSealedCannotInsert);
+        }
+        self.root_node.set_dirty(true);
 
         let mut current = &mut self.root_node;
         let arena_ptr: *const bumpalo::Bump = &self.arena;
@@ -51,50 +63,8 @@ impl RadixTree {
         assign_route_key(current, method, &self.next_route_key)
     }
 
-    fn prepare_path_segments(&self, path: &str) -> Result<Vec<SegmentPattern>, RouterError> {
-        if path.is_empty() { return Err(RouterError::RoutePathEmpty); }
-        if !path.is_ascii() { return Err(RouterError::RoutePathNotAscii); }
-
-        let norm = crate::router::path::normalize_path(path);
-        if !crate::router::path::is_path_character_allowed(&norm) {
-            return Err(RouterError::RoutePathContainsDisallowedCharacters);
-        }
-
-        let segments: Vec<&str> = norm.split('/').filter(|s| !s.is_empty()).collect();
-        if segments.is_empty() { return Err(RouterError::RoutePathSyntaxInvalid); }
-
-        let mut parsed_segments = Vec::with_capacity(segments.len());
-        let mut seen_params = HashSet::new();
-
-        for seg in segments {
-            let pat = crate::router::pattern::parse_segment(seg)?;
-            
-            let mut min_len = 0u16;
-            let mut last_lit_len = 0u16;
-            for part in pat.parts.iter() {
-                if let SegmentPart::Literal(l) = part {
-                    min_len += l.len() as u16;
-                }
-            }
-            if let Some(SegmentPart::Literal(l)) = pat.parts.iter().rev().find(|p| p.is_literal()) {
-                 last_lit_len = l.len() as u16;
-            }
-
-            if !PatternMeta::is_valid_length(min_len, last_lit_len) {
-                return Err(RouterError::PatternTooLong);
-            }
-
-            for part in &pat.parts {
-                if let SegmentPart::Param { name, .. } = part {
-                    if seen_params.contains(name.as_str()) {
-                        return Err(RouterError::RouteDuplicateParamNameInRoute);
-                    }
-                    seen_params.insert(name.clone());
-                }
-            }
-            parsed_segments.push(pat);
-        }
-        Ok(parsed_segments)
+    pub(super) fn prepare_path_segments(&self, path: &str) -> Result<Vec<SegmentPattern>, RouterError> {
+        prepare_path_segments_standalone(path)
     }
 }
 
@@ -183,4 +153,53 @@ impl SegmentPart {
     fn is_literal(&self) -> bool {
         matches!(self, SegmentPart::Literal(_))
     }
+}
+
+// Thread-safe standalone parser for bulk preprocess
+pub(super) fn prepare_path_segments_standalone(path: &str) -> Result<Vec<SegmentPattern>, RouterError> {
+    if path.is_empty() { return Err(RouterError::RoutePathEmpty); }
+    if !path.is_ascii() { return Err(RouterError::RoutePathNotAscii); }
+
+    let norm = crate::router::path::normalize_path(path);
+    if !crate::router::path::is_path_character_allowed(&norm) {
+        return Err(RouterError::RoutePathContainsDisallowedCharacters);
+    }
+
+    if norm == "/" { return Ok(Vec::new()); }
+
+    let segments: Vec<&str> = norm.split('/').filter(|s| !s.is_empty()).collect();
+    if segments.is_empty() { return Err(RouterError::RoutePathSyntaxInvalid); }
+
+    let mut parsed_segments = Vec::with_capacity(segments.len());
+    let mut seen_params = HashSet::new();
+
+    for seg in segments {
+        let pat = crate::router::pattern::parse_segment(seg)?;
+
+        let mut min_len = 0u16;
+        let mut last_lit_len = 0u16;
+        for part in pat.parts.iter() {
+            if let SegmentPart::Literal(l) = part {
+                min_len += l.len() as u16;
+            }
+        }
+        if let Some(SegmentPart::Literal(l)) = pat.parts.iter().rev().find(|p| p.is_literal()) {
+            last_lit_len = l.len() as u16;
+        }
+
+        if !PatternMeta::is_valid_length(min_len, last_lit_len) {
+            return Err(RouterError::PatternTooLong);
+        }
+
+        for part in &pat.parts {
+            if let SegmentPart::Param { name, .. } = part {
+                if seen_params.contains(name.as_str()) {
+                    return Err(RouterError::RouteDuplicateParamNameInRoute);
+                }
+                seen_params.insert(name.clone());
+            }
+        }
+        parsed_segments.push(pat);
+    }
+    Ok(parsed_segments)
 }

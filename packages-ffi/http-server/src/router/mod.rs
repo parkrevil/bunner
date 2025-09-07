@@ -30,6 +30,13 @@ impl Router {
         self.radix_tree.insert(method, path)
     }
 
+    pub fn add_bulk<I>(&mut self, entries: I) -> Result<Vec<u16>, errors::RouterError>
+    where
+        I: IntoIterator<Item = (HttpMethod, String)>,
+    {
+        self.radix_tree.insert_bulk(entries)
+    }
+
     pub fn find(
         &self,
         method: HttpMethod,
@@ -77,6 +84,16 @@ impl Router {
     #[cfg(feature = "test")]
     pub fn get_internal_radix_router(&self) -> &radix_tree::RadixTree {
         &self.radix_tree
+    }
+
+    #[cfg(feature = "test")]
+    pub fn reset_bulk_metrics(&self) {
+        self.radix_tree.reset_bulk_metrics();
+    }
+
+    #[cfg(feature = "test")]
+    pub fn bulk_metrics(&self) -> (usize, usize) {
+        self.radix_tree.bulk_metrics()
     }
 }
 

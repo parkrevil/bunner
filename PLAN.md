@@ -12,22 +12,22 @@
 - Implementation: gate constants and defaults with `cfg(feature)`. Introduce `type RouteKey` alias; keep public API unchanged.
 
 ## Bulk Insert (extreme performance, ordered keys)
-- API: `bulk_insert_ordered(entries: IntoIterator<(HttpMethod, String)>) -> Result<Vec<RouteKey>, RouterError>`.
+- ~~API: `bulk_insert_ordered(entries: IntoIterator<(HttpMethod, String)>) -> Result<Vec<RouteKey>, RouterError>`.~~
 - Phase A (parallel preprocess):
-  - Normalize + parse on worker threads
+  - ~~Normalize + parse on worker threads~~
   - Pre-intern literals in thread-local buffers; dedup before merging to main interner
   - Emit `ParsedEntry { idx, method, segments, head_byte, path_len }`
   - Stable bucket sort: head_byte → path_len → static-first to improve locality
 - Phase B (ultra-light single commit):
   - Pre-assign keys: `base = next_route_key.fetch_add(N)`; `key[i] = base + i`
   - Commit loop only descends/creates nodes; sets `dirty` flags; defers masks/indices/build to finalize
-  - No per-insert index/mask rebuilds, no per-insert map shuffles
+  - ~~No per-insert index/mask rebuilds, no per-insert map shuffles~~
 - Post: call existing `finalize()` once to compress/build indices/masks/pruning/static map
 - Optional later: lock striping by first segment for partial parallel commit; adopt only if clearly beneficial
 
 ## Memory and Structure (low-risk first)
-- Pattern meta packed (done) – keep.
-- Node flags bitfield (SEALED, DIRTY – done) – optional extend later only if needed.
+- ~~Pattern meta packed (done) – keep.~~
+- ~~Node flags bitfield (SEALED, DIRTY – done) – optional extend later only if needed.~~
 - Adjust SmallVec defaults by feature profile (light uses smaller, high can increase upper bounds).
 - Optional runtime cleanup: after `finalize()`, clear compile-only containers under a feature flag (`router-runtime-cleanup`).
 - Interner IDs: keep `u32` for now (lowest risk); consider `u16` only when bounded vocab confirmed (high profile).
