@@ -18,12 +18,10 @@ pub enum RouterError {
     MaxRoutesExceeded = 10014,
     PatternTooLong = 10015,
     // Match-time
-    MatchNotFound = 11001,
-    MatchPathSyntaxInvalid = 11002,
-    MatchPathContainsDisallowedCharacters = 11003,
-    MatchPathEmpty = 11004,
-    MatchPathNotAscii = 11005,
-    MatchPathTooLong = 11006,
+    MatchNotFound = 10101,
+    MatchPathContainsDisallowedCharacters = 10102,
+    MatchPathEmpty = 10103,
+    MatchPathNotAscii = 10104,
 }
 
 impl RouterError {
