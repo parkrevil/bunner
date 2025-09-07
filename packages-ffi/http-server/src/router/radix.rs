@@ -288,10 +288,7 @@ impl RadixRouter {
             // Include fused edge at root as a static head candidate
             if let Some(edge) = n.fused_edge.as_ref() {
                 if let Some(&b0) = edge.as_str().as_bytes().first() {
-                    let mut b = b0;
-                    if !self.options.case_sensitive && b.is_ascii_uppercase() {
-                        b |= 0x20;
-                    }
+                    let b = b0;
                     let blk = (b as usize) >> 6;
                     let bit = 1u64 << ((b as usize) & 63);
                     let mask = n.method_mask;
@@ -438,7 +435,6 @@ impl RadixRouter {
             n: &node::RadixNode,
             buf: &mut String,
             maps: &mut [FastHashMap<String, u16>; METHOD_COUNT],
-            case_sensitive: bool,
         ) {
             let base_len = buf.len();
             if let Some(edge) = n.fused_edge.as_ref() {
@@ -449,14 +445,11 @@ impl RadixRouter {
             }
             for (i, &rk) in n.routes.iter().enumerate() {
                 if rk != 0 {
-                    let mut key = if buf.is_empty() {
+                    let key = if buf.is_empty() {
                         "/".to_string()
                     } else {
                         buf.clone()
                     };
-                    if !case_sensitive {
-                        key = key.to_ascii_lowercase();
-                    }
                     maps[i].insert(key, rk);
                 }
             }
@@ -466,7 +459,7 @@ impl RadixRouter {
                     let prev = buf.len();
                     buf.push('/');
                     buf.push_str(k_idx.as_str());
-                    collect_static(nb.as_ref(), buf, maps, case_sensitive);
+                    collect_static(nb.as_ref(), buf, maps);
                     buf.truncate(prev);
                 }
             }
@@ -474,11 +467,11 @@ impl RadixRouter {
                 let prev = buf.len();
                 buf.push('/');
                 buf.push_str(k.as_str());
-                collect_static(v.as_ref(), buf, maps, case_sensitive);
+                collect_static(v.as_ref(), buf, maps);
                 buf.truncate(prev);
             }
             if let Some(fc) = n.fused_child.as_ref() {
-                collect_static(fc.as_ref(), buf, maps, case_sensitive);
+                collect_static(fc.as_ref(), buf, maps);
             }
             buf.truncate(base_len);
         }
@@ -488,7 +481,6 @@ impl RadixRouter {
                 &self.root,
                 &mut path_buf,
                 &mut self.static_full_map,
-                self.options.case_sensitive,
             );
         }
     }

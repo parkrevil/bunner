@@ -40,53 +40,6 @@ unsafe fn starts_with_cs_avx2(hay: &[u8], pre: &[u8]) -> bool {
     true
 }
 
-#[inline(always)]
-fn starts_with_ascii_ci(hay: &str, pre: &str) -> bool {
-    let hb = hay.as_bytes();
-    let pb = pre.as_bytes();
-    let n = pb.len();
-    if n > hb.len() {
-        return false;
-    }
-    if n == 0 {
-        return true;
-    }
-    // quick first-byte guard
-    let a0 = hb[0];
-    let b0 = pb[0];
-    if !(a0 == b0 || (a0 ^ 0x20) == (b0 | 0x20)) {
-        return false;
-    }
-    let mut i = 0usize;
-    while i + 16 <= n {
-        let a = &hb[i..i + 16];
-        let b = &pb[i..i + 16];
-        for j in 0..16 {
-            if !a[j].eq_ignore_ascii_case(&b[j]) {
-                return false;
-            }
-        }
-        i += 16;
-    }
-    while i + 8 <= n {
-        let a = &hb[i..i + 8];
-        let b = &pb[i..i + 8];
-        for j in 0..8 {
-            if !a[j].eq_ignore_ascii_case(&b[j]) {
-                return false;
-            }
-        }
-        i += 8;
-    }
-    while i < n {
-        if !hb[i].eq_ignore_ascii_case(&pb[i]) {
-            return false;
-        }
-        i += 1;
-    }
-    true
-}
-
 impl RadixRouter {
     #[inline(always)]
     fn decode_key(stored: u16) -> u16 {
@@ -115,7 +68,7 @@ impl RadixRouter {
         loop {
             if let Some(edge) = cur.fused_edge.as_ref() {
                 let rem = &s[i..];
-                let ok = if self.options.case_sensitive {
+                let ok = {
                     let hb = rem.as_bytes();
                     let pb = edge.as_bytes();
                     #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
@@ -130,8 +83,6 @@ impl RadixRouter {
                     {
                         hb.starts_with(pb)
                     }
-                } else {
-                    starts_with_ascii_ci(rem, edge.as_str())
                 };
 
                 if ok {
@@ -211,11 +162,7 @@ impl RadixRouter {
             }
 
             let seg = &s[start..i];
-            let comp_cow: Cow<str> = if self.options.case_sensitive {
-                Cow::Borrowed(seg)
-            } else {
-                Cow::Owned(seg.to_ascii_lowercase())
-            };
+            let comp_cow: Cow<str> = Cow::Borrowed(seg);
 
             let comp: &str = comp_cow.as_ref();
 
@@ -406,8 +353,8 @@ impl RadixRouter {
 
         if crate::router::router_debug_enabled() {
             eprintln!(
-                "[router.find] method={:?} path={} cs:{}",
-                method, path, self.options.case_sensitive
+                "[router.find] method={:?} path={}",
+                method, path
             );
         }
 
@@ -458,13 +405,8 @@ impl RadixRouter {
         }
 
         if self.root.sealed && self.enable_static_full_map {
-            if let Some(&rk) = if self.options.case_sensitive {
-                self.static_full_map[method_idx].get(norm_path)
-            } else {
-                let lower = norm_path.to_ascii_lowercase();
-
-                self.static_full_map[method_idx].get(lower.as_str())
-            } {
+            if let Some(&rk) = self.static_full_map[method_idx].get(norm_path)
+             {
                 if crate::router::router_debug_enabled() {
                     eprintln!("[router.find_norm] static_full_map hit key={}", rk);
                 }
@@ -487,11 +429,7 @@ impl RadixRouter {
                 }
 
                 if i < bs.len() {
-                    let mut hb = bs[i];
-
-                    if !self.options.case_sensitive && hb.is_ascii_uppercase() {
-                        hb |= 0x20;
-                    }
+                    let hb = bs[i];
 
                     let blk = (hb as usize) >> 6;
                     let bit = 1u64 << ((hb as usize) & 63);

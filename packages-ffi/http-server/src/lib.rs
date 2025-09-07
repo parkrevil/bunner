@@ -24,10 +24,11 @@ pub struct HttpServer {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn init() -> HttpServerHandle {
-    let boxed = Box::new(router::Router::new());
-    let router = RouterPtr(Box::into_raw(boxed));
-    let http_server = Box::new(HttpServer { router });
-    Box::into_raw(http_server)
+    let router = Box::into_raw(Box::new(router::Router::new()));
+    let server = Box::new(HttpServer {
+        router: RouterPtr(router),
+    });
+    Box::into_raw(server)
 }
 
 /// Destroys the HttpServer instance and frees all associated memory.

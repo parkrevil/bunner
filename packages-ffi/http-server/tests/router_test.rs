@@ -205,31 +205,8 @@ mod case_sensitivity {
     }
 
     #[test]
-    fn case_insensitive_when_disabled() {
-        let mut o = RouterOptions::default();
-        o.case_sensitive = false;
-        let r = RouterBuilder::with_options(o)
-            .add(HttpMethod::Get, "/About")
-            .seal()
-            .build();
-        assert!(r.find(HttpMethod::Get, "/about").is_some());
-        assert!(r.find(HttpMethod::Get, "/ABOUT").is_some());
-    }
-
-    #[test]
-    fn conflict_on_duplicate_path_with_different_case_when_insensitive() {
-        let mut o = RouterOptions::default();
-        o.case_sensitive = false;
-        let mut r = rapi::Router::with_options(o, None);
-        assert!(rapi::register_route(&mut r, HttpMethod::Get, "/About").is_ok());
-        let code = rapi::register_route(&mut r, HttpMethod::Get, "/about");
-        assert_eq!(code, Err(RouterError::RouteConflictOnDuplicatePath));
-    }
-
-    #[test]
     fn non_ascii_paths_are_rejected() {
-        let mut o = RouterOptions::default();
-        o.case_sensitive = false;
+        let o = RouterOptions::default();
         let r = RouterBuilder::with_options(o).seal().build();
         assert!(r.find(HttpMethod::Get, "/café").is_none());
         assert!(r.find(HttpMethod::Get, "/Café").is_none());
@@ -687,18 +664,6 @@ mod edge_cases {
     }
 
     #[test]
-    fn case_insensitive_static_full_map_lookup() {
-        let mut o = RouterOptions::default();
-        o.case_sensitive = false;
-        o.enable_static_full_map = true;
-        let r = RouterBuilder::with_options(o)
-            .add(HttpMethod::Get, "/Case")
-            .seal()
-            .build();
-        assert!(r.find(HttpMethod::Get, "/case").is_some());
-    }
-
-    #[test]
     fn matches_deep_static_and_param_paths() {
         let r = RouterBuilder::with_options(RouterOptions::default())
             .add(HttpMethod::Get, "/a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r/s/t/u/v")
@@ -729,8 +694,7 @@ mod edge_cases {
 
     #[test]
     fn case_insensitive_with_dup_and_trailing_works_together() {
-        let mut o = RouterOptions::default();
-        o.case_sensitive = false;
+        let o = RouterOptions::default();
         let r = RouterBuilder::with_options(o)
             .add(HttpMethod::Get, "/a/b")
             .seal()

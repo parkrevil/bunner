@@ -130,7 +130,6 @@ pub fn seal(router: &mut Router) {
 
 #[derive(Debug, Clone, Copy)]
 pub struct RouterOptions {
-    pub case_sensitive: bool,
     // performance/feature toggles
     pub enable_root_prune: bool,
     pub enable_static_full_map: bool,
@@ -140,7 +139,6 @@ pub struct RouterOptions {
 impl Default for RouterOptions {
     fn default() -> Self {
         Self {
-            case_sensitive: true,
             enable_root_prune: false,
             enable_static_full_map: false,
             automatic_optimization: true,

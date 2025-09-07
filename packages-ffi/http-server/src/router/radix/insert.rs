@@ -53,8 +53,6 @@ impl RadixRouter {
             return Err(RouterError::RoutePathSyntaxInvalid);
         }
 
-        let case_sensitive = self.options.case_sensitive;
-
         let mut parsed_segments: Vec<SegmentPattern> = Vec::new();
         let mut seen_params: hashbrown::HashSet<String> = hashbrown::HashSet::new();
 
@@ -99,11 +97,7 @@ impl RadixRouter {
                 return Ok(key);
             }
 
-            let key_seg = if case_sensitive {
-                (*seg).to_string()
-            } else {
-                seg.to_ascii_lowercase()
-            };
+            let key_seg = (*seg).to_string();
 
             for part in pat.parts.iter() {
                 if let SegmentPart::Param { .. } = part {
@@ -260,11 +254,7 @@ impl RadixRouter {
             return Err(RouterError::RouteSegmentContainsMixedParamAndLiteral);
         }
 
-        let lit_norm = if self.options.case_sensitive {
-            seg.to_string()
-        } else {
-            seg.to_ascii_lowercase()
-        };
+        let lit_norm = seg.to_string();
 
         Ok(SegmentPattern {
             parts: vec![SegmentPart::Literal(lit_norm)],
