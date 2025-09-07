@@ -1,3 +1,4 @@
+use crate::router::errors::RouterError;
 use smallvec::SmallVec;
 
 // Reduce type complexity with aliases for readability and clippy friendliness
@@ -176,4 +177,68 @@ pub fn match_segment(seg: &str, seg_l: &str, pat: &SegmentPattern) -> Option<Cap
     }
 
     if i == seg.len() { Some(out) } else { None }
+}
+
+pub(crate) fn parse_segment(seg: &str) -> Result<SegmentPattern, RouterError> {
+    if seg.contains('(') || seg.contains(')') {
+        return Err(RouterError::RoutePathSyntaxInvalid);
+    }
+
+    let bytes = seg.as_bytes();
+
+    if bytes.first().copied() == Some(b':') {
+        let mut j = 1usize;
+
+        if j >= bytes.len() {
+            return Err(RouterError::RoutePathSyntaxInvalid);
+        }
+
+        while j < bytes.len() {
+            let b = bytes[j];
+
+            if !(b.is_ascii_alphanumeric() || b == b'_') {
+                break;
+            }
+
+            j += 1;
+        }
+
+        let name = &seg[1..];
+
+        if name.contains(':') {
+            return Err(RouterError::RoutePathSyntaxInvalid);
+        }
+
+        let nb = name.as_bytes();
+
+        if nb.is_empty() {
+            return Err(RouterError::RoutePathSyntaxInvalid);
+        }
+
+        if !(nb[0].is_ascii_alphabetic() || nb[0] == b'_') {
+            return Err(RouterError::RouteParamNameInvalidStart);
+        }
+
+        for &c in &nb[1..] {
+            if !(c.is_ascii_alphanumeric() || c == b'_') {
+                return Err(RouterError::RouteParamNameInvalidChar);
+            }
+        }
+
+        return Ok(SegmentPattern {
+            parts: vec![SegmentPart::Param {
+                name: name.to_string(),
+            }],
+        });
+    }
+
+    if seg.contains(':') {
+        return Err(RouterError::RouteSegmentContainsMixedParamAndLiteral);
+    }
+
+    let lit_norm = seg.to_string();
+
+    Ok(SegmentPattern {
+        parts: vec![SegmentPart::Literal(lit_norm)],
+    })
 }

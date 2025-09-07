@@ -1,9 +1,10 @@
 use crate::router::pattern;
 use smallvec::SmallVec;
-use std::borrow::Cow;
 
-use super::RadixTree;
+use super::{node::RadixTreeNode, RadixTree};
 use crate::r#enum::HttpMethod;
+
+const INITIAL_PARAMETER_OFFSETS_CAPACITY: usize = 8;
 
 #[inline(always)]
 fn prefetch_node(_n: &super::node::RadixTreeNode) {
@@ -40,6 +41,92 @@ unsafe fn starts_with_cs_avx2(hay: &[u8], pre: &[u8]) -> bool {
     true
 }
 
+fn find_pattern_child<'a>(
+    tree: &'a RadixTree,
+    node: &'a RadixTreeNode,
+    method: HttpMethod,
+    path: &str,
+    segment: &str,
+    path_offset: usize,
+    segment_offset: usize,
+    parameter_offsets: &mut SmallVec<[(String, (usize, usize)); INITIAL_PARAMETER_OFFSETS_CAPACITY]>,
+) -> Option<super::super::RouteMatchResult> {
+    let mut cand_idxs: SmallVec<[u16; 8]> = node.pattern_candidates_for(segment);
+
+    if cand_idxs.is_empty() {
+        cand_idxs.extend((0..node.patterns.len()).map(|i| i as u16));
+    }
+
+    if cand_idxs.len() > 1 {
+        let mut scores_with_idx: SmallVec<[(u16, u16); 64]> = SmallVec::with_capacity(cand_idxs.len());
+        for &i0 in cand_idxs.iter() {
+            let score = node.pattern_meta.get(i0 as usize).map(|meta| meta.score).unwrap_or(0);
+            scores_with_idx.push((score, i0));
+        }
+        scores_with_idx.sort_unstable_by_key(|&(s, _)| core::cmp::Reverse(s));
+        cand_idxs.clear();
+        for &(_, idx0) in scores_with_idx.iter() {
+            cand_idxs.push(idx0);
+        }
+    }
+
+    for idx_u16 in cand_idxs {
+        let idx = idx_u16 as usize;
+        let pat = &node.patterns[idx];
+        let child_nb = &node.pattern_nodes[idx];
+
+        prefetch_node(child_nb.as_ref());
+
+        if let Some(kvs) = pattern::match_segment(segment, segment, pat) {
+            let checkpoint = parameter_offsets.len();
+            for (name, (off, len)) in kvs.into_iter() {
+                parameter_offsets.push((name, (segment_offset + off, len)));
+            }
+
+            if let Some(ok) = tree.find_from(child_nb.as_ref(), method, path, path_offset, parameter_offsets) {
+                return Some(ok);
+            } else {
+                parameter_offsets.truncate(checkpoint);
+            }
+        }
+    }
+
+    None
+}
+
+fn handle_wildcard(
+    node: &RadixTreeNode,
+    method: HttpMethod,
+    path: &str,
+    segment_offset: usize,
+    parameter_offsets: &mut SmallVec<[(String, (usize, usize)); INITIAL_PARAMETER_OFFSETS_CAPACITY]>,
+) -> Option<super::super::RouteMatchResult> {
+    let wildcard_route_key = node.wildcard_routes[method as usize];
+    if wildcard_route_key == 0 {
+        return None;
+    }
+
+    let mut cap_start = segment_offset;
+    if cap_start < path.len() && path.as_bytes()[cap_start] == b'/' {
+        cap_start += 1;
+    }
+
+    let rest_len = if cap_start <= path.len() { path.len() - cap_start } else { 0 };
+
+    let checkpoint = parameter_offsets.len();
+    if rest_len > 0 {
+        parameter_offsets.push(("*".to_string(), (cap_start, rest_len)));
+    }
+
+    let result = Some(super::super::RouteMatchResult {
+        route_key: RadixTree::decode_route_key(wildcard_route_key),
+        parameter_offsets: parameter_offsets.clone().into_vec(),
+    });
+
+    parameter_offsets.truncate(checkpoint);
+    result
+}
+
 impl RadixTree {
     #[inline(always)]
     fn decode_route_key(stored: u16) -> u16 {
@@ -61,7 +148,7 @@ impl RadixTree {
         method: HttpMethod,
         s: &str,
         mut i: usize,
-        parameter_offsets: &mut SmallVec<[(String, (usize, usize)); 8]>,
+        parameter_offsets: &mut SmallVec<[(String, (usize, usize)); INITIAL_PARAMETER_OFFSETS_CAPACITY]>,
     ) -> Option<super::super::RouteMatchResult> {
         let mut cur = node;
         i = self.skip_slashes(s, i);
@@ -166,167 +253,20 @@ impl RadixTree {
             }
 
             let seg = &s[start..i];
-            let comp_cow: Cow<str> = Cow::Borrowed(seg);
-
-            let comp: &str = comp_cow.as_ref();
-
-            if let Some(route_key_id) = self.interner.get(comp)
-                && let Some(nb) = cur.get_static_id_fast(route_key_id)
-            {
-                prefetch_node(nb);
-
-                if let Some(ok) = self.find_from(nb, method, s, i, parameter_offsets) {
-                    return Some(ok);
+            
+            if let Some(next_node) = cur.get_static_child(seg, self.interner.get(seg)) {
+                prefetch_node(next_node);
+                if let Some(result) = self.find_from(next_node, method, s, i, parameter_offsets) {
+                    return Some(result);
                 }
             }
-
-            if let Some(nb) = cur.get_static_fast(comp) {
-                prefetch_node(nb);
-
-                if let Some(ok) = self.find_from(nb, method, s, i, parameter_offsets) {
-                    return Some(ok);
-                }
+            
+            if let Some(result) = find_pattern_child(self, cur, method, s, seg, i, start, parameter_offsets) {
+                return Some(result);
             }
 
-            if let Some(next) = cur.get_static_ref(comp) {
-                prefetch_node(next);
-
-                if let Some(ok) = self.find_from(next, method, s, i, parameter_offsets) {
-                    return Some(ok);
-                }
-            }
-
-            if !cur.static_keys.is_empty() && cur.static_vals_idx.len() == cur.static_keys.len() {
-                for (k, nb) in cur.static_keys.iter().zip(cur.static_vals_idx.iter()) {
-                    if k.as_str() == comp {
-                        prefetch_node(nb.as_ref());
-
-                        if let Some(ok) =
-                            self.find_from(nb.as_ref(), method, s, i, parameter_offsets)
-                        {
-                            return Some(ok);
-                        }
-                    }
-                }
-            }
-
-            if !cur.static_children.is_empty()
-                && let Some(nb) = cur.static_children.get(comp)
-            {
-                prefetch_node(nb.as_ref());
-
-                if let Some(ok) = self.find_from(nb.as_ref(), method, s, i, parameter_offsets) {
-                    return Some(ok);
-                }
-            }
-
-            let mut cand_idxs: SmallVec<[u16; 8]> = cur.pattern_candidates_for(comp);
-
-            if cand_idxs.is_empty() {
-                cand_idxs.extend((0..cur.patterns.len()).map(|i| i as u16));
-            }
-
-            let cand_len = cand_idxs.len();
-            if cand_len > 1 {
-                let mut scores_with_idx: SmallVec<[(u16, u16); 64]> =
-                    SmallVec::with_capacity(cand_len);
-                for &i0 in cand_idxs.iter() {
-                    let score = cur
-                        .pattern_meta
-                        .get(i0 as usize)
-                        .map(|meta| meta.score)
-                        .unwrap_or(0);
-                    scores_with_idx.push((score, i0));
-                }
-                scores_with_idx.sort_unstable_by_key(|&(s, _)| core::cmp::Reverse(s));
-                cand_idxs.clear();
-                for &(_, idx0) in scores_with_idx.iter() {
-                    cand_idxs.push(idx0);
-                }
-            }
-
-            for idx_u16 in cand_idxs {
-                let idx = idx_u16 as usize;
-                if idx < cur.pattern_children_idx.len() {
-                    let pat = &cur.patterns[idx];
-                    let child_nb = &cur.pattern_nodes[idx];
-
-                    prefetch_node(child_nb.as_ref());
-
-                    if let Some(kvs) = pattern::match_segment(seg, comp, pat) {
-                        let checkpoint = parameter_offsets.len();
-
-                        for (name, (off, len)) in kvs.into_iter() {
-                            parameter_offsets.push((name, (start + off, len)));
-                        }
-
-                        if let Some(ok) =
-                            self.find_from(child_nb.as_ref(), method, s, i, parameter_offsets)
-                        {
-                            return Some(ok);
-                        } else {
-                            parameter_offsets.truncate(checkpoint);
-                        }
-                    }
-
-                    continue;
-                }
-
-                let pat = &cur.patterns[idx];
-                let next = &cur.pattern_nodes[idx];
-
-                prefetch_node(next.as_ref());
-
-                if let Some(kvs) = pattern::match_segment(seg, comp, pat) {
-                    let checkpoint = parameter_offsets.len();
-
-                    for (name, (off, len)) in kvs.into_iter() {
-                        parameter_offsets.push((name, (start + off, len)));
-                    }
-
-                    if let Some(ok) = self.find_from(next.as_ref(), method, s, i, parameter_offsets)
-                    {
-                        return Some(ok);
-                    } else {
-                        parameter_offsets.truncate(checkpoint);
-                    }
-                }
-            }
-
-            if wildcard_route_key != 0 {
-                let mut cap_start = start;
-
-                if cap_start < s.len() && s.as_bytes()[cap_start] == b'/' {
-                    cap_start += 1;
-                }
-
-                let rest_len = if cap_start <= s.len() {
-                    s.len() - cap_start
-                } else {
-                    0
-                };
-
-                if rest_len == 0 {
-                    let out_parameter_offsets = parameter_offsets.clone().into_vec();
-
-                    return Some(super::super::RouteMatchResult {
-                        route_key: Self::decode_route_key(wildcard_route_key),
-                        parameter_offsets: out_parameter_offsets,
-                    });
-                } else {
-                    let checkpoint = parameter_offsets.len();
-
-                    parameter_offsets.push(("*".to_string(), (cap_start, rest_len)));
-
-                    let out = Some(super::super::RouteMatchResult {
-                        route_key: Self::decode_route_key(wildcard_route_key),
-                        parameter_offsets: parameter_offsets.clone().into_vec(),
-                    });
-
-                    parameter_offsets.truncate(checkpoint);
-
-                    return out;
-                }
+            if let Some(result) = handle_wildcard(cur, method, s, start, parameter_offsets) {
+                return Some(result);
             }
 
             #[cold]
@@ -429,7 +369,7 @@ impl RadixTree {
             return None;
         }
 
-        let mut parameter_offsets: SmallVec<[(String, (usize, usize)); 8]> = SmallVec::new();
+        let mut parameter_offsets: SmallVec<[(String, (usize, usize)); INITIAL_PARAMETER_OFFSETS_CAPACITY]> = SmallVec::new();
 
         self.find_from(
             &self.root_node,

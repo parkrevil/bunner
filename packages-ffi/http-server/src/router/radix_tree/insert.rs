@@ -2,314 +2,185 @@ use crate::router::errors::RouterError;
 use crate::router::pattern::{
     SegmentPart, SegmentPattern, pattern_compatible_policy, pattern_is_pure_static, pattern_score,
 };
-
-use super::RadixTree;
-use super::create_node_box_from_arena_pointer;
-use super::node::PatternMeta;
-
 use crate::r#enum::HttpMethod;
+use hashbrown::HashSet;
+use std::sync::atomic::AtomicU16;
+use super::{RadixTree, RadixTreeNode, create_node_box_from_arena_pointer, node::PatternMeta, MAX_ROUTES};
+use crate::router::interner::Interner;
 
 impl RadixTree {
     pub fn insert(&mut self, method: HttpMethod, path: &str) -> Result<u16, RouterError> {
         if self.root_node.is_sealed() {
             return Err(RouterError::RouterSealedCannotInsert);
         }
-
-        self.invalidate_all_indices();
-
-        let method_idx = method as usize;
+        self.root_node.set_dirty(true);
 
         if path == "/" {
-            if self.root_node.routes[method_idx] != 0 {
-                return Err(RouterError::RouteConflictOnDuplicatePath);
+            return assign_route_key(&mut self.root_node, method, &self.next_route_key);
+        }
+
+        let parsed_segments = self.prepare_path_segments(path)?;
+
+        let mut current = &mut self.root_node;
+        let arena_ptr: *const bumpalo::Bump = &self.arena;
+
+        for (i, pat) in parsed_segments.iter().enumerate() {
+            let seg = pat.parts.iter().map(|p| match p {
+                SegmentPart::Literal(s) => s.clone(),
+                SegmentPart::Param { name } => format!(":{}", name),
+            }).collect::<Vec<String>>().join("");
+
+            if seg == "*" {
+                return handle_wildcard_insert(current, method, i, parsed_segments.len(), &self.next_route_key);
             }
 
-            let current_key = self
-                .next_route_key
-                .load(std::sync::atomic::Ordering::Relaxed);
-
-            if current_key >= super::MAX_ROUTES {
-                return Err(RouterError::MaxRoutesExceeded);
+            if pattern_is_pure_static(pat, &seg) {
+                current = current.descend_static_mut_with_alloc(seg.to_string(), || {
+                    create_node_box_from_arena_pointer(arena_ptr)
+                });
+                sort_static_children(current, &self.interner);
+            } else {
+                current = find_or_create_pattern_child(current, pat, arena_ptr)?;
             }
-
-            let key = self
-                .next_route_key
-                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-
-            self.root_node.routes[method_idx] = key + 1;
-            let current_mask = self.root_node.method_mask();
-            self.root_node
-                .set_method_mask(current_mask | (1 << method_idx));
-            self.root_node.set_dirty(true);
-            return Ok(key);
+            
+            let current_mask = current.method_mask();
+            current.set_method_mask(current_mask | (1 << (method as usize)));
+            current.set_dirty(true);
         }
 
-        if path.is_empty() {
-            return Err(RouterError::RoutePathEmpty);
-        }
+        assign_route_key(current, method, &self.next_route_key)
+    }
 
-        if !path.is_ascii() {
-            return Err(RouterError::RoutePathNotAscii);
-        }
+    fn prepare_path_segments(&self, path: &str) -> Result<Vec<SegmentPattern>, RouterError> {
+        if path.is_empty() { return Err(RouterError::RoutePathEmpty); }
+        if !path.is_ascii() { return Err(RouterError::RoutePathNotAscii); }
 
-        let norm = super::super::normalize_path(path);
-
-        if !super::super::is_path_character_allowed(&norm) {
+        let norm = crate::router::path::normalize_path(path);
+        if !crate::router::path::is_path_character_allowed(&norm) {
             return Err(RouterError::RoutePathContainsDisallowedCharacters);
         }
 
         let segments: Vec<&str> = norm.split('/').filter(|s| !s.is_empty()).collect();
+        if segments.is_empty() { return Err(RouterError::RoutePathSyntaxInvalid); }
 
-        if segments.is_empty() {
-            return Err(RouterError::RoutePathSyntaxInvalid);
-        }
+        let mut parsed_segments = Vec::with_capacity(segments.len());
+        let mut seen_params = HashSet::new();
 
-        let mut parsed_segments: Vec<SegmentPattern> = Vec::new();
-        let mut seen_params: hashbrown::HashSet<String> = hashbrown::HashSet::new();
-
-        for seg in segments.iter() {
-            let pat = self.parse_segment(seg)?;
-
-            // 패턴 길이 검증 (안정성 보장)
+        for seg in segments {
+            let pat = crate::router::pattern::parse_segment(seg)?;
+            
             let mut min_len = 0u16;
             let mut last_lit_len = 0u16;
-
             for part in pat.parts.iter() {
-                match part {
-                    SegmentPart::Literal(l) => {
-                        min_len += l.len() as u16;
-                    }
-                    SegmentPart::Param { .. } => {}
+                if let SegmentPart::Literal(l) = part {
+                    min_len += l.len() as u16;
                 }
             }
-
-            for part in pat.parts.iter().rev() {
-                if let SegmentPart::Literal(l) = part {
-                    last_lit_len = l.len() as u16;
-                    break;
-                }
+            if let Some(SegmentPart::Literal(l)) = pat.parts.iter().rev().find(|p| p.is_literal()) {
+                 last_lit_len = l.len() as u16;
             }
 
             if !PatternMeta::is_valid_length(min_len, last_lit_len) {
                 return Err(RouterError::PatternTooLong);
             }
 
-            for part in pat.parts.iter() {
+            for part in &pat.parts {
                 if let SegmentPart::Param { name, .. } = part {
-                    if seen_params.contains(name) {
+                    if seen_params.contains(name.as_str()) {
                         return Err(RouterError::RouteDuplicateParamNameInRoute);
                     }
-
                     seen_params.insert(name.clone());
                 }
             }
-
             parsed_segments.push(pat);
         }
+        Ok(parsed_segments)
+    }
+}
 
-        let mut current = &mut self.root_node;
-        let arena_ptr: *const bumpalo::Bump = &self.arena;
-        let mut _total_params = 0usize;
-
-        for (i, (seg, pat)) in segments.iter().zip(parsed_segments.iter()).enumerate() {
-            if *seg == "*" {
-                if i != segments.len() - 1 {
-                    return Err(RouterError::RouteWildcardSegmentNotAtEnd);
-                }
-
-                if current.wildcard_routes[method_idx] != 0 {
-                    return Err(RouterError::RouteWildcardAlreadyExistsForMethod);
-                }
-
-                let key = self
-                    .next_route_key
-                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-
-                current.wildcard_routes[method_idx] = key + 1;
-                let current_mask = current.method_mask();
-                current.set_method_mask(current_mask | (1 << method_idx));
-                current.set_dirty(true);
-
-                return Ok(key);
-            }
-
-            let key_seg = (*seg).to_string();
-
-            for part in pat.parts.iter() {
-                if let SegmentPart::Param { .. } = part {
-                    _total_params += 1;
-                }
-            }
-
-            if pattern_is_pure_static(pat, &key_seg) {
-                current = current.descend_static_mut_with_alloc(key_seg, || {
-                    create_node_box_from_arena_pointer(arena_ptr)
-                });
-                let current_mask = current.method_mask();
-                current.set_method_mask(current_mask | (1 << method_idx));
-
-                if current.static_keys.len() == current.static_vals.len() {
-                    let interner = &self.interner;
-                    let mut pairs: Vec<(u32, String, super::NodeBox)> = current
-                        .static_keys
-                        .iter()
-                        .cloned()
-                        .zip(current.static_vals.iter().map(|nb| super::NodeBox(nb.0)))
-                        .map(|(k, v)| (interner.intern(k.as_str()), k, v))
-                        .collect();
-                    pairs.sort_unstable_by(|a, b| a.0.cmp(&b.0));
-                    current.static_keys.clear();
-                    current.static_vals.clear();
-
-                    for (_id, k, v) in pairs.into_iter() {
-                        current.static_keys.push(k);
-                        current.static_vals.push(v);
-                    }
-                }
-
-                current.set_dirty(true);
-            } else {
-                for exist in current.patterns.iter() {
-                    if !pattern_compatible_policy(exist, pat) {
-                        return Err(RouterError::RouteParamNameConflictAtSamePosition);
-                    }
-
-                    if i == segments.len() - 1 {
-                        for (ea, eb) in exist.parts.iter().zip(pat.parts.iter()) {
-                            if let (SegmentPart::Param { .. }, SegmentPart::Param { .. }) = (ea, eb)
-                            {
-                            }
-                        }
-                    }
-                }
-
-                if let Some(existing_idx) = current.patterns.iter().position(|exist| exist == pat) {
-                    let child = current
-                        .pattern_nodes
-                        .get_mut(existing_idx)
-                        .unwrap()
-                        .as_mut();
-
-                    current = child;
-
-                    continue;
-                }
-
-                if current.pattern_meta.len() != current.patterns.len() {
-                    current.rebuild_pattern_meta();
-                }
-
-                let score = pattern_score(pat);
-                let pos_opt = current
-                    .pattern_meta
-                    .iter()
-                    .position(|&meta| meta.score < score);
-                let insert_pos = pos_opt.unwrap_or(current.patterns.len());
-
-                current.patterns.insert(insert_pos, pat.clone());
-                current
-                    .pattern_nodes
-                    .insert(insert_pos, create_node_box_from_arena_pointer(arena_ptr));
-
-                // 임시로 score만 저장, 나중에 rebuild_pattern_meta에서 완전한 메타데이터 생성
-                let temp_meta = PatternMeta::new(score, 0, 0);
-                current.pattern_meta.insert(insert_pos, temp_meta);
-                current.rebuild_pattern_index();
-
-                let current_mask = current.method_mask();
-                current.set_method_mask(current_mask | (1 << method_idx));
-                current.set_dirty(true);
-
-                let child = current.pattern_nodes.get_mut(insert_pos).unwrap().as_mut();
-                current = child;
-            }
+fn sort_static_children(node: &mut RadixTreeNode, interner: &Interner) {
+    if node.static_keys.len() == node.static_vals.len() && node.static_keys.len() > 1 {
+        let mut pairs: Vec<(u32, String, super::NodeBox)> = node
+            .static_keys
+            .iter()
+            .cloned()
+            .zip(node.static_vals.iter().map(|nb| super::NodeBox(nb.0)))
+            .map(|(k, v)| (interner.intern(k.as_str()), k, v))
+            .collect();
+        pairs.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+        node.static_keys.clear();
+        node.static_vals.clear();
+        for (_id, k, v) in pairs.into_iter() {
+            node.static_keys.push(k);
+            node.static_vals.push(v);
         }
+    }
+}
 
-        if current.routes[method_idx] != 0 {
-            return Err(RouterError::RouteConflictOnDuplicatePath);
+fn find_or_create_pattern_child<'a>(
+    node: &'a mut RadixTreeNode,
+    pat: &SegmentPattern,
+    arena_ptr: *const bumpalo::Bump,
+) -> Result<&'a mut RadixTreeNode, RouterError> {
+    for exist in node.patterns.iter() {
+        if !pattern_compatible_policy(exist, pat) {
+            return Err(RouterError::RouteParamNameConflictAtSamePosition);
         }
-
-        let current_key = self
-            .next_route_key
-            .load(std::sync::atomic::Ordering::Relaxed);
-
-        if current_key > super::MAX_ROUTES {
-            return Err(RouterError::MaxRoutesExceeded);
-        }
-
-        let key = self
-            .next_route_key
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-
-        current.routes[method_idx] = key + 1;
-        let current_mask = current.method_mask();
-        current.set_method_mask(current_mask | (1 << method_idx));
-        current.set_dirty(true);
-
-        Ok(key)
     }
 
-    pub(super) fn parse_segment(&self, seg: &str) -> Result<SegmentPattern, RouterError> {
-        if seg.contains('(') || seg.contains(')') {
-            return Err(RouterError::RoutePathSyntaxInvalid);
-        }
+    if let Some(existing_idx) = node.patterns.iter().position(|exist| exist == pat) {
+        return Ok(node.pattern_nodes.get_mut(existing_idx).unwrap().as_mut());
+    }
 
-        let bytes = seg.as_bytes();
+    let score = pattern_score(pat);
+    let insert_pos = node.pattern_meta.iter().position(|&meta| meta.score < score).unwrap_or(node.patterns.len());
+    
+    node.patterns.insert(insert_pos, pat.clone());
+    node.pattern_nodes.insert(insert_pos, create_node_box_from_arena_pointer(arena_ptr));
 
-        if bytes.first().copied() == Some(b':') {
-            let mut j = 1usize;
+    Ok(node.pattern_nodes.get_mut(insert_pos).unwrap().as_mut())
+}
 
-            if j >= bytes.len() {
-                return Err(RouterError::RoutePathSyntaxInvalid);
-            }
+fn handle_wildcard_insert(node: &mut RadixTreeNode, method: HttpMethod, index: usize, total_segments: usize, next_route_key: &AtomicU16) -> Result<u16, RouterError> {
+    if index != total_segments - 1 {
+        return Err(RouterError::RouteWildcardSegmentNotAtEnd);
+    }
+    let method_idx = method as usize;
+    if node.wildcard_routes[method_idx] != 0 {
+        return Err(RouterError::RouteWildcardAlreadyExistsForMethod);
+    }
+    let key = next_route_key.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    node.wildcard_routes[method_idx] = key + 1;
+    
+    let current_mask = node.method_mask();
+    node.set_method_mask(current_mask | (1 << method_idx));
+    node.set_dirty(true);
 
-            while j < bytes.len() {
-                let b = bytes[j];
+    Ok(key)
+}
 
-                if !(b.is_ascii_alphanumeric() || b == b'_') {
-                    break;
-                }
+fn assign_route_key(node: &mut RadixTreeNode, method: HttpMethod, next_route_key: &AtomicU16) -> Result<u16, RouterError> {
+    let method_idx = method as usize;
+    if node.routes[method_idx] != 0 {
+        return Err(RouterError::RouteConflictOnDuplicatePath);
+    }
+    let current_key = next_route_key.load(std::sync::atomic::Ordering::Relaxed);
+    if current_key >= MAX_ROUTES {
+        return Err(RouterError::MaxRoutesExceeded);
+    }
+    let key = next_route_key.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    node.routes[method_idx] = key + 1;
+    
+    let current_mask = node.method_mask();
+    node.set_method_mask(current_mask | (1 << method_idx));
+    node.set_dirty(true);
 
-                j += 1;
-            }
+    Ok(key)
+}
 
-            let name = &seg[1..];
-
-            if name.contains(':') {
-                return Err(RouterError::RoutePathSyntaxInvalid);
-            }
-
-            let nb = name.as_bytes();
-
-            if nb.is_empty() {
-                return Err(RouterError::RoutePathSyntaxInvalid);
-            }
-
-            if !(nb[0].is_ascii_alphabetic() || nb[0] == b'_') {
-                return Err(RouterError::RouteParamNameInvalidStart);
-            }
-
-            for &c in &nb[1..] {
-                if !(c.is_ascii_alphanumeric() || c == b'_') {
-                    return Err(RouterError::RouteParamNameInvalidChar);
-                }
-            }
-
-            return Ok(SegmentPattern {
-                parts: vec![SegmentPart::Param {
-                    name: name.to_string(),
-                }],
-            });
-        }
-
-        if seg.contains(':') {
-            return Err(RouterError::RouteSegmentContainsMixedParamAndLiteral);
-        }
-
-        let lit_norm = seg.to_string();
-
-        Ok(SegmentPattern {
-            parts: vec![SegmentPart::Literal(lit_norm)],
-        })
+// Helper for SegmentPart
+impl SegmentPart {
+    fn is_literal(&self) -> bool {
+        matches!(self, SegmentPart::Literal(_))
     }
 }

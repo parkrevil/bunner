@@ -3,8 +3,7 @@ use bitflags::bitflags;
 use hashbrown::HashMap as FastHashMap;
 use smallvec::SmallVec;
 
-use crate::router::interner::Interner;
-use crate::router::pattern::{SegmentPart, SegmentPattern, pattern_score};
+use crate::router::pattern::{SegmentPart, SegmentPattern};
 
 use super::HTTP_METHOD_COUNT;
 
@@ -121,159 +120,65 @@ impl RadixTreeNode {
     }
 
     #[inline(always)]
-    pub(super) fn get_static_ref(&self, key: &str) -> Option<&RadixTreeNode> {
+    pub(super) fn get_static_child(&self, key: &str, key_id: Option<u32>) -> Option<&RadixTreeNode> {
+        // --- Fast path for sealed/indexed nodes ---
+        if !self.static_vals_idx.is_empty() {
+            if let Some(id) = key_id {
+                if let Some(node) = self.static_children_idx_ids.get(&id) {
+                    return Some(node.as_ref());
+                }
+                if !self.static_key_ids.is_empty() {
+                    if let Ok(pos) = self.static_key_ids.binary_search(&id) {
+                        return Some(self.static_vals_idx[pos].as_ref());
+                    }
+                }
+            }
+
+            if !self.static_hash_table.is_empty() {
+                let size = self.static_hash_table.len();
+                let mut h: u64 = self.static_hash_seed;
+                for &b in key.as_bytes() {
+                    h ^= b as u64;
+                    h = h.wrapping_mul(1099511628211);
+                }
+                let mut idx = (h as usize) & (size - 1);
+                let mut steps = 0usize;
+                while steps < size {
+                    let pos = self.static_hash_table[idx];
+                    if pos == -1 { break; }
+                    let p = pos as usize;
+                    if self.static_keys[p].as_str() == key {
+                        return Some(self.static_vals_idx[p].as_ref());
+                    }
+                    idx = (idx + 1) & (size - 1);
+                    steps += 1;
+                }
+            }
+            
+            if let Some(node) = self.static_children_idx.get(key) {
+                return Some(node.as_ref());
+            }
+
+            if self.static_keys.len() <= 12 {
+                if let Some(pos) = self.static_keys.iter().position(|k| k.as_str() == key) {
+                    return Some(self.static_vals_idx[pos].as_ref());
+                }
+            } else if let Ok(pos) = self.static_keys.binary_search_by(|k| k.as_str().cmp(key)) {
+                return Some(self.static_vals_idx[pos].as_ref());
+            }
+
+            return None; // Indexed node, but not found
+        }
+
+        // --- Slow path for non-sealed/unindexed nodes ---
         if let Some(n) = self.static_children.get(key) {
             return Some(n.as_ref());
         }
         if let Some(pos) = self.static_keys.iter().position(|k| k.as_str() == key) {
             return Some(self.static_vals[pos].as_ref());
         }
+
         None
-    }
-
-    #[inline(always)]
-    pub(super) fn get_static_fast(&self, key: &str) -> Option<&RadixTreeNode> {
-        // MPHF-like quick path
-        if !self.static_hash_table.is_empty()
-            && self.static_vals_idx.len() == self.static_keys.len()
-        {
-            let size = self.static_hash_table.len();
-            let mut h: u64 = self.static_hash_seed;
-            for &b in key.as_bytes() {
-                h ^= b as u64;
-                h = h.wrapping_mul(1099511628211);
-            }
-            let mut idx = (h as usize) & (size - 1);
-            let mut steps = 0usize;
-            while steps < size {
-                let pos = self.static_hash_table[idx];
-                if pos == -1 {
-                    break;
-                }
-                let p = pos as usize;
-                if self.static_keys[p].as_str() == key {
-                    return Some(self.static_vals_idx[p].as_ref());
-                }
-                idx = (idx + 1) & (size - 1);
-                steps += 1;
-            }
-        }
-        if let Some(nb) = self.static_children_idx.get(key) {
-            return Some(nb.as_ref());
-        }
-        if !self.static_keys.is_empty() && self.static_vals_idx.len() == self.static_keys.len() {
-            // small-N linear scan is often faster than binary search
-            if self.static_keys.len() <= 12 {
-                if let Some(pos) = self.static_keys.iter().position(|k| k.as_str() == key) {
-                    return Some(self.static_vals_idx[pos].as_ref());
-                }
-            } else {
-                // binary search on sorted static_keys
-                let mut lo = 0usize;
-                let mut hi = self.static_keys.len();
-                while lo < hi {
-                    let mid = (lo + hi) >> 1;
-                    let cmp = self.static_keys[mid].as_str().cmp(key);
-                    if cmp.is_lt() {
-                        lo = mid + 1;
-                    } else if cmp.is_gt() {
-                        hi = mid;
-                    } else {
-                        return Some(self.static_vals_idx[mid].as_ref());
-                    }
-                }
-            }
-        }
-        None
-    }
-
-    #[inline(always)]
-    pub(super) fn get_static_id_fast(&self, key_id: u32) -> Option<&RadixTreeNode> {
-        if let Some(nb) = self.static_children_idx_ids.get(&key_id) {
-            return Some(nb.as_ref());
-        }
-        if !self.static_key_ids.is_empty()
-            && self.static_vals_idx.len() == self.static_key_ids.len()
-        {
-            // binary search on sorted intern ids
-            let mut lo = 0usize;
-            let mut hi = self.static_key_ids.len();
-            while lo < hi {
-                let mid = (lo + hi) >> 1;
-                let id = self.static_key_ids[mid];
-                if id < key_id {
-                    lo = mid + 1;
-                } else if id > key_id {
-                    hi = mid;
-                } else {
-                    return Some(self.static_vals_idx[mid].as_ref());
-                }
-            }
-        }
-        None
-    }
-
-    pub(super) fn rebuild_intern_ids(&mut self, interner: &Interner) {
-        self.static_key_ids.clear();
-        self.static_hash_table.clear();
-        self.static_hash_seed = 0;
-
-        if !self.static_keys.is_empty() {
-            self.static_key_ids.reserve(self.static_keys.len());
-
-            for k in self.static_keys.iter() {
-                self.static_key_ids.push(interner.intern(k.as_str()));
-            }
-
-            if self.static_vals_idx.len() == self.static_keys.len() && self.static_keys.len() >= 16
-            {
-                let mut size: usize = (self.static_keys.len() * 2).next_power_of_two();
-                let max_size: usize = self.static_keys.len() * 8;
-                let mut seed: u64 = 1469598103934665603;
-                while size <= max_size {
-                    let mut table: Vec<i32> = vec![-1; size];
-                    let mut ok = true;
-                    for (i, k) in self.static_keys.iter().enumerate() {
-                        let mut h: u64 = seed;
-                        for &b in k.as_bytes() {
-                            h ^= b as u64;
-                            h = h.wrapping_mul(1099511628211);
-                        }
-                        let mut idx = (h as usize) & (size - 1);
-                        let mut steps = 0usize;
-                        while table[idx] != -1 {
-                            idx = (idx + 1) & (size - 1);
-                            steps += 1;
-                            if steps > size {
-                                ok = false;
-                                break;
-                            }
-                        }
-                        if !ok {
-                            break;
-                        }
-                        table[idx] = i as i32;
-                    }
-                    if ok {
-                        self.static_hash_seed = seed;
-                        self.static_hash_table.clear();
-                        self.static_hash_table.extend_from_slice(&table);
-                        break;
-                    }
-                    seed = seed
-                        .wrapping_mul(1315423911)
-                        .wrapping_add(0x9e3779b97f4a7c15);
-                    size *= 2;
-                }
-            }
-        }
-        self.static_children_idx_ids.clear();
-        if !self.static_children.is_empty() {
-            for (k, v) in self.static_children.iter() {
-                let id = interner.intern(k.as_str());
-                self.static_children_idx_ids.insert(id, super::NodeBox(v.0));
-            }
-        }
     }
 
     /// Same as `descend_static_mut` but uses provided allocator for child creation.
@@ -306,66 +211,6 @@ impl RadixTreeNode {
     }
 
     #[inline]
-    pub(super) fn rebuild_pattern_index(&mut self) {
-        self.pattern_first_literal.clear();
-        self.pattern_first_lit_head.clear();
-        self.pattern_param_first.clear();
-
-        for (idx, pat) in self.patterns.iter().enumerate() {
-            if let Some(SegmentPart::Literal(l0)) = pat.parts.first() {
-                let entry = self
-                    .pattern_first_literal
-                    .entry(l0.clone())
-                    .or_insert_with(SmallVec::new);
-                entry.push(idx as u16);
-                if let Some(&b) = l0.as_bytes().first() {
-                    let entry2 = self
-                        .pattern_first_lit_head
-                        .entry(b)
-                        .or_insert_with(SmallVec::new);
-                    entry2.push(idx as u16);
-                }
-            } else if let Some(SegmentPart::Param { .. }) = pat.parts.first() {
-                self.pattern_param_first.push(idx as u16);
-            }
-        }
-    }
-
-    #[inline]
-    pub(super) fn rebuild_pattern_meta(&mut self) {
-        self.pattern_meta.clear();
-        self.pattern_meta.reserve(self.patterns.len());
-
-        for pat in self.patterns.iter() {
-            let score = pattern_score(pat);
-
-            let mut min_len = 0u16;
-            for part in pat.parts.iter() {
-                match part {
-                    SegmentPart::Literal(l) => {
-                        min_len += l.len() as u16;
-                    }
-                    SegmentPart::Param { .. } => {}
-                }
-            }
-
-            let mut last_len = 0u16;
-            for part in pat.parts.iter().rev() {
-                if let SegmentPart::Literal(l) = part {
-                    last_len = l.len() as u16;
-                    break;
-                }
-            }
-
-            // PatternMeta 생성 (입력값은 이미 검증됨)
-            let meta = PatternMeta::new(score, min_len, last_len);
-            self.pattern_meta.push(meta);
-        }
-
-        debug_assert_eq!(self.patterns.len(), self.pattern_meta.len());
-    }
-
-    #[inline(always)]
     pub(super) fn pattern_candidates_for(&self, comp: &str) -> SmallVec<[u16; 8]> {
         let mut out: SmallVec<[u16; 8]> = SmallVec::new();
 
