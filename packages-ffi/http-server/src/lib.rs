@@ -318,9 +318,19 @@ pub unsafe extern "C" fn handle_request(
     };
 
     // Dispatch only the callback off-thread (no Router captured)
-    submit_job(Box::new(move || {
-        callback_with_request_id_ptr(cb, &request_id_owned, make_ffi_result(&ok));
-    }));
+    let request_id_for_cb = request_id_owned.clone();
+    match submit_job(Box::new(move || {
+        callback_with_request_id_ptr(cb, &request_id_for_cb, make_ffi_result(&ok));
+    })) {
+        Ok(()) => {}
+        Err(_e) => {
+            callback_with_request_id_ptr(
+                cb,
+                &request_id_owned,
+                make_ffi_error_result(HttpServerError::ServerError, Some("QueueFull".to_string())),
+            );
+        }
+    }
 }
 
 /// Seals the router, optimizing it for fast lookups. No routes can be added after sealing.

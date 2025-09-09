@@ -2,14 +2,17 @@ use std::sync::{mpsc, Arc, Mutex, OnceLock};
 use std::thread;
 
 type Job = Box<dyn FnOnce() + Send + 'static>;
-static TASK_SENDER: OnceLock<mpsc::Sender<Job>> = OnceLock::new();
+static TASK_SENDER: OnceLock<mpsc::SyncSender<Job>> = OnceLock::new();
 
-fn init() -> mpsc::Sender<Job> {
-    let (tx, rx) = mpsc::channel::<Job>();
-    let rx = Arc::new(Mutex::new(rx));
+fn init() -> mpsc::SyncSender<Job> {
+    // Bounded queue for backpressure
+    // Capacity proportional to cores; minimum 64
     let workers = thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(4);
+    let capacity = (workers * 256).max(64);
+    let (tx, rx) = mpsc::sync_channel::<Job>(capacity);
+    let rx = Arc::new(Mutex::new(rx));
     for _ in 0..workers {
         let rx_cloned = Arc::clone(&rx);
         thread::spawn(move || loop {
@@ -26,7 +29,7 @@ fn init() -> mpsc::Sender<Job> {
     tx
 }
 
-pub fn submit_job(job: Job) {
+pub fn submit_job(job: Job) -> Result<(), mpsc::TrySendError<Job>> {
     let tx = TASK_SENDER.get_or_init(|| init());
-    let _ = tx.send(job);
+    tx.try_send(job)
 }
