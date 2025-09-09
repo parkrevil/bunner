@@ -12,13 +12,10 @@ use std::{
 use crate::errors::HttpServerError;
 mod thread_pool;
 use crate::structure::{
-    AddRouteResult, FfiError, HandleRequestPayload, HandleRequestResponse, HandleRequestResult,
+    AddRouteResult, HandleRequestPayload, HandleRequestResponse, HandleRequestResult,
 };
 use crate::util::make_ffi_error_result;
-use crate::{
-    r#enum::HttpMethod,
-    util::{make_ffi_result, serialize_to_cstring},
-};
+use crate::{r#enum::HttpMethod, util::make_ffi_result};
 use cookie::Cookie;
 use serde_json::Value as JsonValue;
 use serde_qs;
