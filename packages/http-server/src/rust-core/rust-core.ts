@@ -85,8 +85,6 @@ export class RustCore extends BaseRustCore<
             throw new Error('Request ID is null');
           }
 
-          const result = this.ensure<HandleRequestResult>(resultPtr);
-
           entry = this.pendingHandleRequests.get(requestId);
 
           if (!entry) {
@@ -96,6 +94,8 @@ export class RustCore extends BaseRustCore<
 
             return;
           }
+
+          const result = this.ensure<HandleRequestResult>(resultPtr);
 
           entry.resolve(result);
         } catch (e) {
