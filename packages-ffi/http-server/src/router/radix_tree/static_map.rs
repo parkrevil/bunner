@@ -1,5 +1,5 @@
-use hashbrown::HashMap as FastHashMap;
 use super::{node::RadixTreeNode, HTTP_METHOD_COUNT};
+use hashbrown::HashMap as FastHashMap;
 
 pub(super) fn collect_static(
     n: &RadixTreeNode,
@@ -15,7 +15,11 @@ pub(super) fn collect_static(
     }
     for (i, &rk) in n.routes.iter().enumerate() {
         if rk != 0 {
-            let key = if buf.is_empty() { "/".to_string() } else { buf.clone() };
+            let key = if buf.is_empty() {
+                "/".to_string()
+            } else {
+                buf.clone()
+            };
             maps[i].insert(key, rk);
         }
     }
@@ -40,5 +44,3 @@ pub(super) fn collect_static(
     }
     buf.truncate(base_len);
 }
-
-

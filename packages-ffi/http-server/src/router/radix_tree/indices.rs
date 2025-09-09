@@ -1,5 +1,5 @@
-use super::node::RadixTreeNode;
 use super::alloc::NodeBox;
+use super::node::RadixTreeNode;
 use crate::router::interner::Interner;
 use smallvec::SmallVec;
 
@@ -60,5 +60,3 @@ pub(super) fn build_indices(root: &mut RadixTreeNode, interner: &Interner) {
         }
     });
 }
-
-

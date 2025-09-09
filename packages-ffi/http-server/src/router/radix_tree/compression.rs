@@ -75,5 +75,3 @@ fn compress_node(n: &mut RadixTreeNode) {
 pub(super) fn compress_root_node(root: &mut RadixTreeNode) {
     compress_node(root);
 }
-
-

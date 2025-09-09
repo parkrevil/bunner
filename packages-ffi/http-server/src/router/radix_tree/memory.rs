@@ -36,5 +36,3 @@ pub(super) fn warm_node(root: &RadixTreeNode) {
         }
     });
 }
-
-

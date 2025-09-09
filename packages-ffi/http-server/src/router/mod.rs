@@ -1,8 +1,8 @@
 pub mod errors;
 mod interner;
+mod path;
 mod pattern;
 pub mod radix_tree;
-mod path;
 
 use crate::r#enum::HttpMethod;
 pub use errors::RouterError;

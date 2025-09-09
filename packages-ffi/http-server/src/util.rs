@@ -2,7 +2,7 @@ use serde::Serialize;
 use std::ffi::CString;
 use std::os::raw::c_char;
 
-use crate::structure::{FfiError};
+use crate::structure::FfiError;
 
 pub fn serialize_to_cstring<T: Serialize>(value: &T) -> *mut c_char {
     match serde_json::to_string(value) {
@@ -20,9 +20,9 @@ pub fn make_ffi_result<T: Serialize>(data: T) -> *mut c_char {
     serialize_to_cstring(&data)
 }
 
-pub fn make_ffi_error_result<T>(error: T, message: Option<String>) -> *mut c_char 
-where 
-    T: Copy + Into<u16>
+pub fn make_ffi_error_result<T>(error: T, message: Option<String>) -> *mut c_char
+where
+    T: Copy + Into<u16>,
 {
     let ffi_error = FfiError {
         code: error.into(),

@@ -44,7 +44,9 @@ unsafe fn starts_with_cs_avx2(hay: &[u8], pre: &[u8]) -> bool {
 fn handle_end_of_path(
     node: &RadixTreeNode,
     method: HttpMethod,
-    parameter_offsets: &mut SmallVec<[(String, (usize, usize)); INITIAL_PARAMETER_OFFSETS_CAPACITY]>,
+    parameter_offsets: &mut SmallVec<
+        [(String, (usize, usize)); INITIAL_PARAMETER_OFFSETS_CAPACITY],
+    >,
 ) -> Option<super::super::RouteMatchResult> {
     let method_idx = method as usize;
     let rk = node.routes[method_idx];
@@ -74,7 +76,9 @@ fn find_pattern_child<'a>(
     path: &str,
     segment: &str,
     segment_offset: usize,
-    parameter_offsets: &mut SmallVec<[(String, (usize, usize)); INITIAL_PARAMETER_OFFSETS_CAPACITY]>,
+    parameter_offsets: &mut SmallVec<
+        [(String, (usize, usize)); INITIAL_PARAMETER_OFFSETS_CAPACITY],
+    >,
 ) -> Option<super::super::RouteMatchResult> {
     let mut cand_idxs: SmallVec<[u16; 8]> = node.pattern_candidates_for(segment);
 
@@ -83,9 +87,14 @@ fn find_pattern_child<'a>(
     }
 
     if cand_idxs.len() > 1 {
-        let mut scores_with_idx: SmallVec<[(u16, u16); 64]> = SmallVec::with_capacity(cand_idxs.len());
+        let mut scores_with_idx: SmallVec<[(u16, u16); 64]> =
+            SmallVec::with_capacity(cand_idxs.len());
         for &i0 in cand_idxs.iter() {
-            let score = node.pattern_meta.get(i0 as usize).map(|meta| meta.score).unwrap_or(0);
+            let score = node
+                .pattern_meta
+                .get(i0 as usize)
+                .map(|meta| meta.score)
+                .unwrap_or(0);
             scores_with_idx.push((score, i0));
         }
         scores_with_idx.sort_unstable_by_key(|&(s, _)| core::cmp::Reverse(s));
@@ -109,8 +118,13 @@ fn find_pattern_child<'a>(
             }
 
             let path_offset = segment_offset + segment.len();
-            if let Some(ok) = tree.find_from(child_nb.as_ref(), method, path, path_offset, parameter_offsets)
-            {
+            if let Some(ok) = tree.find_from(
+                child_nb.as_ref(),
+                method,
+                path,
+                path_offset,
+                parameter_offsets,
+            ) {
                 return Some(ok);
             } else {
                 parameter_offsets.truncate(checkpoint);
@@ -126,7 +140,9 @@ fn handle_wildcard(
     method: HttpMethod,
     path: &str,
     segment_offset: usize,
-    parameter_offsets: &mut SmallVec<[(String, (usize, usize)); INITIAL_PARAMETER_OFFSETS_CAPACITY]>,
+    parameter_offsets: &mut SmallVec<
+        [(String, (usize, usize)); INITIAL_PARAMETER_OFFSETS_CAPACITY],
+    >,
 ) -> Option<super::super::RouteMatchResult> {
     let wildcard_route_key = node.wildcard_routes[method as usize];
     if wildcard_route_key == 0 {
@@ -138,7 +154,11 @@ fn handle_wildcard(
         cap_start += 1;
     }
 
-    let rest_len = if cap_start <= path.len() { path.len() - cap_start } else { 0 };
+    let rest_len = if cap_start <= path.len() {
+        path.len() - cap_start
+    } else {
+        0
+    };
 
     if rest_len > 0 {
         parameter_offsets.push(("*".to_string(), (cap_start, rest_len)));
@@ -153,7 +173,11 @@ fn handle_wildcard(
 impl RadixTree {
     #[inline(always)]
     fn decode_route_key(stored: u16) -> u16 {
-        if stored > 0 { stored - 1 } else { 0 }
+        if stored > 0 {
+            stored - 1
+        } else {
+            0
+        }
     }
 
     #[inline(always)]
@@ -171,7 +195,9 @@ impl RadixTree {
         method: HttpMethod,
         s: &str,
         i: usize,
-        parameter_offsets: &mut SmallVec<[(String, (usize, usize)); INITIAL_PARAMETER_OFFSETS_CAPACITY]>,
+        parameter_offsets: &mut SmallVec<
+            [(String, (usize, usize)); INITIAL_PARAMETER_OFFSETS_CAPACITY],
+        >,
     ) -> Option<super::super::RouteMatchResult> {
         let current_i = self.skip_slashes(s, i);
 
@@ -180,10 +206,10 @@ impl RadixTree {
             if !rem.starts_with(edge.as_str()) {
                 return None;
             }
-            
+
             let next_i = current_i + edge.len();
             if let Some(child) = &node.fused_child {
-                 return self.find_from(child, method, s, next_i, parameter_offsets);
+                return self.find_from(child, method, s, next_i, parameter_offsets);
             }
             return None;
         }
@@ -198,12 +224,16 @@ impl RadixTree {
 
         if let Some(next_node) = node.get_static_child(seg, self.interner.get(seg)) {
             prefetch_node(next_node);
-            if let Some(result) = self.find_from(next_node, method, s, next_slash, parameter_offsets) {
+            if let Some(result) =
+                self.find_from(next_node, method, s, next_slash, parameter_offsets)
+            {
                 return Some(result);
             }
         }
-        
-        if let Some(result) = find_pattern_child(self, node, method, s, seg, start, parameter_offsets) {
+
+        if let Some(result) =
+            find_pattern_child(self, node, method, s, seg, start, parameter_offsets)
+        {
             return Some(result);
         }
 
@@ -212,7 +242,6 @@ impl RadixTree {
             return Some(result);
         }
         parameter_offsets.truncate(checkpoint);
-
 
         None
     }
@@ -308,7 +337,9 @@ impl RadixTree {
             return None;
         }
 
-        let mut parameter_offsets: SmallVec<[(String, (usize, usize)); INITIAL_PARAMETER_OFFSETS_CAPACITY]> = SmallVec::new();
+        let mut parameter_offsets: SmallVec<
+            [(String, (usize, usize)); INITIAL_PARAMETER_OFFSETS_CAPACITY],
+        > = SmallVec::new();
 
         self.find_from(
             &self.root_node,

@@ -120,7 +120,11 @@ impl RadixTreeNode {
     }
 
     #[inline(always)]
-    pub(super) fn get_static_child(&self, key: &str, key_id: Option<u32>) -> Option<&RadixTreeNode> {
+    pub(super) fn get_static_child(
+        &self,
+        key: &str,
+        key_id: Option<u32>,
+    ) -> Option<&RadixTreeNode> {
         // --- Fast path for sealed/indexed nodes ---
         if !self.static_vals_idx.is_empty() {
             if let Some(id) = key_id {
@@ -145,7 +149,9 @@ impl RadixTreeNode {
                 let mut steps = 0usize;
                 while steps < size {
                     let pos = self.static_hash_table[idx];
-                    if pos == -1 { break; }
+                    if pos == -1 {
+                        break;
+                    }
                     let p = pos as usize;
                     if self.static_keys[p].as_str() == key {
                         return Some(self.static_vals_idx[p].as_ref());
@@ -154,7 +160,7 @@ impl RadixTreeNode {
                     steps += 1;
                 }
             }
-            
+
             if let Some(node) = self.static_children_idx.get(key) {
                 return Some(node.as_ref());
             }

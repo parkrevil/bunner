@@ -1,12 +1,14 @@
-use crate::router::errors::RouterError;
-use crate::router::pattern::{
-    SegmentPart, SegmentPattern, pattern_compatible_policy, pattern_is_pure_static, pattern_score,
+use super::{
+    create_node_box_from_arena_pointer, node::PatternMeta, RadixTree, RadixTreeNode, MAX_ROUTES,
 };
 use crate::r#enum::HttpMethod;
+use crate::router::errors::RouterError;
+use crate::router::interner::Interner;
+use crate::router::pattern::{
+    pattern_compatible_policy, pattern_is_pure_static, pattern_score, SegmentPart, SegmentPattern,
+};
 use hashbrown::HashSet;
 use std::sync::atomic::AtomicU16;
-use super::{RadixTree, RadixTreeNode, create_node_box_from_arena_pointer, node::PatternMeta, MAX_ROUTES};
-use crate::router::interner::Interner;
 
 impl RadixTree {
     pub fn insert(&mut self, method: HttpMethod, path: &str) -> Result<u16, RouterError> {
@@ -37,13 +39,24 @@ impl RadixTree {
         let arena_ptr: *const bumpalo::Bump = &self.arena;
 
         for (i, pat) in parsed_segments.iter().enumerate() {
-            let seg = pat.parts.iter().map(|p| match p {
-                SegmentPart::Literal(s) => s.clone(),
-                SegmentPart::Param { name } => format!(":{}", name),
-            }).collect::<Vec<String>>().join("");
+            let seg = pat
+                .parts
+                .iter()
+                .map(|p| match p {
+                    SegmentPart::Literal(s) => s.clone(),
+                    SegmentPart::Param { name } => format!(":{}", name),
+                })
+                .collect::<Vec<String>>()
+                .join("");
 
             if seg == "*" {
-                return handle_wildcard_insert(current, method, i, parsed_segments.len(), &self.next_route_key);
+                return handle_wildcard_insert(
+                    current,
+                    method,
+                    i,
+                    parsed_segments.len(),
+                    &self.next_route_key,
+                );
             }
 
             if pattern_is_pure_static(pat, &seg) {
@@ -54,7 +67,7 @@ impl RadixTree {
             } else {
                 current = find_or_create_pattern_child(current, pat, arena_ptr)?;
             }
-            
+
             // method mask is delayed to finalize()
             current.set_dirty(true);
         }
@@ -77,13 +90,24 @@ impl RadixTree {
         let arena_ptr: *const bumpalo::Bump = &self.arena;
 
         for (i, pat) in parsed_segments.iter().enumerate() {
-            let seg = pat.parts.iter().map(|p| match p {
-                SegmentPart::Literal(s) => s.clone(),
-                SegmentPart::Param { name } => format!(":{}", name),
-            }).collect::<Vec<String>>().join("");
+            let seg = pat
+                .parts
+                .iter()
+                .map(|p| match p {
+                    SegmentPart::Literal(s) => s.clone(),
+                    SegmentPart::Param { name } => format!(":{}", name),
+                })
+                .collect::<Vec<String>>()
+                .join("");
 
             if seg == "*" {
-                return handle_wildcard_insert_preassigned(current, method, i, parsed_segments.len(), assigned_key);
+                return handle_wildcard_insert_preassigned(
+                    current,
+                    method,
+                    i,
+                    parsed_segments.len(),
+                    assigned_key,
+                );
             }
 
             if pattern_is_pure_static(pat, &seg) {
@@ -101,7 +125,10 @@ impl RadixTree {
         assign_route_key_preassigned(current, method, assigned_key)
     }
 
-    pub(super) fn prepare_path_segments(&self, path: &str) -> Result<Vec<SegmentPattern>, RouterError> {
+    pub(super) fn prepare_path_segments(
+        &self,
+        path: &str,
+    ) -> Result<Vec<SegmentPattern>, RouterError> {
         prepare_path_segments_standalone(path)
     }
 }
@@ -141,15 +168,26 @@ fn find_or_create_pattern_child<'a>(
     }
 
     let score = pattern_score(pat);
-    let insert_pos = node.pattern_meta.iter().position(|&meta| meta.score < score).unwrap_or(node.patterns.len());
-    
+    let insert_pos = node
+        .pattern_meta
+        .iter()
+        .position(|&meta| meta.score < score)
+        .unwrap_or(node.patterns.len());
+
     node.patterns.insert(insert_pos, pat.clone());
-    node.pattern_nodes.insert(insert_pos, create_node_box_from_arena_pointer(arena_ptr));
+    node.pattern_nodes
+        .insert(insert_pos, create_node_box_from_arena_pointer(arena_ptr));
 
     Ok(node.pattern_nodes.get_mut(insert_pos).unwrap().as_mut())
 }
 
-fn handle_wildcard_insert(node: &mut RadixTreeNode, method: HttpMethod, index: usize, total_segments: usize, next_route_key: &AtomicU16) -> Result<u16, RouterError> {
+fn handle_wildcard_insert(
+    node: &mut RadixTreeNode,
+    method: HttpMethod,
+    index: usize,
+    total_segments: usize,
+    next_route_key: &AtomicU16,
+) -> Result<u16, RouterError> {
     if index != total_segments - 1 {
         return Err(RouterError::RouteWildcardSegmentNotAtEnd);
     }
@@ -159,7 +197,7 @@ fn handle_wildcard_insert(node: &mut RadixTreeNode, method: HttpMethod, index: u
     }
     let key = next_route_key.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     node.wildcard_routes[method_idx] = key + 1;
-    
+
     // method mask is delayed to finalize()
     node.set_dirty(true);
 
@@ -181,13 +219,19 @@ fn handle_wildcard_insert_preassigned(
         return Err(RouterError::RouteWildcardAlreadyExistsForMethod);
     }
     let k = assigned_key;
-    if k == 0 { return Err(RouterError::MaxRoutesExceeded); }
+    if k == 0 {
+        return Err(RouterError::MaxRoutesExceeded);
+    }
     node.wildcard_routes[method_idx] = k + 1;
     node.set_dirty(true);
     Ok(k)
 }
 
-fn assign_route_key(node: &mut RadixTreeNode, method: HttpMethod, next_route_key: &AtomicU16) -> Result<u16, RouterError> {
+fn assign_route_key(
+    node: &mut RadixTreeNode,
+    method: HttpMethod,
+    next_route_key: &AtomicU16,
+) -> Result<u16, RouterError> {
     let method_idx = method as usize;
     if node.routes[method_idx] != 0 {
         return Err(RouterError::RouteConflictOnDuplicatePath);
@@ -198,7 +242,7 @@ fn assign_route_key(node: &mut RadixTreeNode, method: HttpMethod, next_route_key
     }
     let key = next_route_key.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     node.routes[method_idx] = key + 1;
-    
+
     let current_mask = node.method_mask();
     node.set_method_mask(current_mask | (1 << method_idx));
     node.set_dirty(true);
@@ -215,7 +259,9 @@ fn assign_route_key_preassigned(
     if node.routes[method_idx] != 0 {
         return Err(RouterError::RouteConflictOnDuplicatePath);
     }
-    if assigned_key == 0 { return Err(RouterError::MaxRoutesExceeded); }
+    if assigned_key == 0 {
+        return Err(RouterError::MaxRoutesExceeded);
+    }
     node.routes[method_idx] = assigned_key + 1;
     node.set_dirty(true);
     Ok(assigned_key)
@@ -229,19 +275,29 @@ impl SegmentPart {
 }
 
 // Thread-safe standalone parser for bulk preprocess
-pub(super) fn prepare_path_segments_standalone(path: &str) -> Result<Vec<SegmentPattern>, RouterError> {
-    if path.is_empty() { return Err(RouterError::RoutePathEmpty); }
-    if !path.is_ascii() { return Err(RouterError::RoutePathNotAscii); }
+pub(super) fn prepare_path_segments_standalone(
+    path: &str,
+) -> Result<Vec<SegmentPattern>, RouterError> {
+    if path.is_empty() {
+        return Err(RouterError::RoutePathEmpty);
+    }
+    if !path.is_ascii() {
+        return Err(RouterError::RoutePathNotAscii);
+    }
 
     let norm = crate::router::path::normalize_path(path);
     if !crate::router::path::is_path_character_allowed(&norm) {
         return Err(RouterError::RoutePathContainsDisallowedCharacters);
     }
 
-    if norm == "/" { return Ok(Vec::new()); }
+    if norm == "/" {
+        return Ok(Vec::new());
+    }
 
     let segments: Vec<&str> = norm.split('/').filter(|s| !s.is_empty()).collect();
-    if segments.is_empty() { return Err(RouterError::RoutePathSyntaxInvalid); }
+    if segments.is_empty() {
+        return Err(RouterError::RoutePathSyntaxInvalid);
+    }
 
     let mut parsed_segments = Vec::with_capacity(segments.len());
     let mut seen_params = HashSet::new();

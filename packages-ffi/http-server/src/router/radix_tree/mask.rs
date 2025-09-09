@@ -34,5 +34,3 @@ pub(super) fn compute_mask(n: &mut RadixTreeNode) -> u8 {
 
     m
 }
-
-

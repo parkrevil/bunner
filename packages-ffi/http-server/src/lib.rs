@@ -10,9 +10,14 @@ use std::{
 };
 
 use crate::errors::HttpServerError;
-use crate::structure::AddRouteResult;
+use crate::structure::{
+    AddRouteResult, FfiError, HandleRequestError, HandleRequestPayload, HandleRequestResult,
+};
 use crate::util::make_ffi_error_result;
-use crate::{r#enum::HttpMethod, util::make_ffi_result};
+use crate::{
+    r#enum::HttpMethod,
+    util::{make_ffi_result, serialize_to_cstring},
+};
 
 pub type HttpServerHandle = *mut HttpServer;
 pub struct RouterPtr(*mut router::Router);
@@ -135,52 +140,63 @@ pub unsafe extern "C" fn add_routes(
 /// - The `request_json` pointer must point to a valid, null-terminated C string.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn handle_request(
-    _handle: HttpServerHandle,
-    _request_data: *const c_char,
-) -> *mut c_char {
-    /*     let http_server = unsafe { &*handle };
-    let request_str = match unsafe { CStr::from_ptr(request_data).to_str() } {
-        Ok(s) => s,
-        Err(e) => {
-            return make_ffi_error_result(FfiError {
-                code: HttpServerError::InvalidJsonString.code(),
-                message: Some(e.to_string()),
-            });
-        }
-    };
-
-    let request: Request = match serde_json::from_str(request_str) {
-        Ok(req) => req,
-        Err(_) => {
-            return make_ffi_error_result(FfiError {
-                code: HttpServerError::InvalidJsonString.code(),
-                message: Some("Invalid JSON format".to_string()),
-            });
-        }
-    };
-
-    let method = request.http_method.parse().unwrap_or(HttpMethod::Get);
-    let path_cstring = CString::new(request.url).unwrap();
-    let result_ptr = router::find(http_server.router, method, path_cstring.as_ptr());
-
-    if result_ptr.is_null() {
-        return make_ffi_error_result(FfiError {
-            code: HttpServerError::RouteNotFound.code(),
-            message: Some("Route not found".to_string()),
-        });
+    handle: HttpServerHandle,
+    request_ptr: *const c_char,
+    cb: extern "C" fn(*mut c_char),
+) {
+    // Always call callback exactly once.
+    if handle.is_null() {
+        let err = HandleRequestError {
+            request_id: String::new(),
+            error: FfiError {
+                code: HttpServerError::HandleIsNull.code(),
+                message: Some("Handle is null".to_string()),
+            },
+        };
+        cb(serialize_to_cstring(&err));
+        return;
     }
 
-    let result_box: Box<FindRouteResult> = unsafe { Box::from_raw(result_ptr) };
-
-    let success_result = HandleRequestResult {
-        key: result_box.key,
-        params: None, // TODO: Implement params
-        error: result_box.error,
-        error_message: None,
+    let request_str = match unsafe { CStr::from_ptr(request_ptr).to_str() } {
+        Ok(s) => s,
+        Err(e) => {
+            let err = HandleRequestError {
+                request_id: String::new(),
+                error: FfiError {
+                    code: HttpServerError::InvalidJsonString.code(),
+                    message: Some(e.to_string()),
+                },
+            };
+            cb(serialize_to_cstring(&err));
+            return;
+        }
     };
 
-    make_ffi_result(Some(success_result), None) */
-    make_ffi_error_result(HttpServerError::InvalidJsonString, None)
+    let payload: HandleRequestPayload = match serde_json::from_str(request_str) {
+        Ok(p) => p,
+        Err(e) => {
+            let err = HandleRequestError {
+                request_id: String::new(),
+                error: FfiError {
+                    code: HttpServerError::InvalidJsonString.code(),
+                    message: Some(e.to_string()),
+                },
+            };
+            cb(serialize_to_cstring(&err));
+            return;
+        }
+    };
+
+    // Minimal echo implementation (routing logic will be added with thread pool in next steps)
+    let ok = HandleRequestResult {
+        request_id: payload.request_id,
+        route_key: 0,
+        params: None,
+        query_params: None,
+        body: None,
+        response: None,
+    };
+    cb(serialize_to_cstring(&ok));
 }
 
 /// Seals the router, optimizing it for fast lookups. No routes can be added after sealing.

@@ -176,7 +176,11 @@ pub fn match_segment(seg: &str, seg_l: &str, pat: &SegmentPattern) -> Option<Cap
         idx += 1;
     }
 
-    if i == seg.len() { Some(out) } else { None }
+    if i == seg.len() {
+        Some(out)
+    } else {
+        None
+    }
 }
 
 pub(crate) fn parse_segment(seg: &str) -> Result<SegmentPattern, RouterError> {
