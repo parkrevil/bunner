@@ -5,7 +5,7 @@ import type { Pointer } from 'bun:ffi';
  * @description The base symbols for a Rust core
  */
 export interface BaseRustSymbols {
-  init: () => Pointer | null;
+  init: (...args: any[]) => Pointer | null;
   destroy: (handle: Pointer) => void;
   free_string: (ptr: Pointer) => void;
 }

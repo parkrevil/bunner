@@ -1,5 +1,5 @@
 import { BaseRustCore, encodeCString, resolveRustLibPath } from '@bunner/core';
-import { FFIType } from 'bun:ffi';
+import { FFIType, type FFIFunction } from 'bun:ffi';
 
 import type { HttpMethodValue } from '../types';
 
@@ -25,7 +25,7 @@ export class RustCore extends BaseRustCore<
   }
 
   override init() {
-    const api: Record<keyof HttpServerSymbols, any> = {
+    const api: Record<keyof HttpServerSymbols, FFIFunction> = {
       // BaseRustSymbols
       free_string: { args: [FFIType.pointer], returns: FFIType.void },
       init: { args: [], returns: FFIType.pointer },

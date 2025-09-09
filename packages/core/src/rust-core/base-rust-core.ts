@@ -1,4 +1,4 @@
-import { dlopen, type Pointer } from 'bun:ffi';
+import { dlopen, type FFIFunction, type Pointer } from 'bun:ffi';
 
 import { stringPointerToJson } from '../helpers';
 
@@ -22,7 +22,7 @@ export abstract class BaseRustCore<
    * Initialize the Rust core
    * @description Initialize the Rust core
    */
-  init(libPath: string, api: Record<keyof T, any>) {
+  init(libPath: string, api: Record<keyof T, FFIFunction>) {
     const lib = dlopen(libPath, api);
 
     if (!lib.symbols) {
