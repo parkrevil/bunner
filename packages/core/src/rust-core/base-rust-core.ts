@@ -1,4 +1,4 @@
-import type { Pointer } from 'bun:ffi';
+import { dlopen, type Pointer } from 'bun:ffi';
 
 import { stringPointerToJson } from '../helpers';
 
@@ -14,18 +14,27 @@ export abstract class BaseRustCore<
   protected handle: Pointer;
   protected errorCodes: E;
 
-  constructor(symbols: any, close: () => void, errorCodes: E) {
-    if (!symbols) {
+  constructor(errorCodes: E) {
+    this.errorCodes = errorCodes;
+  }
+
+  /**
+   * Initialize the Rust core
+   * @description Initialize the Rust core
+   */
+  init(libPath: string, api: Record<keyof T, any>) {
+    const lib = dlopen(libPath, api);
+
+    if (!lib.symbols) {
       throw new Error('Failed to initialize RustCore');
     }
 
-    this.symbols = symbols;
-    this.close = close;
-    this.errorCodes = errorCodes;
+    this.symbols = lib.symbols as T;
+    this.close = () => lib.close();
 
     const handle = this.symbols.init();
 
-    if (handle === null) {
+    if (!handle) {
       throw new Error('Failed to initialize Rust core');
     }
 
@@ -45,6 +54,7 @@ export abstract class BaseRustCore<
     this.close();
 
     this.handle = undefined as any;
+    this.close = undefined as any;
   }
 
   /**

@@ -1,5 +1,5 @@
 import { BaseRustCore, encodeCString, resolveRustLibPath } from '@bunner/core';
-import { dlopen, FFIType } from 'bun:ffi';
+import { FFIType } from 'bun:ffi';
 
 import type { HttpMethodValue } from '../types';
 
@@ -21,33 +21,29 @@ export class RustCore extends BaseRustCore<
    * @returns
    */
   constructor() {
-    try {
-      const api: Record<keyof HttpServerSymbols, any> = {
-        // BaseRustSymbols
-        free_string: { args: [FFIType.pointer], returns: FFIType.void },
-        init: { args: [], returns: FFIType.pointer },
-        destroy: { args: [FFIType.pointer], returns: FFIType.void },
+    super(HttpServerErrorCodes);
+  }
 
-        // HttpServerSymbols
-        add_route: {
-          args: [FFIType.pointer, FFIType.u8, FFIType.cstring],
-          returns: FFIType.pointer,
-        },
-        handle_request: {
-          args: [FFIType.pointer, FFIType.cstring],
-          returns: FFIType.pointer,
-        },
-        router_seal: { args: [FFIType.pointer], returns: FFIType.void },
-      };
-      const lib = dlopen(
-        resolveRustLibPath('bunner_http_server', import.meta.dir),
-        api,
-      );
+  override init() {
+    const api: Record<keyof HttpServerSymbols, any> = {
+      // BaseRustSymbols
+      free_string: { args: [FFIType.pointer], returns: FFIType.void },
+      init: { args: [], returns: FFIType.pointer },
+      destroy: { args: [FFIType.pointer], returns: FFIType.void },
 
-      super(lib.symbols, () => lib.close(), HttpServerErrorCodes);
-    } catch (e: any) {
-      throw new Error(`Failed to initialize RustCore: ${e.message}`);
-    }
+      // HttpServerSymbols
+      add_route: {
+        args: [FFIType.pointer, FFIType.u8, FFIType.cstring],
+        returns: FFIType.pointer,
+      },
+      handle_request: {
+        args: [FFIType.pointer, FFIType.cstring],
+        returns: FFIType.pointer,
+      },
+      router_seal: { args: [FFIType.pointer], returns: FFIType.void },
+    };
+
+    super.init(resolveRustLibPath('bunner_http_server', import.meta.dir), api);
   }
 
   /**
