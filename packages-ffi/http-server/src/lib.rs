@@ -7,6 +7,7 @@ pub mod util;
 use std::{
     ffi::{CStr, CString},
     os::raw::c_char,
+    sync::Arc,
 };
 
 use crate::errors::HttpServerError;
@@ -24,11 +25,10 @@ use thread_pool::submit_job;
 use url::Url;
 
 pub type HttpServerHandle = *mut HttpServer;
-pub struct RouterPtr(*mut router::Router);
 
 #[repr(C)]
 pub struct HttpServer {
-    router: RouterPtr,
+    router: Arc<parking_lot::RwLock<router::Router>>,
 }
 
 #[inline(always)]
@@ -44,9 +44,8 @@ fn callback_with_request_id_ptr(
 
 #[unsafe(no_mangle)]
 pub extern "C" fn init() -> HttpServerHandle {
-    let router = Box::into_raw(Box::new(router::Router::new(None)));
     let server = Box::new(HttpServer {
-        router: RouterPtr(router),
+        router: Arc::new(parking_lot::RwLock::new(router::Router::new(None))),
     });
 
     Box::into_raw(server)
@@ -60,11 +59,6 @@ pub extern "C" fn init() -> HttpServerHandle {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn destroy(handle: HttpServerHandle) {
     let http_server = unsafe { Box::from_raw(handle) };
-
-    if !http_server.router.0.is_null() {
-        let _ = unsafe { Box::from_raw(http_server.router.0) };
-    }
-
     drop(http_server);
 }
 
@@ -88,7 +82,8 @@ pub unsafe extern "C" fn add_route(
         Err(e) => return make_ffi_error_result(e, None),
     };
     let http_server = unsafe { &*handle };
-    let router_mut = unsafe { &mut *http_server.router.0 };
+    let mut guard = http_server.router.write();
+    let router_mut = &mut *guard;
     let path_str = unsafe { CStr::from_ptr(path) }.to_string_lossy();
 
     match router_mut.add(http_method, &path_str) {
@@ -140,7 +135,8 @@ pub unsafe extern "C" fn add_routes(
         };
 
     let http_server = unsafe { &*handle };
-    let router_mut = unsafe { &mut *http_server.router.0 };
+    let mut guard = http_server.router.write();
+    let router_mut = &mut *guard;
 
     match router_mut.add_bulk(routes) {
         Ok(r) => make_ffi_result(r),
@@ -207,125 +203,122 @@ pub unsafe extern "C" fn handle_request(
 
     // Own the request_id for async job
     let request_id_owned = request_id_str.to_owned();
-    let router_ptr = (*handle).router.0;
-    let method_u8 = payload.http_method;
-    let url_str = payload.url.clone();
-    let headers = payload.headers.clone();
-    let body_str = payload.body.clone();
+    // Parse URL
+    let parsed_url = match Url::parse(payload.url.as_str()) {
+        Ok(u) => u,
+        Err(_) => {
+            callback_with_request_id_ptr(
+                cb,
+                &request_id_owned,
+                make_ffi_error_result(HttpServerError::InvalidUrl, None),
+            );
+            return;
+        }
+    };
 
-    submit_job(Box::new(move || {
-        // Parse URL
-        let parsed_url = match Url::parse(&url_str) {
-            Ok(u) => u,
+    let path = parsed_url.path().to_string();
+    let raw_query = parsed_url.query().map(|s| s.to_string());
+
+    // Query params via serde_qs
+    let query_params: Option<JsonValue> = match raw_query {
+        Some(q) => match serde_qs::from_str::<JsonValue>(&q) {
+            Ok(v) => Some(v),
             Err(_) => {
                 callback_with_request_id_ptr(
                     cb,
                     &request_id_owned,
-                    make_ffi_error_result(HttpServerError::InvalidUrl, None),
+                    make_ffi_error_result(HttpServerError::InvalidQueryString, None),
                 );
                 return;
             }
-        };
+        },
+        None => None,
+    };
 
-        let path = parsed_url.path().to_string();
-        let raw_query = parsed_url.query().map(|s| s.to_string());
+    // Cookies (not returned in result yet, parsed for future use)
+    let headers = payload.headers; // take ownership
+    let _cookies: Option<HashMap<String, String>> = headers.get("cookie").map(|cookie_header| {
+        Cookie::split_parse(cookie_header)
+            .filter_map(|c| c.ok())
+            .map(|c| (c.name().to_string(), c.value().to_string()))
+            .collect::<HashMap<_, _>>()
+    });
 
-        // Query params via serde_qs
-        let query_params: Option<JsonValue> = match raw_query {
-            Some(q) => match serde_qs::from_str::<JsonValue>(&q) {
-                Ok(v) => Some(v),
-                Err(_) => {
-                    callback_with_request_id_ptr(
-                        cb,
-                        &request_id_owned,
-                        make_ffi_error_result(HttpServerError::InvalidQueryString, None),
-                    );
-                    return;
-                }
-            },
-            None => None,
-        };
+    // Protocol/IP derivation (not returned yet)
+    let _protocol = headers
+        .get("x-forwarded-proto")
+        .or_else(|| headers.get("x-forwarded-protocol"))
+        .cloned()
+        .unwrap_or_else(|| "http".to_string());
+    let _ip = headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.split(',').next().map(|s| s.trim().to_string()))
+        .or_else(|| headers.get("x-real-ip").cloned());
 
-        // Cookies (not returned in result yet, parsed for future use)
-        let _cookies: Option<HashMap<String, String>> =
-            headers.get("cookie").map(|cookie_header| {
-                Cookie::split_parse(cookie_header)
-                    .filter_map(|c| c.ok())
-                    .map(|c| (c.name().to_string(), c.value().to_string()))
-                    .collect::<HashMap<_, _>>()
-            });
+    // Body JSON (optional)
+    let body_json: Option<JsonValue> = match payload.body {
+        Some(ref s) => match serde_json::from_str::<JsonValue>(s) {
+            Ok(v) => Some(v),
+            Err(_) => None,
+        },
+        None => None,
+    };
 
-        // Protocol/IP derivation (not returned yet)
-        let _protocol = headers
-            .get("x-forwarded-proto")
-            .or_else(|| headers.get("x-forwarded-protocol"))
-            .cloned()
-            .unwrap_or_else(|| "http".to_string());
-        let _ip = headers
-            .get("x-forwarded-for")
-            .and_then(|v| v.split(',').next().map(|s| s.trim().to_string()))
-            .or_else(|| headers.get("x-real-ip").cloned());
+    // Method
+    let method = match HttpMethod::from_u8(payload.http_method) {
+        Ok(m) => m,
+        Err(e) => {
+            callback_with_request_id_ptr(cb, &request_id_owned, make_ffi_error_result(e, None));
+            return;
+        }
+    };
 
-        // Body JSON (optional)
-        let body_json: Option<JsonValue> = match body_str {
-            Some(s) => match serde_json::from_str::<JsonValue>(&s) {
-                Ok(v) => Some(v),
-                Err(_) => None,
-            },
-            None => None,
-        };
-
-        // Method
-        let method = match HttpMethod::from_u8(method_u8) {
-            Ok(m) => m,
-            Err(e) => {
-                callback_with_request_id_ptr(cb, &request_id_owned, make_ffi_error_result(e, None));
-                return;
+    // Route match (read-only) on current thread
+    let http_server = &*handle;
+    let guard = http_server.router.read();
+    let find_result = guard.find(method, &path);
+    let ok = match find_result {
+        Ok((route_key, param_pairs)) => {
+            let mut map = serde_json::Map::new();
+            for (name, value) in param_pairs {
+                map.insert(name, JsonValue::String(value));
             }
-        };
+            let params_json = JsonValue::Object(map);
+            HandleRequestResult {
+                route_key,
+                params: if params_json
+                    .as_object()
+                    .map(|m| m.is_empty())
+                    .unwrap_or(true)
+                {
+                    None
+                } else {
+                    Some(params_json)
+                },
+                query_params,
+                body: body_json,
+                response: None,
+            }
+        }
+        Err(e @ crate::router::RouterError::MatchNotFound)
+        | Err(e @ crate::router::RouterError::MatchPathEmpty)
+        | Err(e @ crate::router::RouterError::MatchPathNotAscii)
+        | Err(e @ crate::router::RouterError::MatchPathContainsDisallowedCharacters) => {
+            callback_with_request_id_ptr(cb, &request_id_owned, make_ffi_error_result(e, None));
+            return;
+        }
+        Err(e) => {
+            callback_with_request_id_ptr(
+                cb,
+                &request_id_owned,
+                make_ffi_error_result(HttpServerError::ServerError, Some(format!("{:?}", e))),
+            );
+            return;
+        }
+    };
 
-        // Route match (read-only)
-        let find_result = unsafe { &*router_ptr }.find(method, &path);
-        let ok = match find_result {
-            Ok((route_key, param_pairs)) => {
-                let mut map = serde_json::Map::new();
-                for (name, value) in param_pairs {
-                    map.insert(name, JsonValue::String(value));
-                }
-                let params_json = JsonValue::Object(map);
-                HandleRequestResult {
-                    route_key,
-                    params: if params_json
-                        .as_object()
-                        .map(|m| m.is_empty())
-                        .unwrap_or(true)
-                    {
-                        None
-                    } else {
-                        Some(params_json)
-                    },
-                    query_params,
-                    body: body_json,
-                    response: None,
-                }
-            }
-            Err(e @ crate::router::RouterError::MatchNotFound)
-            | Err(e @ crate::router::RouterError::MatchPathEmpty)
-            | Err(e @ crate::router::RouterError::MatchPathNotAscii)
-            | Err(e @ crate::router::RouterError::MatchPathContainsDisallowedCharacters) => {
-                callback_with_request_id_ptr(cb, &request_id_owned, make_ffi_error_result(e, None));
-                return;
-            }
-            Err(e) => {
-                callback_with_request_id_ptr(
-                    cb,
-                    &request_id_owned,
-                    make_ffi_error_result(HttpServerError::ServerError, Some(format!("{:?}", e))),
-                );
-                return;
-            }
-        };
-
+    // Dispatch only the callback off-thread (no Router captured)
+    submit_job(Box::new(move || {
         callback_with_request_id_ptr(cb, &request_id_owned, make_ffi_result(&ok));
     }));
 }
@@ -337,8 +330,8 @@ pub unsafe extern "C" fn handle_request(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn router_seal(handle: HttpServerHandle) {
     let http_server = unsafe { &*handle };
-
-    unsafe { &mut *http_server.router.0 }.finalize()
+    let mut guard = http_server.router.write();
+    guard.finalize()
 }
 
 /// Frees the memory for a C string that was allocated by Rust.
