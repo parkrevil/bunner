@@ -29,3 +29,9 @@ impl RouterError {
         self as u16
     }
 }
+
+impl From<RouterError> for u16 {
+    fn from(error: RouterError) -> u16 {
+        error as u16
+    }
+}

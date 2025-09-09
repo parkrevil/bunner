@@ -26,6 +26,7 @@ export class BunnerHttpServer extends BunnerApplication {
    */
   override async init() {
     await super.init();
+
     this.router.register();
   }
 

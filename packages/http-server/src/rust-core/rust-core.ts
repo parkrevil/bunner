@@ -5,7 +5,7 @@ import type { HttpMethodValue } from '../types';
 
 import { HttpServerErrorCodes } from './constants';
 import type {
-  AddRoutesResult,
+  AddRouteResult,
   HandleRequestParams,
   HandleRequestResult,
   HttpServerSymbols,
@@ -22,25 +22,26 @@ export class RustCore extends BaseRustCore<
    */
   constructor() {
     try {
+      const api: Record<keyof HttpServerSymbols, any> = {
+        // BaseRustSymbols
+        free_string: { args: [FFIType.pointer], returns: FFIType.void },
+        init: { args: [], returns: FFIType.pointer },
+        destroy: { args: [FFIType.pointer], returns: FFIType.void },
+
+        // HttpServerSymbols
+        add_route: {
+          args: [FFIType.pointer, FFIType.u8, FFIType.cstring],
+          returns: FFIType.pointer,
+        },
+        handle_request: {
+          args: [FFIType.pointer, FFIType.cstring],
+          returns: FFIType.pointer,
+        },
+        router_seal: { args: [FFIType.pointer], returns: FFIType.void },
+      };
       const lib = dlopen(
         resolveRustLibPath('bunner_http_server', import.meta.dir),
-        {
-          // HTTP Server
-          init: { args: [], returns: FFIType.pointer },
-          destroy: { args: [FFIType.pointer], returns: FFIType.void },
-
-          // Router
-          router_add: {
-            args: [FFIType.pointer, FFIType.u8, FFIType.cstring],
-            returns: FFIType.pointer,
-          },
-          handle_request: {
-            args: [FFIType.u64, FFIType.cstring],
-            returns: FFIType.ptr,
-          },
-          router_seal: { args: [FFIType.pointer], returns: FFIType.void },
-          free_string: { args: [FFIType.pointer], returns: FFIType.void },
-        },
+        api,
       );
 
       super(lib.symbols, () => lib.close(), HttpServerErrorCodes);
@@ -57,8 +58,8 @@ export class RustCore extends BaseRustCore<
    * @returns
    */
   addRoute(method: HttpMethodValue, path: string) {
-    return this.ensure<AddRoutesResult>(
-      this.symbols.router_add(
+    return this.ensure<AddRouteResult>(
+      this.symbols.add_route(
         this.handle,
         method as FFIType.u8,
         encodeCString(path),

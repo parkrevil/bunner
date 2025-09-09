@@ -1,32 +1,30 @@
+import type { BaseRustSymbols } from '@bunner/core';
 import type { Server } from 'bun';
 import type { FFIType, Pointer } from 'bun:ffi';
 
 import type { HttpMethodValue } from '../types';
 
-export interface HttpServerSymbols {
-  init: () => Pointer | null;
-  destroy: (handle: Pointer) => void;
+export interface HttpServerSymbols extends BaseRustSymbols {
   handle_request: (handle: Pointer, requestJson: Uint8Array) => Pointer | null;
-  router_add: (
+  add_route: (
     handle: Pointer,
     method: FFIType.u8,
     path: Uint8Array,
   ) => Pointer | null;
   router_seal: (handle: Pointer) => void;
-  free_string: (ptr: Pointer) => void;
 }
 
 /**
  * Add Route Result
  * @description The result interface for Add Route
  */
-export interface AddRoutResult {
+export interface AddRouteResult {
   key: number;
 }
 
 /**
  * Add Routes Result
- * @description The result interface for Add Routes
+ * @description The result value when multiple routes are added at once (bulk insert)
  */
 export interface AddRoutesResult {
   keys: number[];
@@ -52,11 +50,10 @@ export interface HandleRequestResult {
   params: Record<string, any> | null;
   queryParams: Record<string, any> | null;
   body: Record<string, any> | null;
-  setted: {
+  response: {
     httpStatus: number;
     headers: Record<string, any> | null;
-    body: string | null;
-    responseImmediately: boolean;
+    body: any;
   } | null;
 }
 

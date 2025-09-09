@@ -12,3 +12,9 @@ impl HttpServerError {
         self as u16
     }
 }
+
+impl From<HttpServerError> for u16 {
+    fn from(error: HttpServerError) -> u16 {
+        error as u16
+    }
+}

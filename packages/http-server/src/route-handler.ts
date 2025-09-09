@@ -1,5 +1,4 @@
 import type { Container } from '@bunner/core';
-import type { Server } from 'bun';
 
 import { HTTP_METHOD } from './constants';
 import {
@@ -9,7 +8,6 @@ import {
 } from './decorators';
 import { RustCore } from './rust-core';
 import type { HandlerFunction } from './types';
-import { BunnerRequest } from './bunner-request';
 
 export class RouteHandler {
   private container: Container;
@@ -64,10 +62,10 @@ export class RouteHandler {
               .join('/');
 
           try {
-            const routeKey = this.rustCore.addRoute(httpMethod, fullPath);
+            const { key } = this.rustCore.addRoute(httpMethod, fullPath);
 
             this.handlers.set(
-              routeKey,
+              key,
               controllerInstance[handlerName].bind(controllerInstance),
             );
           } catch (e) {
@@ -94,11 +92,17 @@ export class RouteHandler {
     try {
       let body: string | null = null;
 
-      if (!(httpMethod === HTTP_METHOD.GET || httpMethod === HTTP_METHOD.HEAD || httpMethod === HTTP_METHOD.OPTIONS)) {
+      if (
+        !(
+          httpMethod === HTTP_METHOD.GET ||
+          httpMethod === HTTP_METHOD.HEAD ||
+          httpMethod === HTTP_METHOD.OPTIONS
+        )
+      ) {
         body = await rawReq.text();
       }
 
-      const handleResult = await this.rustCore.handleRequest({
+      const handleResult = this.rustCore.handleRequest({
         httpMethod,
         url: rawReq.url,
         headers: {},
@@ -109,7 +113,7 @@ export class RouteHandler {
       if (!handler) {
         return new Response('Handler not found for route key', { status: 500 });
       }
-/* 
+      /* 
       const req = new BunnerRequest(rawReq, handleResult);
       const res = new BunnerResponse();
       const handlerResult = await handler(req, res);

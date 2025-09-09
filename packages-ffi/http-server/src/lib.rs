@@ -9,10 +9,10 @@ use std::{
     os::raw::c_char,
 };
 
-use crate::r#enum::HttpMethod;
+use crate::{r#enum::HttpMethod, util::make_ffi_result};
 use crate::errors::HttpServerError;
-use crate::structure::{AddRouteResult, FfiError};
-use crate::util::{make_ffi_error_result, make_ffi_result};
+use crate::structure::{AddRouteResult};
+use crate::util::{make_ffi_error_result};
 
 pub type HttpServerHandle = *mut HttpServer;
 pub struct RouterPtr(*mut router::Router);
@@ -54,40 +54,35 @@ pub unsafe extern "C" fn destroy(handle: HttpServerHandle) {
 /// - The `handle` pointer must be a valid pointer returned by `init`.
 /// - The `path` pointer must point to a valid, null-terminated C string.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn router_add(
+pub unsafe extern "C" fn add_route(
     handle: HttpServerHandle,
     method_num: u8,
     path: *const c_char,
 ) -> *mut c_char {
     if handle.is_null() {
-        return make_ffi_error_result(FfiError {
-            code: HttpServerError::HandleIsNull.code(),
-            message: None,
-        });
+        return make_ffi_error_result(HttpServerError::HandleIsNull, None);
     }
 
     let method_option = HttpMethod::from_u8(method_num);
 
     if method_option.is_none() {
-        return make_ffi_error_result(FfiError {
-            code: HttpServerError::InvalidHttpMethod.code(),
-            message: None,
-        });
+        return make_ffi_error_result(HttpServerError::InvalidHttpMethod.code(), None);
     }
 
     let http_server = unsafe { &*handle };
     let router_mut = unsafe { &mut *http_server.router.0 };
     let method = method_option.unwrap();
     let path_str = unsafe { CStr::from_ptr(path) }.to_string_lossy();
-    let result = match router_mut.add(method, &path_str) {
-        Ok(k) => AddRouteResult { key: k, error: 0 },
-        Err(e) => AddRouteResult {
-            key: 0,
-            error: e as u32,
-        },
-    };
+    match router_mut.add(method, &path_str) {
+        Ok(k) => {
+            let result = AddRouteResult { key: k };
 
-    make_ffi_result(Some(result), None)
+            make_ffi_result(&result)
+        },
+        Err(e) => {
+            make_ffi_error_result(e, None)
+        },
+    }
 }
 
 /// Finds a route that matches the given method and path from a serialized JSON request.
@@ -142,10 +137,7 @@ pub unsafe extern "C" fn handle_request(
     };
 
     make_ffi_result(Some(success_result), None) */
-    make_ffi_error_result(FfiError {
-        code: HttpServerError::HandleIsNull.code(),
-        message: Some("Route not found".to_string()),
-    })
+    make_ffi_error_result(HttpServerError::InvalidJsonString, None)
 }
 
 /// Seals the router, optimizing it for fast lookups. No routes can be added after sealing.

@@ -20,7 +20,6 @@ pub struct Request<'a> {
 #[derive(Serialize)]
 pub struct AddRouteResult {
     pub key: u16,
-    pub error: u32,
 }
 
 #[derive(Serialize)]
@@ -35,10 +34,4 @@ pub struct HandleRequestResult {
 pub struct FfiError {
     pub code: u16,
     pub message: Option<String>,
-}
-
-#[derive(Serialize)]
-pub struct FfiResult<T> {
-    pub data: Option<T>,
-    pub error: Option<FfiError>,
 }
