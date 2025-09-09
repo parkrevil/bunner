@@ -10,8 +10,13 @@ pub struct RouterReadOnly {
 }
 
 impl RouterReadOnly {
+    /// Read-only router built for lock-free concurrent lookups.
+    ///
+    /// Safety & Concurrency:
+    /// - Contains only immutable owned data structures
+    /// - No interior mutability
+    /// - Safe to share across threads (`Send + Sync` by construction)
     pub fn from_router(router: &Router) -> Self {
-        // Clone static route full mapping into read-only HashMaps
         let mut maps: [HashMap<String, u16>; HTTP_METHOD_COUNT] = Default::default();
         for i in 0..HTTP_METHOD_COUNT {
             let mut out: HashMap<String, u16> =
@@ -24,7 +29,10 @@ impl RouterReadOnly {
 
         let root = ReadOnlyNode::from_node(&router.radix_tree.root_node);
 
-        RouterReadOnly { static_maps: maps, root }
+        RouterReadOnly {
+            static_maps: maps,
+            root,
+        }
     }
 
     #[inline]
@@ -43,6 +51,14 @@ impl RouterReadOnly {
         self.root.find_from(method, &normalized, 0, &mut out_params)
     }
 }
+
+// Compile-time assertion: RouterReadOnly and ReadOnlyNode must be Send + Sync
+#[allow(dead_code)]
+const _: fn() = || {
+    fn assert_send_sync<T: Send + Sync>() {}
+    assert_send_sync::<RouterReadOnly>();
+    assert_send_sync::<ReadOnlyNode>();
+};
 
 #[derive(Debug, Clone, Default)]
 struct ReadOnlyNode {
@@ -71,12 +87,16 @@ impl ReadOnlyNode {
                 static_children.insert(k.clone(), ReadOnlyNode::from_node(v.as_ref()));
             }
             for (i, key) in n.static_keys.iter().enumerate() {
-                static_children.insert(key.clone(), ReadOnlyNode::from_node(n.static_vals[i].as_ref()));
+                static_children.insert(
+                    key.clone(),
+                    ReadOnlyNode::from_node(n.static_vals[i].as_ref()),
+                );
             }
         }
 
         // Patterns
-        let mut patterns: Vec<(SegmentPattern, ReadOnlyNode)> = Vec::with_capacity(n.patterns.len());
+        let mut patterns: Vec<(SegmentPattern, ReadOnlyNode)> =
+            Vec::with_capacity(n.patterns.len());
         for (i, pat) in n.patterns.iter().enumerate() {
             let child = n.pattern_nodes[i].as_ref();
             patterns.push((pat.clone(), ReadOnlyNode::from_node(child)));
@@ -109,7 +129,11 @@ impl ReadOnlyNode {
         i
     }
 
-    fn handle_end(&self, method: HttpMethod, params: &mut Vec<(String, String)>) -> Option<(u16, Vec<(String, String)>)> {
+    fn handle_end(
+        &self,
+        method: HttpMethod,
+        params: &mut Vec<(String, String)>,
+    ) -> Option<(u16, Vec<(String, String)>)> {
         let idx = method as usize;
         let rk = self.routes[idx];
         if rk != 0 {
@@ -178,10 +202,14 @@ impl ReadOnlyNode {
         let wrk = self.wildcard_routes[method as usize];
         if wrk != 0 {
             let mut cap_start = start;
-            if cap_start < s.len() && s.as_bytes()[cap_start] == b'/' { cap_start += 1; }
+            if cap_start < s.len() && s.as_bytes()[cap_start] == b'/' {
+                cap_start += 1;
+            }
             if cap_start <= s.len() {
                 let rest = &s[cap_start..];
-                if !rest.is_empty() { params.push(("*".to_string(), rest.to_string())); }
+                if !rest.is_empty() {
+                    params.push(("*".to_string(), rest.to_string()));
+                }
             }
             return Some((wrk - 1, params.clone()));
         }

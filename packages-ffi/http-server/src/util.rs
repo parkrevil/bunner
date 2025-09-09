@@ -8,9 +8,8 @@ pub fn serialize_to_cstring<T: Serialize>(value: &T) -> *mut c_char {
     match serde_json::to_string(value) {
         Ok(json_string) => CString::new(json_string).unwrap().into_raw(),
         Err(_) => {
-            let error_json =
-                "{\"data\":null,\"error\":{\"code\":-1,\"message\":\"Serialization failed\"}}";
-
+            // Unify error envelope to { code, message }
+            let error_json = "{\"code\":-1,\"message\":\"Serialization failed\"}";
             CString::new(error_json).unwrap().into_raw()
         }
     }

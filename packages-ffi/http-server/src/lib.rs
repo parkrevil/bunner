@@ -19,6 +19,7 @@ use cookie::Cookie;
 use serde_json::Value as JsonValue;
 use serde_qs;
 use std::collections::HashMap;
+use thread_pool::shutdown_pool;
 use thread_pool::submit_job;
 use url::Url;
 
@@ -60,6 +61,8 @@ pub extern "C" fn init() -> HttpServerHandle {
 pub unsafe extern "C" fn destroy(handle: HttpServerHandle) {
     let http_server = unsafe { Box::from_raw(handle) };
     drop(http_server);
+    // Ensure global worker pool is shutdown on destroy as per requirement
+    shutdown_pool();
 }
 
 /// Adds a new route to the router.
@@ -163,8 +166,9 @@ pub unsafe extern "C" fn handle_request(
     cb: extern "C" fn(*const c_char, *mut c_char),
 ) {
     if handle.is_null() {
-        cb(
-            request_id_ptr,
+        callback_with_request_id_ptr(
+            cb,
+            "",
             make_ffi_error_result(HttpServerError::HandleIsNull, None),
         );
 
@@ -174,8 +178,9 @@ pub unsafe extern "C" fn handle_request(
     let request_id_str = match unsafe { CStr::from_ptr(request_id_ptr).to_str() } {
         Ok(s) => s,
         Err(_) => {
-            cb(
-                CString::new("").unwrap().as_ptr(),
+            callback_with_request_id_ptr(
+                cb,
+                "",
                 make_ffi_error_result(HttpServerError::InvalidRequestId, None),
             );
 
@@ -186,8 +191,9 @@ pub unsafe extern "C" fn handle_request(
     let payload_str = match unsafe { CStr::from_ptr(paylaod_ptr).to_str() } {
         Ok(s) => s,
         Err(_) => {
-            cb(
-                request_id_ptr,
+            callback_with_request_id_ptr(
+                cb,
+                request_id_str,
                 make_ffi_error_result(HttpServerError::InvalidJsonString, None),
             );
 
@@ -262,18 +268,20 @@ pub unsafe extern "C" fn handle_request(
         };
 
         // Headers to lowercase for consistent lookup
-        let mut lowercase_headers: HashMap<String, String> = HashMap::with_capacity(payload.headers.len());
+        let mut lowercase_headers: HashMap<String, String> =
+            HashMap::with_capacity(payload.headers.len());
         for (k, v) in payload.headers.into_iter() {
             lowercase_headers.insert(k.to_lowercase(), v);
         }
 
         // Cookies (not returned in result yet, parsed for future use)
-        let _cookies: Option<HashMap<String, String>> = lowercase_headers.get("cookie").map(|cookie_header| {
-            Cookie::split_parse(cookie_header)
-                .filter_map(|c| c.ok())
-                .map(|c| (c.name().to_string(), c.value().to_string()))
-                .collect::<HashMap<_, _>>()
-        });
+        let _cookies: Option<HashMap<String, String>> =
+            lowercase_headers.get("cookie").map(|cookie_header| {
+                Cookie::split_parse(cookie_header)
+                    .filter_map(|c| c.ok())
+                    .map(|c| (c.name().to_string(), c.value().to_string()))
+                    .collect::<HashMap<_, _>>()
+            });
 
         // Protocol/IP derivation (not returned yet)
         let _protocol = lowercase_headers
@@ -308,7 +316,9 @@ pub unsafe extern "C" fn handle_request(
         let ok = match ro.find(method, &path) {
             Some((route_key, params_vec)) => {
                 let mut map = serde_json::Map::new();
-                for (n, v) in params_vec.into_iter() { map.insert(n, JsonValue::String(v)); }
+                for (n, v) in params_vec.into_iter() {
+                    map.insert(n, JsonValue::String(v));
+                }
                 let params_json = JsonValue::Object(map);
                 HandleRequestResult {
                     route_key,
@@ -327,7 +337,11 @@ pub unsafe extern "C" fn handle_request(
                 }
             }
             None => {
-                callback_with_request_id_ptr(cb, &request_id_owned, make_ffi_error_result(crate::router::RouterError::MatchNotFound, None));
+                callback_with_request_id_ptr(
+                    cb,
+                    &request_id_owned,
+                    make_ffi_error_result(crate::router::RouterError::MatchNotFound, None),
+                );
                 return;
             }
         };
