@@ -11,18 +11,20 @@ use std::{
 
 use crate::errors::HttpServerError;
 mod thread_pool;
-use crate::structure::{AddRouteResult, FfiError, HandleRequestPayload, HandleRequestResult};
+use crate::structure::{
+    AddRouteResult, FfiError, HandleRequestPayload, HandleRequestResponse, HandleRequestResult,
+};
 use crate::util::make_ffi_error_result;
 use crate::{
     r#enum::HttpMethod,
     util::{make_ffi_result, serialize_to_cstring},
 };
+use cookie::Cookie;
+use serde_json::Value as JsonValue;
+use serde_qs;
+use std::collections::HashMap;
 use thread_pool::submit_job;
 use url::Url;
-use serde_json::Value as JsonValue;
-use std::collections::HashMap;
-use cookie::Cookie;
-use serde_qs;
 
 pub type HttpServerHandle = *mut HttpServer;
 pub struct RouterPtr(*mut router::Router);
@@ -248,9 +250,8 @@ pub unsafe extern "C" fn handle_request(
         };
 
         // Cookies (not returned in result yet, parsed for future use)
-        let _cookies: Option<HashMap<String, String>> = headers
-            .get("cookie")
-            .map(|cookie_header| {
+        let _cookies: Option<HashMap<String, String>> =
+            headers.get("cookie").map(|cookie_header| {
                 Cookie::split_parse(cookie_header)
                     .filter_map(|c| c.ok())
                     .map(|c| (c.name().to_string(), c.value().to_string()))
@@ -281,31 +282,51 @@ pub unsafe extern "C" fn handle_request(
         let method = match HttpMethod::from_u8(method_u8) {
             Ok(m) => m,
             Err(e) => {
-                callback_with_request_id_ptr(
-                  cb, &request_id_owned, make_ffi_error_result(e, None)
-                );
+                callback_with_request_id_ptr(cb, &request_id_owned, make_ffi_error_result(e, None));
                 return;
             }
         };
 
         // Route match (read-only)
-        let (route_key, param_pairs) = unsafe { &*router_ptr }.find(method, &path).map_err(|e| e).map(|t| t);
-        let (route_key, params_json) = match (route_key, param_pairs) {
-            (k, pairs) => {
+        let find_result = unsafe { &*router_ptr }.find(method, &path);
+        let ok = match find_result {
+            Ok((route_key, param_pairs)) => {
                 let mut map = serde_json::Map::new();
-                for (name, value) in pairs {
+                for (name, value) in param_pairs {
                     map.insert(name, JsonValue::String(value));
                 }
-                (k, JsonValue::Object(map))
+                let params_json = JsonValue::Object(map);
+                HandleRequestResult {
+                    route_key,
+                    params: if params_json
+                        .as_object()
+                        .map(|m| m.is_empty())
+                        .unwrap_or(true)
+                    {
+                        None
+                    } else {
+                        Some(params_json)
+                    },
+                    query_params,
+                    body: body_json,
+                    response: None,
+                }
             }
-        };
-
-        let ok = HandleRequestResult {
-            route_key,
-            params: if params_json.as_object().map(|m| m.is_empty()).unwrap_or(true) { None } else { Some(params_json) },
-            query_params,
-            body: body_json,
-            response: None,
+            Err(e @ crate::router::RouterError::MatchNotFound)
+            | Err(e @ crate::router::RouterError::MatchPathEmpty)
+            | Err(e @ crate::router::RouterError::MatchPathNotAscii)
+            | Err(e @ crate::router::RouterError::MatchPathContainsDisallowedCharacters) => {
+                callback_with_request_id_ptr(cb, &request_id_owned, make_ffi_error_result(e, None));
+                return;
+            }
+            Err(e) => {
+                callback_with_request_id_ptr(
+                    cb,
+                    &request_id_owned,
+                    make_ffi_error_result(HttpServerError::ServerError, Some(format!("{:?}", e))),
+                );
+                return;
+            }
         };
 
         callback_with_request_id_ptr(cb, &request_id_owned, make_ffi_result(&ok));
