@@ -38,6 +38,10 @@ export interface HandleRequestParams {
   body: string | null;
 }
 
+/**
+ * Handle Request Payload
+ * @description The payload interface for Handle Request
+ */
 export interface HandleRequestPayload extends HandleRequestParams {
   requestId: string;
 }
