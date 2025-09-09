@@ -49,22 +49,22 @@ pub(super) type StaticMapIdx = FastHashMap<String, super::NodeBox>;
 #[derive(Debug, Default)]
 pub struct RadixTreeNode {
     // optimize small number of siblings before promoting to map
-    pub(super) static_keys: SmallVec<[String; 16]>,
-    pub(super) static_vals: SmallVec<[NodeBox; 16]>,
+    pub(crate) static_keys: SmallVec<[String; 16]>,
+    pub(crate) static_vals: SmallVec<[NodeBox; 16]>,
     // index-based mirror for arena-backed nodes (built during sealing)
-    pub(super) static_vals_idx: SmallVec<[super::NodeBox; 16]>,
+    pub(crate) static_vals_idx: SmallVec<[super::NodeBox; 16]>,
     // interned ids aligned with static_keys
     pub(super) static_key_ids: SmallVec<[u32; 16]>,
-    pub(super) static_children: StaticMap,
-    pub(super) static_children_idx: StaticMapIdx,
+    pub(crate) static_children: StaticMap,
+    pub(crate) static_children_idx: StaticMapIdx,
     // id-keyed mirror for static children
     pub(super) static_children_idx_ids: FastHashMap<u32, super::NodeBox>,
     // simple MPHF-like open-addressing table for static_keys (built when many keys)
     pub(super) static_hash_seed: u64,
     pub(super) static_hash_table: SmallVec<[i32; 32]>, // stores index into static_vals_idx/static_keys, -1 means empty
     // SoA: separate pattern specs and node handles
-    pub(super) patterns: SmallVec<[SegmentPattern; 4]>,
-    pub(super) pattern_nodes: SmallVec<[NodeBox; 4]>,
+    pub(crate) patterns: SmallVec<[SegmentPattern; 4]>,
+    pub(crate) pattern_nodes: SmallVec<[NodeBox; 4]>,
     // ordered view indices for fast iteration
     pub(super) pattern_children_idx: SmallVec<[usize; 16]>,
     // first literal -> indices in pattern_children (to reduce regex calls)
@@ -75,14 +75,14 @@ pub struct RadixTreeNode {
     pub(super) pattern_param_first: SmallVec<[u16; 16]>,
     // 압축된 패턴 메타데이터 (기존 3개 SmallVec을 1개로 통합)
     pub(super) pattern_meta: SmallVec<[PatternMeta; 4]>,
-    pub(super) routes: [u16; HTTP_METHOD_COUNT],
-    pub(super) wildcard_routes: [u16; HTTP_METHOD_COUNT],
+    pub(crate) routes: [u16; HTTP_METHOD_COUNT],
+    pub(crate) wildcard_routes: [u16; HTTP_METHOD_COUNT],
     pub(super) flags: NodeFlags,
     // bitmask of methods present in this subtree (including this node)
     pub(super) method_mask: u8,
     // prefix compression (set by compress())
-    pub(super) fused_edge: Option<String>,
-    pub(super) fused_child: Option<NodeBox>,
+    pub(crate) fused_edge: Option<String>,
+    pub(crate) fused_child: Option<NodeBox>,
     // index-based mirror for arena-backed nodes (built during sealing)
     pub(super) fused_child_idx: Option<super::NodeBox>,
 }

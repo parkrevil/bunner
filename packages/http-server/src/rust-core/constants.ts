@@ -8,6 +8,7 @@ export const HttpServerErrorCodes: Record<number, string> = {
   2: 'Internal server error occurred.',
   3: 'Invalid HTTP method.',
   4: 'Invalid JSON string.',
+  5: 'Invalid request id.',
 
   // Router
   // Add-time
@@ -31,4 +32,7 @@ export const HttpServerErrorCodes: Record<number, string> = {
   10102: 'The request path contains disallowed characters.',
   10103: 'The request path is empty.',
   10104: 'The request path must contain only ASCII characters.',
+  // Server runtime
+  8: 'Router is not sealed.',
+  9: 'Job queue is full.',
 } as const;

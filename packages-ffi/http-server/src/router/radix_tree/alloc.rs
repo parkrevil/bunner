@@ -5,7 +5,7 @@ use super::RadixTreeNode;
 
 #[repr(transparent)]
 #[derive(Clone)]
-pub(super) struct NodeBox(pub(super) NonNull<RadixTreeNode>);
+pub(crate) struct NodeBox(pub(crate) NonNull<RadixTreeNode>);
 
 impl NodeBox {
     #[inline(always)]
@@ -47,7 +47,7 @@ impl core::fmt::Debug for NodeBox {
 }
 
 #[inline(always)]
-pub(super) fn create_node_box_from_arena_pointer(arena_ptr: *const Bump) -> NodeBox {
+pub(crate) fn create_node_box_from_arena_pointer(arena_ptr: *const Bump) -> NodeBox {
     let arena_ref = unsafe { &*arena_ptr };
     NodeBox::from_arena(arena_ref)
 }

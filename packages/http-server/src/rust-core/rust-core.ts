@@ -165,7 +165,7 @@ export class RustCore extends BaseRustCore<
     this.symbols.handle_request(
       this.handle,
       encodeCString(requestId),
-      encodeCString(JSON.stringify(params)),
+      encodeCString(params),
       this.handleRequestCb.ptr!,
     );
 
@@ -179,5 +179,18 @@ export class RustCore extends BaseRustCore<
    */
   finalizeRoutes() {
     return this.symbols.router_seal(this.handle);
+  }
+
+  /**
+   * Gracefully destroy and reject all pending callbacks
+   */
+  override destroy() {
+    // Reject all pending before closing the handle to avoid dangling callbacks
+    const err = new Error('Core destroyed');
+    for (const [id, entry] of this.pendingHandleRequests) {
+      entry.reject?.(err);
+      this.pendingHandleRequests.delete(id);
+    }
+    super.destroy();
   }
 }
