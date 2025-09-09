@@ -62,7 +62,10 @@ export class RouteHandler {
               .join('/');
 
           try {
-            const { key } = this.rustCore.addRoute(httpMethod, fullPath);
+            const { key } = this.rustCore.addRoute({
+              httpMethod: httpMethod,
+              path: fullPath,
+            });
 
             this.handlers.set(
               key,

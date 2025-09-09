@@ -11,7 +11,17 @@ export interface HttpServerSymbols extends BaseRustSymbols {
     method: FFIType.u8,
     path: Uint8Array,
   ) => Pointer | null;
+  add_routes: (handle: Pointer, routes: Uint8Array) => Pointer | null;
   router_seal: (handle: Pointer) => void;
+}
+
+/**
+ * Add Routes Params
+ * @description The params interface for Add Routes
+ */
+export interface AddRouteParams {
+  httpMethod: HttpMethodValue;
+  path: string;
 }
 
 /**

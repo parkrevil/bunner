@@ -19,8 +19,10 @@ export function isClass(target: any): target is Class {
  * @param message - The message to encode
  * @returns The encoded message
  */
-export function encodeCString(message: string) {
-  const bytes = textEncoder.encode(message);
+export function encodeCString(message: string | object | any[]) {
+  const bytes = textEncoder.encode(
+    typeof message === 'string' ? message : JSON.stringify(message),
+  );
   const buf = new Uint8Array(bytes.length + 1);
 
   buf.set(bytes);
