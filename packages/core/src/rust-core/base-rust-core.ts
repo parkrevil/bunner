@@ -64,13 +64,6 @@ export abstract class BaseRustCore<
    * @param canBeNull
    * @returns
    */
-  /**
-   * Rust FFI에서 반환된 포인터 값을 안전하게 변환한다
-   * canBeNull이 true일 때만 undefined를 반환할 수 있도록 타입을 분기한다
-   * @param value - Rust에서 반환된 포인터 또는 null
-   * @param canBeNull - null 허용 여부
-   * @returns 변환된 값 또는 undefined (canBeNull이 true일 때만)
-   */
   protected ensure<T>(value: Pointer | null, canBeNull: true): T | undefined;
   protected ensure<T>(value: Pointer | null, canBeNull?: false): T;
   protected ensure<T>(value: Pointer | null, canBeNull = false): T | undefined {

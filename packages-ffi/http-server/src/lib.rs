@@ -10,14 +10,14 @@ use std::{
 };
 
 use crate::errors::HttpServerError;
-use crate::structure::{
-    AddRouteResult, FfiError, HandleRequestPayload, HandleRequestResult,
-};
+mod thread_pool;
+use crate::structure::{AddRouteResult, FfiError, HandleRequestPayload, HandleRequestResult};
 use crate::util::make_ffi_error_result;
 use crate::{
     r#enum::HttpMethod,
     util::{make_ffi_result, serialize_to_cstring},
 };
+use thread_pool::submit_job;
 
 pub type HttpServerHandle = *mut HttpServer;
 pub struct RouterPtr(*mut router::Router);
@@ -26,6 +26,8 @@ pub struct RouterPtr(*mut router::Router);
 pub struct HttpServer {
     router: RouterPtr,
 }
+
+// thread pool moved to pool.rs
 
 #[unsafe(no_mangle)]
 pub extern "C" fn init() -> HttpServerHandle {
@@ -146,20 +148,20 @@ pub unsafe extern "C" fn handle_request(
     cb: extern "C" fn(*const c_char, *mut c_char),
 ) {
     if handle.is_null() {
-      cb(
-        request_id_ptr,
-        make_ffi_error_result(HttpServerError::HandleIsNull, None)
-      );
+        cb(
+            request_id_ptr,
+            make_ffi_error_result(HttpServerError::HandleIsNull, None),
+        );
 
-      return;
+        return;
     }
 
     let request_id_str = match unsafe { CStr::from_ptr(request_id_ptr).to_str() } {
         Ok(s) => s,
         Err(e) => {
             cb(
-              CString::new("").unwrap().as_ptr(),
-              make_ffi_error_result(HttpServerError::InvalidRequestId, None)
+                CString::new("").unwrap().as_ptr(),
+                make_ffi_error_result(HttpServerError::InvalidRequestId, None),
             );
 
             return;
@@ -169,40 +171,48 @@ pub unsafe extern "C" fn handle_request(
     let payload_str = match unsafe { CStr::from_ptr(paylaod_ptr).to_str() } {
         Ok(s) => s,
         Err(e) => {
-          cb(
-            request_id_ptr,
-            make_ffi_error_result(HttpServerError::InvalidJsonString, None)
-          );
+            cb(
+                request_id_ptr,
+                make_ffi_error_result(HttpServerError::InvalidJsonString, None),
+            );
 
-          return;
-      }
+            return;
+        }
     };
 
     let payload: HandleRequestPayload = match serde_json::from_str(payload_str) {
         Ok(p) => p,
         Err(e) => {
-          cb(
-            request_id_ptr,
-            make_ffi_error_result(HttpServerError::InvalidJsonString, None)
-          );
+            cb(
+                request_id_ptr,
+                make_ffi_error_result(HttpServerError::InvalidJsonString, None),
+            );
 
-          return;
+            return;
         }
     };
 
-    // Minimal echo implementation (routing logic will be added with thread pool in next steps)
-    let ok = HandleRequestResult {
-        route_key: 0,
-        params: None,
-        query_params: None,
-        body: None,
-        response: None,
-    };
+    // Own the request_id for async job
+    let request_id_owned = request_id_str.to_owned();
+    let router_ptr = (*handle).router.0;
 
-    cb(
-      request_id_ptr,
-      make_ffi_result(&ok)
-    );
+    submit_job(Box::new(move || {
+        // TODO: route match using router_ptr (read-only after seal)
+        let ok = HandleRequestResult {
+            route_key: 0,
+            params: None,
+            query_params: None,
+            body: None,
+            response: None,
+        };
+
+        let request_id_c = CString::new(request_id_owned).unwrap();
+
+        cb(request_id_c.as_ptr(), make_ffi_result(&ok));
+        // Prevent double free: leak req_id_c to transfer ownership to caller? No, JS won't free it.
+        // So we intentionally forget to keep pointer valid during callback only.
+        std::mem::forget(request_id_c);
+    }));
 }
 
 /// Seals the router, optimizing it for fast lookups. No routes can be added after sealing.

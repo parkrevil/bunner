@@ -77,6 +77,10 @@ export class RustCore extends BaseRustCore<
         try {
           requestId = pointerToString(requestIdPtr);
 
+          if (requestIdPtr) {
+            this.symbols.free_string(requestIdPtr);
+          }
+
           if (!requestId) {
             throw new Error('Request ID is null');
           }
