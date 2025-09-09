@@ -7,7 +7,7 @@ import {
   type RestRouteHandlerMetadata,
 } from './decorators';
 import { RustCore } from './rust-core';
-import type { HandlerFunction } from './types';
+import type { HandlerFunction, HttpMethodValue } from './types';
 
 export class RouteHandler {
   private container: Container;
@@ -24,6 +24,9 @@ export class RouteHandler {
    * Collect routes from controllers and register them to the router
    */
   register() {
+    const handlers: HandlerFunction[] = [];
+    const addRoutesParams: [HttpMethodValue, string][] = [];
+
     this.container
       .getControllers<RestControllerMetadata>(METADATA_KEY.REST_CONTROLLER)
       .forEach(controller => {
@@ -61,23 +64,18 @@ export class RouteHandler {
               .filter(Boolean)
               .join('/');
 
-          try {
-            const { key } = this.rustCore.addRoute({
-              httpMethod: httpMethod,
-              path: fullPath,
-            });
-
-            this.handlers.set(
-              key,
-              controllerInstance[handlerName].bind(controllerInstance),
-            );
-          } catch (e) {
-            console.error(e, httpMethod, fullPath);
-
-            throw e;
-          }
+          handlers.push(
+            controllerInstance[handlerName].bind(controllerInstance),
+          );
+          addRoutesParams.push([httpMethod, fullPath]);
         });
       });
+
+    const addRoutesResult = this.rustCore.addRoutes(addRoutesParams);
+
+    this.handlers = new Map<number, HandlerFunction>(
+      addRoutesResult.map((routeKey, index) => [routeKey, handlers[index]!]),
+    );
   }
 
   /**

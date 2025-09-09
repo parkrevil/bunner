@@ -16,28 +16,11 @@ export interface HttpServerSymbols extends BaseRustSymbols {
 }
 
 /**
- * Add Routes Params
- * @description The params interface for Add Routes
- */
-export interface AddRouteParams {
-  httpMethod: HttpMethodValue;
-  path: string;
-}
-
-/**
  * Add Route Result
  * @description The result interface for Add Route
  */
 export interface AddRouteResult {
   key: number;
-}
-
-/**
- * Add Routes Result
- * @description The result value when multiple routes are added at once (bulk insert)
- */
-export interface AddRoutesResult {
-  keys: number[];
 }
 
 /**

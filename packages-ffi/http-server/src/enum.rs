@@ -1,5 +1,8 @@
+use crate::errors::HttpServerError;
+use serde::de::{Deserialize, Deserializer};
+
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy)]
 pub enum HttpMethod {
     Get = 0,
     Post = 1,
@@ -8,31 +11,46 @@ pub enum HttpMethod {
     Delete = 4,
     Options = 5,
     Head = 6,
-    Trace,
-    Connect,
 }
 
 impl HttpMethod {
     #[inline(always)]
-    pub fn from_u8(n: u8) -> Option<Self> {
+    pub fn from_u8(n: u8) -> Result<Self, HttpServerError> {
         match n {
-            0 => Some(Self::Get),
-            1 => Some(Self::Post),
-            2 => Some(Self::Put),
-            3 => Some(Self::Patch),
-            4 => Some(Self::Delete),
-            5 => Some(Self::Options),
-            6 => Some(Self::Head),
-            _ => None,
+            0 => Ok(Self::Get),
+            1 => Ok(Self::Post),
+            2 => Ok(Self::Put),
+            3 => Ok(Self::Patch),
+            4 => Ok(Self::Delete),
+            5 => Ok(Self::Options),
+            6 => Ok(Self::Head),
+            _ => Err(HttpServerError::InvalidHttpMethod),
         }
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub struct ParseHttpMethodError;
+impl<'de> Deserialize<'de> for HttpMethod {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let v = u8::deserialize(deserializer)?;
+
+        match v {
+            0 => Ok(HttpMethod::Get),
+            1 => Ok(HttpMethod::Post),
+            2 => Ok(HttpMethod::Put),
+            3 => Ok(HttpMethod::Patch),
+            4 => Ok(HttpMethod::Delete),
+            5 => Ok(HttpMethod::Options),
+            6 => Ok(HttpMethod::Head),
+            _ => Err(serde::de::Error::custom("InvalidHttpMethod")),
+        }
+    }
+}
 
 impl std::str::FromStr for HttpMethod {
-    type Err = ParseHttpMethodError;
+    type Err = HttpServerError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
@@ -43,9 +61,7 @@ impl std::str::FromStr for HttpMethod {
             "PATCH" => Ok(Self::Patch),
             "HEAD" => Ok(Self::Head),
             "OPTIONS" => Ok(Self::Options),
-            "TRACE" => Ok(Self::Trace),
-            "CONNECT" => Ok(Self::Connect),
-            _ => Err(ParseHttpMethodError),
+            _ => Err(HttpServerError::InvalidHttpMethod),
         }
     }
 }

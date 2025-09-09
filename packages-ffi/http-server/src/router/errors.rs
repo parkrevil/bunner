@@ -1,5 +1,5 @@
 #[repr(u16)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum RouterError {
     // Insert-time
     RouteConflictOnDuplicatePath = 10001,

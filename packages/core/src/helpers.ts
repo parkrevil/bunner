@@ -19,10 +19,20 @@ export function isClass(target: any): target is Class {
  * @param message - The message to encode
  * @returns The encoded message
  */
-export function encodeCString(message: string | object | any[]) {
-  const bytes = textEncoder.encode(
-    typeof message === 'string' ? message : JSON.stringify(message),
-  );
+export function encodeCString(
+  message: string | object | Map<any, any> | any[],
+) {
+  let json: string;
+
+  if (typeof message === 'string') {
+    json = message;
+  } else if (message instanceof Map) {
+    json = JSON.stringify(Array.from(message.entries()));
+  } else {
+    json = JSON.stringify(message);
+  }
+
+  const bytes = textEncoder.encode(json);
   const buf = new Uint8Array(bytes.length + 1);
 
   buf.set(bytes);
@@ -31,6 +41,11 @@ export function encodeCString(message: string | object | any[]) {
   return buf;
 }
 
+/**
+ * Convert a pointer to a JSON object
+ * @param ptr
+ * @returns
+ */
 export function stringPointerToJson<T>(ptr: Pointer): T {
   const json = new CString(ptr);
 

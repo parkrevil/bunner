@@ -1,11 +1,11 @@
 import { BaseRustCore, encodeCString, resolveRustLibPath } from '@bunner/core';
 import { FFIType } from 'bun:ffi';
 
+import type { HttpMethodValue } from '../types';
+
 import { HttpServerErrorCodes } from './constants';
 import type {
-  AddRouteParams,
   AddRouteResult,
-  AddRoutesResult,
   HandleRequestParams,
   HandleRequestResult,
   HttpServerSymbols,
@@ -57,12 +57,12 @@ export class RustCore extends BaseRustCore<
    * @param path
    * @returns
    */
-  addRoute(params: AddRouteParams) {
+  addRoute(httpMethod: HttpMethodValue, path: string) {
     return this.ensure<AddRouteResult>(
       this.symbols.add_route(
         this.handle,
-        params.httpMethod as FFIType.u8,
-        encodeCString(params.path),
+        httpMethod as FFIType.u8,
+        encodeCString(path),
       ),
     );
   }
@@ -73,8 +73,8 @@ export class RustCore extends BaseRustCore<
    * @param params
    * @returns
    */
-  addRoutes(params: AddRouteParams[]) {
-    return this.ensure<AddRoutesResult>(
+  addRoutes(params: [HttpMethodValue, string][]) {
+    return this.ensure<number[]>(
       this.symbols.add_routes(this.handle, encodeCString(params)),
     );
   }

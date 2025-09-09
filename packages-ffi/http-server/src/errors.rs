@@ -1,5 +1,5 @@
 #[repr(u16)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum HttpServerError {
     HandleIsNull = 1,
     ServerError = 2,

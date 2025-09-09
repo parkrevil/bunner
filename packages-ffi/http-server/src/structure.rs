@@ -1,13 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Serialize)]
-pub struct RouteResult {
-    pub key: u16,
-    pub params: Option<HashMap<String, String>>,
-    pub error: u32,
-}
-
 #[derive(Deserialize)]
 pub struct Request<'a> {
     #[serde(rename = "httpMethod")]
