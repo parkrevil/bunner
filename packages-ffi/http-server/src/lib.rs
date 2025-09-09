@@ -143,7 +143,7 @@ pub unsafe extern "C" fn handle_request(
 
     make_ffi_result(Some(success_result), None) */
     make_ffi_error_result(FfiError {
-        code: HttpServerError::RouteNotFound.code(),
+        code: HttpServerError::HandleIsNull.code(),
         message: Some("Route not found".to_string()),
     })
 }

@@ -26,7 +26,6 @@ export class BunnerHttpServer extends BunnerApplication {
    */
   override async init() {
     await super.init();
-    this.rustCore.init();
     this.router.register();
   }
 
@@ -34,7 +33,7 @@ export class BunnerHttpServer extends BunnerApplication {
    * Start the server
    */
   start() {
-    this.rustCore.build();
+    this.rustCore.finalizeRoutes();
 
     this.server = Bun.serve({
       port: 5000,

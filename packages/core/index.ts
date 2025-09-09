@@ -8,3 +8,4 @@ export * from './src/helpers';
 export * from './src/injector';
 export * from './src/types';
 export * from './src/errors';
+export * from './src/rust-core';

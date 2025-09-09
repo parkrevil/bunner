@@ -1,25 +1,25 @@
-import {
-  encodeCString,
-  resolveRustLibPath,
-  stringPointerToJson,
-} from '@bunner/core';
-import { dlopen, FFIType, type Pointer } from 'bun:ffi';
+import { BaseRustCore, encodeCString, resolveRustLibPath } from '@bunner/core';
+import { dlopen, FFIType } from 'bun:ffi';
 
 import type { HttpMethodValue } from '../types';
 
-import { toError } from './helpers';
+import { HttpServerErrorCodes } from './constants';
 import type {
-  AddRouteResult,
+  AddRoutesResult,
   HandleRequestParams,
   HandleRequestResult,
   HttpServerSymbols,
 } from './interfaces';
 
-export class RustCore {
-  private symbols: HttpServerSymbols;
-  private close: () => void;
-  private handle: Pointer;
-
+export class RustCore extends BaseRustCore<
+  HttpServerSymbols,
+  typeof HttpServerErrorCodes
+> {
+  /**
+   * Constructor
+   * @description Constructor
+   * @returns
+   */
   constructor() {
     try {
       const lib = dlopen(
@@ -43,83 +43,49 @@ export class RustCore {
         },
       );
 
-      if (!lib.symbols) {
-        throw new Error('Failed to initialize RustCore');
-      }
-
-      this.symbols = lib.symbols;
-      this.close = () => lib.close();
+      super(lib.symbols, () => lib.close(), HttpServerErrorCodes);
     } catch (e: any) {
       throw new Error(`Failed to initialize RustCore: ${e.message}`);
     }
   }
 
-  init() {
-    const handle = this.symbols.init();
-
-    if (handle === null) {
-      throw new Error('Failed to initialize Rust core');
-    }
-
-    this.handle = handle;
-  }
-
-  async handleRequest(params: HandleRequestParams): Promise<HandleRequestResult> {
-    const resultPtr = this.symbols.handle_request(
-      this.handle,
-      encodeCString(JSON.stringify(params)),
-    );
-
-    if (!resultPtr) {
-      throw toError();
-    }
-
-    const result = stringPointerToJson<HandleRequestResult>(resultPtr);
-
-    this.symbols.free_string(resultPtr);
-
-    const error = toError(result.error);
-    if (error) {
-      throw toError(result.error);
-    }
-
-    return result;
-  }
-
   /**
    * Add a route to the router
+   * @description Add a route to the router
    * @param method
    * @param path
    * @returns
    */
   addRoute(method: HttpMethodValue, path: string) {
-    const resultPtr = this.symbols.router_add(
-      this.handle,
-      method as FFIType.u8,
-      encodeCString(path),
+    return this.ensure<AddRoutesResult>(
+      this.symbols.router_add(
+        this.handle,
+        method as FFIType.u8,
+        encodeCString(path),
+      ),
     );
-
-    if (resultPtr === null) {
-      throw toError();
-    }
-
-    const result = stringPointerToJson<AddRouteResult>(resultPtr);
-
-    this.symbols.free_string(resultPtr);
-
-    const error = toError(result.error);
-    if (error) {
-      throw error;
-    }
-
-    return result.key;
   }
 
   /**
-   * Seal the router
+   * Handle a request
+   * @param params
    * @returns
    */
-  build() {
+  handleRequest(params: HandleRequestParams) {
+    return this.ensure<HandleRequestResult>(
+      this.symbols.handle_request(
+        this.handle,
+        encodeCString(JSON.stringify(params)),
+      ),
+    );
+  }
+
+  /**
+   * Finalize the routes
+   * @description Finalize the routes
+   * @returns
+   */
+  finalizeRoutes() {
     return this.symbols.router_seal(this.handle);
   }
 }
