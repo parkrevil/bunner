@@ -5,13 +5,17 @@ import type { FFIType, Pointer } from 'bun:ffi';
 import type { HttpMethodValue } from '../types';
 
 export interface HttpServerSymbols extends BaseRustSymbols {
-  handle_request: (handle: Pointer, requestJson: Uint8Array) => Pointer | null;
   add_route: (
     handle: Pointer,
     method: FFIType.u8,
     path: Uint8Array,
   ) => Pointer | null;
   add_routes: (handle: Pointer, routes: Uint8Array) => Pointer | null;
+  handle_request: (
+    handle: Pointer,
+    requestJson: Uint8Array,
+    callback: Pointer,
+  ) => void;
   router_seal: (handle: Pointer) => void;
 }
 
@@ -34,12 +38,17 @@ export interface HandleRequestParams {
   body: string | null;
 }
 
+export interface HandleRequestPayload extends HandleRequestParams {
+  requestId: string;
+}
+
 /**
  * Handle Request Result
  * @description The result interface for Handle Request
  */
 export interface HandleRequestResult {
   routeKey: number;
+  requestId: string;
   params: Record<string, any> | null;
   queryParams: Record<string, any> | null;
   body: Record<string, any> | null;

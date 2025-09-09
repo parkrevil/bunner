@@ -103,13 +103,13 @@ export class RouteHandler {
         body = await rawReq.text();
       }
 
-      const handleResult = this.rustCore.handleRequest({
+      const handleResult = await this.rustCore.handleRequest({
         httpMethod,
         url: rawReq.url,
         headers: {},
         body,
       });
-      const handler = this.handlers.get(handleResult.key);
+      const handler = this.handlers.get(handleResult.routeKey);
 
       if (!handler) {
         return new Response('Handler not found for route key', { status: 500 });
@@ -131,7 +131,7 @@ export class RouteHandler {
  */
       const result = await handler();
 
-      return new Response(result, { status: 501 });
+      return new Response(result, { status: 200 });
     } catch (e) {
       console.error(e, rawReq.method, rawReq.url);
 

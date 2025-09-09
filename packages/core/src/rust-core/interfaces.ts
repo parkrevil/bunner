@@ -18,3 +18,13 @@ export interface RustError {
   code: number | null;
   message: string | null;
 }
+
+/**
+ * JS Callback Entry
+ * @description The entry for a JS callback
+ * @param T - The type for the result
+ */
+export interface JSCallbackEntry<T> {
+  resolve: (v: T) => void;
+  reject?: (e: unknown) => void;
+}

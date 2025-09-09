@@ -74,23 +74,27 @@ export abstract class BaseRustCore<
   protected ensure<T>(value: Pointer | null, canBeNull: true): T | undefined;
   protected ensure<T>(value: Pointer | null, canBeNull?: false): T;
   protected ensure<T>(value: Pointer | null, canBeNull = false): T | undefined {
-    if (value === null && !canBeNull) {
-      throw new Error('Value is null');
+    try {
+      if (value === null && !canBeNull) {
+        throw new Error('Value is null');
+      }
+
+      if (value === null) {
+        return undefined as T;
+      }
+
+      const result = stringPointerToJson<T>(value);
+
+      if (this.isError(result)) {
+        throw this.makeError(result);
+      }
+
+      return result;
+    } finally {
+      if (value) {
+        this.symbols.free_string(value);
+      }
     }
-
-    if (value === null) {
-      return undefined as T;
-    }
-
-    const result = stringPointerToJson<T>(value);
-
-    this.symbols.free_string(value);
-
-    if (this.isError(result)) {
-      throw this.makeError(result);
-    }
-
-    return result;
   }
 
   /**
