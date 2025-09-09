@@ -18,13 +18,13 @@ impl RouterReadOnly {
     /// - Safe to share across threads (`Send + Sync` by construction)
     pub fn from_router(router: &Router) -> Self {
         let mut maps: [HashMap<String, u16>; HTTP_METHOD_COUNT] = Default::default();
-        for i in 0..HTTP_METHOD_COUNT {
+        for (i, out_map) in maps.iter_mut().enumerate().take(HTTP_METHOD_COUNT) {
             let mut out: HashMap<String, u16> =
                 HashMap::with_capacity(router.radix_tree.static_route_full_mapping[i].len());
             for (k, v) in router.radix_tree.static_route_full_mapping[i].iter() {
                 out.insert(k.clone(), *v);
             }
-            maps[i] = out;
+            *out_map = out;
         }
 
         let root = ReadOnlyNode::from_node(&router.radix_tree.root_node);
@@ -132,16 +132,16 @@ impl ReadOnlyNode {
     fn handle_end(
         &self,
         method: HttpMethod,
-        params: &mut Vec<(String, String)>,
+        params: &mut [(String, String)],
     ) -> Option<(u16, Vec<(String, String)>)> {
         let idx = method as usize;
         let rk = self.routes[idx];
         if rk != 0 {
-            return Some((rk - 1, params.clone()));
+            return Some((rk - 1, params.to_owned()));
         }
         let wrk = self.wildcard_routes[idx];
         if wrk != 0 {
-            return Some((wrk - 1, params.clone()));
+            return Some((wrk - 1, params.to_owned()));
         }
         None
     }
@@ -175,10 +175,10 @@ impl ReadOnlyNode {
         let next_slash = s[start..].find('/').map_or(s.len(), |pos| start + pos);
         let seg = &s[start..next_slash];
 
-        if let Some(next_node) = self.static_children.get(seg) {
-            if let Some(ok) = next_node.find_from(method, s, next_slash, params) {
-                return Some(ok);
-            }
+        if let Some(next_node) = self.static_children.get(seg)
+            && let Some(ok) = next_node.find_from(method, s, next_slash, params)
+        {
+            return Some(ok);
         }
 
         // Pattern children

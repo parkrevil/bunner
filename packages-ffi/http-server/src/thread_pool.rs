@@ -37,7 +37,7 @@ fn init() -> mpsc::SyncSender<Task> {
 }
 
 pub fn submit_job(job: Job) -> Result<(), mpsc::TrySendError<Task>> {
-    let tx = TASK_SENDER.get_or_init(|| init());
+    let tx = TASK_SENDER.get_or_init(init);
     tx.try_send(Task::Job(job))
 }
 

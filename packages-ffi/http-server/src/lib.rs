@@ -17,7 +17,7 @@ use crate::util::make_ffi_error_result;
 use crate::{r#enum::HttpMethod, util::make_ffi_result};
 use cookie::Cookie;
 use serde_json::Value as JsonValue;
-use serde_qs;
+// serde_qs used via fully-qualified paths
 use std::collections::HashMap;
 use thread_pool::shutdown_pool;
 use thread_pool::submit_job;
@@ -27,7 +27,7 @@ pub type HttpServerHandle = *mut HttpServer;
 
 #[repr(C)]
 pub struct HttpServer {
-    router: Arc<parking_lot::RwLock<router::Router>>,
+    router: parking_lot::RwLock<router::Router>,
     readonly: Arc<parking_lot::RwLock<Option<Arc<router::RouterReadOnly>>>>,
 }
 
@@ -45,7 +45,7 @@ fn callback_with_request_id_ptr(
 #[unsafe(no_mangle)]
 pub extern "C" fn init() -> HttpServerHandle {
     let server = Box::new(HttpServer {
-        router: Arc::new(parking_lot::RwLock::new(router::Router::new(None))),
+        router: parking_lot::RwLock::new(router::Router::new(None)),
         readonly: Arc::new(parking_lot::RwLock::new(None)),
     });
 
@@ -86,7 +86,7 @@ pub unsafe extern "C" fn add_route(
     };
     let http_server = unsafe { &*handle };
     let mut guard = http_server.router.write();
-    if let Some(_) = http_server.readonly.read().as_ref() {
+    if http_server.readonly.read().as_ref().is_some() {
         return make_ffi_error_result(crate::router::RouterError::RouterSealedCannotInsert, None);
     }
     let router_mut = &mut *guard;
@@ -142,7 +142,7 @@ pub unsafe extern "C" fn add_routes(
 
     let http_server = unsafe { &*handle };
     let mut guard = http_server.router.write();
-    if let Some(_) = http_server.readonly.read().as_ref() {
+    if http_server.readonly.read().as_ref().is_some() {
         return make_ffi_error_result(crate::router::RouterError::RouterSealedCannotInsert, None);
     }
     let router_mut = &mut *guard;
@@ -296,10 +296,7 @@ pub unsafe extern "C" fn handle_request(
 
         // Body JSON (optional)
         let body_json: Option<JsonValue> = match payload.body {
-            Some(ref s) => match serde_json::from_str::<JsonValue>(s) {
-                Ok(v) => Some(v),
-                Err(_) => None,
-            },
+            Some(ref s) => serde_json::from_str::<JsonValue>(s).ok(),
             None => None,
         };
 

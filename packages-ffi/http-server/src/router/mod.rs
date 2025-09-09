@@ -8,9 +8,7 @@ pub mod readonly;
 use crate::r#enum::HttpMethod;
 pub use errors::RouterError;
 use path::{is_path_character_allowed, normalize_path};
-use radix_tree::HTTP_METHOD_COUNT;
 pub use readonly::RouterReadOnly;
-use std::collections::HashMap;
 
 #[derive(Debug, Default)]
 pub struct RouteMatchResult {
