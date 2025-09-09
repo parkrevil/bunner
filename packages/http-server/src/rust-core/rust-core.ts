@@ -1,6 +1,7 @@
 import {
   BaseRustCore,
   encodeCString,
+  pointerToString,
   resolveRustLibPath,
   type JSCallbackEntry,
 } from '@bunner/core';
@@ -13,7 +14,6 @@ import { HttpServerErrorCodes } from './constants';
 import type {
   AddRouteResult,
   HandleRequestParams,
-  HandleRequestPayload,
   HandleRequestResult,
   HttpServerSymbols,
 } from './interfaces';
@@ -56,7 +56,12 @@ export class RustCore extends BaseRustCore<
         returns: FFIType.pointer,
       },
       handle_request: {
-        args: [FFIType.pointer, FFIType.cstring, FFIType.function],
+        args: [
+          FFIType.pointer,
+          FFIType.cstring,
+          FFIType.cstring,
+          FFIType.function,
+        ],
         returns: FFIType.void,
       },
       router_seal: { args: [FFIType.pointer], returns: FFIType.void },
@@ -65,19 +70,24 @@ export class RustCore extends BaseRustCore<
     super.init(resolveRustLibPath('bunner_http_server', import.meta.dir), api);
 
     this.handleRequestCb = new JSCallback(
-      (resultPtr: Pointer) => {
-        let id: string | undefined;
+      (requestIdPtr: Pointer, resultPtr: Pointer) => {
+        let requestId: string | undefined;
         let entry: JSCallbackEntry<HandleRequestResult> | undefined;
 
         try {
+          requestId = pointerToString(requestIdPtr);
+
+          if (!requestId) {
+            throw new Error('Request ID is null');
+          }
+
           const result = this.ensure<HandleRequestResult>(resultPtr);
 
-          id = result.requestId;
-          entry = this.pendingHandleRequests.get(id);
+          entry = this.pendingHandleRequests.get(requestId);
 
           if (!entry) {
             queueMicrotask(() => {
-              throw new Error(`No pending promise for requestId=${id}`);
+              throw new Error(`No pending promise for requestId=${requestId}`);
             });
 
             return;
@@ -93,13 +103,13 @@ export class RustCore extends BaseRustCore<
             });
           }
         } finally {
-          if (id) {
-            this.pendingHandleRequests.delete(id);
+          if (requestId) {
+            this.pendingHandleRequests.delete(requestId);
           }
         }
       },
       {
-        args: [FFIType.pointer],
+        args: [FFIType.pointer, FFIType.pointer],
         returns: FFIType.void,
         threadsafe: true,
       },
@@ -147,11 +157,11 @@ export class RustCore extends BaseRustCore<
     const promise = new Promise<HandleRequestResult>((resolve, reject) => {
       this.pendingHandleRequests.set(requestId, { resolve, reject });
     });
-    const payload: HandleRequestPayload = { ...params, requestId };
 
     this.symbols.handle_request(
       this.handle,
-      encodeCString(payload),
+      encodeCString(requestId),
+      encodeCString(JSON.stringify(params)),
       this.handleRequestCb.ptr!,
     );
 

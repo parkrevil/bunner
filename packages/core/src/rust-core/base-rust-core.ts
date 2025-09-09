@@ -1,6 +1,6 @@
 import { dlopen, type FFIFunction, type Pointer } from 'bun:ffi';
 
-import { stringPointerToJson } from '../helpers';
+import { pointerToJson } from '../helpers';
 
 import type { RustError, BaseRustSymbols } from './interfaces';
 import type { RustErrorCodes } from './types';
@@ -83,7 +83,7 @@ export abstract class BaseRustCore<
         return undefined as T;
       }
 
-      const result = stringPointerToJson<T>(value);
+      const result = pointerToJson<T>(value);
 
       if (this.isError(result)) {
         throw this.makeError(result);

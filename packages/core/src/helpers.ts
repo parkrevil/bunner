@@ -46,10 +46,19 @@ export function encodeCString(
  * @param ptr
  * @returns
  */
-export function stringPointerToJson<T>(ptr: Pointer): T {
+export function pointerToJson<T>(ptr: Pointer): T {
   const json = new CString(ptr);
 
   return JSON.parse(json.toString()) as T;
+}
+
+/**
+ * Convert a pointer to a JSON object
+ * @param ptr
+ * @returns
+ */
+export function pointerToString(ptr: Pointer): string {
+  return new CString(ptr).toString();
 }
 
 /**

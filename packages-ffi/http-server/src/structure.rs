@@ -43,8 +43,6 @@ pub struct HandleRequestResponse {
 
 #[derive(Serialize, Debug)]
 pub struct HandleRequestResult {
-    #[serde(rename = "requestId")]
-    pub request_id: String,
     #[serde(rename = "routeKey")]
     pub route_key: u16,
     pub params: Option<serde_json::Value>,
@@ -52,11 +50,4 @@ pub struct HandleRequestResult {
     pub query_params: Option<serde_json::Value>,
     pub body: Option<serde_json::Value>,
     pub response: Option<HandleRequestResponse>,
-}
-
-#[derive(Serialize, Debug)]
-pub struct HandleRequestError {
-    #[serde(rename = "requestId")]
-    pub request_id: String,
-    pub error: FfiError,
 }

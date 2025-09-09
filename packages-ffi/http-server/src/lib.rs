@@ -11,7 +11,7 @@ use std::{
 
 use crate::errors::HttpServerError;
 use crate::structure::{
-    AddRouteResult, FfiError, HandleRequestError, HandleRequestPayload, HandleRequestResult,
+    AddRouteResult, FfiError, HandleRequestPayload, HandleRequestResult,
 };
 use crate::util::make_ffi_error_result;
 use crate::{
@@ -141,62 +141,68 @@ pub unsafe extern "C" fn add_routes(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn handle_request(
     handle: HttpServerHandle,
-    request_ptr: *const c_char,
-    cb: extern "C" fn(*mut c_char),
+    request_id_ptr: *const c_char,
+    paylaod_ptr: *const c_char,
+    cb: extern "C" fn(*const c_char, *mut c_char),
 ) {
-    // Always call callback exactly once.
     if handle.is_null() {
-        let err = HandleRequestError {
-            request_id: String::new(),
-            error: FfiError {
-                code: HttpServerError::HandleIsNull.code(),
-                message: Some("Handle is null".to_string()),
-            },
-        };
-        cb(serialize_to_cstring(&err));
-        return;
+      cb(
+        request_id_ptr,
+        make_ffi_error_result(HttpServerError::HandleIsNull, None)
+      );
+
+      return;
     }
 
-    let request_str = match unsafe { CStr::from_ptr(request_ptr).to_str() } {
+    let request_id_str = match unsafe { CStr::from_ptr(request_id_ptr).to_str() } {
         Ok(s) => s,
         Err(e) => {
-            let err = HandleRequestError {
-                request_id: String::new(),
-                error: FfiError {
-                    code: HttpServerError::InvalidJsonString.code(),
-                    message: Some(e.to_string()),
-                },
-            };
-            cb(serialize_to_cstring(&err));
+            cb(
+              CString::new("").unwrap().as_ptr(),
+              make_ffi_error_result(HttpServerError::InvalidRequestId, None)
+            );
+
             return;
         }
     };
 
-    let payload: HandleRequestPayload = match serde_json::from_str(request_str) {
+    let payload_str = match unsafe { CStr::from_ptr(paylaod_ptr).to_str() } {
+        Ok(s) => s,
+        Err(e) => {
+          cb(
+            request_id_ptr,
+            make_ffi_error_result(HttpServerError::InvalidJsonString, None)
+          );
+
+          return;
+      }
+    };
+
+    let payload: HandleRequestPayload = match serde_json::from_str(payload_str) {
         Ok(p) => p,
         Err(e) => {
-            let err = HandleRequestError {
-                request_id: String::new(),
-                error: FfiError {
-                    code: HttpServerError::InvalidJsonString.code(),
-                    message: Some(e.to_string()),
-                },
-            };
-            cb(serialize_to_cstring(&err));
-            return;
+          cb(
+            request_id_ptr,
+            make_ffi_error_result(HttpServerError::InvalidJsonString, None)
+          );
+
+          return;
         }
     };
 
     // Minimal echo implementation (routing logic will be added with thread pool in next steps)
     let ok = HandleRequestResult {
-        request_id: payload.request_id,
         route_key: 0,
         params: None,
         query_params: None,
         body: None,
         response: None,
     };
-    cb(serialize_to_cstring(&ok));
+
+    cb(
+      request_id_ptr,
+      make_ffi_result(&ok)
+    );
 }
 
 /// Seals the router, optimizing it for fast lookups. No routes can be added after sealing.

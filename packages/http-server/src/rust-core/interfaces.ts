@@ -13,7 +13,8 @@ export interface HttpServerSymbols extends BaseRustSymbols {
   add_routes: (handle: Pointer, routes: Uint8Array) => Pointer | null;
   handle_request: (
     handle: Pointer,
-    requestJson: Uint8Array,
+    requestId: Uint8Array,
+    payload: Uint8Array,
     callback: Pointer,
   ) => void;
   router_seal: (handle: Pointer) => void;
@@ -39,20 +40,11 @@ export interface HandleRequestParams {
 }
 
 /**
- * Handle Request Payload
- * @description The payload interface for Handle Request
- */
-export interface HandleRequestPayload extends HandleRequestParams {
-  requestId: string;
-}
-
-/**
  * Handle Request Result
  * @description The result interface for Handle Request
  */
 export interface HandleRequestResult {
   routeKey: number;
-  requestId: string;
   params: Record<string, any> | null;
   queryParams: Record<string, any> | null;
   body: Record<string, any> | null;

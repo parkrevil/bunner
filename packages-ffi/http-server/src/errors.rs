@@ -5,6 +5,7 @@ pub enum HttpServerError {
     ServerError = 2,
     InvalidHttpMethod = 3,
     InvalidJsonString = 4,
+    InvalidRequestId = 5,
 }
 
 impl HttpServerError {
