@@ -24,8 +24,6 @@ pub struct FfiError {
 // Payload/result for async handle_request
 #[derive(Deserialize, Debug)]
 pub struct HandleRequestPayload {
-    #[serde(rename = "requestId")]
-    pub request_id: String,
     #[serde(rename = "httpMethod")]
     pub http_method: u8,
     pub url: String,

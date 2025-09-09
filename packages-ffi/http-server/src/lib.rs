@@ -18,6 +18,11 @@ use crate::{
     util::{make_ffi_result, serialize_to_cstring},
 };
 use thread_pool::submit_job;
+use url::Url;
+use serde_json::Value as JsonValue;
+use std::collections::HashMap;
+use cookie::Cookie;
+use serde_qs;
 
 pub type HttpServerHandle = *mut HttpServer;
 pub struct RouterPtr(*mut router::Router);
@@ -27,7 +32,16 @@ pub struct HttpServer {
     router: RouterPtr,
 }
 
-// thread pool moved to pool.rs
+#[inline(always)]
+fn callback_with_request_id_ptr(
+    cb: extern "C" fn(*const c_char, *mut c_char),
+    request_id: &str,
+    result_ptr: *mut c_char,
+) {
+    let request_id_c = CString::new(request_id).unwrap();
+    cb(request_id_c.as_ptr(), result_ptr);
+    std::mem::forget(request_id_c);
+}
 
 #[unsafe(no_mangle)]
 pub extern "C" fn init() -> HttpServerHandle {
@@ -195,23 +209,106 @@ pub unsafe extern "C" fn handle_request(
     // Own the request_id for async job
     let request_id_owned = request_id_str.to_owned();
     let router_ptr = (*handle).router.0;
+    let method_u8 = payload.http_method;
+    let url_str = payload.url.clone();
+    let headers = payload.headers.clone();
+    let body_str = payload.body.clone();
 
     submit_job(Box::new(move || {
-        // TODO: route match using router_ptr (read-only after seal)
+        // Parse URL
+        let parsed_url = match Url::parse(&url_str) {
+            Ok(u) => u,
+            Err(_) => {
+                callback_with_request_id_ptr(
+                    cb,
+                    &request_id_owned,
+                    make_ffi_error_result(HttpServerError::InvalidUrl, None),
+                );
+                return;
+            }
+        };
+
+        let path = parsed_url.path().to_string();
+        let raw_query = parsed_url.query().map(|s| s.to_string());
+
+        // Query params via serde_qs
+        let query_params: Option<JsonValue> = match raw_query {
+            Some(q) => match serde_qs::from_str::<JsonValue>(&q) {
+                Ok(v) => Some(v),
+                Err(_) => {
+                    callback_with_request_id_ptr(
+                        cb,
+                        &request_id_owned,
+                        make_ffi_error_result(HttpServerError::InvalidQueryString, None),
+                    );
+                    return;
+                }
+            },
+            None => None,
+        };
+
+        // Cookies (not returned in result yet, parsed for future use)
+        let _cookies: Option<HashMap<String, String>> = headers
+            .get("cookie")
+            .map(|cookie_header| {
+                Cookie::split_parse(cookie_header)
+                    .filter_map(|c| c.ok())
+                    .map(|c| (c.name().to_string(), c.value().to_string()))
+                    .collect::<HashMap<_, _>>()
+            });
+
+        // Protocol/IP derivation (not returned yet)
+        let _protocol = headers
+            .get("x-forwarded-proto")
+            .or_else(|| headers.get("x-forwarded-protocol"))
+            .cloned()
+            .unwrap_or_else(|| "http".to_string());
+        let _ip = headers
+            .get("x-forwarded-for")
+            .and_then(|v| v.split(',').next().map(|s| s.trim().to_string()))
+            .or_else(|| headers.get("x-real-ip").cloned());
+
+        // Body JSON (optional)
+        let body_json: Option<JsonValue> = match body_str {
+            Some(s) => match serde_json::from_str::<JsonValue>(&s) {
+                Ok(v) => Some(v),
+                Err(_) => None,
+            },
+            None => None,
+        };
+
+        // Method
+        let method = match HttpMethod::from_u8(method_u8) {
+            Ok(m) => m,
+            Err(e) => {
+                callback_with_request_id_ptr(
+                  cb, &request_id_owned, make_ffi_error_result(e, None)
+                );
+                return;
+            }
+        };
+
+        // Route match (read-only)
+        let (route_key, param_pairs) = unsafe { &*router_ptr }.find(method, &path).map_err(|e| e).map(|t| t);
+        let (route_key, params_json) = match (route_key, param_pairs) {
+            (k, pairs) => {
+                let mut map = serde_json::Map::new();
+                for (name, value) in pairs {
+                    map.insert(name, JsonValue::String(value));
+                }
+                (k, JsonValue::Object(map))
+            }
+        };
+
         let ok = HandleRequestResult {
-            route_key: 0,
-            params: None,
-            query_params: None,
-            body: None,
+            route_key,
+            params: if params_json.as_object().map(|m| m.is_empty()).unwrap_or(true) { None } else { Some(params_json) },
+            query_params,
+            body: body_json,
             response: None,
         };
 
-        let request_id_c = CString::new(request_id_owned).unwrap();
-
-        cb(request_id_c.as_ptr(), make_ffi_result(&ok));
-        // Prevent double free: leak req_id_c to transfer ownership to caller? No, JS won't free it.
-        // So we intentionally forget to keep pointer valid during callback only.
-        std::mem::forget(request_id_c);
+        callback_with_request_id_ptr(cb, &request_id_owned, make_ffi_result(&ok));
     }));
 }
 
