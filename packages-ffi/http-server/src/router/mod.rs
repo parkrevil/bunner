@@ -3,10 +3,14 @@ mod interner;
 mod path;
 mod pattern;
 pub mod radix_tree;
+pub mod readonly;
 
 use crate::r#enum::HttpMethod;
 pub use errors::RouterError;
 use path::{is_path_character_allowed, normalize_path};
+use radix_tree::HTTP_METHOD_COUNT;
+pub use readonly::RouterReadOnly;
+use std::collections::HashMap;
 
 #[derive(Debug, Default)]
 pub struct RouteMatchResult {
@@ -81,6 +85,10 @@ impl Router {
         self.radix_tree.finalize();
     }
 
+    pub fn build_readonly(&self) -> RouterReadOnly {
+        RouterReadOnly::from_router(self)
+    }
+
     #[cfg(feature = "test")]
     pub fn get_internal_radix_router(&self) -> &radix_tree::RadixTree {
         &self.radix_tree
@@ -96,6 +104,8 @@ impl Router {
         self.radix_tree.bulk_metrics()
     }
 }
+
+// snapshot removed in favor of RouterReadOnly
 
 #[derive(Debug, Clone, Copy)]
 pub struct RouterOptions {

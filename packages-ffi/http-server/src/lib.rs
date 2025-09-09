@@ -12,9 +12,7 @@ use std::{
 
 use crate::errors::HttpServerError;
 mod thread_pool;
-use crate::structure::{
-    AddRouteResult, HandleRequestPayload, HandleRequestResponse, HandleRequestResult,
-};
+use crate::structure::{AddRouteResult, HandleRequestPayload, HandleRequestResult};
 use crate::util::make_ffi_error_result;
 use crate::{r#enum::HttpMethod, util::make_ffi_result};
 use cookie::Cookie;
@@ -29,6 +27,7 @@ pub type HttpServerHandle = *mut HttpServer;
 #[repr(C)]
 pub struct HttpServer {
     router: Arc<parking_lot::RwLock<router::Router>>,
+    readonly: Arc<parking_lot::RwLock<Option<router::RouterReadOnly>>>,
 }
 
 #[inline(always)]
@@ -46,6 +45,7 @@ fn callback_with_request_id_ptr(
 pub extern "C" fn init() -> HttpServerHandle {
     let server = Box::new(HttpServer {
         router: Arc::new(parking_lot::RwLock::new(router::Router::new(None))),
+        readonly: Arc::new(parking_lot::RwLock::new(None)),
     });
 
     Box::into_raw(server)
@@ -167,7 +167,7 @@ pub unsafe extern "C" fn handle_request(
 
     let request_id_str = match unsafe { CStr::from_ptr(request_id_ptr).to_str() } {
         Ok(s) => s,
-        Err(e) => {
+        Err(_) => {
             cb(
                 CString::new("").unwrap().as_ptr(),
                 make_ffi_error_result(HttpServerError::InvalidRequestId, None),
@@ -179,7 +179,7 @@ pub unsafe extern "C" fn handle_request(
 
     let payload_str = match unsafe { CStr::from_ptr(paylaod_ptr).to_str() } {
         Ok(s) => s,
-        Err(e) => {
+        Err(_) => {
             cb(
                 request_id_ptr,
                 make_ffi_error_result(HttpServerError::InvalidJsonString, None),
@@ -191,7 +191,7 @@ pub unsafe extern "C" fn handle_request(
 
     let payload: HandleRequestPayload = match serde_json::from_str(payload_str) {
         Ok(p) => p,
-        Err(e) => {
+        Err(_) => {
             cb(
                 request_id_ptr,
                 make_ffi_error_result(HttpServerError::InvalidJsonString, None),
@@ -275,8 +275,22 @@ pub unsafe extern "C" fn handle_request(
 
     // Route match (read-only) on current thread
     let http_server = &*handle;
-    let guard = http_server.router.read();
-    let find_result = guard.find(method, &path);
+    // Prefer read-only struct if available (lock-free for static paths)
+    let ro_guard = http_server.readonly.read();
+    let find_result = if let Some(ref ro) = *ro_guard {
+        match ro.find_static(method, &path) {
+            Some(k) => Ok((k, Vec::new())),
+            None => {
+                drop(ro_guard);
+                let guard = http_server.router.read();
+                guard.find(method, &path)
+            }
+        }
+    } else {
+        drop(ro_guard);
+        let guard = http_server.router.read();
+        guard.find(method, &path)
+    };
     let ok = match find_result {
         Ok((route_key, param_pairs)) => {
             let mut map = serde_json::Map::new();
@@ -340,8 +354,14 @@ pub unsafe extern "C" fn handle_request(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn router_seal(handle: HttpServerHandle) {
     let http_server = unsafe { &*handle };
-    let mut guard = http_server.router.write();
-    guard.finalize()
+    {
+        let mut guard = http_server.router.write();
+        guard.finalize();
+        // Build read-only after finalize
+        let ro = guard.build_readonly();
+        let mut s = http_server.readonly.write();
+        *s = Some(ro);
+    }
 }
 
 /// Frees the memory for a C string that was allocated by Rust.
