@@ -1,12 +1,12 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct AddRouteResult {
     pub key: u16,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct FfiError {
     pub code: u16,
     pub message: Option<String>,
@@ -22,7 +22,7 @@ pub struct HandleRequestPayload {
     pub body: Option<String>,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct HandleRequestResponse {
     #[serde(rename = "httpStatus")]
     pub http_status: u16,
@@ -30,7 +30,7 @@ pub struct HandleRequestResponse {
     pub body: serde_json::Value,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct HandleRequestResult {
     #[serde(rename = "routeKey")]
     pub route_key: u16,

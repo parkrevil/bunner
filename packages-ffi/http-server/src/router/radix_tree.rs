@@ -80,7 +80,7 @@ impl RadixTree {
             method_length_buckets: [0; HTTP_METHOD_COUNT],
             enable_root_level_pruning: configuration.enable_root_level_pruning,
             enable_static_route_full_mapping: configuration.enable_static_route_full_mapping,
-            next_route_key: std::sync::atomic::AtomicU16::new(1),
+            next_route_key: std::sync::atomic::AtomicU16::new(0),
         }
     }
 

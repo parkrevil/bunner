@@ -219,9 +219,6 @@ fn handle_wildcard_insert_preassigned(
         return Err(RouterError::RouteWildcardAlreadyExistsForMethod);
     }
     let k = assigned_key;
-    if k == 0 {
-        return Err(RouterError::MaxRoutesExceeded);
-    }
     node.wildcard_routes[method_idx] = k + 1;
     node.set_dirty(true);
     Ok(k)
@@ -259,9 +256,6 @@ fn assign_route_key_preassigned(
     if node.routes[method_idx] != 0 {
         return Err(RouterError::RouteConflictOnDuplicatePath);
     }
-    if assigned_key == 0 {
-        return Err(RouterError::MaxRoutesExceeded);
-    }
     node.routes[method_idx] = assigned_key + 1;
     node.set_dirty(true);
     Ok(assigned_key)
@@ -286,6 +280,10 @@ pub(super) fn prepare_path_segments_standalone(
     }
 
     let norm = crate::router::path::normalize_path(path);
+    // Reject paths with empty segments (e.g., "/a//b")
+    if norm.contains("//") {
+        return Err(RouterError::RoutePathSyntaxInvalid);
+    }
     if !crate::router::path::is_path_character_allowed(&norm) {
         return Err(RouterError::RoutePathContainsDisallowedCharacters);
     }

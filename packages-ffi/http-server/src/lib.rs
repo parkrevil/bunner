@@ -1,9 +1,37 @@
 pub mod r#enum;
 pub mod errors;
+pub mod request_handler;
 pub mod router;
 pub mod structure;
+mod thread_pool;
 pub mod util;
-mod request_handler;
+
+#[cfg(feature = "test")]
+pub mod thread_pool_test_support {
+    use std::sync::mpsc::TrySendError;
+
+    /// Submit a job to the internal thread pool without leaking internal types.
+    pub fn submit<F>(job: F) -> Result<(), &'static str>
+    where
+        F: FnOnce() + Send + 'static,
+    {
+        match crate::thread_pool::submit_job(Box::new(job)) {
+            Ok(()) => Ok(()),
+            Err(TrySendError::Full(_)) => Err("full"),
+            Err(TrySendError::Disconnected(_)) => Err("disconnected"),
+        }
+    }
+
+    /// Shutdown the internal thread pool.
+    pub fn shutdown() {
+        crate::thread_pool::shutdown_pool();
+    }
+
+    /// Force the global thread pool to behave as if its queue is full (test-only).
+    pub fn set_force_full(value: bool) {
+        crate::thread_pool::set_force_full(value);
+    }
+}
 
 use std::{
     ffi::{CStr, CString},
@@ -12,7 +40,6 @@ use std::{
 };
 
 use crate::errors::HttpServerError;
-mod thread_pool;
 use crate::structure::{AddRouteResult, HandleRequestPayload, HandleRequestResult};
 use crate::util::make_ffi_error_result;
 use crate::{r#enum::HttpMethod, util::make_ffi_result};
@@ -41,14 +68,18 @@ fn parse_payload(payload_str: &str) -> Result<HandleRequestPayload, HttpServerEr
 
 #[inline]
 #[allow(dead_code)]
-fn parse_url_and_body(payload: &HandleRequestPayload) -> Result<(String, Option<JsonValue>, Option<JsonValue>), HttpServerError> {
+fn parse_url_and_body(
+    payload: &HandleRequestPayload,
+) -> Result<(String, Option<JsonValue>, Option<JsonValue>), HttpServerError> {
     let parsed_url = Url::parse(payload.url.as_str()).map_err(|_| HttpServerError::InvalidUrl)?;
 
     let path = parsed_url.path().to_string();
     let raw_query = parsed_url.query().map(|s| s.to_string());
     let query_params: Option<JsonValue> = match raw_query {
-        Some(q) => match serde_qs::from_str::<JsonValue>(&q) {
-            Ok(v) => Some(v),
+        Some(q) => match serde_qs::from_str::<std::collections::HashMap<String, String>>(&q) {
+            Ok(m) => {
+                Some(serde_json::to_value(m).unwrap_or(JsonValue::Object(serde_json::Map::new())))
+            }
             Err(_) => return Err(HttpServerError::InvalidQueryString),
         },
         None => None,
@@ -129,6 +160,13 @@ pub extern "C" fn init() -> HttpServerHandle {
 /// After calling this function, the handle is dangling and must not be used again.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn destroy(handle: HttpServerHandle) {
+    // Allow destroying a null handle without panicking
+    if handle.is_null() {
+        // Ensure global worker pool is shutdown on destroy as per requirement
+        shutdown_pool();
+        return;
+    }
+
     let http_server = unsafe { Box::from_raw(handle) };
     drop(http_server);
     // Ensure global worker pool is shutdown on destroy as per requirement
@@ -236,6 +274,11 @@ pub unsafe extern "C" fn handle_request(
     cb: extern "C" fn(*const c_char, *mut c_char),
 ) {
     if handle.is_null() {
+        #[cfg(feature = "test")]
+        eprintln!(
+            "DEBUG_FFI_ERROR: {}",
+            u16::from(HttpServerError::HandleIsNull)
+        );
         callback_handle_request(
             cb,
             "",
@@ -245,28 +288,56 @@ pub unsafe extern "C" fn handle_request(
         return;
     }
 
-    let request_id_str = match unsafe { CStr::from_ptr(request_id_ptr).to_str() } {
-        Ok(s) => s,
-        Err(_) => {
-            callback_handle_request(
-                cb,
-                "",
-                make_ffi_error_result(HttpServerError::InvalidRequestId, None),
-            );
-
-            return;
+    // If request_id is null, treat as empty (no callback receiver). Do not error.
+    let request_id_str = if request_id_ptr.is_null() {
+        ""
+    } else {
+        match unsafe { CStr::from_ptr(request_id_ptr).to_str() } {
+            Ok(s) => s,
+            Err(_) => {
+                #[cfg(feature = "test")]
+                eprintln!(
+                    "DEBUG_FFI_ERROR: {}",
+                    u16::from(HttpServerError::InvalidRequestId)
+                );
+                callback_handle_request(
+                    cb,
+                    "",
+                    make_ffi_error_result(HttpServerError::InvalidRequestId, None),
+                );
+                return;
+            }
         }
     };
+
+    // If payload pointer is null, return InvalidPayload error
+    if paylaod_ptr.is_null() {
+        #[cfg(feature = "test")]
+        eprintln!(
+            "DEBUG_FFI_ERROR: {}",
+            u16::from(HttpServerError::InvalidPayload)
+        );
+        callback_handle_request(
+            cb,
+            request_id_str,
+            make_ffi_error_result(HttpServerError::InvalidPayload, None),
+        );
+        return;
+    }
 
     let payload_str = match unsafe { CStr::from_ptr(paylaod_ptr).to_str() } {
         Ok(s) => s,
         Err(_) => {
+            #[cfg(feature = "test")]
+            eprintln!(
+                "DEBUG_FFI_ERROR: {}",
+                u16::from(HttpServerError::InvalidJsonString)
+            );
             callback_handle_request(
                 cb,
                 request_id_str,
                 make_ffi_error_result(HttpServerError::InvalidJsonString, None),
             );
-
             return;
         }
     };
@@ -280,6 +351,11 @@ pub unsafe extern "C" fn handle_request(
     };
 
     if ro_opt.is_none() {
+        #[cfg(feature = "test")]
+        eprintln!(
+            "DEBUG_FFI_ERROR: {}",
+            u16::from(HttpServerError::RouteNotSealed)
+        );
         callback_handle_request(
             cb,
             request_id_str,
@@ -292,11 +368,17 @@ pub unsafe extern "C" fn handle_request(
     let ro = ro_opt.unwrap();
     let payload_owned_for_job = payload_owned;
 
+    let (done_tx, done_rx) = std::sync::mpsc::channel::<()>();
     match submit_job(Box::new(move || {
         request_handler::process_job(cb, request_id_owned, payload_owned_for_job, ro);
+        let _ = done_tx.send(());
     })) {
-        Ok(()) => {}
+        Ok(()) => {
+            let _ = done_rx.recv();
+        }
         Err(_e) => {
+            #[cfg(feature = "test")]
+            eprintln!("DEBUG_FFI_ERROR: {}", u16::from(HttpServerError::QueueFull));
             callback_handle_request(
                 cb,
                 request_id_str,
