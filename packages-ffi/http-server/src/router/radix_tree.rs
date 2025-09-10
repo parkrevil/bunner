@@ -290,8 +290,7 @@ impl RadixTree {
         for (idx, method, segs, _h, _l, _s, _lits) in pre.into_iter() {
             let assigned = base + (idx as u16) + 1; // stored keys are +1 encoded
                                                     // pass decoded value to helper (helper will re-encode)
-            let k = self.insert_parsed_preassigned(method, segs, assigned - 1)?;
-            out[idx] = k;
+            out[idx] = self.insert_parsed_preassigned(method, segs, assigned - 1)?;
         }
         Ok(out)
     }

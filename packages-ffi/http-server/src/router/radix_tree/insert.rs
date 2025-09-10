@@ -218,10 +218,9 @@ fn handle_wildcard_insert_preassigned(
     if node.wildcard_routes[method_idx] != 0 {
         return Err(RouterError::RouteWildcardAlreadyExistsForMethod);
     }
-    let k = assigned_key;
-    node.wildcard_routes[method_idx] = k + 1;
+    node.wildcard_routes[method_idx] = assigned_key + 1;
     node.set_dirty(true);
-    Ok(k)
+    Ok(assigned_key)
 }
 
 fn assign_route_key(

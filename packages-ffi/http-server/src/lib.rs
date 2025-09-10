@@ -40,14 +40,11 @@ use std::{
 };
 
 use crate::errors::HttpServerError;
-use crate::structure::{AddRouteResult, HandleRequestPayload, HandleRequestResult};
+use crate::structure::AddRouteResult;
 use crate::util::make_ffi_error_result;
 use crate::{r#enum::HttpMethod, util::make_ffi_result};
-use serde_json::Value as JsonValue;
-// serde_qs used via fully-qualified paths
 use thread_pool::shutdown_pool;
 use thread_pool::submit_job;
-use url::Url;
 
 pub type HttpServerHandle = *mut HttpServer;
 
@@ -57,80 +54,7 @@ pub struct HttpServer {
     readonly: Arc<parking_lot::RwLock<Option<Arc<router::RouterReadOnly>>>>,
 }
 
-// ---- Internal helpers (SRP) ----
-
-#[inline]
-#[allow(dead_code)]
-fn parse_payload(payload_str: &str) -> Result<HandleRequestPayload, HttpServerError> {
-    serde_json::from_str::<HandleRequestPayload>(payload_str)
-        .map_err(|_| HttpServerError::InvalidJsonString)
-}
-
-#[inline]
-#[allow(dead_code)]
-fn parse_url_and_body(
-    payload: &HandleRequestPayload,
-) -> Result<(String, Option<JsonValue>, Option<JsonValue>), HttpServerError> {
-    let parsed_url = Url::parse(payload.url.as_str()).map_err(|_| HttpServerError::InvalidUrl)?;
-
-    let path = parsed_url.path().to_string();
-    let raw_query = parsed_url.query().map(|s| s.to_string());
-    let query_params: Option<JsonValue> = match raw_query {
-        Some(q) => match serde_qs::from_str::<std::collections::HashMap<String, String>>(&q) {
-            Ok(m) => {
-                Some(serde_json::to_value(m).unwrap_or(JsonValue::Object(serde_json::Map::new())))
-            }
-            Err(_) => return Err(HttpServerError::InvalidQueryString),
-        },
-        None => None,
-    };
-
-    let body_json: Option<JsonValue> = match payload.body {
-        Some(ref s) => serde_json::from_str::<JsonValue>(s).ok(),
-        None => None,
-    };
-
-    Ok((path, query_params, body_json))
-}
-
-#[inline]
-#[allow(dead_code)]
-fn build_handle_result(
-    route_key: u16,
-    params_vec: Vec<(String, String)>,
-    query_params: Option<JsonValue>,
-    body_json: Option<JsonValue>,
-) -> HandleRequestResult {
-    let mut map = serde_json::Map::new();
-    for (n, v) in params_vec.into_iter() {
-        map.insert(n, JsonValue::String(v));
-    }
-    let params_json = JsonValue::Object(map);
-
-    HandleRequestResult {
-        route_key,
-        params: if params_json
-            .as_object()
-            .map(|m| m.is_empty())
-            .unwrap_or(true)
-        {
-            None
-        } else {
-            Some(params_json)
-        },
-        query_params,
-        body: body_json,
-        ip: String::new(),
-        ip_version: 4,
-        http_protocol: String::new(),
-        http_version: String::from("1.1"),
-        headers: JsonValue::Object(serde_json::Map::new()),
-        cookies: JsonValue::Object(serde_json::Map::new()),
-        content_type: String::new(),
-        charset: String::new(),
-        response: None,
-    }
-}
+// (internal helpers removed; logic lives in request_handler)
 
 #[inline(always)]
 fn callback_handle_request(
@@ -274,11 +198,6 @@ pub unsafe extern "C" fn handle_request(
     cb: extern "C" fn(*const c_char, *mut c_char),
 ) {
     if handle.is_null() {
-        #[cfg(feature = "test")]
-        eprintln!(
-            "DEBUG_FFI_ERROR: {}",
-            u16::from(HttpServerError::HandleIsNull)
-        );
         callback_handle_request(
             cb,
             "",
@@ -288,18 +207,20 @@ pub unsafe extern "C" fn handle_request(
         return;
     }
 
-    // If request_id is null, treat as empty (no callback receiver). Do not error.
-    let request_id_str = if request_id_ptr.is_null() {
-        ""
-    } else {
+    // If request_id is null, return InvalidRequestId error
+    if request_id_ptr.is_null() {
+        callback_handle_request(
+            cb,
+            "",
+            make_ffi_error_result(HttpServerError::InvalidRequestId, None),
+        );
+        return;
+    }
+
+    let request_id_str = {
         match unsafe { CStr::from_ptr(request_id_ptr).to_str() } {
             Ok(s) => s,
             Err(_) => {
-                #[cfg(feature = "test")]
-                eprintln!(
-                    "DEBUG_FFI_ERROR: {}",
-                    u16::from(HttpServerError::InvalidRequestId)
-                );
                 callback_handle_request(
                     cb,
                     "",
@@ -312,11 +233,6 @@ pub unsafe extern "C" fn handle_request(
 
     // If payload pointer is null, return InvalidPayload error
     if paylaod_ptr.is_null() {
-        #[cfg(feature = "test")]
-        eprintln!(
-            "DEBUG_FFI_ERROR: {}",
-            u16::from(HttpServerError::InvalidPayload)
-        );
         callback_handle_request(
             cb,
             request_id_str,
@@ -328,11 +244,6 @@ pub unsafe extern "C" fn handle_request(
     let payload_str = match unsafe { CStr::from_ptr(paylaod_ptr).to_str() } {
         Ok(s) => s,
         Err(_) => {
-            #[cfg(feature = "test")]
-            eprintln!(
-                "DEBUG_FFI_ERROR: {}",
-                u16::from(HttpServerError::InvalidJsonString)
-            );
             callback_handle_request(
                 cb,
                 request_id_str,
@@ -351,11 +262,6 @@ pub unsafe extern "C" fn handle_request(
     };
 
     if ro_opt.is_none() {
-        #[cfg(feature = "test")]
-        eprintln!(
-            "DEBUG_FFI_ERROR: {}",
-            u16::from(HttpServerError::RouteNotSealed)
-        );
         callback_handle_request(
             cb,
             request_id_str,
@@ -377,8 +283,6 @@ pub unsafe extern "C" fn handle_request(
             let _ = done_rx.recv();
         }
         Err(_e) => {
-            #[cfg(feature = "test")]
-            eprintln!("DEBUG_FFI_ERROR: {}", u16::from(HttpServerError::QueueFull));
             callback_handle_request(
                 cb,
                 request_id_str,

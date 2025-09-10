@@ -322,9 +322,10 @@ mod request_processing {
         .to_string();
 
         unsafe {
+            let dummy_req = to_cstr("qfull");
             handle_request(
                 handle,
-                std::ptr::null(),
+                dummy_req.as_ptr(),
                 to_cstr(&payload).as_ptr(),
                 global_callback,
             );
@@ -410,19 +411,39 @@ mod request_processing {
 
     #[test]
     fn should_not_crash_on_null_request_id() {
+        static GLOBAL_TX: OnceLock<Mutex<Option<mpsc::Sender<String>>>> = OnceLock::new();
+        extern "C" fn global_callback(_req_id_ptr: *const c_char, res_ptr: *mut c_char) {
+            let res_str = unsafe { CStr::from_ptr(res_ptr).to_str().unwrap().to_owned() };
+            let lock = GLOBAL_TX.get_or_init(|| Mutex::new(None));
+            if let Some(tx) = lock.lock().unwrap().as_ref() {
+                let _ = tx.send(res_str);
+            }
+            unsafe { bunner_http_server::free_string(res_ptr) };
+        }
+
         let handle = init();
+        let (tx, rx) = mpsc::channel::<String>();
+        {
+            let lock = GLOBAL_TX.get_or_init(|| Mutex::new(None));
+            *lock.lock().unwrap() = Some(tx.clone());
+        }
         unsafe {
             router_seal(handle);
             let payload = json!({ "httpMethod": 0, "url": "http://localhost/a", "headers": {}, "body": null }).to_string();
-            // We can't easily assert the error callback, but we can ensure the program doesn't crash.
             handle_request(
                 handle,
                 null_mut(), // Pass null pointer for request_id
                 to_cstr(&payload).as_ptr(),
-                test_callback,
+                global_callback,
             );
         }
+        let res: FfiError = serde_json::from_str(&rx.recv().unwrap()).unwrap();
+        assert_eq!(res.code, 5);
         unsafe { destroy(handle) };
+        {
+            let lock = GLOBAL_TX.get_or_init(|| Mutex::new(None));
+            *lock.lock().unwrap() = None;
+        }
     }
 }
 

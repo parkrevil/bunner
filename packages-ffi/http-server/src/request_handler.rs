@@ -58,19 +58,18 @@ fn parse_url_and_body(payload: &HandleRequestPayload) -> Result<ParsedUrlBody, H
         None => None,
     };
 
-    let _cookies: Option<HashMap<String, String>> =
-        payload.headers.get("cookie").map(|cookie_header| {
-            Cookie::split_parse(cookie_header)
+    let cookies_json: JsonValue = match payload.headers.get("cookie") {
+        Some(cookie_header) => {
+            let map: HashMap<String, String> = Cookie::split_parse(cookie_header)
                 .filter_map(|c| c.ok())
                 .map(|c| (c.name().to_string(), c.value().to_string()))
-                .collect::<HashMap<_, _>>()
-        });
-    let cookies_json: JsonValue = match &_cookies {
-        Some(m) => serde_json::to_value(m).unwrap_or(JsonValue::Object(serde_json::Map::new())),
+                .collect();
+            serde_json::to_value(map).unwrap_or(JsonValue::Object(serde_json::Map::new()))
+        }
         None => JsonValue::Object(serde_json::Map::new()),
     };
 
-    let protocol = payload
+    let http_protocol = payload
         .headers
         .get("x-forwarded-proto")
         .or_else(|| payload.headers.get("x-forwarded-protocol"))
@@ -106,7 +105,6 @@ fn parse_url_and_body(payload: &HandleRequestPayload) -> Result<ParsedUrlBody, H
 
     let ip_version: u8 = if ip.contains(':') { 6 } else { 4 };
 
-    let http_protocol = protocol.clone();
     let http_version = payload
         .headers
         .get("x-http-version")
@@ -184,8 +182,6 @@ pub fn process_job(
     let payload = match parse_payload(&payload_owned_for_job) {
         Ok(p) => p,
         Err(e) => {
-            #[cfg(feature = "test")]
-            eprintln!("DEBUG_FFI_ERROR: {}", u16::from(e));
             callback_with_request_id_ptr(cb, &request_id_owned, make_ffi_error_result(e, None));
             return;
         }
@@ -204,8 +200,6 @@ pub fn process_job(
     ) = match parse_url_and_body(&payload) {
         Ok(v) => v,
         Err(e) => {
-            #[cfg(feature = "test")]
-            eprintln!("DEBUG_FFI_ERROR: {}", u16::from(e));
             callback_with_request_id_ptr(cb, &request_id_owned, make_ffi_error_result(e, None));
             return;
         }
@@ -214,8 +208,6 @@ pub fn process_job(
     let http_method = match HttpMethod::from_u8(payload.http_method) {
         Ok(m) => m,
         Err(e) => {
-            #[cfg(feature = "test")]
-            eprintln!("DEBUG_FFI_ERROR: {}", u16::from(e));
             callback_with_request_id_ptr(cb, &request_id_owned, make_ffi_error_result(e, None));
             return;
         }
@@ -254,11 +246,6 @@ pub fn process_job(
             result
         }
         None => {
-            #[cfg(feature = "test")]
-            eprintln!(
-                "DEBUG_FFI_ERROR: {}",
-                u16::from(crate::router::RouterError::MatchNotFound)
-            );
             callback_with_request_id_ptr(
                 cb,
                 &request_id_owned,
@@ -268,9 +255,5 @@ pub fn process_job(
         }
     };
 
-    #[cfg(feature = "test")]
-    if let Ok(tmp_json) = serde_json::to_string(&ok) {
-        eprintln!("DEBUG_FFI_RESULT: {}", tmp_json);
-    }
     callback_with_request_id_ptr(cb, &request_id_owned, make_ffi_result(&ok));
 }
