@@ -109,7 +109,6 @@ export class RouteHandler {
         headers: rawReq.headers.toJSON(),
         body,
       });
-      console.log(handleResult);
       const handler = this.handlers.get(handleResult.routeKey);
 
       if (!handler) {

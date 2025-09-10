@@ -13,6 +13,7 @@ import type { HttpMethodValue } from '../types';
 import { HttpServerErrorCodes } from './constants';
 import type {
   AddRouteResult,
+  HandleRequestOutput,
   HandleRequestParams,
   HandleRequestResult,
   HttpServerSymbols,
@@ -70,7 +71,9 @@ export class RustCore extends BaseRustCore<
     super.init(resolveRustLibPath('bunner_http_server', import.meta.dir), api);
 
     this.handleRequestCb = new JSCallback(
-      (requestIdPtr: Pointer, resultPtr: Pointer) => {
+      (requestIdPtr: Pointer, routeKey: FFIType.u16, resultPtr: Pointer) => {
+        console.log('routeKey', routeKey);
+
         let requestId: string | undefined;
         let entry: JSCallbackEntry<HandleRequestResult> | undefined;
 
@@ -95,9 +98,12 @@ export class RustCore extends BaseRustCore<
             return;
           }
 
-          const result = this.ensure<HandleRequestResult>(resultPtr);
+          const result = this.ensure<HandleRequestOutput>(resultPtr);
 
-          entry.resolve(result);
+          entry.resolve({
+            routeKey,
+            ...result,
+          });
         } catch (e) {
           if (entry?.reject) {
             entry.reject(e);
@@ -113,7 +119,7 @@ export class RustCore extends BaseRustCore<
         }
       },
       {
-        args: [FFIType.pointer, FFIType.pointer],
+        args: [FFIType.pointer, FFIType.u16, FFIType.pointer],
         returns: FFIType.void,
         threadsafe: true,
       },

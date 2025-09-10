@@ -1,8 +1,7 @@
 import type { BaseRustSymbols } from '@bunner/core';
-import type { Server } from 'bun';
 import type { FFIType, Pointer } from 'bun:ffi';
 
-import type { HttpMethodValue } from '../types';
+import type { HttpMethodValue, HttpStatusCode } from '../types';
 
 export interface HttpServerSymbols extends BaseRustSymbols {
   add_route: (
@@ -40,35 +39,39 @@ export interface HandleRequestParams {
 }
 
 /**
+ * Handle Request Output
+ * @description The output interface for Handle Request
+ */
+export interface HandleRequestOutput {
+  request: RustBunnerRequest;
+  response: RustBunnerResponse;
+}
+
+/**
  * Handle Request Result
  * @description The result interface for Handle Request
  */
 export interface HandleRequestResult {
   routeKey: number;
-  params: Record<string, any> | null;
-  queryParams: Record<string, any> | null;
-  body: Record<string, any> | null;
-  ip: string;
-  ipVersion: number;
-  httpProtocol: string;
-  httpVersion: string;
+  request: RustBunnerRequest;
+  response: RustBunnerResponse;
+}
+
+export interface RustBunnerRequest {
+  url: string;
+  httpMethod: HttpMethodValue;
+  path: string;
   headers: Record<string, any>;
   cookies: Record<string, any>;
   contentType: string;
   charset: string;
-  response: {
-    httpStatus: number;
-    headers: Record<string, any> | null;
-    body: any;
-  } | null;
+  params: Record<string, any> | null;
+  queryParams: Record<string, any> | null;
+  body: Record<string, any>;
 }
 
-/**
- * Bunner Request Constructor Params
- */
-export interface BunnerRequestConstructorParams {
-  request: Request;
-  server: Server;
-  params: Record<string, any>;
-  queryParams: Record<string, any>;
+export interface RustBunnerResponse {
+  httpStatus: HttpStatusCode;
+  headers: Record<string, any>;
+  body: string | Record<string, any>;
 }
