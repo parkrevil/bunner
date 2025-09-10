@@ -5,7 +5,7 @@ use url::Url;
 pub struct UrlParser;
 
 impl Middleware for UrlParser {
-    fn handle(&self, req: &mut BunnerRequest, _res: &mut BunnerResponse, payload: &HandleRequestPayload) {
+    fn handle(&self, req: &mut BunnerRequest, _res: &mut BunnerResponse, payload: &HandleRequestPayload) -> bool {
         // TODO: Validate URL here and surface structured errors via request fields (no side-channel keys)
         // Parse URL
         if let Ok(u) = Url::parse(payload.url.as_str()) {
@@ -34,6 +34,7 @@ impl Middleware for UrlParser {
         } else {
             // TODO: Surface invalid URL error via a typed field on BunnerRequest
         }
+        true
     }
 }
 

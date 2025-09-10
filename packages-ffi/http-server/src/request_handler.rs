@@ -82,11 +82,12 @@ pub fn process_job(
         .with(CookieParser)
         .with(BodyParser);
 
-    // Execute middleware chain, which fills headers, protocol/version, URL parts, cookies, body
-    chain.execute(&mut request, &mut response, &payload);
-
-    // TODO: Do not perform request-level validation here. Middleware should surface
-    //       structured errors (e.g., invalid URL / querystring) via a proper API.
+    // Execute middleware chain; if any middleware stops (returns false), callback immediately with current output
+    if !chain.execute(&mut request, &mut response, &payload) {
+        let output = HandleRequestOutput { request, response };
+        callback_with_request_id_ptr(cb, &request_id_owned, 0, make_ffi_result(&output));
+        return;
+    }
 
     match ro.find(http_method, &request.path) {
         Some((route_key, params_vec)) => {

@@ -39,7 +39,7 @@ fn run_chain(payload: &HandleRequestPayload) -> (BunnerRequest, BunnerResponse) 
     };
     let mut res = BunnerResponse { http_status: 200, headers: None, body: serde_json::Value::Null };
     let chain = Chain::new().with(HeaderParser).with(UrlParser).with(CookieParser).with(BodyParser);
-    chain.execute(&mut req, &mut res, payload);
+    let _ = chain.execute(&mut req, &mut res, payload);
     (req, res)
 }
 

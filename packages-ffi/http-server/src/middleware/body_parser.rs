@@ -5,10 +5,16 @@ use serde_json::Value as JsonValue;
 pub struct BodyParser;
 
 impl Middleware for BodyParser {
-    fn handle(&self, req: &mut BunnerRequest, _res: &mut BunnerResponse, payload: &HandleRequestPayload) {
+    fn handle(
+        &self,
+        req: &mut BunnerRequest,
+        _res: &mut BunnerResponse,
+        payload: &HandleRequestPayload,
+    ) -> bool {
         if let Some(ref s) = payload.body {
             let ct_lc = req.content_type.to_ascii_lowercase();
-            let looks_like_json = s.trim_start().starts_with('{') || s.trim_start().starts_with('[');
+            let looks_like_json =
+                s.trim_start().starts_with('{') || s.trim_start().starts_with('[');
             let ct_is_json = !ct_lc.is_empty() && ct_lc.contains("json");
 
             if ct_is_json || looks_like_json {
@@ -20,6 +26,6 @@ impl Middleware for BodyParser {
                 req.body = Some(JsonValue::String(s.clone()));
             }
         }
+        true
     }
 }
-

@@ -3,7 +3,8 @@ use crate::structure::BunnerResponse;
 use crate::structure::HandleRequestPayload;
 
 pub trait Middleware: Send + Sync {
-    fn handle(&self, req: &mut BunnerRequest, res: &mut BunnerResponse, payload: &HandleRequestPayload);
+    // return true to continue, false to stop chain immediately
+    fn handle(&self, req: &mut BunnerRequest, res: &mut BunnerResponse, payload: &HandleRequestPayload) -> bool;
 }
 
 pub struct Chain {
@@ -20,10 +21,13 @@ impl Chain {
 
     pub fn add(&mut self, mw: impl Middleware + 'static) { self.layers.push(Box::new(mw)); }
 
-    pub fn execute(&self, req: &mut BunnerRequest, res: &mut BunnerResponse, payload: &HandleRequestPayload) {
+    pub fn execute(&self, req: &mut BunnerRequest, res: &mut BunnerResponse, payload: &HandleRequestPayload) -> bool {
         for layer in self.layers.iter() {
-            layer.handle(req, res, payload);
+            if !layer.handle(req, res, payload) {
+                return false;
+            }
         }
+        true
     }
 }
 

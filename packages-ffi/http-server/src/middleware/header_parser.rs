@@ -5,7 +5,7 @@ use url::Url;
 pub struct HeaderParser;
 
 impl Middleware for HeaderParser {
-    fn handle(&self, req: &mut BunnerRequest, _res: &mut BunnerResponse, payload: &HandleRequestPayload) {
+    fn handle(&self, req: &mut BunnerRequest, _res: &mut BunnerResponse, payload: &HandleRequestPayload) -> bool {
         // Normalize and copy headers from payload into request.headers (lowercased keys)
         {
             let mut normalized = serde_json::Map::new();
@@ -70,6 +70,8 @@ impl Middleware for HeaderParser {
             }
             req.content_type = ct_main.trim().to_string();
         }
+
+        true
     }
 }
 
