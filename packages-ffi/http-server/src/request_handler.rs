@@ -58,21 +58,14 @@ pub fn process_job(
     let mut request = BunnerRequest {
         url: payload.url.clone(),
         http_method,
-        host: String::new(),
-        hostname: String::new(),
-        port: None,
         path: String::new(),
-        params: None,
-        query_params: None,
-        body: None,
-        ip: String::new(),
-        ip_version: 0,
-        http_protocol: String::new(),
-        http_version: String::new(),
         headers: serde_json::Value::Object(serde_json::Map::new()),
         cookies: serde_json::Value::Object(serde_json::Map::new()),
         content_type: String::new(),
         charset: String::new(),
+        params: None,
+        query_params: None,
+        body: None,
     };
     let mut response = BunnerResponse { http_status: 200, headers: None, body: serde_json::Value::Null };
 

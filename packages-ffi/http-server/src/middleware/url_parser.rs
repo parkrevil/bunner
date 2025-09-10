@@ -17,6 +17,7 @@ impl Middleware for UrlParser {
             Err(_) => {
                 res.http_status = 400;
                 res.body = serde_json::Value::String("Bad Request: invalid URL".to_string());
+
                 return false;
             }
         };
