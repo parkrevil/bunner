@@ -12,8 +12,10 @@ impl Middleware for CookieParser {
                 .filter_map(|c| c.ok())
                 .map(|c| (c.name().to_string(), c.value().to_string()))
                 .collect();
+
             req.cookies = json!(map);
         }
+
         true
     }
 }

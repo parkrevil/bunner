@@ -11,21 +11,16 @@ impl Middleware for BodyParser {
         _res: &mut BunnerResponse,
         payload: &HandleRequestPayload,
     ) -> bool {
-        if let Some(ref s) = payload.body {
-            let ct_lc = req.content_type.to_ascii_lowercase();
-            let looks_like_json =
-                s.trim_start().starts_with('{') || s.trim_start().starts_with('[');
-            let ct_is_json = !ct_lc.is_empty() && ct_lc.contains("json");
-
-            if ct_is_json || looks_like_json {
-                match serde_json::from_str::<JsonValue>(s) {
-                    Ok(v) => req.body = Some(v),
-                    Err(_) => req.body = Some(JsonValue::String(s.clone())),
-                }
-            } else {
-                req.body = Some(JsonValue::String(s.clone()));
-            }
+        if payload.body.is_some() {
+            return true;
         }
+
+        let body = payload.body.as_ref().unwrap();
+
+        if let Ok(v) = serde_json::from_str::<JsonValue>(body) {
+            req.body = Some(v);
+        }
+
         true
     }
 }
