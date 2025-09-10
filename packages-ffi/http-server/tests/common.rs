@@ -6,6 +6,7 @@ use std::sync::{mpsc, Mutex, OnceLock};
 pub static GLOBAL_TX: OnceLock<Mutex<Option<mpsc::Sender<String>>>> = OnceLock::new();
 
 #[allow(dead_code)]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn global_callback(_req_id_ptr: *const c_char, _route_key: u16, res_ptr: *mut c_char) {
     let res_str = unsafe { CStr::from_ptr(res_ptr).to_str().unwrap().to_owned() };
     let lock = GLOBAL_TX.get_or_init(|| Mutex::new(None));

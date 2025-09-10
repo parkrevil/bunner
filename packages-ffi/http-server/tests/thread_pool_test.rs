@@ -86,7 +86,7 @@ mod queue_capacity {
                 if e == "disconnected" { break; }
             }
         }
-        assert!(true, "pressure loop completed; saw_full={}", saw_full);
+        let _ = saw_full; // loop completed; no-op to keep variable used
         pool::shutdown();
     }
 
