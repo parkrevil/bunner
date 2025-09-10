@@ -5,6 +5,7 @@ pub mod router;
 pub mod structure;
 mod thread_pool;
 pub mod util;
+pub mod middleware;
 
 #[cfg(feature = "test")]
 pub mod thread_pool_test_support {
@@ -58,12 +59,13 @@ pub struct HttpServer {
 
 #[inline(always)]
 fn callback_handle_request(
-    cb: extern "C" fn(*const c_char, *mut c_char),
+    cb: extern "C" fn(*const c_char, u16, *mut c_char),
     request_id: &str,
+    route_key: u16,
     result_ptr: *mut c_char,
 ) {
     let request_id_c = CString::new(request_id).unwrap();
-    cb(request_id_c.as_ptr(), result_ptr);
+    cb(request_id_c.as_ptr(), route_key, result_ptr);
     std::mem::forget(request_id_c);
 }
 
@@ -195,12 +197,13 @@ pub unsafe extern "C" fn handle_request(
     handle: HttpServerHandle,
     request_id_ptr: *const c_char,
     paylaod_ptr: *const c_char,
-    cb: extern "C" fn(*const c_char, *mut c_char),
+    cb: extern "C" fn(*const c_char, u16, *mut c_char),
 ) {
     if handle.is_null() {
         callback_handle_request(
             cb,
             "",
+            0,
             make_ffi_error_result(HttpServerError::HandleIsNull, None),
         );
 
@@ -212,6 +215,7 @@ pub unsafe extern "C" fn handle_request(
         callback_handle_request(
             cb,
             "",
+            0,
             make_ffi_error_result(HttpServerError::InvalidRequestId, None),
         );
         return;
@@ -224,6 +228,7 @@ pub unsafe extern "C" fn handle_request(
                 callback_handle_request(
                     cb,
                     "",
+                    0,
                     make_ffi_error_result(HttpServerError::InvalidRequestId, None),
                 );
                 return;
@@ -236,6 +241,7 @@ pub unsafe extern "C" fn handle_request(
         callback_handle_request(
             cb,
             request_id_str,
+            0,
             make_ffi_error_result(HttpServerError::InvalidPayload, None),
         );
         return;
@@ -247,6 +253,7 @@ pub unsafe extern "C" fn handle_request(
             callback_handle_request(
                 cb,
                 request_id_str,
+                0,
                 make_ffi_error_result(HttpServerError::InvalidJsonString, None),
             );
             return;
@@ -265,6 +272,7 @@ pub unsafe extern "C" fn handle_request(
         callback_handle_request(
             cb,
             request_id_str,
+            0,
             make_ffi_error_result(HttpServerError::RouteNotSealed, None),
         );
         return;
@@ -286,6 +294,7 @@ pub unsafe extern "C" fn handle_request(
             callback_handle_request(
                 cb,
                 request_id_str,
+                0,
                 make_ffi_error_result(HttpServerError::QueueFull, None),
             );
         }

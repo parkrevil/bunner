@@ -1,8 +1,9 @@
 use crate::errors::HttpServerError;
 use serde::de::{Deserialize, Deserializer};
+use serde::Serialize;
 
 #[repr(u8)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize)]
 pub enum HttpMethod {
     Get = 0,
     Post = 1,

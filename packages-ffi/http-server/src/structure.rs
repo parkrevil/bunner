@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::r#enum::HttpMethod;
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AddRouteResult {
     pub key: u16,
@@ -23,7 +25,7 @@ pub struct HandleRequestPayload {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct HandleRequestResponse {
+pub struct BunnerResponse {
     #[serde(rename = "httpStatus")]
     pub http_status: u16,
     pub headers: Option<HashMap<String, String>>,
@@ -31,9 +33,15 @@ pub struct HandleRequestResponse {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct HandleRequestResult {
-    #[serde(rename = "routeKey")]
-    pub route_key: u16,
+pub struct BunnerRequest {
+    #[serde(skip_serializing, skip_deserializing)]
+    pub url: String,
+    #[serde(rename = "httpMethod")]
+    pub http_method: HttpMethod,
+    pub host: String,
+    pub hostname: String,
+    pub port: Option<u16>,
+    pub path: String,
     pub params: Option<serde_json::Value>,
     #[serde(rename = "queryParams")]
     pub query_params: Option<serde_json::Value>,
@@ -50,5 +58,10 @@ pub struct HandleRequestResult {
     #[serde(rename = "contentType")]
     pub content_type: String,
     pub charset: String,
-    pub response: Option<HandleRequestResponse>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct HandleRequestOutput {
+    pub request: BunnerRequest,
+    pub response: BunnerResponse,
 }

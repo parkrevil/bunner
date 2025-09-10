@@ -42,13 +42,14 @@ impl RouterReadOnly {
         self.static_maps[idx].get(&normalized).cloned()
     }
 
-    pub fn find(&self, method: HttpMethod, path: &str) -> Option<(u16, Vec<(String, String)>)> {
+    pub fn find(&self, method: HttpMethod, path: &str) -> Option<(u16, HashMap<String, String>)> {
         let normalized = normalize_path(path);
         if let Some(k) = self.find_static(method, &normalized) {
-            return Some((k, Vec::new()));
+            return Some((k, HashMap::new()));
         }
         let mut out_params: Vec<(String, String)> = Vec::new();
         self.root.find_from(method, &normalized, 0, &mut out_params)
+            .map(|(rk, v)| (rk, v.into_iter().collect()))
     }
 }
 
