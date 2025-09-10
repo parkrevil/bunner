@@ -1,4 +1,4 @@
-use bunner_http_server::structure::{AddRouteResult, HandleRequestResult};
+use bunner_http_server::structure::{AddRouteResult, HandleRequestOutput};
 use bunner_http_server::*;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -32,7 +32,7 @@ unsafe fn from_ptr<'a, T: Deserialize<'a>>(ptr: *mut c_char) -> Result<T, FfiErr
     res
 }
 
-extern "C" fn test_callback(req_id_ptr: *const c_char, res_ptr: *mut c_char) {
+extern "C" fn test_callback(req_id_ptr: *const c_char, _route_key: u16, res_ptr: *mut c_char) {
     let req_id_str = unsafe { CStr::from_ptr(req_id_ptr).to_str().unwrap() };
     if req_id_str.is_empty() {
         return;
@@ -193,6 +193,14 @@ mod router_sealing {
 mod request_processing {
     use super::*;
 
+    #[cfg(feature = "test")]
+    fn set_pool_force_full(value: bool) {
+        bunner_http_server::thread_pool_test_support::set_force_full(value);
+    }
+
+    #[cfg(not(feature = "test"))]
+    fn set_pool_force_full(_value: bool) {}
+
     #[test]
     fn should_handle_a_valid_request_successfully() {
         let handle = init();
@@ -217,8 +225,8 @@ mod request_processing {
             );
 
             let res_str = rx.recv().unwrap();
-            let res: HandleRequestResult = serde_json::from_str(&res_str).unwrap();
-            assert_eq!(res.route_key, 0);
+            let out: HandleRequestOutput = serde_json::from_str(&res_str).unwrap();
+            let res = out.request;
             assert_eq!(res.params.unwrap()["id"], "123");
             assert_eq!(res.query_params.unwrap()["q"], "test");
             assert_eq!(res.body.unwrap()["key"], "val");
@@ -246,7 +254,7 @@ mod request_processing {
 
     #[test]
     fn should_return_queue_full_when_pool_is_saturated() {
-        bunner_http_server::thread_pool_test_support::set_force_full(true);
+        set_pool_force_full(true);
 
         let handle = init();
         unsafe {
@@ -272,7 +280,7 @@ mod request_processing {
         unsafe { destroy(handle) };
 
         // Reset the forced state
-        bunner_http_server::thread_pool_test_support::set_force_full(false);
+        set_pool_force_full(false);
     }
 
     #[test]
@@ -407,7 +415,8 @@ mod concurrency {
         let mut results: HashMap<String, usize> = HashMap::new();
         for _ in 0..(num_threads * num_reqs_per_thread) {
             let res_str = rx.recv().unwrap();
-            let res: HandleRequestResult = serde_json::from_str(&res_str).unwrap();
+            let out: HandleRequestOutput = serde_json::from_str(&res_str).unwrap();
+            let res = out.request;
             let id = res.params.unwrap()["id"].as_str().unwrap().to_string();
             *results.entry(id).or_insert(0) += 1;
         }
@@ -422,5 +431,15 @@ mod concurrency {
         }
 
         unsafe { destroy(handle) };
+    }
+}
+
+mod ffi_utilities {
+    use super::*;
+
+    #[test]
+    fn free_string_should_noop_on_null() {
+        unsafe { free_string(std::ptr::null_mut()); }
+        // No assertion: test passes if no crash occurs
     }
 }

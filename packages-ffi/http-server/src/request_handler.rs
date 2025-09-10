@@ -82,16 +82,21 @@ pub fn process_job(
         .with(CookieParser)
         .with(BodyParser);
 
+    // Execute middleware chain, which fills headers, protocol/version, URL parts, cookies, body
     chain.execute(&mut request, &mut response, &payload);
+
+    // TODO: Do not perform request-level validation here. Middleware should surface
+    //       structured errors (e.g., invalid URL / querystring) via a proper API.
 
     match ro.find(http_method, &request.path) {
         Some((route_key, params_vec)) => {
-            let params_json = serde_json::to_value(&params_vec).unwrap_or_else(|_| JsonValue::Object(serde_json::Map::new()));
-
-            request.params = match params_json.as_object().map(|m| m.is_empty()) {
-                Some(false) => Some(params_json),
-                _ => None,
+            // Build params JSON; use None when empty
+            let params_json = if params_vec.is_empty() {
+                None
+            } else {
+                Some(serde_json::to_value(&params_vec).unwrap_or_else(|_| JsonValue::Object(serde_json::Map::new())))
             };
+            request.params = params_json;
 
             let output = HandleRequestOutput { request, response };
 

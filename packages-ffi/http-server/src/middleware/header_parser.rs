@@ -6,11 +6,11 @@ pub struct HeaderParser;
 
 impl Middleware for HeaderParser {
     fn handle(&self, req: &mut BunnerRequest, _res: &mut BunnerResponse, payload: &HandleRequestPayload) {
-        if let Some(map) = req.headers.as_object_mut() {
-            let original = std::mem::take(map);
+        // Normalize and copy headers from payload into request.headers (lowercased keys)
+        {
             let mut normalized = serde_json::Map::new();
-            for (k, v) in original.into_iter() {
-                normalized.insert(k.to_ascii_lowercase(), v);
+            for (k, v) in payload.headers.iter() {
+                normalized.insert(k.to_ascii_lowercase(), serde_json::Value::String(v.clone()));
             }
             req.headers = serde_json::Value::Object(normalized);
         }
@@ -20,7 +20,7 @@ impl Middleware for HeaderParser {
             .get("x-forwarded-proto")
             .or_else(|| req.headers.get("x-forwarded-protocol"))
             .and_then(|v| v.as_str().map(|s| s.to_string()))
-            .or_else(|| Url::parse(req.url.as_str()).ok().map(|u| u.scheme().to_string()))
+            .or_else(|| Url::parse(payload.url.as_str()).ok().map(|u| u.scheme().to_string()))
             .unwrap_or_else(|| "http".to_string());
         req.http_protocol = protocol;
 
@@ -41,6 +41,19 @@ impl Middleware for HeaderParser {
         if !ip.is_empty() {
             req.ip_version = if ip.contains(':') { 6u8 } else { 4u8 };
             req.ip = ip;
+        } else if let Ok(u) = Url::parse(payload.url.as_str()) {
+            // Fallback from URL host when no headers provide an IP
+            if let Some(host) = u.host_str() {
+                if host.eq_ignore_ascii_case("localhost") {
+                    req.ip = "127.0.0.1".to_string();
+                    req.ip_version = 4u8;
+                } else if host.starts_with('[') && host.ends_with(']') {
+                    // IPv6 literal in URL form [::1]
+                    let v6 = host.trim_matches(&['[', ']'][..]).to_string();
+                    req.ip = v6;
+                    req.ip_version = 6u8;
+                }
+            }
         }
 
         // content-type and charset move to header parser

@@ -6,7 +6,7 @@ use std::sync::{mpsc, Mutex, OnceLock};
 pub static GLOBAL_TX: OnceLock<Mutex<Option<mpsc::Sender<String>>>> = OnceLock::new();
 
 #[allow(dead_code)]
-pub extern "C" fn global_callback(_req_id_ptr: *const c_char, res_ptr: *mut c_char) {
+pub extern "C" fn global_callback(_req_id_ptr: *const c_char, _route_key: u16, res_ptr: *mut c_char) {
     let res_str = unsafe { CStr::from_ptr(res_ptr).to_str().unwrap().to_owned() };
     let lock = GLOBAL_TX.get_or_init(|| Mutex::new(None));
     if let Some(tx) = lock.lock().unwrap().as_ref() {
@@ -18,7 +18,7 @@ pub extern "C" fn global_callback(_req_id_ptr: *const c_char, res_ptr: *mut c_ch
 #[allow(dead_code)]
 pub fn with_capture<F>(f: F) -> String
 where
-    F: FnOnce(extern "C" fn(*const c_char, *mut c_char)),
+    F: FnOnce(extern "C" fn(*const c_char, u16, *mut c_char)),
 {
     let (tx, rx) = mpsc::channel::<String>();
     {

@@ -1,9 +1,9 @@
 use crate::errors::HttpServerError;
 use serde::de::{Deserialize, Deserializer};
-use serde::Serialize;
+use serde::Serializer;
 
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, Serialize)]
+#[derive(Debug, Clone, Copy)]
 pub enum HttpMethod {
     Get = 0,
     Post = 1,
@@ -47,6 +47,15 @@ impl<'de> Deserialize<'de> for HttpMethod {
             6 => Ok(HttpMethod::Head),
             _ => Err(serde::de::Error::custom("InvalidHttpMethod")),
         }
+    }
+}
+
+impl serde::Serialize for HttpMethod {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_u8(*self as u8)
     }
 }
 

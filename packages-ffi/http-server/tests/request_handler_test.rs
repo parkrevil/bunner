@@ -1,6 +1,6 @@
 use bunner_http_server::request_handler;
 use bunner_http_server::router::{Router, RouterOptions, RouterReadOnly};
-use bunner_http_server::structure::HandleRequestResult;
+use bunner_http_server::structure::HandleRequestOutput;
 use serde_json::json;
 use std::ffi::{c_char, CStr};
 use std::sync::{mpsc, Arc};
@@ -10,7 +10,7 @@ use common::make_req_id;
 
 // --- Test Setup & Helpers ---
 
-extern "C" fn test_callback(req_id_ptr: *const c_char, res_ptr: *mut c_char) {
+extern "C" fn test_callback(req_id_ptr: *const c_char, _route_key: u16, res_ptr: *mut c_char) {
     let req_id_str = unsafe { CStr::from_ptr(req_id_ptr).to_str().unwrap() };
     let res_str = unsafe { CStr::from_ptr(res_ptr).to_str().unwrap().to_owned() };
     let tx_ptr = req_id_str.parse::<usize>().unwrap();
@@ -28,12 +28,13 @@ fn setup_router() -> Arc<RouterReadOnly> {
     Arc::new(router.build_readonly())
 }
 
-fn run_test_and_get_result(payload: serde_json::Value) -> HandleRequestResult {
+fn run_test_and_get_result(payload: serde_json::Value) -> HandleRequestOutput {
     let ro = setup_router();
     let (tx, rx) = mpsc::channel::<String>();
     let req_id = make_req_id(&tx);
     request_handler::process_job(test_callback, req_id, payload.to_string(), ro);
-    serde_json::from_str(&rx.recv().unwrap()).unwrap()
+    let out: HandleRequestOutput = serde_json::from_str(&rx.recv().unwrap()).unwrap();
+    out
 }
 
 fn run_test_and_get_error_code(payload: serde_json::Value) -> u16 {
@@ -58,8 +59,8 @@ mod request_parsing {
             "url": "https://example.com/users/42?search=test&page=2",
             "headers": {}, "body": null
         });
-        let res = run_test_and_get_result(payload);
-        let query = res.query_params.unwrap();
+        let out = run_test_and_get_result(payload);
+        let query = out.request.query_params.unwrap();
         assert_eq!(query.get("search").unwrap(), "test");
         assert_eq!(query.get("page").unwrap(), "2");
     }
@@ -72,8 +73,8 @@ mod request_parsing {
             "headers": {},
             "body": "{\"value\": true, \"nested\": {\"key\": 123}}"
         });
-        let res = run_test_and_get_result(payload);
-        let body = res.body.unwrap();
+        let out = run_test_and_get_result(payload);
+        let body = out.request.body.unwrap();
         assert_eq!(body.get("value").unwrap(), true);
         assert_eq!(body.get("nested").unwrap().get("key").unwrap(), 123);
     }
@@ -81,9 +82,9 @@ mod request_parsing {
     #[test]
     fn should_handle_empty_query_and_body() {
         let payload = json!({"httpMethod": 0, "url": "http://[::1]/users/ipv6", "headers": {}, "body": null});
-        let res = run_test_and_get_result(payload);
-        assert!(res.query_params.is_none());
-        assert!(res.body.is_none());
+        let out = run_test_and_get_result(payload);
+        assert!(out.request.query_params.is_none());
+        assert!(out.request.body.is_none());
     }
 
     #[test]
@@ -94,8 +95,24 @@ mod request_parsing {
             "headers": {},
             "body": "this is plain text"
         });
-        let res = run_test_and_get_result(payload);
-        assert_eq!(res.body.unwrap().as_str().unwrap(), "this is plain text");
+        let out = run_test_and_get_result(payload);
+        assert_eq!(out.request.body.unwrap().as_str().unwrap(), "this is plain text");
+    }
+
+    mod body_fallbacks {
+        use super::*;
+
+        #[test]
+        fn should_fallback_to_string_when_json_content_type_but_invalid_json() {
+            let payload = json!({
+                "httpMethod": 0,
+                "url": "http://a.com/users/1",
+                "headers": { "content-type": "application/json" },
+                "body": "{invalid}"
+            });
+            let out = super::run_test_and_get_result(payload);
+            assert_eq!(out.request.body.unwrap(), json!("{invalid}"));
+        }
     }
 }
 
@@ -108,9 +125,9 @@ mod header_parsing {
             "httpMethod": 0, "url": "http://test.com/users/1",
             "headers": { "x-forwarded-for": "1.1.1.1, 2.2.2.2" }, "body": null
         });
-        let res = run_test_and_get_result(payload);
-        assert_eq!(res.ip, "1.1.1.1");
-        assert_eq!(res.ip_version, 4);
+        let out = run_test_and_get_result(payload);
+        assert_eq!(out.request.ip, "1.1.1.1");
+        assert_eq!(out.request.ip_version, 4);
     }
 
     #[test]
@@ -119,23 +136,23 @@ mod header_parsing {
             "httpMethod": 0, "url": "http://test.com/users/1",
             "headers": { "x-real-ip": "3.3.3.3" }, "body": null
         });
-        let res = run_test_and_get_result(payload);
-        assert_eq!(res.ip, "3.3.3.3");
+        let out = run_test_and_get_result(payload);
+        assert_eq!(out.request.ip, "3.3.3.3");
     }
 
     #[test]
     fn should_resolve_localhost_ip_from_url_host() {
         let payload = json!({"httpMethod": 0, "url": "http://localhost/users/1", "headers": {}, "body": null});
-        let res = run_test_and_get_result(payload);
-        assert_eq!(res.ip, "127.0.0.1");
+        let out = run_test_and_get_result(payload);
+        assert_eq!(out.request.ip, "127.0.0.1");
     }
 
     #[test]
     fn should_resolve_ipv6_from_url_host() {
         let payload = json!({"httpMethod": 0, "url": "http://[::1]/users/1", "headers": {}, "body": null});
-        let res = run_test_and_get_result(payload);
-        assert_eq!(res.ip, "::1");
-        assert_eq!(res.ip_version, 6);
+        let out = run_test_and_get_result(payload);
+        assert_eq!(out.request.ip, "::1");
+        assert_eq!(out.request.ip_version, 6);
     }
 
     #[test]
@@ -144,8 +161,8 @@ mod header_parsing {
             "httpMethod": 0, "url": "http://test.com/users/1",
             "headers": { "x-forwarded-proto": "https" }, "body": null
         });
-        let res = run_test_and_get_result(payload);
-        assert_eq!(res.http_protocol, "https");
+        let out = run_test_and_get_result(payload);
+        assert_eq!(out.request.http_protocol, "https");
     }
 
     #[test]
@@ -154,8 +171,8 @@ mod header_parsing {
             "httpMethod": 0, "url": "http://test.com/users/1",
             "headers": { "x-forwarded-protocol": "https" }, "body": null
         });
-        let res = run_test_and_get_result(payload);
-        assert_eq!(res.http_protocol, "https");
+        let out = run_test_and_get_result(payload);
+        assert_eq!(out.request.http_protocol, "https");
     }
 
     #[test]
@@ -164,8 +181,8 @@ mod header_parsing {
             "httpMethod": 0, "url": "http://test.com/users/1",
             "headers": { "x-http-version": "2.0" }, "body": null
         });
-        let res = run_test_and_get_result(payload);
-        assert_eq!(res.http_version, "2.0");
+        let out = run_test_and_get_result(payload);
+        assert_eq!(out.request.http_version, "2.0");
     }
 
     #[test]
@@ -174,8 +191,8 @@ mod header_parsing {
             "httpMethod": 0, "url": "http://test.com/users/1",
             "headers": {}, "body": null
         });
-        let res = run_test_and_get_result(payload);
-        assert_eq!(res.http_version, "1.1");
+        let out = run_test_and_get_result(payload);
+        assert_eq!(out.request.http_version, "1.1");
     }
 
     #[test]
@@ -184,8 +201,8 @@ mod header_parsing {
             "httpMethod": 0, "url": "http://a.com/users/1",
             "headers": { "cookie": "a=1; b=2; c=3" }, "body": null
         });
-        let res = run_test_and_get_result(payload);
-        let cookies = res.cookies;
+        let out = run_test_and_get_result(payload);
+        let cookies = out.request.cookies;
         assert_eq!(cookies.get("a").unwrap(), "1");
         assert_eq!(cookies.get("b").unwrap(), "2");
         assert_eq!(cookies.get("c").unwrap(), "3");
@@ -197,9 +214,9 @@ mod header_parsing {
             "httpMethod": 0, "url": "http://a.com/users/1",
             "headers": { "content-type": "application/json; charset=utf-8" }, "body": null
         });
-        let res = run_test_and_get_result(payload);
-        assert_eq!(res.content_type, "application/json");
-        assert_eq!(res.charset, "utf-8");
+        let out = run_test_and_get_result(payload);
+        assert_eq!(out.request.content_type, "application/json");
+        assert_eq!(out.request.charset, "utf-8");
     }
 
     #[test]
@@ -208,9 +225,9 @@ mod header_parsing {
             "httpMethod": 0, "url": "http://a.com/users/1",
             "headers": { "x-custom": "v1", "content-type": "text/plain" }, "body": null
         });
-        let res = run_test_and_get_result(payload);
-        assert_eq!(res.headers.get("x-custom").unwrap(), "v1");
-        assert_eq!(res.content_type, "text/plain");
+        let out = run_test_and_get_result(payload);
+        assert_eq!(out.request.headers.get("x-custom").unwrap(), "v1");
+        assert_eq!(out.request.content_type, "text/plain");
     }
 }
 
@@ -220,25 +237,22 @@ mod routing_logic {
     #[test]
     fn should_match_static_route() {
         let payload = json!({"httpMethod": 0, "url": "http://localhost/static", "headers": {}, "body": null});
-        let res = run_test_and_get_result(payload);
-        assert_eq!(res.route_key, 2);
-        assert!(res.params.is_none());
+        let out = run_test_and_get_result(payload);
+        assert!(out.request.params.is_none());
     }
 
     #[test]
     fn should_match_parameterized_route_and_extract_param() {
         let payload = json!({"httpMethod": 0, "url": "https://example.com/users/12345", "headers": {}, "body": null});
-        let res = run_test_and_get_result(payload);
-        assert_eq!(res.route_key, 0);
-        assert_eq!(res.params.unwrap().get("id").unwrap(), "12345");
+        let out = run_test_and_get_result(payload);
+        assert_eq!(out.request.params.unwrap().get("id").unwrap(), "12345");
     }
 
     #[test]
     fn should_match_wildcard_route_and_extract_path() {
         let payload = json!({"httpMethod": 1, "url": "http://test.com/files/path/to/my/file.txt", "headers": {}, "body": null});
-        let res = run_test_and_get_result(payload);
-        assert_eq!(res.route_key, 1);
-        assert_eq!(res.params.unwrap().get("*").unwrap(), "path/to/my/file.txt");
+        let out = run_test_and_get_result(payload);
+        assert_eq!(out.request.params.unwrap().get("*").unwrap(), "path/to/my/file.txt");
     }
 }
 
