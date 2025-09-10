@@ -82,5 +82,45 @@ pub enum HttpStatusCode {
     OK = 200,
     BadRequest = 400,
     NotFound = 404,
+    UnsupportedMediaType = 415,
     InternalServerError = 500,
+}
+
+impl serde::Serialize for HttpStatusCode {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_u16(*self as u16)
+    }
+}
+
+impl<'de> Deserialize<'de> for HttpStatusCode {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let v = u16::deserialize(deserializer)?;
+        match v {
+            200 => Ok(HttpStatusCode::OK),
+            400 => Ok(HttpStatusCode::BadRequest),
+            404 => Ok(HttpStatusCode::NotFound),
+            415 => Ok(HttpStatusCode::UnsupportedMediaType),
+            500 => Ok(HttpStatusCode::InternalServerError),
+            _ => Err(serde::de::Error::custom("InvalidHttpStatusCode")),
+        }
+    }
+}
+
+impl HttpStatusCode {
+    #[inline]
+    pub fn reason_phrase(self) -> &'static str {
+        match self {
+            HttpStatusCode::OK => "OK",
+            HttpStatusCode::BadRequest => "Bad Request",
+            HttpStatusCode::NotFound => "Not Found",
+            HttpStatusCode::UnsupportedMediaType => "Unsupported Media Type",
+            HttpStatusCode::InternalServerError => "Internal Server Error",
+        }
+    }
 }

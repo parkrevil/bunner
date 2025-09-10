@@ -67,7 +67,7 @@ pub fn process_job(
         query_params: None,
         body: None,
     };
-    let mut response = BunnerResponse { http_status: 200, headers: None, body: serde_json::Value::Null };
+    let mut response = BunnerResponse { http_status: crate::r#enum::HttpStatusCode::OK, headers: None, body: serde_json::Value::Null };
 
     let chain = Chain::new()
         .with(HeaderParser)

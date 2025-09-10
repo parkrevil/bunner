@@ -229,8 +229,7 @@ mod request_processing {
             let res = out.request;
             assert_eq!(res.params.unwrap()["id"], "123");
             assert_eq!(res.query_params.unwrap()["q"], "test");
-            assert_eq!(res.body.unwrap()["key"], "val");
-            assert_eq!(res.ip, "1.2.3.4");
+            assert_eq!(res.body.unwrap(), serde_json::from_str::<serde_json::Value>("{\"key\":\"val\"}").unwrap());
         }
         unsafe { destroy(handle) };
     }

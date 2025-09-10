@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::r#enum::HttpMethod;
+use crate::r#enum::{HttpMethod, HttpStatusCode};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AddRouteResult {
@@ -27,7 +27,7 @@ pub struct HandleRequestPayload {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct BunnerResponse {
     #[serde(rename = "httpStatus")]
-    pub http_status: u16,
+    pub http_status: HttpStatusCode,
     pub headers: Option<HashMap<String, String>>,
     pub body: serde_json::Value,
 }

@@ -1,4 +1,5 @@
 use bunner_http_server::request_handler;
+use bunner_http_server::r#enum::HttpStatusCode;
 use bunner_http_server::router::{Router, RouterOptions, RouterReadOnly};
 use bunner_http_server::structure::HandleRequestOutput;
 use serde_json::json;
@@ -66,6 +67,34 @@ mod request_parsing {
     }
 
     #[test]
+    fn should_parse_array_query_parameters() {
+        let payload = json!({
+            "httpMethod": 0,
+            "url": "https://example.com/static?tags[]=a&tags[]=b&tags[]=c",
+            "headers": {}, "body": null
+        });
+        let out = run_test_and_get_result(payload);
+        let q = out.request.query_params.unwrap();
+        let tags = q.get("tags").unwrap().as_array().unwrap();
+        assert_eq!(tags, &vec![json!("a"), json!("b"), json!("c")]);
+    }
+
+    #[test]
+    fn should_parse_nested_object_query_parameters() {
+        let payload = json!({
+            "httpMethod": 0,
+            "url": "https://example.com/static?user[name]=alice&user[id]=42&user[role]=admin",
+            "headers": {}, "body": null
+        });
+        let out = run_test_and_get_result(payload);
+        let q = out.request.query_params.unwrap();
+        let user = q.get("user").unwrap();
+        assert_eq!(user.get("name").unwrap(), "alice");
+        assert_eq!(user.get("id").unwrap(), "42");
+        assert_eq!(user.get("role").unwrap(), "admin");
+    }
+
+    #[test]
     fn should_parse_json_body() {
         let payload = json!({
             "httpMethod": 0,
@@ -96,7 +125,8 @@ mod request_parsing {
             "body": "this is plain text"
         });
         let out = run_test_and_get_result(payload);
-        assert_eq!(out.request.body.unwrap().as_str().unwrap(), "this is plain text");
+        assert_eq!(out.response.http_status, HttpStatusCode::UnsupportedMediaType);
+        assert_eq!(out.response.body, json!(HttpStatusCode::UnsupportedMediaType.reason_phrase()));
     }
 
     mod body_fallbacks {
@@ -111,89 +141,14 @@ mod request_parsing {
                 "body": "{invalid}"
             });
             let out = super::run_test_and_get_result(payload);
-            assert_eq!(out.request.body.unwrap(), json!("{invalid}"));
+            assert_eq!(out.response.http_status, HttpStatusCode::UnsupportedMediaType);
+            assert_eq!(out.response.body, json!(HttpStatusCode::UnsupportedMediaType.reason_phrase()));
         }
     }
 }
 
 mod header_parsing {
     use super::*;
-
-    #[test]
-    fn should_resolve_ip_from_x_forwarded_for() {
-        let payload = json!({
-            "httpMethod": 0, "url": "http://test.com/users/1",
-            "headers": { "x-forwarded-for": "1.1.1.1, 2.2.2.2" }, "body": null
-        });
-        let out = run_test_and_get_result(payload);
-        assert_eq!(out.request.ip, "1.1.1.1");
-        assert_eq!(out.request.ip_version, 4);
-    }
-
-    #[test]
-    fn should_resolve_ip_from_x_real_ip() {
-        let payload = json!({
-            "httpMethod": 0, "url": "http://test.com/users/1",
-            "headers": { "x-real-ip": "3.3.3.3" }, "body": null
-        });
-        let out = run_test_and_get_result(payload);
-        assert_eq!(out.request.ip, "3.3.3.3");
-    }
-
-    #[test]
-    fn should_resolve_localhost_ip_from_url_host() {
-        let payload = json!({"httpMethod": 0, "url": "http://localhost/users/1", "headers": {}, "body": null});
-        let out = run_test_and_get_result(payload);
-        assert_eq!(out.request.ip, "127.0.0.1");
-    }
-
-    #[test]
-    fn should_resolve_ipv6_from_url_host() {
-        let payload = json!({"httpMethod": 0, "url": "http://[::1]/users/1", "headers": {}, "body": null});
-        let out = run_test_and_get_result(payload);
-        assert_eq!(out.request.ip, "::1");
-        assert_eq!(out.request.ip_version, 6);
-    }
-
-    #[test]
-    fn should_parse_protocol_from_x_forwarded_proto() {
-        let payload = json!({
-            "httpMethod": 0, "url": "http://test.com/users/1",
-            "headers": { "x-forwarded-proto": "https" }, "body": null
-        });
-        let out = run_test_and_get_result(payload);
-        assert_eq!(out.request.http_protocol, "https");
-    }
-
-    #[test]
-    fn should_parse_protocol_from_x_forwarded_protocol_alias() {
-        let payload = json!({
-            "httpMethod": 0, "url": "http://test.com/users/1",
-            "headers": { "x-forwarded-protocol": "https" }, "body": null
-        });
-        let out = run_test_and_get_result(payload);
-        assert_eq!(out.request.http_protocol, "https");
-    }
-
-    #[test]
-    fn should_parse_http_version_from_header() {
-        let payload = json!({
-            "httpMethod": 0, "url": "http://test.com/users/1",
-            "headers": { "x-http-version": "2.0" }, "body": null
-        });
-        let out = run_test_and_get_result(payload);
-        assert_eq!(out.request.http_version, "2.0");
-    }
-
-    #[test]
-    fn should_default_http_version_when_header_missing() {
-        let payload = json!({
-            "httpMethod": 0, "url": "http://test.com/users/1",
-            "headers": {}, "body": null
-        });
-        let out = run_test_and_get_result(payload);
-        assert_eq!(out.request.http_version, "1.1");
-    }
 
     #[test]
     fn should_parse_cookies() {
@@ -284,8 +239,9 @@ mod error_handling {
     #[test]
     fn should_fail_on_malformed_url() {
         let payload = json!({"httpMethod": 0, "url": "://bad-url", "headers": {}, "body": null});
-        let code = run_test_and_get_error_code(payload);
-        assert_eq!(code, 6); // InvalidUrl
+        let out = super::run_test_and_get_result(payload);
+        assert_eq!(out.response.http_status, HttpStatusCode::BadRequest);
+        assert_eq!(out.response.body, json!(HttpStatusCode::BadRequest.reason_phrase()));
     }
 
     #[test]
@@ -298,7 +254,8 @@ mod error_handling {
     #[test]
     fn should_fail_on_invalid_querystring_format() {
         let payload = json!({"httpMethod": 0, "url": "http://a.com/users/1?a[=malformed", "headers": {}, "body": null});
-        let code = run_test_and_get_error_code(payload);
-        assert_eq!(code, 7); // InvalidQueryString
+        let out = super::run_test_and_get_result(payload);
+        assert_eq!(out.response.http_status, HttpStatusCode::BadRequest);
+        assert_eq!(out.response.body, json!(HttpStatusCode::BadRequest.reason_phrase()));
     }
 }

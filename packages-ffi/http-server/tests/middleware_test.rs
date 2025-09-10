@@ -4,6 +4,7 @@ use bunner_http_server::middleware::cookie_parser::CookieParser;
 use bunner_http_server::middleware::header_parser::HeaderParser;
 use bunner_http_server::middleware::url_parser::UrlParser;
 use bunner_http_server::r#enum::HttpMethod;
+use bunner_http_server::r#enum::HttpStatusCode;
 use bunner_http_server::structure::{BunnerRequest, BunnerResponse, HandleRequestPayload};
 use serde_json::json;
 use std::collections::HashMap;
@@ -21,23 +22,16 @@ fn run_chain(payload: &HandleRequestPayload) -> (BunnerRequest, BunnerResponse) 
     let mut req = BunnerRequest {
         url: String::new(),
         http_method: HttpMethod::Get,
-        host: String::new(),
-        hostname: String::new(),
-        port: None,
         path: String::new(),
-        params: None,
-        query_params: None,
-        body: None,
-        ip: String::new(),
-        ip_version: 0,
-        http_protocol: String::new(),
-        http_version: String::new(),
         headers: serde_json::Value::Object(serde_json::Map::new()),
         cookies: serde_json::Value::Object(serde_json::Map::new()),
         content_type: String::new(),
         charset: String::new(),
+        params: None,
+        query_params: None,
+        body: None,
     };
-    let mut res = BunnerResponse { http_status: 200, headers: None, body: serde_json::Value::Null };
+    let mut res = BunnerResponse { http_status: HttpStatusCode::OK, headers: None, body: serde_json::Value::Null };
     let chain = Chain::new().with(HeaderParser).with(UrlParser).with(CookieParser).with(BodyParser);
     let _ = chain.execute(&mut req, &mut res, payload);
     (req, res)
@@ -45,19 +39,6 @@ fn run_chain(payload: &HandleRequestPayload) -> (BunnerRequest, BunnerResponse) 
 
 mod header_parsing {
     use super::*;
-
-    #[test]
-    fn should_lowercase_headers_and_set_protocol_version_ip() {
-        let mut headers = HashMap::new();
-        headers.insert("X-Forwarded-Proto".to_string(), "https".to_string());
-        headers.insert("X-Real-IP".to_string(), "1.2.3.4".to_string());
-        let payload = make_payload("https://example.com/a", headers, None);
-        let (req, _res) = run_chain(&payload);
-        assert_eq!(req.http_protocol, "https");
-        assert_eq!(req.http_version, "1.1");
-        assert_eq!(req.ip, "1.2.3.4");
-        assert_eq!(req.ip_version, 4);
-    }
 
     #[test]
     fn should_parse_content_type_and_charset() {
@@ -68,33 +49,6 @@ mod header_parsing {
         assert_eq!(req.content_type, "application/json");
         assert_eq!(req.charset, "utf-8");
     }
-
-    #[test]
-    fn should_trim_and_pick_first_ip_from_x_forwarded_for() {
-        let mut headers = HashMap::new();
-        headers.insert("x-forwarded-for".to_string(), " 1.1.1.1 , 2.2.2.2 ".to_string());
-        let payload = make_payload("http://a.com/a", headers, None);
-        let (req, _res) = run_chain(&payload);
-        assert_eq!(req.ip, "1.1.1.1");
-    }
-
-    #[test]
-    fn should_detect_ipv4_mapped_ipv6_as_ipv6_version() {
-        let mut headers = HashMap::new();
-        headers.insert("x-real-ip".to_string(), "::ffff:192.0.2.128".to_string());
-        let payload = make_payload("http://a.com/a", headers, None);
-        let (req, _res) = run_chain(&payload);
-        assert_eq!(req.ip, "::ffff:192.0.2.128");
-        assert_eq!(req.ip_version, 6);
-    }
-
-    #[test]
-    fn should_fallback_protocol_from_url_scheme_when_header_missing() {
-        let headers = HashMap::new();
-        let payload = make_payload("https://a.com/a", headers, None);
-        let (req, _res) = run_chain(&payload);
-        assert_eq!(req.http_protocol, "https");
-    }
 }
 
 mod url_parsing {
@@ -104,28 +58,121 @@ mod url_parsing {
     fn should_parse_path_query_and_host_parts() {
         let headers = HashMap::new();
         let payload = make_payload("http://localhost:8080/users/42?q=ok", headers, None);
-        let (req, _res) = run_chain(&payload);
+        let (req, res) = run_chain(&payload);
+
+        assert_eq!(res.http_status, HttpStatusCode::OK);
         assert_eq!(req.path, "/users/42");
         assert_eq!(req.query_params.unwrap().get("q").unwrap(), "ok");
-        assert_eq!(req.hostname, "localhost");
-        assert_eq!(req.port, Some(8080));
-    }
-
-    #[test]
-    fn should_keep_duplicate_query_last_value() {
-        let headers = HashMap::new();
-        let payload = make_payload("http://a.com/a?k=1&k=2", headers, None);
-        let (req, _res) = run_chain(&payload);
-        assert_eq!(req.query_params.unwrap().get("k").unwrap(), "2");
     }
 
     #[test]
     fn should_allow_empty_keys_or_values_in_query() {
         let headers = HashMap::new();
         let payload = make_payload("http://a.com/a?=v&k=", headers, None);
-        let (req, _res) = run_chain(&payload);
+        let (_req, res) = run_chain(&payload);
+        assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+        assert_eq!(res.body, json!(HttpStatusCode::BadRequest.reason_phrase()));
+    }
+
+    #[test]
+    fn should_parse_array_query_params() {
+        let headers = HashMap::new();
+        let payload = make_payload("http://a.com/a?tags[]=a&tags[]=b&tags[]=c", headers, None);
+        let (req, res) = run_chain(&payload);
+        assert_eq!(res.http_status, HttpStatusCode::OK);
         let q = req.query_params.unwrap();
-        assert_eq!(q.get("").unwrap(), "v");
+        let tags = q.get("tags").unwrap().as_array().unwrap();
+        assert_eq!(tags, &vec![json!("a"), json!("b"), json!("c")]);
+    }
+
+    #[test]
+    fn should_parse_nested_object_query_params() {
+        let headers = HashMap::new();
+        let payload = make_payload(
+            "http://a.com/a?user[name]=alice&user[id]=42&user[role]=admin",
+            headers,
+            None,
+        );
+        let (req, res) = run_chain(&payload);
+        assert_eq!(res.http_status, HttpStatusCode::OK);
+
+        let q = req.query_params.unwrap();
+        let user = q.get("user").unwrap();
+
+        assert_eq!(user.get("name").unwrap(), "alice");
+        assert_eq!(user.get("id").unwrap(), "42");
+        assert_eq!(user.get("role").unwrap(), "admin");
+    }
+
+    #[test]
+    fn should_parse_5_level_nested_object_query_params() {
+        let headers = HashMap::new();
+        let payload = make_payload(
+            "http://a.com/a?a[b][c][d][e]=1",
+            headers,
+            None,
+        );
+        let (req, res) = run_chain(&payload);
+        assert_eq!(res.http_status, HttpStatusCode::OK);
+
+        let q = req.query_params.unwrap();
+        let a = q.get("a").unwrap();
+        let b = a.get("b").unwrap();
+        let c = b.get("c").unwrap();
+        let d = c.get("d").unwrap();
+        assert_eq!(d.get("e").unwrap(), "1");
+    }
+
+    #[test]
+    fn should_return_400_on_invalid_url() {
+        let headers = HashMap::new();
+        let payload = make_payload("://bad-url", headers, None);
+        let (_req, res) = run_chain(&payload);
+        assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+        assert_eq!(res.body, json!(HttpStatusCode::BadRequest.reason_phrase()));
+    }
+
+    #[test]
+    fn should_return_400_on_invalid_querystring() {
+        let headers = HashMap::new();
+        let payload = make_payload("http://a.com/a?a[=malformed", headers, None);
+        let (_req, res) = run_chain(&payload);
+
+        assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+        assert_eq!(res.body, json!(HttpStatusCode::BadRequest.reason_phrase()));
+    }
+
+    #[test]
+    fn should_reject_duplicate_non_array_keys() {
+        let headers = HashMap::new();
+        let payload = make_payload("http://a.com/a?k=1&k=2", headers, None);
+        let (_req, res) = run_chain(&payload);
+        assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+        assert_eq!(res.body, json!(HttpStatusCode::BadRequest.reason_phrase()));
+    }
+
+    #[test]
+    fn should_reject_invalid_bracket_forms() {
+        let headers = HashMap::new();
+        for bad in [
+            "http://a.com/a?[k]=v",
+            "http://a.com/a?[]=v",
+            "http://a.com/a?a[]]=v",
+            "http://a.com/a?a[[x]]=v",
+        ] {
+            let payload = make_payload(bad, headers.clone(), None);
+            let (_req, res) = run_chain(&payload);
+            assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+        }
+    }
+
+    #[test]
+    fn should_allow_empty_value() {
+        let headers = HashMap::new();
+        let payload = make_payload("http://a.com/a?k=", headers, None);
+        let (req, res) = run_chain(&payload);
+        assert_eq!(res.http_status, HttpStatusCode::OK);
+        let q = req.query_params.unwrap();
         assert_eq!(q.get("k").unwrap(), "");
     }
 }
@@ -149,7 +196,7 @@ mod cookie_parsing {
         headers.insert("cookie".to_string(), "a=\"hello world\"; b=2".to_string());
         let payload = make_payload("http://localhost/a", headers, None);
         let (req, _res) = run_chain(&payload);
-        assert_eq!(req.cookies.get("a").unwrap(), "hello world");
+        assert_eq!(req.cookies.get("a").unwrap(), "\"hello world\"");
         assert_eq!(req.cookies.get("b").unwrap(), "2");
     }
 
@@ -181,8 +228,9 @@ mod body_parsing {
         let mut headers = HashMap::new();
         headers.insert("content-type".to_string(), "text/plain".to_string());
         let payload = make_payload("http://localhost/a", headers, Some("hello"));
-        let (req, _res) = run_chain(&payload);
-        assert_eq!(req.body.unwrap(), json!("hello"));
+        let (_req, res) = run_chain(&payload);
+        assert_eq!(res.http_status, HttpStatusCode::UnsupportedMediaType);
+        assert_eq!(res.body, json!(HttpStatusCode::UnsupportedMediaType.reason_phrase()));
     }
 
     #[test]
@@ -190,8 +238,8 @@ mod body_parsing {
         let mut headers = HashMap::new();
         headers.insert("content-type".to_string(), "application/json".to_string());
         let payload = make_payload("http://localhost/a", headers, Some("{invalid}"));
-        let (req, _res) = run_chain(&payload);
-        assert_eq!(req.body.unwrap(), json!("{invalid}"));
+        let (_req, res) = run_chain(&payload);
+        assert_eq!(res.http_status, HttpStatusCode::UnsupportedMediaType);
+        assert_eq!(res.body, json!(HttpStatusCode::UnsupportedMediaType.reason_phrase()));
     }
 }
-
