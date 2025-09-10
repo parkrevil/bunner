@@ -38,26 +38,16 @@ pub struct BunnerRequest {
     pub url: String,
     #[serde(rename = "httpMethod")]
     pub http_method: HttpMethod,
-    pub host: String,
-    pub hostname: String,
-    pub port: Option<u16>,
     pub path: String,
-    pub params: Option<serde_json::Value>,
-    #[serde(rename = "queryParams")]
-    pub query_params: Option<serde_json::Value>,
-    pub body: Option<serde_json::Value>,
-    pub ip: String,
-    #[serde(rename = "ipVersion")]
-    pub ip_version: u8,
-    #[serde(rename = "httpProtocol")]
-    pub http_protocol: String,
-    #[serde(rename = "httpVersion")]
-    pub http_version: String,
     pub headers: serde_json::Value,
     pub cookies: serde_json::Value,
     #[serde(rename = "contentType")]
     pub content_type: String,
     pub charset: String,
+    pub params: Option<serde_json::Value>,
+    #[serde(rename = "queryParams")]
+    pub query_params: Option<serde_json::Value>,
+    pub body: Option<serde_json::Value>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
