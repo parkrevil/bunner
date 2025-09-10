@@ -8,8 +8,9 @@ pub enum HttpServerError {
     InvalidRequestId = 5,
     InvalidUrl = 6,
     InvalidQueryString = 7,
-    NotSealed = 8,
+    RouteNotSealed = 8,
     QueueFull = 9,
+    InvalidPayload = 10,
 }
 
 impl HttpServerError {

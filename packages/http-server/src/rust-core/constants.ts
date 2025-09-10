@@ -9,6 +9,11 @@ export const HttpServerErrorCodes: Record<number, string> = {
   3: 'Invalid HTTP method.',
   4: 'Invalid JSON string.',
   5: 'Invalid request id.',
+  6: 'Invalid URL.',
+  7: 'Invalid query string.',
+  8: 'Route is not sealed.',
+  9: 'Job queue is full.',
+  10: 'Invalid payload.',
 
   // Router
   // Add-time
@@ -32,7 +37,4 @@ export const HttpServerErrorCodes: Record<number, string> = {
   10102: 'The request path contains disallowed characters.',
   10103: 'The request path is empty.',
   10104: 'The request path must contain only ASCII characters.',
-  // Server runtime
-  8: 'Router is not sealed.',
-  9: 'Job queue is full.',
 } as const;

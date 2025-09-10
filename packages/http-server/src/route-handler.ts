@@ -106,9 +106,10 @@ export class RouteHandler {
       const handleResult = await this.rustCore.handleRequest({
         httpMethod,
         url: rawReq.url,
-        headers: {},
+        headers: rawReq.headers.toJSON(),
         body,
       });
+      console.log(handleResult);
       const handler = this.handlers.get(handleResult.routeKey);
 
       if (!handler) {

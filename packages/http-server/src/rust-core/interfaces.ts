@@ -48,6 +48,14 @@ export interface HandleRequestResult {
   params: Record<string, any> | null;
   queryParams: Record<string, any> | null;
   body: Record<string, any> | null;
+  ip: string;
+  ipVersion: number;
+  httpProtocol: string;
+  httpVersion: string;
+  headers: Record<string, any>;
+  cookies: Record<string, any>;
+  contentType: string;
+  charset: string;
   response: {
     httpStatus: number;
     headers: Record<string, any> | null;
