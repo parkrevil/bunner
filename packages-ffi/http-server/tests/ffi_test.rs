@@ -5,7 +5,7 @@ use serde_json::json;
 use std::ffi::{c_char, CStr, CString};
 use std::ptr::null_mut;
 use std::sync::{mpsc, Arc, Barrier};
-use std::sync::{Mutex, OnceLock};
+mod common;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 struct FfiError {
@@ -46,6 +46,8 @@ extern "C" fn test_callback(req_id_ptr: *const c_char, res_ptr: *mut c_char) {
 
 // --- Test Modules (Domain-Driven) ---
 
+use common as helpers;
+
 mod lifecycle_management {
     use super::*;
     use std::ptr::null_mut;
@@ -65,37 +67,11 @@ mod lifecycle_management {
 
     #[test]
     fn should_return_handle_is_null_error_when_handle_is_null() {
-        static GLOBAL_TX: OnceLock<Mutex<Option<mpsc::Sender<String>>>> = OnceLock::new();
-        extern "C" fn global_callback(_req_id_ptr: *const c_char, res_ptr: *mut c_char) {
-            let res_str = unsafe { CStr::from_ptr(res_ptr).to_str().unwrap().to_owned() };
-            let lock = GLOBAL_TX.get_or_init(|| Mutex::new(None));
-            if let Some(tx) = lock.lock().unwrap().as_ref() {
-                let _ = tx.send(res_str);
-            }
-            unsafe { bunner_http_server::free_string(res_ptr) };
-        }
-
-        let (tx, rx) = mpsc::channel::<String>();
-        {
-            let lock = GLOBAL_TX.get_or_init(|| Mutex::new(None));
-            *lock.lock().unwrap() = Some(tx.clone());
-        }
-
-        unsafe {
-            handle_request(
-                std::ptr::null_mut(),
-                std::ptr::null(),
-                std::ptr::null(),
-                global_callback,
-            );
-        }
-
-        let res: FfiError = serde_json::from_str(&rx.recv().unwrap()).unwrap();
+        let out = helpers::with_capture(|cb| unsafe {
+            handle_request(std::ptr::null_mut(), std::ptr::null(), std::ptr::null(), cb);
+        });
+        let res: FfiError = serde_json::from_str(&out).unwrap();
         assert_eq!(res.code, 1);
-        {
-            let lock = GLOBAL_TX.get_or_init(|| Mutex::new(None));
-            *lock.lock().unwrap() = None;
-        }
     }
 }
 
@@ -253,64 +229,29 @@ mod request_processing {
 
     #[test]
     fn should_return_invalid_request_id_on_non_utf8_request_id() {
-        static GLOBAL_TX: OnceLock<Mutex<Option<mpsc::Sender<String>>>> = OnceLock::new();
-        extern "C" fn global_callback(_req_id_ptr: *const c_char, res_ptr: *mut c_char) {
-            let res_str = unsafe { CStr::from_ptr(res_ptr).to_str().unwrap().to_owned() };
-            let lock = GLOBAL_TX.get_or_init(|| Mutex::new(None));
-            if let Some(tx) = lock.lock().unwrap().as_ref() {
-                let _ = tx.send(res_str);
-            }
-            unsafe { bunner_http_server::free_string(res_ptr) };
-        }
-
         let handle = init();
-        let (tx, rx) = mpsc::channel::<String>();
-        {
-            let lock = GLOBAL_TX.get_or_init(|| Mutex::new(None));
-            *lock.lock().unwrap() = Some(tx.clone());
-        }
-
-        unsafe {
-            let bad_ptr: *mut u8 = libc::malloc(2) as *mut u8;
-            *bad_ptr.offset(0) = 0xFF;
-            *bad_ptr.offset(1) = 0x00;
-            handle_request(handle, bad_ptr as *const c_char, std::ptr::null(), global_callback);
-            libc::free(bad_ptr as *mut libc::c_void);
-        }
-
-        let res: FfiError = serde_json::from_str(&rx.recv().unwrap()).unwrap();
+        let out = helpers::with_capture(|cb| {
+            let bad_ptr: *mut u8 = unsafe { libc::malloc(2) as *mut u8 };
+            unsafe {
+                *bad_ptr.offset(0) = 0xFF;
+                *bad_ptr.offset(1) = 0x00;
+                handle_request(handle, bad_ptr as *const c_char, std::ptr::null(), cb);
+                libc::free(bad_ptr as *mut libc::c_void);
+            }
+        });
+        let res: FfiError = serde_json::from_str(&out).unwrap();
         assert_eq!(res.code, 5);
         unsafe { destroy(handle) };
-        {
-            let lock = GLOBAL_TX.get_or_init(|| Mutex::new(None));
-            *lock.lock().unwrap() = None;
-        }
     }
 
     #[test]
     fn should_return_queue_full_when_pool_is_saturated() {
-        static GLOBAL_TX: OnceLock<Mutex<Option<mpsc::Sender<String>>>> = OnceLock::new();
-        extern "C" fn global_callback(_req_id_ptr: *const c_char, res_ptr: *mut c_char) {
-            let res_str = unsafe { CStr::from_ptr(res_ptr).to_str().unwrap().to_owned() };
-            let lock = GLOBAL_TX.get_or_init(|| Mutex::new(None));
-            if let Some(tx) = lock.lock().unwrap().as_ref() {
-                let _ = tx.send(res_str);
-            }
-            unsafe { bunner_http_server::free_string(res_ptr) };
-        }
-
         bunner_http_server::thread_pool_test_support::set_force_full(true);
 
         let handle = init();
         unsafe {
             add_route(handle, 0, to_cstr("/a").as_ptr());
             router_seal(handle);
-        }
-
-        let (tx, rx) = mpsc::channel::<String>();
-        {
-            let lock = GLOBAL_TX.get_or_init(|| Mutex::new(None));
-            *lock.lock().unwrap() = Some(tx.clone());
         }
 
         let payload = json!({
@@ -321,27 +262,16 @@ mod request_processing {
         })
         .to_string();
 
-        unsafe {
+        let out = helpers::with_capture(|cb| unsafe {
             let dummy_req = to_cstr("qfull");
-            handle_request(
-                handle,
-                dummy_req.as_ptr(),
-                to_cstr(&payload).as_ptr(),
-                global_callback,
-            );
-        }
-
-        let res: FfiError = serde_json::from_str(&rx.recv().unwrap()).unwrap();
+            handle_request(handle, dummy_req.as_ptr(), to_cstr(&payload).as_ptr(), cb);
+        });
+        let res: FfiError = serde_json::from_str(&out).unwrap();
         assert_eq!(res.code, 9);
 
         unsafe { destroy(handle) };
-        {
-            let lock = GLOBAL_TX.get_or_init(|| Mutex::new(None));
-            *lock.lock().unwrap() = None;
-        }
 
         // Reset the forced state
-        #[cfg(feature = "test")]
         bunner_http_server::thread_pool_test_support::set_force_full(false);
     }
 
@@ -411,39 +341,17 @@ mod request_processing {
 
     #[test]
     fn should_not_crash_on_null_request_id() {
-        static GLOBAL_TX: OnceLock<Mutex<Option<mpsc::Sender<String>>>> = OnceLock::new();
-        extern "C" fn global_callback(_req_id_ptr: *const c_char, res_ptr: *mut c_char) {
-            let res_str = unsafe { CStr::from_ptr(res_ptr).to_str().unwrap().to_owned() };
-            let lock = GLOBAL_TX.get_or_init(|| Mutex::new(None));
-            if let Some(tx) = lock.lock().unwrap().as_ref() {
-                let _ = tx.send(res_str);
-            }
-            unsafe { bunner_http_server::free_string(res_ptr) };
-        }
-
         let handle = init();
-        let (tx, rx) = mpsc::channel::<String>();
-        {
-            let lock = GLOBAL_TX.get_or_init(|| Mutex::new(None));
-            *lock.lock().unwrap() = Some(tx.clone());
-        }
-        unsafe {
-            router_seal(handle);
-            let payload = json!({ "httpMethod": 0, "url": "http://localhost/a", "headers": {}, "body": null }).to_string();
-            handle_request(
-                handle,
-                null_mut(), // Pass null pointer for request_id
-                to_cstr(&payload).as_ptr(),
-                global_callback,
-            );
-        }
-        let res: FfiError = serde_json::from_str(&rx.recv().unwrap()).unwrap();
+        let out = helpers::with_capture(|cb| {
+            unsafe {
+                router_seal(handle);
+                let payload = json!({ "httpMethod": 0, "url": "http://localhost/a", "headers": {}, "body": null }).to_string();
+                handle_request(handle, null_mut(), to_cstr(&payload).as_ptr(), cb);
+            }
+        });
+        let res: FfiError = serde_json::from_str(&out).unwrap();
         assert_eq!(res.code, 5);
         unsafe { destroy(handle) };
-        {
-            let lock = GLOBAL_TX.get_or_init(|| Mutex::new(None));
-            *lock.lock().unwrap() = None;
-        }
     }
 }
 

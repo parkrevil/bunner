@@ -5,6 +5,9 @@ use serde_json::json;
 use std::ffi::{c_char, CStr};
 use std::sync::{mpsc, Arc};
 
+mod common;
+use common::make_req_id;
+
 // --- Test Setup & Helpers ---
 
 extern "C" fn test_callback(req_id_ptr: *const c_char, res_ptr: *mut c_char) {
@@ -28,8 +31,7 @@ fn setup_router() -> Arc<RouterReadOnly> {
 fn run_test_and_get_result(payload: serde_json::Value) -> HandleRequestResult {
     let ro = setup_router();
     let (tx, rx) = mpsc::channel::<String>();
-    let tx_ptr_val = &tx as *const _ as usize;
-    let req_id = tx_ptr_val.to_string();
+    let req_id = make_req_id(&tx);
     request_handler::process_job(test_callback, req_id, payload.to_string(), ro);
     serde_json::from_str(&rx.recv().unwrap()).unwrap()
 }
@@ -37,8 +39,7 @@ fn run_test_and_get_result(payload: serde_json::Value) -> HandleRequestResult {
 fn run_test_and_get_error_code(payload: serde_json::Value) -> u16 {
     let ro = setup_router();
     let (tx, rx) = mpsc::channel::<String>();
-    let tx_ptr_val = &tx as *const _ as usize;
-    let req_id = tx_ptr_val.to_string();
+    let req_id = make_req_id(&tx);
     request_handler::process_job(test_callback, req_id, payload.to_string(), ro);
     let res: serde_json::Value = serde_json::from_str(&rx.recv().unwrap()).unwrap();
     res.get("code").unwrap().as_u64().unwrap() as u16
