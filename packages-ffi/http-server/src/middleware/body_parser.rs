@@ -12,21 +12,25 @@ impl Middleware for BodyParser {
         res: &mut BunnerResponse,
         payload: &HandleRequestPayload,
     ) -> bool {
-      if payload.body.is_none() {
-        return true;
-      }
+        if payload.body.is_none() {
+            return true;
+        }
 
-      let body = payload.body.as_ref().unwrap();
+        let body = payload.body.as_ref().unwrap();
 
-      match serde_json::from_str::<JsonValue>(body) {
-          Ok(v) => req.body = Some(v),
-          Err(_) => {
-            res.http_status = HttpStatusCode::UnsupportedMediaType;
-            res.body = serde_json::Value::String(HttpStatusCode::UnsupportedMediaType.reason_phrase().to_string());
+        match serde_json::from_str::<JsonValue>(body) {
+            Ok(v) => req.body = Some(v),
+            Err(_) => {
+                res.http_status = HttpStatusCode::UnsupportedMediaType;
+                res.body = serde_json::Value::String(
+                    HttpStatusCode::UnsupportedMediaType
+                        .reason_phrase()
+                        .to_string(),
+                );
 
-            return false;
-          },
-      }
+                return false;
+            }
+        }
         true
     }
 }

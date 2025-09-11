@@ -88,12 +88,16 @@ impl RadixTree {
         builder::finalize(self);
     }
 
-    pub fn insert_bulk<I>(&mut self, entries: I) -> Result<Vec<u16>, super::errors::RouterError>
+    pub fn insert_bulk<I>(&mut self, entries: I) -> Result<Vec<u16>, super::structures::RouterError>
     where
         I: IntoIterator<Item = (HttpMethod, String)>,
     {
         if self.root_node.is_sealed() {
-            return Err(super::errors::RouterError::RouterSealedCannotInsert);
+            return Err(super::structures::RouterError::new(
+                super::errors::RouterErrorCode::RouterSealedCannotInsert,
+                "Router is sealed; cannot insert bulk routes".to_string(),
+                Some(serde_json::json!({"operation":"insert_bulk"})),
+            ));
         }
 
         // Phase A: parallel preprocess (normalize/parse) with light metadata
@@ -214,7 +218,7 @@ impl RadixTree {
             }
             drop(tx);
 
-            let mut first_err: Option<super::errors::RouterError> = None;
+            let mut first_err: Option<super::structures::RouterError> = None;
             for msg in rx.iter() {
                 match msg {
                     Ok((idx, method, segs, head, plen, is_static, lits)) => {
@@ -282,7 +286,11 @@ impl RadixTree {
             use std::sync::atomic::Ordering;
             let cur = self.next_route_key.load(Ordering::Relaxed);
             if cur as usize + n >= MAX_ROUTES as usize {
-                return Err(super::errors::RouterError::MaxRoutesExceeded);
+                return Err(super::structures::RouterError::new(
+                    super::errors::RouterErrorCode::MaxRoutesExceeded,
+                    "Maximum number of routes exceeded when reserving bulk keys".to_string(),
+                    Some(serde_json::json!({"operation":"insert_bulk","requested": n})),
+                ));
             }
             self.next_route_key.fetch_add(n as u16, Ordering::Relaxed)
         };

@@ -3,9 +3,7 @@
 
 use bunner_http_server::r#enum::HttpMethod;
 use bunner_http_server::router::radix_tree::node::MAX_SEGMENT_LENGTH;
-use bunner_http_server::router::{self as rapi, Router, RouterError, RouterOptions};
-
-// --- New Refactored Test Structure ---
+use bunner_http_server::router::{self as rapi, Router, RouterErrorCode, RouterOptions, RouterError};
 
 mod registration {
     use super::*;
@@ -43,15 +41,15 @@ mod registration {
         #[test]
         fn when_path_is_empty() {
             let mut r = rapi::Router::new(None);
-            assert_eq!(r.add(HttpMethod::Get, ""), Err(RouterError::RoutePathEmpty));
+            assert_eq!(r.add(HttpMethod::Get, "").map_err(|e| e.code), Err(RouterErrorCode::RoutePathEmpty));
         }
 
         #[test]
         fn when_path_is_not_ascii() {
             let mut r = rapi::Router::new(None);
             assert_eq!(
-                r.add(HttpMethod::Get, "/café"),
-                Err(RouterError::RoutePathNotAscii)
+                r.add(HttpMethod::Get, "/café").map_err(|e| e.code),
+                Err(RouterErrorCode::RoutePathNotAscii)
             );
         }
 
@@ -60,8 +58,8 @@ mod registration {
             let mut r = rapi::Router::new(None);
             for p in ["/a b", "/a?b", "/a#b", "/a%b"].iter() {
                 assert_eq!(
-                    r.add(HttpMethod::Get, p),
-                    Err(RouterError::RoutePathContainsDisallowedCharacters)
+                    r.add(HttpMethod::Get, p).map_err(|e| e.code),
+                    Err(RouterErrorCode::RoutePathContainsDisallowedCharacters)
                 );
             }
         }
@@ -70,12 +68,12 @@ mod registration {
         fn when_path_syntax_is_invalid() {
             let mut r = rapi::Router::new(None);
             assert_eq!(
-                r.add(HttpMethod::Get, "/a/:()"),
-                Err(RouterError::RoutePathSyntaxInvalid)
+                r.add(HttpMethod::Get, "/a/:()").map_err(|e| e.code),
+                Err(RouterErrorCode::RoutePathSyntaxInvalid)
             );
             assert_eq!(
-                r.add(HttpMethod::Get, "/users/:"),
-                Err(RouterError::RoutePathSyntaxInvalid)
+                r.add(HttpMethod::Get, "/users/:").map_err(|e| e.code),
+                Err(RouterErrorCode::RoutePathSyntaxInvalid)
             );
         }
 
@@ -83,8 +81,8 @@ mod registration {
         fn when_param_name_starts_with_invalid_char() {
             let mut r = rapi::Router::new(None);
             assert_eq!(
-                r.add(HttpMethod::Get, "/:1bad"),
-                Err(RouterError::RouteParamNameInvalidStart)
+                r.add(HttpMethod::Get, "/:1bad").map_err(|e| e.code),
+                Err(RouterErrorCode::RouteParamNameInvalidStart)
             );
         }
 
@@ -92,12 +90,12 @@ mod registration {
         fn when_param_name_contains_invalid_chars() {
             let mut r = rapi::Router::new(None);
             assert_eq!(
-                r.add(HttpMethod::Get, "/:bad-name"),
-                Err(RouterError::RouteParamNameInvalidChar)
+                r.add(HttpMethod::Get, "/:bad-name").map_err(|e| e.code),
+                Err(RouterErrorCode::RouteParamNameInvalidChar)
             );
             assert_eq!(
-                r.add(HttpMethod::Get, "/:file.zip"),
-                Err(RouterError::RouteParamNameInvalidChar)
+                r.add(HttpMethod::Get, "/:file.zip").map_err(|e| e.code),
+                Err(RouterErrorCode::RouteParamNameInvalidChar)
             );
         }
 
@@ -105,8 +103,8 @@ mod registration {
         fn when_segment_has_mixed_literal_and_param() {
             let mut r = rapi::Router::new(None);
             assert_eq!(
-                r.add(HttpMethod::Get, "/user-:id"),
-                Err(RouterError::RouteSegmentContainsMixedParamAndLiteral)
+                r.add(HttpMethod::Get, "/user-:id").map_err(|e| e.code),
+                Err(RouterErrorCode::RouteSegmentContainsMixedParamAndLiteral)
             );
         }
 
@@ -114,8 +112,8 @@ mod registration {
         fn when_param_name_is_duplicated_across_segments() {
             let mut r = rapi::Router::new(None);
             assert_eq!(
-                r.add(HttpMethod::Get, "/a/:x/b/:x"),
-                Err(RouterError::RouteDuplicateParamNameInRoute)
+                r.add(HttpMethod::Get, "/a/:x/b/:x").map_err(|e| e.code),
+                Err(RouterErrorCode::RouteDuplicateParamNameInRoute)
             );
         }
 
@@ -123,8 +121,8 @@ mod registration {
         fn when_wildcard_is_not_at_the_end() {
             let mut r = rapi::Router::new(None);
             assert_eq!(
-                r.add(HttpMethod::Get, "/a/*/b"),
-                Err(RouterError::RouteWildcardSegmentNotAtEnd)
+                r.add(HttpMethod::Get, "/a/*/b").map_err(|e| e.code),
+                Err(RouterErrorCode::RouteWildcardSegmentNotAtEnd)
             );
         }
 
@@ -133,8 +131,8 @@ mod registration {
             let mut r = rapi::Router::new(None);
             r.add(HttpMethod::Get, "/dup").unwrap();
             assert_eq!(
-                r.add(HttpMethod::Get, "/dup"),
-                Err(RouterError::RouteConflictOnDuplicatePath)
+                r.add(HttpMethod::Get, "/dup").map_err(|e| e.code),
+                Err(RouterErrorCode::RouteConflictOnDuplicatePath)
             );
         }
 
@@ -143,8 +141,8 @@ mod registration {
             let mut r = rapi::Router::new(None);
             r.add(HttpMethod::Get, "/users/:id").unwrap();
             assert_eq!(
-                r.add(HttpMethod::Get, "/users/:name"),
-                Err(RouterError::RouteParamNameConflictAtSamePosition)
+                r.add(HttpMethod::Get, "/users/:name").map_err(|e| e.code),
+                Err(RouterErrorCode::RouteParamNameConflictAtSamePosition)
             );
         }
 
@@ -153,8 +151,8 @@ mod registration {
             let mut r = rapi::Router::new(None);
             r.add(HttpMethod::Get, "/a/*").unwrap();
             assert_eq!(
-                r.add(HttpMethod::Get, "/a/*"),
-                Err(RouterError::RouteWildcardAlreadyExistsForMethod)
+                r.add(HttpMethod::Get, "/a/*").map_err(|e| e.code),
+                Err(RouterErrorCode::RouteWildcardAlreadyExistsForMethod)
             );
         }
 
@@ -164,8 +162,8 @@ mod registration {
             r.add(HttpMethod::Get, "/ok").unwrap();
             r.finalize();
             assert_eq!(
-                r.add(HttpMethod::Get, "/x"),
-                Err(RouterError::RouterSealedCannotInsert)
+                r.add(HttpMethod::Get, "/x").map_err(|e| e.code),
+                Err(RouterErrorCode::RouterSealedCannotInsert)
             );
         }
 
@@ -173,7 +171,7 @@ mod registration {
         fn when_max_routes_limit_is_exceeded() {
             let opts = RouterOptions::default();
             let mut r = Router::new(Some(opts));
-            let mut got_err = None;
+            let mut got_err: Option<RouterError> = None;
 
             for i in 0..=100 {
                 let path = format!("/route{}", i);
@@ -182,17 +180,17 @@ mod registration {
                     break;
                 }
             }
-            assert!(matches!(got_err, Some(RouterError::MaxRoutesExceeded)));
-        }
-
+            assert!(matches!(got_err, Some(e) if e.code == RouterErrorCode::MaxRoutesExceeded));
+            }
+        
         #[test]
         fn when_segment_literal_is_too_long() {
             let mut r = rapi::Router::new(None);
             let long_segment = "a".repeat(MAX_SEGMENT_LENGTH + 1);
             let path = format!("/{}", long_segment);
             assert_eq!(
-                r.add(HttpMethod::Get, &path),
-                Err(RouterError::PatternTooLong)
+                r.add(HttpMethod::Get, &path).map_err(|e| e.code),
+                Err(RouterErrorCode::PatternTooLong)
             );
         }
     }
@@ -201,6 +199,7 @@ mod registration {
 // Bulk insert variants mirroring the registration tests
 mod bulk_registration {
     use super::*;
+
     mod success {
         use super::*;
 
@@ -285,8 +284,8 @@ mod bulk_registration {
         fn when_path_is_empty() {
             let mut r = rapi::Router::new(None);
             assert_eq!(
-                r.add_bulk(vec![(HttpMethod::Get, "".to_string())]),
-                Err(RouterError::RoutePathEmpty)
+                r.add_bulk(vec![(HttpMethod::Get, "".to_string())]).map_err(|e| e.code),
+                Err(RouterErrorCode::RoutePathEmpty)
             );
         }
 
@@ -294,8 +293,8 @@ mod bulk_registration {
         fn when_path_is_not_ascii() {
             let mut r = rapi::Router::new(None);
             assert_eq!(
-                r.add_bulk(vec![(HttpMethod::Get, "/café".to_string())]),
-                Err(RouterError::RoutePathNotAscii)
+                r.add_bulk(vec![(HttpMethod::Get, "/café".to_string())]).map_err(|e| e.code),
+                Err(RouterErrorCode::RoutePathNotAscii)
             );
         }
 
@@ -304,8 +303,8 @@ mod bulk_registration {
             let mut r = rapi::Router::new(None);
             for p in ["/a b", "/a?b", "/a#b", "/a%b"].iter() {
                 assert_eq!(
-                    r.add_bulk(vec![(HttpMethod::Get, (*p).to_string())]),
-                    Err(RouterError::RoutePathContainsDisallowedCharacters)
+                    r.add_bulk(vec![(HttpMethod::Get, (*p).to_string())]).map_err(|e| e.code),
+                    Err(RouterErrorCode::RoutePathContainsDisallowedCharacters)
                 );
             }
         }
@@ -314,12 +313,12 @@ mod bulk_registration {
         fn when_path_syntax_is_invalid() {
             let mut r = rapi::Router::new(None);
             assert_eq!(
-                r.add_bulk(vec![(HttpMethod::Get, "/a/:()".to_string())]),
-                Err(RouterError::RoutePathSyntaxInvalid)
+                r.add_bulk(vec![(HttpMethod::Get, "/a/:()".to_string())]).map_err(|e| e.code),
+                Err(RouterErrorCode::RoutePathSyntaxInvalid)
             );
             assert_eq!(
-                r.add_bulk(vec![(HttpMethod::Get, "/users/:".to_string())]),
-                Err(RouterError::RoutePathSyntaxInvalid)
+                r.add_bulk(vec![(HttpMethod::Get, "/users/:".to_string())]).map_err(|e| e.code),
+                Err(RouterErrorCode::RoutePathSyntaxInvalid)
             );
         }
 
@@ -327,8 +326,8 @@ mod bulk_registration {
         fn when_param_name_starts_with_invalid_char() {
             let mut r = rapi::Router::new(None);
             assert_eq!(
-                r.add_bulk(vec![(HttpMethod::Get, "/:1bad".to_string())]),
-                Err(RouterError::RouteParamNameInvalidStart)
+                r.add_bulk(vec![(HttpMethod::Get, "/:1bad".to_string())]).map_err(|e| e.code),
+                Err(RouterErrorCode::RouteParamNameInvalidStart)
             );
         }
 
@@ -336,12 +335,12 @@ mod bulk_registration {
         fn when_param_name_contains_invalid_chars() {
             let mut r = rapi::Router::new(None);
             assert_eq!(
-                r.add_bulk(vec![(HttpMethod::Get, "/:bad-name".to_string())]),
-                Err(RouterError::RouteParamNameInvalidChar)
+                r.add_bulk(vec![(HttpMethod::Get, "/:bad-name".to_string())]).map_err(|e| e.code),
+                Err(RouterErrorCode::RouteParamNameInvalidChar)
             );
             assert_eq!(
-                r.add_bulk(vec![(HttpMethod::Get, "/:file.zip".to_string())]),
-                Err(RouterError::RouteParamNameInvalidChar)
+                r.add_bulk(vec![(HttpMethod::Get, "/:file.zip".to_string())]).map_err(|e| e.code),
+                Err(RouterErrorCode::RouteParamNameInvalidChar)
             );
         }
 
@@ -349,8 +348,8 @@ mod bulk_registration {
         fn when_segment_has_mixed_literal_and_param() {
             let mut r = rapi::Router::new(None);
             assert_eq!(
-                r.add_bulk(vec![(HttpMethod::Get, "/user-:id".to_string())]),
-                Err(RouterError::RouteSegmentContainsMixedParamAndLiteral)
+                r.add_bulk(vec![(HttpMethod::Get, "/user-:id".to_string())]).map_err(|e| e.code),
+                Err(RouterErrorCode::RouteSegmentContainsMixedParamAndLiteral)
             );
         }
 
@@ -358,8 +357,8 @@ mod bulk_registration {
         fn when_param_name_is_duplicated_across_segments() {
             let mut r = rapi::Router::new(None);
             assert_eq!(
-                r.add_bulk(vec![(HttpMethod::Get, "/a/:x/b/:x".to_string())]),
-                Err(RouterError::RouteDuplicateParamNameInRoute)
+                r.add_bulk(vec![(HttpMethod::Get, "/a/:x/b/:x".to_string())]).map_err(|e| e.code),
+                Err(RouterErrorCode::RouteDuplicateParamNameInRoute)
             );
         }
 
@@ -367,8 +366,8 @@ mod bulk_registration {
         fn when_wildcard_is_not_at_the_end() {
             let mut r = rapi::Router::new(None);
             assert_eq!(
-                r.add_bulk(vec![(HttpMethod::Get, "/a/*/b".to_string())]),
-                Err(RouterError::RouteWildcardSegmentNotAtEnd)
+                r.add_bulk(vec![(HttpMethod::Get, "/a/*/b".to_string())]).map_err(|e| e.code),
+                Err(RouterErrorCode::RouteWildcardSegmentNotAtEnd)
             );
         }
 
@@ -379,7 +378,7 @@ mod bulk_registration {
                 (HttpMethod::Get, "/dup".to_string()),
                 (HttpMethod::Get, "/dup".to_string()),
             ]);
-            assert_eq!(res, Err(RouterError::RouteConflictOnDuplicatePath));
+            assert_eq!(res.map_err(|e| e.code), Err(RouterErrorCode::RouteConflictOnDuplicatePath));
         }
 
         #[test]
@@ -389,11 +388,11 @@ mod bulk_registration {
                 (HttpMethod::Get, "/ok".to_string()),
                 (HttpMethod::Get, "/a/*/b".to_string()), // invalid wildcard position
             ]);
-            assert_eq!(res, Err(RouterError::RouteWildcardSegmentNotAtEnd));
+            assert_eq!(res.map_err(|e| e.code), Err(RouterErrorCode::RouteWildcardSegmentNotAtEnd));
             r.finalize();
             assert_eq!(
-                r.find(HttpMethod::Get, "/ok"),
-                Err(RouterError::MatchNotFound),
+                r.find(HttpMethod::Get, "/ok").map_err(|e| e.code),
+                Err(RouterErrorCode::MatchNotFound),
                 "no partial commit should have occurred",
             );
         }
@@ -407,11 +406,11 @@ mod bulk_registration {
                 .map(|i| (HttpMethod::Get, format!("/r{i}")))
                 .collect();
             let res = r.add_bulk(entries);
-            assert!(matches!(res, Err(RouterError::MaxRoutesExceeded)));
+            assert!(matches!(res.map_err(|e| e.code), Err(RouterErrorCode::MaxRoutesExceeded)));
             r.finalize();
             assert_eq!(
-                r.find(HttpMethod::Get, "/r0"),
-                Err(RouterError::MatchNotFound),
+                r.find(HttpMethod::Get, "/r0").map_err(|e| e.code),
+                Err(RouterErrorCode::MatchNotFound),
                 "no routes should be visible after overflow error",
             );
         }
@@ -423,7 +422,7 @@ mod bulk_registration {
                 (HttpMethod::Get, "/users/:id".to_string()),
                 (HttpMethod::Get, "/users/:name".to_string()),
             ]);
-            assert_eq!(res, Err(RouterError::RouteParamNameConflictAtSamePosition));
+            assert_eq!(res.map_err(|e| e.code), Err(RouterErrorCode::RouteParamNameConflictAtSamePosition));
         }
 
         #[test]
@@ -433,7 +432,7 @@ mod bulk_registration {
                 (HttpMethod::Get, "/a/*".to_string()),
                 (HttpMethod::Get, "/a/*".to_string()),
             ]);
-            assert_eq!(res, Err(RouterError::RouteWildcardAlreadyExistsForMethod));
+            assert_eq!(res.map_err(|e| e.code), Err(RouterErrorCode::RouteWildcardAlreadyExistsForMethod));
         }
 
         #[test]
@@ -442,8 +441,8 @@ mod bulk_registration {
             r.add(HttpMethod::Get, "/ok").unwrap();
             r.finalize();
             assert_eq!(
-                r.add_bulk(vec![(HttpMethod::Get, "/x".to_string())]),
-                Err(RouterError::RouterSealedCannotInsert)
+                r.add_bulk(vec![(HttpMethod::Get, "/x".to_string())]).map_err(|e| e.code),
+                Err(RouterErrorCode::RouterSealedCannotInsert)
             );
         }
 
@@ -455,7 +454,7 @@ mod bulk_registration {
                 .map(|i| (HttpMethod::Get, format!("/route{}", i)))
                 .collect();
             let res = r.add_bulk(entries);
-            assert!(matches!(res, Err(RouterError::MaxRoutesExceeded)));
+            assert!(matches!(res.map_err(|e| e.code), Err(RouterErrorCode::MaxRoutesExceeded)));
         }
 
         #[test]
@@ -464,8 +463,8 @@ mod bulk_registration {
             let long_segment = "a".repeat(MAX_SEGMENT_LENGTH + 1);
             let path = format!("/{}", long_segment);
             assert_eq!(
-                r.add_bulk(vec![(HttpMethod::Get, path)]),
-                Err(RouterError::PatternTooLong)
+                r.add_bulk(vec![(HttpMethod::Get, path)]).map_err(|e| e.code),
+                Err(RouterErrorCode::PatternTooLong)
             );
         }
     }
@@ -536,8 +535,8 @@ mod matching {
         fn when_path_is_empty() {
             let r = rapi::Router::new(None);
             assert_eq!(
-                r.find(HttpMethod::Get, ""),
-                Err(RouterError::MatchPathEmpty)
+                r.find(HttpMethod::Get, "").map_err(|e| e.code),
+                Err(RouterErrorCode::MatchPathEmpty)
             );
         }
 
@@ -545,8 +544,8 @@ mod matching {
         fn when_path_is_not_ascii() {
             let r = rapi::Router::new(None);
             assert_eq!(
-                r.find(HttpMethod::Get, "/café"),
-                Err(RouterError::MatchPathNotAscii)
+                r.find(HttpMethod::Get, "/café").map_err(|e| e.code),
+                Err(RouterErrorCode::MatchPathNotAscii)
             );
         }
 
@@ -555,8 +554,8 @@ mod matching {
             let r = rapi::Router::new(None);
             for p in ["/a b", "/a?b", "/a#b", "/a%b"].iter() {
                 assert_eq!(
-                    r.find(HttpMethod::Get, p),
-                    Err(RouterError::MatchPathContainsDisallowedCharacters)
+                    r.find(HttpMethod::Get, p).map_err(|e| e.code),
+                    Err(RouterErrorCode::MatchPathContainsDisallowedCharacters)
                 );
             }
         }
@@ -567,8 +566,8 @@ mod matching {
             r.add(HttpMethod::Get, "/ok").unwrap();
             r.finalize();
             assert_eq!(
-                r.find(HttpMethod::Get, "/missing"),
-                Err(RouterError::MatchNotFound)
+                r.find(HttpMethod::Get, "/missing").map_err(|e| e.code),
+                Err(RouterErrorCode::MatchNotFound)
             );
         }
 
@@ -588,8 +587,8 @@ mod matching {
             let too_long_id = "b".repeat(MAX_SEGMENT_LENGTH + 1);
             let invalid_path = format!("/users/{}", too_long_id);
             assert!(matches!(
-                r.find(HttpMethod::Get, &invalid_path),
-                Err(RouterError::MatchNotFound)
+                r.find(HttpMethod::Get, &invalid_path).map_err(|e| e.code),
+                Err(RouterErrorCode::MatchNotFound)
             ));
         }
     }
@@ -703,8 +702,8 @@ mod security {
             let path_with_null = "/file/image.jpg\0.txt";
             let add_result = r.add(HttpMethod::Get, path_with_null);
             assert_eq!(
-                add_result,
-                Err(RouterError::RoutePathContainsDisallowedCharacters)
+                add_result.map_err(|e| e.code),
+                Err(RouterErrorCode::RoutePathContainsDisallowedCharacters)
             );
         }
 
@@ -715,8 +714,8 @@ mod security {
             let path_with_null = "/file/image.jpg\0.txt";
             let find_result = r.find(HttpMethod::Get, path_with_null);
             assert_eq!(
-                find_result,
-                Err(RouterError::MatchPathContainsDisallowedCharacters)
+                find_result.map_err(|e| e.code),
+                Err(RouterErrorCode::MatchPathContainsDisallowedCharacters)
             );
         }
 
@@ -725,12 +724,12 @@ mod security {
             let mut r = Router::new(None);
             let path_with_encoded_slash = "/a/b%2fc";
             assert_eq!(
-                r.add(HttpMethod::Get, path_with_encoded_slash),
-                Err(RouterError::RoutePathContainsDisallowedCharacters)
+                r.add(HttpMethod::Get, path_with_encoded_slash).map_err(|e| e.code),
+                Err(RouterErrorCode::RoutePathContainsDisallowedCharacters)
             );
             assert_eq!(
-                r.find(HttpMethod::Get, path_with_encoded_slash),
-                Err(RouterError::MatchPathContainsDisallowedCharacters)
+                r.find(HttpMethod::Get, path_with_encoded_slash).map_err(|e| e.code),
+                Err(RouterErrorCode::MatchPathContainsDisallowedCharacters)
             );
         }
     }
@@ -770,8 +769,8 @@ mod security {
             let long_segment = "x".repeat(10000);
             let path = format!("/a/{}/c", long_segment);
             assert!(matches!(
-                r.find(HttpMethod::Get, &path),
-                Err(RouterError::MatchNotFound)
+                r.find(HttpMethod::Get, &path).map_err(|e| e.code),
+                Err(RouterErrorCode::MatchNotFound)
             ));
         }
 

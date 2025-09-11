@@ -58,3 +58,22 @@ pub struct HandleRequestOutput {
     pub request: BunnerRequest,
     pub response: BunnerResponse,
 }
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct BunnerErrorData {
+    pub code: u16,
+    pub error: String,
+    pub description: String,
+    pub detail: Option<serde_json::Value>,
+}
+
+impl From<crate::router::RouterError> for BunnerErrorData {
+    fn from(router_error: crate::router::RouterError) -> Self {
+        BunnerErrorData {
+            code: router_error.code as u16,
+            error: router_error.error.clone(),
+            description: router_error.description.clone(),
+            detail: router_error.detail.clone(),
+        }
+    }
+}

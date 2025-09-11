@@ -3,17 +3,16 @@ use std::os::raw::c_char;
 use std::sync::Arc;
 
 use crate::errors::HttpServerError;
-use crate::r#enum::HttpMethod;
+use crate::middleware::body_parser::BodyParser;
 use crate::middleware::chain::Chain;
+use crate::middleware::cookie_parser::CookieParser;
 use crate::middleware::header_parser::HeaderParser;
 use crate::middleware::url_parser::UrlParser;
-use crate::middleware::cookie_parser::CookieParser;
-use crate::middleware::body_parser::BodyParser;
+use crate::r#enum::HttpMethod;
 use crate::router;
-use crate::structure::{HandleRequestPayload, BunnerRequest, BunnerResponse, HandleRequestOutput};
-use crate::util::{make_ffi_error_result, make_ffi_result};
+use crate::structure::{BunnerRequest, BunnerResponse, HandleRequestOutput, HandleRequestPayload};
+use crate::util::{make_ffi_bunner_error_result, make_ffi_error_result, make_ffi_result};
 use serde_json::Value as JsonValue;
-
 
 #[inline]
 fn callback_with_request_id_ptr(
@@ -48,11 +47,11 @@ pub fn process_job(
     };
 
     let http_method = match HttpMethod::from_u8(payload.http_method) {
-      Ok(m) => m,
-      Err(e) => {
-          callback_with_request_id_ptr(cb, &request_id_owned, 0, make_ffi_error_result(e, None));
-          return;
-      }
+        Ok(m) => m,
+        Err(e) => {
+            callback_with_request_id_ptr(cb, &request_id_owned, 0, make_ffi_error_result(e, None));
+            return;
+        }
     };
 
     let mut request = BunnerRequest {
@@ -68,7 +67,11 @@ pub fn process_job(
         query_params: None,
         body: None,
     };
-    let mut response = BunnerResponse { http_status: crate::r#enum::HttpStatusCode::OK, headers: None, body: serde_json::Value::Null };
+    let mut response = BunnerResponse {
+        http_status: crate::r#enum::HttpStatusCode::OK,
+        headers: None,
+        body: serde_json::Value::Null,
+    };
 
     let chain = Chain::new()
         .with(HeaderParser)
@@ -89,20 +92,37 @@ pub fn process_job(
             let params_json = if params_vec.is_empty() {
                 None
             } else {
-                Some(serde_json::to_value(&params_vec).unwrap_or_else(|_| JsonValue::Object(serde_json::Map::new())))
+                Some(
+                    serde_json::to_value(&params_vec)
+                        .unwrap_or_else(|_| JsonValue::Object(serde_json::Map::new())),
+                )
             };
             request.params = params_json;
 
             let output = HandleRequestOutput { request, response };
 
-            callback_with_request_id_ptr(cb, &request_id_owned, route_key, make_ffi_result(&output));
+            callback_with_request_id_ptr(
+                cb,
+                &request_id_owned,
+                route_key,
+                make_ffi_result(&output),
+            );
         }
         None => {
+            let detail = serde_json::json!({"operation": "find", "path": request.path, "method": http_method as u8});
+            let be = crate::structure::BunnerErrorData {
+                code: crate::router::RouterErrorCode::MatchNotFound.into(),
+                error: crate::router::RouterErrorCode::MatchNotFound
+                    .as_str()
+                    .to_string(),
+                description: "No matching route was found".to_string(),
+                detail: Some(detail),
+            };
             callback_with_request_id_ptr(
                 cb,
                 &request_id_owned,
                 0,
-                make_ffi_error_result(crate::router::RouterError::MatchNotFound, None),
+                make_ffi_bunner_error_result(&be),
             );
         }
     }

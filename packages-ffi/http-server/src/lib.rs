@@ -1,11 +1,11 @@
 pub mod r#enum;
 pub mod errors;
+pub mod middleware;
 pub mod request_handler;
 pub mod router;
 pub mod structure;
 mod thread_pool;
 pub mod util;
-pub mod middleware;
 
 #[cfg(feature = "test")]
 pub mod thread_pool_test_support {
@@ -42,7 +42,7 @@ use std::{
 
 use crate::errors::HttpServerError;
 use crate::structure::AddRouteResult;
-use crate::util::make_ffi_error_result;
+use crate::util::{make_ffi_bunner_error_result, make_ffi_error_result};
 use crate::{r#enum::HttpMethod, util::make_ffi_result};
 use thread_pool::shutdown_pool;
 use thread_pool::submit_job;
@@ -120,19 +120,31 @@ pub unsafe extern "C" fn add_route(
     };
     let http_server = unsafe { &*handle };
     let mut guard = http_server.router.write();
-    if http_server.readonly.read().as_ref().is_some() {
-        return make_ffi_error_result(crate::router::RouterError::RouterSealedCannotInsert, None);
-    }
     let router_mut = &mut *guard;
     let path_str = unsafe { CStr::from_ptr(path) }.to_string_lossy();
+    if http_server.readonly.read().as_ref().is_some() {
+        let detail =
+            serde_json::json!({"operation":"add_route","reason":"router_sealed","path": path_str});
+        let be = crate::structure::BunnerErrorData {
+            code: crate::router::RouterErrorCode::RouterSealedCannotInsert.into(),
+            error: crate::router::RouterErrorCode::RouterSealedCannotInsert
+                .as_str()
+                .to_string(),
+            description: "Router is sealed; cannot insert routes".to_string(),
+            detail: Some(detail),
+        };
+        return make_ffi_bunner_error_result(&be);
+    }
 
     match router_mut.add(http_method, &path_str) {
         Ok(k) => {
             let result = AddRouteResult { key: k };
-
             make_ffi_result(&result)
         }
-        Err(e) => make_ffi_error_result(e, None),
+        Err(e) => {
+            let bunner_error = crate::structure::BunnerErrorData::from(e);
+            make_ffi_bunner_error_result(&bunner_error)
+        }
     }
 }
 
@@ -176,14 +188,34 @@ pub unsafe extern "C" fn add_routes(
 
     let http_server = unsafe { &*handle };
     let mut guard = http_server.router.write();
-    if http_server.readonly.read().as_ref().is_some() {
-        return make_ffi_error_result(crate::router::RouterError::RouterSealedCannotInsert, None);
-    }
     let router_mut = &mut *guard;
 
+    let routes_count = routes.len();
+    if http_server.readonly.read().as_ref().is_some() {
+        let detail = serde_json::json!({"operation":"add_routes","reason":"router_sealed","count": routes_count});
+        let be = crate::structure::BunnerErrorData {
+            code: crate::router::RouterErrorCode::RouterSealedCannotInsert.into(),
+            error: crate::router::RouterErrorCode::RouterSealedCannotInsert
+                .as_str()
+                .to_string(),
+            description: "Router is sealed; cannot insert bulk routes".to_string(),
+            detail: Some(detail),
+        };
+        return make_ffi_bunner_error_result(&be);
+    }
     match router_mut.add_bulk(routes) {
         Ok(r) => make_ffi_result(r),
-        Err(e) => make_ffi_error_result(e, None),
+        Err(e) => {
+            // include payload size and a small snippet for context
+            let detail = serde_json::json!({"operation": "add_routes", "count": routes_count});
+            let be = crate::structure::BunnerErrorData {
+                code: (e.code as u16),
+                error: e.error.clone(),
+                description: format!("Failed to add bulk routes: {}", e.description),
+                detail: Some(detail),
+            };
+            make_ffi_bunner_error_result(&be)
+        }
     }
 }
 

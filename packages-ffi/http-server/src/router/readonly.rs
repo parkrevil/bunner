@@ -48,7 +48,8 @@ impl RouterReadOnly {
             return Some((k, HashMap::new()));
         }
         let mut out_params: Vec<(String, String)> = Vec::new();
-        self.root.find_from(method, &normalized, 0, &mut out_params)
+        self.root
+            .find_from(method, &normalized, 0, &mut out_params)
             .map(|(rk, v)| (rk, v.into_iter().collect()))
     }
 }

@@ -2,18 +2,24 @@ use super::{
     create_node_box_from_arena_pointer, node::PatternMeta, RadixTree, RadixTreeNode, MAX_ROUTES,
 };
 use crate::r#enum::HttpMethod;
-use crate::router::errors::RouterError;
+use crate::router::errors::RouterErrorCode;
 use crate::router::interner::Interner;
 use crate::router::pattern::{
     pattern_compatible_policy, pattern_is_pure_static, pattern_score, SegmentPart, SegmentPattern,
 };
+use crate::router::structures::RouterError;
 use hashbrown::HashSet;
+use serde_json::json;
 use std::sync::atomic::AtomicU16;
 
 impl RadixTree {
     pub fn insert(&mut self, method: HttpMethod, path: &str) -> Result<u16, RouterError> {
         if self.root_node.is_sealed() {
-            return Err(RouterError::RouterSealedCannotInsert);
+            return Err(RouterError::new(
+                RouterErrorCode::RouterSealedCannotInsert,
+                format!("Router is sealed; cannot insert path: '{}'", path),
+                Some(json!({"operation":"insert","path": path})),
+            ));
         }
         self.root_node.set_dirty(true);
 
@@ -31,7 +37,11 @@ impl RadixTree {
         parsed_segments: Vec<SegmentPattern>,
     ) -> Result<u16, RouterError> {
         if self.root_node.is_sealed() {
-            return Err(RouterError::RouterSealedCannotInsert);
+            return Err(RouterError::new(
+                RouterErrorCode::RouterSealedCannotInsert,
+                "Router is sealed; cannot insert parsed segments".to_string(),
+                Some(json!({"operation":"insert_parsed"})),
+            ));
         }
         self.root_node.set_dirty(true);
 
@@ -82,7 +92,14 @@ impl RadixTree {
         assigned_key: u16,
     ) -> Result<u16, RouterError> {
         if self.root_node.is_sealed() {
-            return Err(RouterError::RouterSealedCannotInsert);
+            return Err(RouterError::new(
+                RouterErrorCode::RouterSealedCannotInsert,
+                format!(
+                    "Router is sealed; cannot insert parsed segments preassigned key={}",
+                    assigned_key
+                ),
+                Some(json!({"operation":"insert_parsed_preassigned","assigned_key": assigned_key})),
+            ));
         }
         self.root_node.set_dirty(true);
 
@@ -159,7 +176,11 @@ fn find_or_create_pattern_child<'a>(
 ) -> Result<&'a mut RadixTreeNode, RouterError> {
     for exist in node.patterns.iter() {
         if !pattern_compatible_policy(exist, pat) {
-            return Err(RouterError::RouteParamNameConflictAtSamePosition);
+            return Err(RouterError::new(
+                RouterErrorCode::RouteParamNameConflictAtSamePosition,
+                "Parameter name conflict at the same position between patterns".to_string(),
+                Some(json!({"operation":"find_or_create_pattern_child"})),
+            ));
         }
     }
 
@@ -189,11 +210,24 @@ fn handle_wildcard_insert(
     next_route_key: &AtomicU16,
 ) -> Result<u16, RouterError> {
     if index != total_segments - 1 {
-        return Err(RouterError::RouteWildcardSegmentNotAtEnd);
+        return Err(RouterError::new(
+            RouterErrorCode::RouteWildcardSegmentNotAtEnd,
+            format!(
+                "Wildcard segment '*' must be the final segment; found at index {} of {}",
+                index, total_segments
+            ),
+            Some(
+                json!({"operation":"handle_wildcard_insert","index": index, "total_segments": total_segments}),
+            ),
+        ));
     }
     let method_idx = method as usize;
     if node.wildcard_routes[method_idx] != 0 {
-        return Err(RouterError::RouteWildcardAlreadyExistsForMethod);
+        return Err(RouterError::new(
+            RouterErrorCode::RouteWildcardAlreadyExistsForMethod,
+            "Wildcard route already exists for this method at the node".to_string(),
+            Some(json!({"operation":"handle_wildcard_insert","method":method as u8})),
+        ));
     }
     let key = next_route_key.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     node.wildcard_routes[method_idx] = key + 1;
@@ -212,11 +246,24 @@ fn handle_wildcard_insert_preassigned(
     assigned_key: u16,
 ) -> Result<u16, RouterError> {
     if index != total_segments - 1 {
-        return Err(RouterError::RouteWildcardSegmentNotAtEnd);
+        return Err(RouterError::new(
+            RouterErrorCode::RouteWildcardSegmentNotAtEnd,
+            format!(
+                "Wildcard segment '*' must be the final segment; found at index {} of {}",
+                index, total_segments
+            ),
+            Some(
+                json!({"operation":"handle_wildcard_insert_preassigned","index": index, "total_segments": total_segments}),
+            ),
+        ));
     }
     let method_idx = method as usize;
     if node.wildcard_routes[method_idx] != 0 {
-        return Err(RouterError::RouteWildcardAlreadyExistsForMethod);
+        return Err(RouterError::new(
+            RouterErrorCode::RouteWildcardAlreadyExistsForMethod,
+            "Wildcard route already exists for this method at the node".to_string(),
+            Some(json!({"operation":"handle_wildcard_insert_preassigned","method":method as u8})),
+        ));
     }
     node.wildcard_routes[method_idx] = assigned_key + 1;
     node.set_dirty(true);
@@ -230,11 +277,19 @@ fn assign_route_key(
 ) -> Result<u16, RouterError> {
     let method_idx = method as usize;
     if node.routes[method_idx] != 0 {
-        return Err(RouterError::RouteConflictOnDuplicatePath);
+        return Err(RouterError::new(
+            RouterErrorCode::RouteConflictOnDuplicatePath,
+            "A route already exists for this path and method".to_string(),
+            Some(json!({"operation":"assign_route_key","method": method as u8})),
+        ));
     }
     let current_key = next_route_key.load(std::sync::atomic::Ordering::Relaxed);
     if current_key >= MAX_ROUTES {
-        return Err(RouterError::MaxRoutesExceeded);
+        return Err(RouterError::new(
+            RouterErrorCode::MaxRoutesExceeded,
+            "Maximum number of routes exceeded".to_string(),
+            Some(json!({"operation":"assign_route_key","current_key": current_key})),
+        ));
     }
     let key = next_route_key.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     node.routes[method_idx] = key + 1;
@@ -253,7 +308,14 @@ fn assign_route_key_preassigned(
 ) -> Result<u16, RouterError> {
     let method_idx = method as usize;
     if node.routes[method_idx] != 0 {
-        return Err(RouterError::RouteConflictOnDuplicatePath);
+        return Err(RouterError::new(
+            RouterErrorCode::RouteConflictOnDuplicatePath,
+            format!(
+                "A route already exists for this path and method when preassigning key={}",
+                assigned_key
+            ),
+            Some(json!({"operation":"assign_route_key_preassigned","assigned_key": assigned_key})),
+        ));
     }
     node.routes[method_idx] = assigned_key + 1;
     node.set_dirty(true);
@@ -272,19 +334,35 @@ pub(super) fn prepare_path_segments_standalone(
     path: &str,
 ) -> Result<Vec<SegmentPattern>, RouterError> {
     if path.is_empty() {
-        return Err(RouterError::RoutePathEmpty);
+        return Err(RouterError::new(
+            RouterErrorCode::RoutePathEmpty,
+            "The provided route path is empty".to_string(),
+            Some(json!({"operation":"prepare_path_segments_standalone","path": path})),
+        ));
     }
     if !path.is_ascii() {
-        return Err(RouterError::RoutePathNotAscii);
+        return Err(RouterError::new(
+            RouterErrorCode::RoutePathNotAscii,
+            "The route path is not ASCII".to_string(),
+            Some(json!({"operation":"prepare_path_segments_standalone","path": path})),
+        ));
     }
 
     let norm = crate::router::path::normalize_path(path);
     // Reject paths with empty segments (e.g., "/a//b")
     if norm.contains("//") {
-        return Err(RouterError::RoutePathSyntaxInvalid);
+        return Err(RouterError::new(
+            RouterErrorCode::RoutePathSyntaxInvalid,
+            "Route path contains empty segments (e.g., '//')".to_string(),
+            Some(json!({"operation":"prepare_path_segments_standalone","path": path})),
+        ));
     }
     if !crate::router::path::is_path_character_allowed(&norm) {
-        return Err(RouterError::RoutePathContainsDisallowedCharacters);
+        return Err(RouterError::new(
+            RouterErrorCode::RoutePathContainsDisallowedCharacters,
+            "Route path contains disallowed characters".to_string(),
+            Some(json!({"operation":"prepare_path_segments_standalone","path": path})),
+        ));
     }
 
     if norm == "/" {
@@ -293,7 +371,11 @@ pub(super) fn prepare_path_segments_standalone(
 
     let segments: Vec<&str> = norm.split('/').filter(|s| !s.is_empty()).collect();
     if segments.is_empty() {
-        return Err(RouterError::RoutePathSyntaxInvalid);
+        return Err(RouterError::new(
+            RouterErrorCode::RoutePathSyntaxInvalid,
+            "Route path syntax invalid after normalization".to_string(),
+            Some(json!({"operation":"prepare_path_segments_standalone","path": path})),
+        ));
     }
 
     let mut parsed_segments = Vec::with_capacity(segments.len());
@@ -314,13 +396,28 @@ pub(super) fn prepare_path_segments_standalone(
         }
 
         if !PatternMeta::is_valid_length(min_len, last_lit_len) {
-            return Err(RouterError::PatternTooLong);
+            return Err(RouterError::new(
+                RouterErrorCode::PatternTooLong,
+                format!(
+                    "Pattern length exceeds allowed limits for segment '{}' in path '{}'",
+                    seg, path
+                ),
+                Some(
+                    json!({"operation":"prepare_path_segments_standalone","path": path, "segment": seg}),
+                ),
+            ));
         }
 
         for part in &pat.parts {
             if let SegmentPart::Param { name, .. } = part {
                 if seen_params.contains(name.as_str()) {
-                    return Err(RouterError::RouteDuplicateParamNameInRoute);
+                    return Err(RouterError::new(
+                        RouterErrorCode::RouteDuplicateParamNameInRoute,
+                        format!("Duplicate parameter name '{}' in route '{}'", name, path),
+                        Some(
+                            json!({"operation":"prepare_path_segments_standalone","param": name, "path": path}),
+                        ),
+                    ));
                 }
                 seen_params.insert(name.clone());
             }

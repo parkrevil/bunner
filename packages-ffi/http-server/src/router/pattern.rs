@@ -1,4 +1,6 @@
-use crate::router::errors::RouterError;
+use crate::router::errors::RouterErrorCode;
+use crate::router::structures::RouterError;
+use serde_json::json;
 use smallvec::SmallVec;
 
 // Reduce type complexity with aliases for readability and clippy friendliness
@@ -185,7 +187,11 @@ pub fn match_segment(seg: &str, seg_l: &str, pat: &SegmentPattern) -> Option<Cap
 
 pub(crate) fn parse_segment(seg: &str) -> Result<SegmentPattern, RouterError> {
     if seg.contains('(') || seg.contains(')') {
-        return Err(RouterError::RoutePathSyntaxInvalid);
+        return Err(RouterError::new(
+            RouterErrorCode::RoutePathSyntaxInvalid,
+            "Segment contains parenthesis which is invalid".to_string(),
+            Some(json!({"operation":"parse_segment","segment": seg})),
+        ));
     }
 
     let bytes = seg.as_bytes();
@@ -194,7 +200,11 @@ pub(crate) fn parse_segment(seg: &str) -> Result<SegmentPattern, RouterError> {
         let mut j = 1usize;
 
         if j >= bytes.len() {
-            return Err(RouterError::RoutePathSyntaxInvalid);
+            return Err(RouterError::new(
+                RouterErrorCode::RoutePathSyntaxInvalid,
+                "Parameter segment missing name".to_string(),
+                Some(json!({"operation":"parse_segment","segment": seg})),
+            ));
         }
 
         while j < bytes.len() {
@@ -210,22 +220,38 @@ pub(crate) fn parse_segment(seg: &str) -> Result<SegmentPattern, RouterError> {
         let name = &seg[1..];
 
         if name.contains(':') {
-            return Err(RouterError::RoutePathSyntaxInvalid);
+            return Err(RouterError::new(
+                RouterErrorCode::RoutePathSyntaxInvalid,
+                "Parameter name contains ':' which is invalid".to_string(),
+                Some(json!({"operation":"parse_segment","segment": seg, "param": name})),
+            ));
         }
 
         let nb = name.as_bytes();
 
         if nb.is_empty() {
-            return Err(RouterError::RoutePathSyntaxInvalid);
+            return Err(RouterError::new(
+                RouterErrorCode::RoutePathSyntaxInvalid,
+                "Parameter name is empty".to_string(),
+                Some(json!({"operation":"parse_segment","segment": seg})),
+            ));
         }
 
         if !(nb[0].is_ascii_alphabetic() || nb[0] == b'_') {
-            return Err(RouterError::RouteParamNameInvalidStart);
+            return Err(RouterError::new(
+                RouterErrorCode::RouteParamNameInvalidStart,
+                "Parameter name must start with an alphabetic character or underscore".to_string(),
+                Some(json!({"operation":"parse_segment","segment": seg, "param": name})),
+            ));
         }
 
         for &c in &nb[1..] {
             if !(c.is_ascii_alphanumeric() || c == b'_') {
-                return Err(RouterError::RouteParamNameInvalidChar);
+                return Err(RouterError::new(
+                    RouterErrorCode::RouteParamNameInvalidChar,
+                    "Parameter name contains invalid character".to_string(),
+                    Some(json!({"operation":"parse_segment","segment": seg, "param": name})),
+                ));
             }
         }
 
@@ -237,7 +263,11 @@ pub(crate) fn parse_segment(seg: &str) -> Result<SegmentPattern, RouterError> {
     }
 
     if seg.contains(':') {
-        return Err(RouterError::RouteSegmentContainsMixedParamAndLiteral);
+        return Err(RouterError::new(
+            RouterErrorCode::RouteSegmentContainsMixedParamAndLiteral,
+            "Segment contains mixed parameter and literal syntax".to_string(),
+            Some(json!({"operation":"parse_segment","segment": seg})),
+        ));
     }
 
     let lit_norm = seg.to_string();

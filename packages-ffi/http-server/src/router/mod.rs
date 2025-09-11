@@ -4,11 +4,13 @@ mod path;
 mod pattern;
 pub mod radix_tree;
 pub mod readonly;
+pub mod structures;
 
 use crate::r#enum::HttpMethod;
-pub use errors::RouterError;
+pub use errors::RouterErrorCode;
 use path::{is_path_character_allowed, normalize_path};
 pub use readonly::RouterReadOnly;
+pub use structures::RouterError;
 
 #[derive(Debug, Default)]
 pub struct RouteMatchResult {
@@ -28,11 +30,11 @@ impl Router {
         }
     }
 
-    pub fn add(&mut self, method: HttpMethod, path: &str) -> Result<u16, errors::RouterError> {
+    pub fn add(&mut self, method: HttpMethod, path: &str) -> Result<u16, RouterError> {
         self.radix_tree.insert(method, path)
     }
 
-    pub fn add_bulk<I>(&mut self, entries: I) -> Result<Vec<u16>, errors::RouterError>
+    pub fn add_bulk<I>(&mut self, entries: I) -> Result<Vec<u16>, RouterError>
     where
         I: IntoIterator<Item = (HttpMethod, String)>,
     {
@@ -45,21 +47,37 @@ impl Router {
         path: &str,
     ) -> Result<(u16, Vec<(String, String)>), RouterError> {
         if path.is_empty() {
-            return Err(RouterError::MatchPathEmpty);
+            return Err(RouterError::new(
+                RouterErrorCode::MatchPathEmpty,
+                "Request path is empty".to_string(),
+                Some(serde_json::json!({"operation":"find","path": path})),
+            ));
         }
 
         if !path.is_ascii() {
-            return Err(RouterError::MatchPathNotAscii);
+            return Err(RouterError::new(
+                RouterErrorCode::MatchPathNotAscii,
+                "Request path contains non-ASCII characters".to_string(),
+                Some(serde_json::json!({"operation":"find","path": path})),
+            ));
         }
 
         if !is_path_character_allowed(path) {
-            return Err(RouterError::MatchPathContainsDisallowedCharacters);
+            return Err(RouterError::new(
+                RouterErrorCode::MatchPathContainsDisallowedCharacters,
+                "Request path contains disallowed characters".to_string(),
+                Some(serde_json::json!({"operation":"find","path": path})),
+            ));
         }
 
         let normalized_path = normalize_path(path);
 
         if !is_path_character_allowed(&normalized_path) {
-            return Err(RouterError::MatchPathContainsDisallowedCharacters);
+            return Err(RouterError::new(
+                RouterErrorCode::MatchPathContainsDisallowedCharacters,
+                "Normalized request path contains disallowed characters".to_string(),
+                Some(serde_json::json!({"operation":"find","path": normalized_path})),
+            ));
         }
 
         if let Some(match_result) = self.radix_tree.find_normalized(method, &normalized_path) {
@@ -75,7 +93,16 @@ impl Router {
 
             Ok((match_result.route_key, parameter_pairs))
         } else {
-            Err(RouterError::MatchNotFound)
+            Err(RouterError::new(
+                RouterErrorCode::MatchNotFound,
+                format!(
+                    "No route matched path '{}' for method {:?}",
+                    normalized_path, method
+                ),
+                Some(
+                    serde_json::json!({"operation":"find","path": normalized_path, "method": method as u8}),
+                ),
+            ))
         }
     }
 

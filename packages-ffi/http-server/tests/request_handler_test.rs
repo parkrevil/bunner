@@ -3,7 +3,7 @@ use bunner_http_server::r#enum::HttpStatusCode;
 use bunner_http_server::router::{Router, RouterOptions, RouterReadOnly};
 use bunner_http_server::structure::HandleRequestOutput;
 use bunner_http_server::errors::HttpServerError;
-use bunner_http_server::router::RouterError;
+use bunner_http_server::router::RouterErrorCode;
 use serde_json::json;
 use std::ffi::{c_char, CStr};
 use std::sync::{mpsc, Arc};
@@ -259,7 +259,7 @@ mod error_handling {
         let code = run_test_and_get_error_code(payload);
         assert_eq!(
             code,
-            RouterError::MatchNotFound.code()
+            RouterErrorCode::MatchNotFound.code()
         );
     }
 

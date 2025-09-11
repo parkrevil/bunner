@@ -2,6 +2,7 @@ use serde::Serialize;
 use std::ffi::CString;
 use std::os::raw::c_char;
 
+use crate::structure::BunnerErrorData;
 use crate::structure::FfiError;
 
 pub fn serialize_to_cstring<T: Serialize>(value: &T) -> *mut c_char {
@@ -28,4 +29,8 @@ where
         message,
     };
     serialize_to_cstring(&ffi_error)
+}
+
+pub fn make_ffi_bunner_error_result(error: &BunnerErrorData) -> *mut c_char {
+    serialize_to_cstring(error)
 }

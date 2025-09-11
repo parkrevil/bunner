@@ -1,6 +1,6 @@
 use bunner_http_server::structure::{AddRouteResult, HandleRequestOutput};
 use bunner_http_server::errors::HttpServerError;
-use bunner_http_server::router::RouterError;
+use bunner_http_server::router::RouterErrorCode;
 use bunner_http_server::*;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -126,7 +126,7 @@ mod route_management {
             let res: Result<AddRouteResult, _> = from_ptr(add_route(handle, 0, path.as_ptr()));
             assert_eq!(
                 res.unwrap_err().code,
-                RouterError::RouteConflictOnDuplicatePath.code(),
+                RouterErrorCode::RouteConflictOnDuplicatePath.code(),
                 "Should return a conflict error"
             );
         }
@@ -141,7 +141,7 @@ mod route_management {
             let res: Result<AddRouteResult, _> = from_ptr(add_route(handle, 0, path.as_ptr()));
             assert_eq!(
                 res.unwrap_err().code,
-                RouterError::RoutePathSyntaxInvalid.code(),
+                RouterErrorCode::RoutePathSyntaxInvalid.code(),
                 "Should return an invalid path error"
             );
         }
@@ -193,7 +193,7 @@ mod router_sealing {
                 from_ptr(add_route(handle, 0, to_cstr("/after").as_ptr()));
             assert_eq!(
                 res.unwrap_err().code,
-                RouterError::RouterSealedCannotInsert.code(),
+                RouterErrorCode::RouterSealedCannotInsert.code(),
                 "Should not be able to add routes after sealing"
             );
         }
@@ -355,7 +355,7 @@ mod request_processing {
             let res: FfiError = serde_json::from_str(&rx.recv().unwrap()).unwrap();
             assert_eq!(
                 res.code,
-                RouterError::MatchNotFound.code(),
+                RouterErrorCode::MatchNotFound.code(),
                 "Should return MatchNotFound error"
             );
         }
