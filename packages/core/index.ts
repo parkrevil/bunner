@@ -10,3 +10,5 @@ export * from './src/types';
 export * from './src/errors';
 export * from './src/rust-core';
 export * from './src/instances';
+
+export * from 'http-status-codes';

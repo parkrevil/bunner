@@ -306,7 +306,7 @@ pub unsafe extern "C" fn handle_request(
 /// # Safety
 /// The `handle` pointer must be a valid pointer returned by `init`.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn router_seal(handle: HttpServerHandle) {
+pub unsafe extern "C" fn seal_routes(handle: HttpServerHandle) {
     let http_server = unsafe { &*handle };
     {
         let mut guard = http_server.router.write();

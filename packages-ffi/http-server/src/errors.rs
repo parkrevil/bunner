@@ -2,15 +2,12 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum HttpServerError {
     HandleIsNull = 1,
-    ServerError = 2,
-    InvalidHttpMethod = 3,
-    InvalidJsonString = 4,
-    InvalidRequestId = 5,
-    InvalidUrl = 6,
-    InvalidQueryString = 7,
-    RouteNotSealed = 8,
-    QueueFull = 9,
-    InvalidPayload = 10,
+    InvalidHttpMethod,
+    InvalidJsonString,
+    InvalidRequestId,
+    RouteNotSealed,
+    QueueFull,
+    InvalidPayload,
 }
 
 impl HttpServerError {

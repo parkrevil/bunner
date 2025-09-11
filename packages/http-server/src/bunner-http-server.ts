@@ -38,7 +38,7 @@ export class BunnerHttpServer extends BunnerApplication {
    * Start the server
    */
   start() {
-    this.rustCore.finalizeRoutes();
+    this.rustCore.buildRoutes();
 
     this.server = Bun.serve({
       port: 5000,

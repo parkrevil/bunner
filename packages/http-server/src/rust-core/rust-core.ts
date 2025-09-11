@@ -65,7 +65,7 @@ export class RustCore extends BaseRustCore<
         ],
         returns: FFIType.void,
       },
-      router_seal: { args: [FFIType.pointer], returns: FFIType.void },
+      seal_routes: { args: [FFIType.pointer], returns: FFIType.void },
     };
 
     super.init(resolveRustLibPath('bunner_http_server', import.meta.dir), api);
@@ -183,8 +183,8 @@ export class RustCore extends BaseRustCore<
    * @description Finalize the routes
    * @returns
    */
-  finalizeRoutes() {
-    return this.symbols.router_seal(this.handle);
+  buildRoutes() {
+    return this.symbols.seal_routes(this.handle);
   }
 
   /**

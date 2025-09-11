@@ -1,4 +1,6 @@
 use bunner_http_server::structure::{AddRouteResult, HandleRequestOutput};
+use bunner_http_server::errors::HttpServerError;
+use bunner_http_server::router::RouterError;
 use bunner_http_server::*;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -71,7 +73,10 @@ mod lifecycle_management {
             handle_request(std::ptr::null_mut(), std::ptr::null(), std::ptr::null(), cb);
         });
         let res: FfiError = serde_json::from_str(&out).unwrap();
-        assert_eq!(res.code, 1);
+        assert_eq!(
+            res.code,
+            HttpServerError::HandleIsNull.code()
+        );
     }
 }
 
@@ -119,7 +124,11 @@ mod route_management {
             let _ = from_ptr::<AddRouteResult>(add_route(handle, 0, path.as_ptr()));
             // Add second time
             let res: Result<AddRouteResult, _> = from_ptr(add_route(handle, 0, path.as_ptr()));
-            assert_eq!(res.unwrap_err().code, 10001, "Should return a conflict error");
+            assert_eq!(
+                res.unwrap_err().code,
+                RouterError::RouteConflictOnDuplicatePath.code(),
+                "Should return a conflict error"
+            );
         }
         unsafe { destroy(handle) };
     }
@@ -130,7 +139,11 @@ mod route_management {
         unsafe {
             let path = to_cstr("/a//b"); // Contains empty segment
             let res: Result<AddRouteResult, _> = from_ptr(add_route(handle, 0, path.as_ptr()));
-            assert_eq!(res.unwrap_err().code, 10002, "Should return an invalid path error");
+            assert_eq!(
+                res.unwrap_err().code,
+                RouterError::RoutePathSyntaxInvalid.code(),
+                "Should return an invalid path error"
+            );
         }
         unsafe { destroy(handle) };
     }
@@ -141,7 +154,11 @@ mod route_management {
         unsafe {
             let routes_cstr = to_cstr("[[0, \"/a\"], [99, \"/b\"]]"); // 99 is invalid
             let res: Result<Vec<u16>, _> = from_ptr(add_routes(handle, routes_cstr.as_ptr()));
-            assert_eq!(res.unwrap_err().code, 3, "Should return invalid http method error");
+            assert_eq!(
+                res.unwrap_err().code,
+                HttpServerError::InvalidHttpMethod.code(),
+                "Should return invalid http method error"
+            );
         }
         unsafe { destroy(handle) };
     }
@@ -152,7 +169,11 @@ mod route_management {
         unsafe {
             let routes_cstr = to_cstr("[[0, \"/a\""); // Incomplete JSON
             let res: Result<Vec<u16>, _> = from_ptr(add_routes(handle, routes_cstr.as_ptr()));
-            assert_eq!(res.unwrap_err().code, 4, "Should return invalid json error");
+            assert_eq!(
+                res.unwrap_err().code,
+                HttpServerError::InvalidJsonString.code(),
+                "Should return invalid json error"
+            );
         }
         unsafe { destroy(handle) };
     }
@@ -166,13 +187,13 @@ mod router_sealing {
         let handle = init();
         unsafe {
             add_route(handle, 0, to_cstr("/before").as_ptr());
-            router_seal(handle); // Seal the router
+            seal_routes(handle); // Seal the router
 
             let res: Result<AddRouteResult, _> =
                 from_ptr(add_route(handle, 0, to_cstr("/after").as_ptr()));
             assert_eq!(
                 res.unwrap_err().code,
-                10006, // RouterSealedCannotInsert
+                RouterError::RouterSealedCannotInsert.code(),
                 "Should not be able to add routes after sealing"
             );
         }
@@ -183,8 +204,8 @@ mod router_sealing {
     fn should_not_panic_on_double_seal() {
         let handle = init();
         unsafe {
-            router_seal(handle);
-            router_seal(handle); // Calling seal a second time should be a safe no-op
+            seal_routes(handle);
+            seal_routes(handle); // Calling seal a second time should be a safe no-op
         }
         unsafe { destroy(handle) };
     }
@@ -207,7 +228,7 @@ mod request_processing {
         let (tx, rx) = mpsc::channel::<String>();
         unsafe {
             add_route(handle, 0, to_cstr("/users/:id").as_ptr());
-            router_seal(handle);
+            seal_routes(handle);
 
             let payload = json!({
                 "httpMethod": 0,
@@ -247,7 +268,10 @@ mod request_processing {
             }
         });
         let res: FfiError = serde_json::from_str(&out).unwrap();
-        assert_eq!(res.code, 5);
+        assert_eq!(
+            res.code,
+            HttpServerError::InvalidRequestId.code()
+        );
         unsafe { destroy(handle) };
     }
 
@@ -258,7 +282,7 @@ mod request_processing {
         let handle = init();
         unsafe {
             add_route(handle, 0, to_cstr("/a").as_ptr());
-            router_seal(handle);
+            seal_routes(handle);
         }
 
         let payload = json!({
@@ -274,7 +298,10 @@ mod request_processing {
             handle_request(handle, dummy_req.as_ptr(), to_cstr(&payload).as_ptr(), cb);
         });
         let res: FfiError = serde_json::from_str(&out).unwrap();
-        assert_eq!(res.code, 9);
+        assert_eq!(
+            res.code,
+            HttpServerError::QueueFull.code()
+        );
 
         unsafe { destroy(handle) };
 
@@ -300,7 +327,11 @@ mod request_processing {
                 test_callback,
             );
             let res: FfiError = serde_json::from_str(&rx.recv().unwrap()).unwrap();
-            assert_eq!(res.code, 8, "Should return RouteNotSealed error"); // RouteNotSealed
+            assert_eq!(
+                res.code,
+                HttpServerError::RouteNotSealed.code(),
+                "Should return RouteNotSealed error"
+            );
         }
         unsafe { destroy(handle) };
     }
@@ -310,7 +341,7 @@ mod request_processing {
         let handle = init();
         let (tx, rx) = mpsc::channel::<String>();
         unsafe {
-            router_seal(handle); // Seal with no routes
+            seal_routes(handle); // Seal with no routes
             let payload =
                 json!({ "httpMethod": 0, "url": "http://localhost/nomatch", "headers": {}, "body": null })
                     .to_string();
@@ -322,7 +353,11 @@ mod request_processing {
                 test_callback,
             );
             let res: FfiError = serde_json::from_str(&rx.recv().unwrap()).unwrap();
-            assert_eq!(res.code, 10101, "Should return MatchNotFound error"); // MatchNotFound
+            assert_eq!(
+                res.code,
+                RouterError::MatchNotFound.code(),
+                "Should return MatchNotFound error"
+            );
         }
         unsafe { destroy(handle) };
     }
@@ -332,7 +367,7 @@ mod request_processing {
         let handle = init();
         let (tx, rx) = mpsc::channel::<String>();
         unsafe {
-            router_seal(handle);
+            seal_routes(handle);
             let tx_ptr_val = &tx as *const _ as usize;
             handle_request(
                 handle,
@@ -341,7 +376,11 @@ mod request_processing {
                 test_callback,
             );
             let res: FfiError = serde_json::from_str(&rx.recv().unwrap()).unwrap();
-            assert_eq!(res.code, 10, "Should return InvalidPayload error"); // InvalidPayload
+            assert_eq!(
+                res.code,
+                HttpServerError::InvalidPayload.code(),
+                "Should return InvalidPayload error"
+            );
         }
         unsafe { destroy(handle) };
     }
@@ -351,13 +390,16 @@ mod request_processing {
         let handle = init();
         let out = helpers::with_capture(|cb| {
             unsafe {
-                router_seal(handle);
+                seal_routes(handle);
                 let payload = json!({ "httpMethod": 0, "url": "http://localhost/a", "headers": {}, "body": null }).to_string();
                 handle_request(handle, null_mut(), to_cstr(&payload).as_ptr(), cb);
             }
         });
         let res: FfiError = serde_json::from_str(&out).unwrap();
-        assert_eq!(res.code, 5);
+        assert_eq!(
+            res.code,
+            HttpServerError::InvalidRequestId.code()
+        );
         unsafe { destroy(handle) };
     }
 }
@@ -373,7 +415,7 @@ mod concurrency {
 
         unsafe {
             add_route(handle, 0, to_cstr("/users/:id").as_ptr());
-            router_seal(handle);
+            seal_routes(handle);
         }
 
         let num_threads = 16;

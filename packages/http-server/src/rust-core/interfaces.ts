@@ -17,7 +17,7 @@ export interface HttpServerSymbols extends BaseRustSymbols {
     payload: Uint8Array,
     callback: Pointer,
   ) => void;
-  router_seal: (handle: Pointer) => void;
+  seal_routes: (handle: Pointer) => void;
 }
 
 /**
