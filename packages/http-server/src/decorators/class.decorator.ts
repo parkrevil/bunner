@@ -1,4 +1,4 @@
-import { METADATA_KEY } from './constants';
+import { MetadataKey } from './enums';
 import type {
   RestControllerDecoratorOptions,
   RestControllerMetadata,
@@ -21,7 +21,7 @@ export function RestController(
     };
 
     Reflect.defineMetadata(
-      METADATA_KEY.REST_CONTROLLER,
+      MetadataKey.RestController,
       controllerMetadata,
       target,
     );

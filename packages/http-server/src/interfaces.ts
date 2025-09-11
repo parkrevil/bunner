@@ -1,0 +1,13 @@
+import type { BunnerRequest } from './bunner-request';
+import type { BunnerResponse } from './bunner-response';
+import type { HandlerFunction } from './types';
+
+/**
+ * Find Handler Result
+ * @description The result of finding a handler
+ */
+export interface FindHandlerResult {
+  handler: HandlerFunction | undefined;
+  request: BunnerRequest;
+  response: BunnerResponse;
+}

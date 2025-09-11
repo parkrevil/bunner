@@ -1,7 +1,7 @@
-import { HTTP_METHOD } from '../constants';
+import { HttpMethod } from '../enums';
 import type { HttpMethodValue } from '../types';
 
-import { METADATA_KEY } from './constants';
+import { MetadataKey } from './enums';
 import type {
   HttpMethodDecoratorOptions,
   RestRouteHandlerMetadata,
@@ -26,7 +26,7 @@ function createHttpMethodDecorator(httpMethod: HttpMethodValue) {
       };
 
       Reflect.defineMetadata(
-        METADATA_KEY.ROUTE_HANDLER,
+        MetadataKey.RouteHandler,
         routeMetadata,
         target,
         propertyKey,
@@ -40,46 +40,46 @@ function createHttpMethodDecorator(httpMethod: HttpMethodValue) {
  * @description Create a HTTP method decorator
  * @returns
  */
-export const Get = createHttpMethodDecorator(HTTP_METHOD.GET);
+export const Get = createHttpMethodDecorator(HttpMethod.Get);
 
 /**
  * Post HTTP method decorator
  * @description Create a HTTP method decorator
  * @returns
  */
-export const Post = createHttpMethodDecorator(HTTP_METHOD.POST);
+export const Post = createHttpMethodDecorator(HttpMethod.Post);
 
 /**
  * Put HTTP method decorator
  * @description Create a HTTP method decorator
  * @returns
  */
-export const Put = createHttpMethodDecorator(HTTP_METHOD.PUT);
+export const Put = createHttpMethodDecorator(HttpMethod.Put);
 
 /**
  * Delete HTTP method decorator
  * @description Create a HTTP method decorator
  * @returns
  */
-export const Delete = createHttpMethodDecorator(HTTP_METHOD.DELETE);
+export const Delete = createHttpMethodDecorator(HttpMethod.Delete);
 
 /**
  * Patch HTTP method decorator
  * @description Create a HTTP method decorator
  * @returns
  */
-export const Patch = createHttpMethodDecorator(HTTP_METHOD.PATCH);
+export const Patch = createHttpMethodDecorator(HttpMethod.Patch);
 
 /**
  * Options HTTP method decorator
  * @description Create a HTTP method decorator
  * @returns
  */
-export const Options = createHttpMethodDecorator(HTTP_METHOD.OPTIONS);
+export const Options = createHttpMethodDecorator(HttpMethod.Options);
 
 /**
  * Head HTTP method decorator
  * @description Create a HTTP method decorator
  * @returns
  */
-export const Head = createHttpMethodDecorator(HTTP_METHOD.HEAD);
+export const Head = createHttpMethodDecorator(HttpMethod.Head);

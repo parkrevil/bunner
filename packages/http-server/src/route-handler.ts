@@ -1,15 +1,18 @@
-import type { Container } from '@bunner/core';
+import { type Container } from '@bunner/core';
 import type { Server } from 'bun';
 
 import { BunnerRequest } from './bunner-request';
-import { HTTP_METHOD } from './constants';
+import { BunnerResponse } from './bunner-response';
 import {
-  METADATA_KEY,
+  MetadataKey,
   type RestControllerMetadata,
   type RestRouteHandlerMetadata,
 } from './decorators';
+import { HttpMethod } from './enums';
+import { MethodNotAllowedError, NotFoundError } from './errors';
+import type { FindHandlerResult } from './interfaces';
 import { RustCore } from './rust-core';
-import type { HandlerFunction, HttpMethodValue } from './types';
+import type { HandlerFunction } from './types';
 
 export class RouteHandler {
   private container: Container;
@@ -27,10 +30,10 @@ export class RouteHandler {
    */
   register() {
     const handlers: HandlerFunction[] = [];
-    const addRoutesParams: [HttpMethodValue, string][] = [];
+    const addRoutesParams: [HttpMethod, string][] = [];
 
     this.container
-      .getControllers<RestControllerMetadata>(METADATA_KEY.REST_CONTROLLER)
+      .getControllers<RestControllerMetadata>(MetadataKey.RestController)
       .forEach(controller => {
         const {
           instance: controllerInstance,
@@ -52,7 +55,7 @@ export class RouteHandler {
             path: routePath,
             options: routeOptions,
           }: RestRouteHandlerMetadata = Reflect.getMetadata(
-            METADATA_KEY.ROUTE_HANDLER,
+            MetadataKey.RouteHandler,
             controllerPrototype,
             handlerName,
           );
@@ -85,65 +88,51 @@ export class RouteHandler {
    * @param rawReq - The raw request object
    * @returns
    */
-  async handleRequest(rawReq: Request, server: Server) {
-    if (!Object.hasOwn(HTTP_METHOD, rawReq.method)) {
-      return new Response('Method not allowed', { status: 405 });
+  async findHandler(
+    rawReq: Request,
+    server: Server,
+  ): Promise<FindHandlerResult> {
+    if (!Object.hasOwn(HttpMethod, rawReq.method)) {
+      throw new MethodNotAllowedError();
     }
 
-    const httpMethod = HTTP_METHOD[rawReq.method as keyof typeof HTTP_METHOD];
+    let body: string | null;
+    const httpMethod = HttpMethod[rawReq.method as keyof typeof HttpMethod];
 
-    try {
-      let body: string | null = null;
-
-      if (
-        !(
-          httpMethod === HTTP_METHOD.GET ||
-          httpMethod === HTTP_METHOD.HEAD ||
-          httpMethod === HTTP_METHOD.OPTIONS
-        )
-      ) {
-        body = await rawReq.text();
-      }
-
-      const handleResult = await this.rustCore.handleRequest({
-        httpMethod,
-        url: rawReq.url,
-        headers: rawReq.headers.toJSON(),
-        body,
-      });
-      console.log(handleResult);
-
-      const req = new BunnerRequest(handleResult.request, rawReq, server);
-      //const res = new BunnerResponse(handleResult.response);
-      const handler = this.handlers.get(handleResult.routeKey);
-
-      console.log(req);
-
-      if (!handler) {
-        return new Response('Handler not found for route key', { status: 500 });
-      }
-      /* 
-      const req = new BunnerRequest(rawReq, handleResult);
-      const res = new BunnerResponse();
-      const handlerResult = await handler(req, res);
-
-      if (handlerResult instanceof Response) {
-        return handlerResult;
-      }
-
-      if (res.isSent) {
-        return res.getResponse();
-      }
-      res.send(handlerResult);
-      return res.getResponse();
- */
-      const result = await handler();
-
-      return new Response(result, { status: 200 });
-    } catch (e) {
-      console.error(e, rawReq.method, rawReq.url);
-
-      return new Response('Internal server error', { status: 500 });
+    if (
+      httpMethod === HttpMethod.Get ||
+      httpMethod === HttpMethod.Head ||
+      httpMethod === HttpMethod.Options
+    ) {
+      body = null;
+    } else {
+      body = await rawReq.text();
     }
+
+    const handleResult = await this.rustCore.handleRequest({
+      httpMethod,
+      url: rawReq.url,
+      headers: rawReq.headers.toJSON(),
+      body,
+    });
+
+    // want to GC
+    body = null;
+
+    const handler = this.handlers.get(handleResult.routeKey);
+
+    if (!handler) {
+      throw new NotFoundError();
+    }
+
+    const request = new BunnerRequest(handleResult.request, rawReq, server);
+    const response = new BunnerResponse(request);
+    const result: FindHandlerResult = {
+      handler,
+      request,
+      response,
+    };
+
+    return result;
   }
 }

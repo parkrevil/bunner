@@ -1,7 +1,8 @@
 import type { BaseRustSymbols } from '@bunner/core';
 import type { FFIType, Pointer } from 'bun:ffi';
+import type { StatusCodes } from 'http-status-codes';
 
-import type { HttpMethodValue, HttpStatusCode } from '../types';
+import type { HttpMethodValue } from '../types';
 
 export interface HttpServerSymbols extends BaseRustSymbols {
   add_route: (
@@ -78,7 +79,7 @@ export interface RustBunnerRequest {
  * @description The response interface for Rust Bunner
  */
 export interface RustBunnerResponse {
-  httpStatus: HttpStatusCode;
+  httpStatus: StatusCodes;
   headers: Record<string, any>;
   body: string | Record<string, any>;
 }

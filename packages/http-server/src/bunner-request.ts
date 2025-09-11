@@ -1,11 +1,11 @@
 import { CookieMap, type Server } from 'bun';
 
-import { HEADER_FIELD } from './constants';
+import { HeaderField } from './enums';
+import type { HttpMethod } from './enums';
 import type { RustBunnerRequest } from './rust-core';
-import type { HttpMethodValue } from './types';
 
 export class BunnerRequest {
-  readonly httpMethod: HttpMethodValue;
+  readonly httpMethod: HttpMethod;
   readonly url: string;
   readonly path: string;
   readonly headers: Headers;
@@ -22,7 +22,7 @@ export class BunnerRequest {
     this.httpMethod = rustReq.httpMethod;
     this.url = rawReq.url;
     this.path = rustReq.path;
-    this.headers = rawReq.headers;
+    this.headers = new Headers(rawReq.headers);
     this.contentType = rustReq.contentType ?? undefined;
     this.contentLength = rustReq.contentLength ?? undefined;
     this.charset = rustReq.charset ?? undefined;
@@ -38,14 +38,13 @@ export class BunnerRequest {
     });
 
     // Request IP
-    const xff = this.headers.get(HEADER_FIELD.X_FORWARDED_FOR);
+    const xff = this.headers.get(HeaderField.XForwardedFor);
     const socketAddress = server.requestIP(rawReq) || undefined;
 
     this.ip = this.normalizeIp(
       xff
         ? xff?.split(',')[0]?.trim()
-        : (rawReq.headers.get(HEADER_FIELD.X_REAL_IP) ??
-            socketAddress?.address),
+        : (rawReq.headers.get(HeaderField.XRealIp) ?? socketAddress?.address),
     );
   }
 

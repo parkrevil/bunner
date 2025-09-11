@@ -1,5 +1,5 @@
 import {
-  METADATA_KEY,
+  MetadataKey,
   type InjectableMetadata,
   type ModuleMetadata,
 } from '../injector';
@@ -22,7 +22,7 @@ export function Module(options?: ModuleDecoratorOptions): ClassDecorator {
       exports: options?.exports ?? [],
     };
 
-    Reflect.defineMetadata(METADATA_KEY.MODULE, moduleMetadata, target);
+    Reflect.defineMetadata(MetadataKey.Module, moduleMetadata, target);
   };
 }
 
@@ -38,6 +38,6 @@ export function Injectable(
       scope: options?.scope ?? 'singleton',
     };
 
-    Reflect.defineMetadata(METADATA_KEY.INJECTABLE, injectableMetadata, target);
+    Reflect.defineMetadata(MetadataKey.Injectable, injectableMetadata, target);
   };
 }

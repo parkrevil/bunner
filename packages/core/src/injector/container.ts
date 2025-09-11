@@ -2,7 +2,7 @@ import { isClass } from '../helpers';
 import type { BunnerRootModule } from '../interfaces';
 import type { Class } from '../types';
 
-import { METADATA_KEY, REFLECT_METADATA_KEY } from './constants';
+import { MetadataKey, ReflectMetadataKey } from './enums';
 import {
   isForwardRef,
   isUseClassProvider,
@@ -97,7 +97,7 @@ export class Container {
     }
 
     const metadata: ModuleMetadata = Reflect.getMetadata(
-      METADATA_KEY.MODULE,
+      MetadataKey.Module,
       cls,
     );
 
@@ -169,7 +169,7 @@ export class Container {
 
     if (cls) {
       const injectableMetadata: InjectableMetadata = Reflect.getMetadata(
-        METADATA_KEY.INJECTABLE,
+        MetadataKey.Injectable,
         cls,
       );
 
@@ -209,7 +209,7 @@ export class Container {
    */
   private getDependenciesFromConstructor(cls: Class) {
     const paramTypes = Reflect.getMetadata(
-      REFLECT_METADATA_KEY.DESIGN_PARAM_TYPES,
+      ReflectMetadataKey.DesignParamTypes,
       cls,
     );
 
@@ -218,7 +218,7 @@ export class Container {
     }
 
     const injectParams: InjectMetadata[] =
-      Reflect.getMetadata(METADATA_KEY.INJECT, cls) ?? [];
+      Reflect.getMetadata(MetadataKey.Inject, cls) ?? [];
     const dependencies: DependencyProvider[] = [];
 
     for (let i = 0; i < paramTypes.length; i++) {

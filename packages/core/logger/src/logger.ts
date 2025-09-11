@@ -1,7 +1,7 @@
 import { encodeCString, resolveRustLibPath } from '@bunner/core';
 import { dlopen } from 'bun:ffi';
 
-import { LogType } from './constants';
+import { LogLevel } from './enums';
 import type { FfiSymbols } from './interfaces';
 import type { LogLevel } from './types';
 
@@ -38,23 +38,23 @@ export class Logger {
   }
 
   trace(message: string) {
-    this.log(LogType.trace, message);
+    this.log(LogLevel.trace, message);
   }
 
   debug(message: string) {
-    this.log(LogType.debug, message);
+    this.log(LogLevel.debug, message);
   }
 
   info(message: string) {
-    this.log(LogType.info, message);
+    this.log(LogLevel.info, message);
   }
 
   warn(message: string) {
-    this.log(LogType.warn, message);
+    this.log(LogLevel.warn, message);
   }
 
   error(message: string) {
-    this.log(LogType.error, message);
+    this.log(LogLevel.error, message);
   }
 
   private log(level: LogLevel, message: string) {

@@ -1,8 +1,8 @@
 import { EmitDecoratorMetadataError } from '../errors';
 import { isClass } from '../helpers';
 import {
-  METADATA_KEY,
-  REFLECT_METADATA_KEY,
+  MetadataKey,
+  ReflectMetadataKey,
   type InjectMetadata,
   type ForwardRef,
   isForwardRef,
@@ -39,7 +39,7 @@ export function Inject(
       }
     } else {
       const paramtypes = Reflect.getMetadata(
-        REFLECT_METADATA_KEY.DESIGN_PARAM_TYPES,
+        ReflectMetadataKey.DesignParamTypes,
         target,
         property!,
       );
@@ -53,11 +53,11 @@ export function Inject(
     }
 
     const existingParams: InjectMetadata[] =
-      Reflect.getMetadata(METADATA_KEY.INJECT, target, property!) ?? [];
+      Reflect.getMetadata(MetadataKey.Inject, target, property!) ?? [];
     existingParams.push({ index, token, provider });
 
     Reflect.defineMetadata(
-      METADATA_KEY.INJECT,
+      MetadataKey.Inject,
       existingParams,
       target,
       property!,

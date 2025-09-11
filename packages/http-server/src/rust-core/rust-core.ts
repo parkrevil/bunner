@@ -8,7 +8,7 @@ import {
 import type { JSCallbackMap } from '@bunner/core/src/rust-core/types';
 import { FFIType, JSCallback, type FFIFunction, type Pointer } from 'bun:ffi';
 
-import type { HttpMethodValue } from '../types';
+import type { HttpMethod } from '../enums';
 
 import { HttpServerErrorCodes } from './constants';
 import type {
@@ -133,11 +133,11 @@ export class RustCore extends BaseRustCore<
    * @param path
    * @returns
    */
-  addRoute(httpMethod: HttpMethodValue, path: string) {
+  addRoute(httpMethod: HttpMethod, path: string) {
     return this.ensure<AddRouteResult>(
       this.symbols.add_route(
         this.handle,
-        httpMethod as FFIType.u8,
+        httpMethod as unknown as FFIType.u8,
         encodeCString(path),
       ),
     );
@@ -149,7 +149,7 @@ export class RustCore extends BaseRustCore<
    * @param params
    * @returns
    */
-  addRoutes(params: [HttpMethodValue, string][]) {
+  addRoutes(params: [HttpMethod, string][]) {
     return this.ensure<number[]>(
       this.symbols.add_routes(this.handle, encodeCString(params)),
     );

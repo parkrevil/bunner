@@ -1,16 +1,16 @@
 import { CookieMap, type CookieInit } from 'bun';
-import { getReasonPhrase, StatusCodes } from 'http-status-codes';
-import { ContentType, HeaderField, HttpMethod } from './constants';
+import { StatusCodes, getReasonPhrase } from 'http-status-codes';
+
 import type { BunnerRequest } from './bunner-request';
-import type { ContentTypeValue } from './types';
+import { ContentType, HeaderField, HttpMethod } from './enums';
 
 export class BunnerResponse {
   private readonly req: BunnerRequest;
   private _body: any;
   private _cookies: CookieMap;
   private _headers: Headers;
-  private _status;
-  private _statusText;
+  private _status: StatusCodes;
+  private _statusText: string;
   private _built = false;
 
   constructor(req: BunnerRequest) {
@@ -67,11 +67,11 @@ export class BunnerResponse {
   }
 
   getContentType() {
-    return this.getHeader(HeaderField.ContentType) as ContentTypeValue | undefined;
+    return this.getHeader(HeaderField.ContentType);
   }
 
-  setContentType(contentType: ContentTypeValue, charset?: string) {
-    this.setHeader(HeaderField.ContentType, `${contentType}${charset ? `; charset=${charset}` : ''}`);
+  setContentType(contentType: string) {
+    this.setHeader(HeaderField.ContentType, `${contentType}; charset=utf-8`);
 
     return this;
   }
@@ -129,20 +129,13 @@ export class BunnerResponse {
       return this;
     }
 
-    let contentType = this.getContentType();
+    const contentType: string | undefined = this.getContentType() ?? undefined;
 
-    if (!contentType) {
-      contentType = this.inferContentType();
-
-      const needsCharset =
-        contentType.startsWith('text/') ||
-        contentType === ContentType.Json ||
-        contentType === ContentType.Javascript;
-
-      this.setContentType(contentType, needsCharset ? 'utf-8' : undefined);
+    if (contentType === undefined) {
+      this.setContentType(this.inferContentType());
     }
 
-    if (this.req.method === HttpMethod.Head) {
+    if (this.req.httpMethod === HttpMethod.Head) {
       if (!this._status) {
         this.setStatus(StatusCodes.OK);
       }
@@ -153,7 +146,10 @@ export class BunnerResponse {
       return this;
     }
 
-    if (this._status === StatusCodes.NO_CONTENT || this._status === StatusCodes.NOT_MODIFIED) {
+    if (
+      this._status === StatusCodes.NO_CONTENT ||
+      this._status === StatusCodes.NOT_MODIFIED
+    ) {
       this._body = undefined;
       this._built = true;
 
@@ -168,22 +164,14 @@ export class BunnerResponse {
       return this;
     }
 
-    if (contentType === ContentType.Json && typeof this._body !== 'string' && !(this._body instanceof Uint8Array) && !(this._body instanceof ArrayBuffer)) {
+    if (contentType === ContentType.Json) {
       try {
         this._body = JSON.stringify(this._body);
       } catch {
-        this.setContentType(ContentType.Text, 'utf-8');
+        this.setContentType(ContentType.Text);
 
         this._body = String(this._body);
       }
-    }
-
-    if (contentType.startsWith('text/') && typeof this._body !== 'string') {
-      this._body = String(this._body);
-    }
-
-    if (this._body && typeof (this._body as any)?.name === 'string' && !this.getHeader(HeaderField.ContentDisposition)) {
-      this.setHeader(HeaderField.ContentDisposition, `attachment; filename="${(this._body as any).name}"`);
     }
 
     this._built = true;
@@ -198,33 +186,25 @@ export class BunnerResponse {
   /**
    * Infer content type based on current body value.
    */
-  private inferContentType(): ContentTypeValue {
-    if (typeof this._body === 'string') {
-      return ContentType.Text as ContentTypeValue;
+  private inferContentType() {
+    if (
+      this._body !== null &&
+      (typeof this._body === 'object' ||
+        typeof this._body === 'number' ||
+        typeof this._body === 'boolean')
+    ) {
+      return ContentType.Json;
     }
 
-    if (this._body instanceof Blob) {
-      return ((this._body as Blob).type || ContentType.OctetStream) as ContentTypeValue;
-    }
-
-    if (this._body instanceof ArrayBuffer || this._body instanceof Uint8Array) {
-      return ContentType.OctetStream as ContentTypeValue;
-    }
-
-    if (typeof ReadableStream !== 'undefined' && this._body instanceof ReadableStream) {
-      return ContentType.OctetStream as ContentTypeValue;
-    }
-
-    if (this._body !== null && (typeof this._body === 'object' || typeof this._body === 'number' || typeof this._body === 'boolean')) {
-      return ContentType.Json as ContentTypeValue;
-    }
-
-    return ContentType.Text as ContentTypeValue;
+    return ContentType.Text;
   }
 
   private makeResponseInit() {
     if (this._cookies.size > 0) {
-      this.setHeader(HeaderField.SetCookie, this._cookies.toSetCookieHeaders().join(', '));
+      this.setHeader(
+        HeaderField.SetCookie,
+        this._cookies.toSetCookieHeaders().join(', '),
+      );
     }
 
     return {

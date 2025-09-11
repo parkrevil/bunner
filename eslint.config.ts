@@ -169,6 +169,7 @@ export default defineConfig([
       '@typescript-eslint/no-unsafe-argument': 'off',
       '@typescript-eslint/no-unsafe-call': 'off',
       '@typescript-eslint/only-throw-error': 'off',
+      '@typescript-eslint/restrict-template-expressions': 'off',
     },
   },
   {

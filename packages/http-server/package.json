@@ -8,7 +8,7 @@
     "@types/statuses": "^2.0.6"
   },
   "dependencies": {
-    "statuses": "^2.0.2"
+    "http-status-codes": "^2.3"
   },
   "peerDependencies": {
     "@bunner/core": "workspace:*"
