@@ -39,7 +39,7 @@ export class BunnerHttpServer extends BunnerApplication {
 
     this.server = Bun.serve({
       port: 5000,
-      fetch: req => this.router.handleRequest(req),
+      fetch: (req, server) => this.router.handleRequest(req, server),
     });
   }
 

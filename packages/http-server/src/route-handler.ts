@@ -1,5 +1,7 @@
 import type { Container } from '@bunner/core';
+import type { Server } from 'bun';
 
+import { BunnerRequest } from './bunner-request';
 import { HTTP_METHOD } from './constants';
 import {
   METADATA_KEY,
@@ -83,7 +85,7 @@ export class RouteHandler {
    * @param rawReq - The raw request object
    * @returns
    */
-  async handleRequest(rawReq: Request) {
+  async handleRequest(rawReq: Request, server: Server) {
     if (!Object.hasOwn(HTTP_METHOD, rawReq.method)) {
       return new Response('Method not allowed', { status: 405 });
     }
@@ -109,7 +111,13 @@ export class RouteHandler {
         headers: rawReq.headers.toJSON(),
         body,
       });
+      console.log(handleResult);
+
+      const req = new BunnerRequest(handleResult.request, rawReq, server);
+      //const res = new BunnerResponse(handleResult.response);
       const handler = this.handlers.get(handleResult.routeKey);
+
+      console.log(req);
 
       if (!handler) {
         return new Response('Handler not found for route key', { status: 500 });

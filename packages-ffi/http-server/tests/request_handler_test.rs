@@ -170,19 +170,20 @@ mod header_parsing {
             "headers": { "content-type": "application/json; charset=utf-8" }, "body": null
         });
         let out = run_test_and_get_result(payload);
-        assert_eq!(out.request.content_type, "application/json");
-        assert_eq!(out.request.charset, "utf-8");
+        assert_eq!(out.request.content_type.unwrap(), "application/json");
+        assert_eq!(out.request.charset.unwrap(), "utf-8");
     }
 
     #[test]
-    fn should_echo_input_headers_in_result_headers() {
+    fn should_not_include_request_headers_in_output_json() {
         let payload = json!({
             "httpMethod": 0, "url": "http://a.com/users/1",
             "headers": { "x-custom": "v1", "content-type": "text/plain" }, "body": null
         });
-        let out = run_test_and_get_result(payload);
-        assert_eq!(out.request.headers.get("x-custom").unwrap(), "v1");
-        assert_eq!(out.request.content_type, "text/plain");
+        let raw = run_test_and_get_result(payload);
+        let serialized = serde_json::to_value(&raw.request).unwrap();
+
+        assert!(serialized.get("headers").is_none());
     }
 }
 

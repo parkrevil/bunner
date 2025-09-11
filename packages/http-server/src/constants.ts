@@ -11,3 +11,12 @@ export const HTTP_METHOD = {
   OPTIONS: 5,
   HEAD: 6,
 } as const;
+
+/**
+ * Header Field
+ * @description The header field
+ */
+export const HEADER_FIELD = {
+  X_FORWARDED_FOR: 'x-forwarded-for',
+  X_REAL_IP: 'x-real-ip',
+};

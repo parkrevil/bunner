@@ -1,165 +1,52 @@
-import type { CookieMap, SocketAddress } from 'bun';
-import { HeaderField, Protocol } from './constants';
-import type { BunnerRequestConstructorParams } from './interfaces';
-import type { HttpMethodValue, ProtocolValue } from './types';
+import { CookieMap, type Server } from 'bun';
+
+import { HEADER_FIELD } from './constants';
+import type { RustBunnerRequest } from './rust-core';
+import type { HttpMethodValue } from './types';
 
 export class BunnerRequest {
-  readonly raw: Request;
-  readonly protocol: ProtocolValue;
+  readonly httpMethod: HttpMethodValue;
+  readonly url: string;
   readonly path: string;
+  readonly headers: Headers;
+  readonly cookies: CookieMap;
   readonly contentType: string | undefined;
   readonly contentLength: number | undefined;
-  readonly params: Record<string, any>;
+  readonly charset: string | undefined;
+  readonly params: Record<string, any> | undefined;
+  readonly queryParams: Record<string, any> | undefined;
+  readonly body: Record<string, any> | undefined;
   readonly ip: string | undefined;
-  readonly socketAddress: SocketAddress | undefined;
 
-  private readonly _customData: Map<string, any> = new Map<string, any>();
-  private _isHttps: boolean;
-  private _queryParams: Record<string, string>;
-  private _body: any;
-  private _cookies: CookieMap | undefined;
+  constructor(rustReq: RustBunnerRequest, rawReq: Request, server: Server) {
+    this.httpMethod = rustReq.httpMethod;
+    this.url = rawReq.url;
+    this.path = rustReq.path;
+    this.headers = rawReq.headers;
+    this.contentType = rustReq.contentType ?? undefined;
+    this.contentLength = rustReq.contentLength ?? undefined;
+    this.charset = rustReq.charset ?? undefined;
+    this.params = rustReq.params ?? undefined;
+    this.queryParams = rustReq.queryParams ?? undefined;
+    this.body = rustReq.body ?? undefined;
 
-  constructor(params: BunnerRequestConstructorParams) {
-    this.raw = params.request;
-    this.params = params.params;
-    this._queryParams = params.queryParams;
+    // Initialize the cookies
+    this.cookies = new CookieMap();
 
-    const url = new URL(this.raw.url);
-    this.path = url.pathname;
-    this.protocol = url.protocol.split(':')[0] as ProtocolValue;
+    Object.entries(rustReq.cookies).forEach(([key, value]) => {
+      this.cookies.set(key, value);
+    });
 
-    const contentTypeHeader = this.raw.headers.get(HeaderField.ContentType);
-    this.contentType = contentTypeHeader ?? undefined;
+    // Request IP
+    const xff = this.headers.get(HEADER_FIELD.X_FORWARDED_FOR);
+    const socketAddress = server.requestIP(rawReq) || undefined;
 
-    const contentLengthHeader = this.raw.headers.get(HeaderField.ContentLength);
-    this.contentLength = contentLengthHeader ? Math.floor(Number(contentLengthHeader)) : undefined;
-
-    const xff = this.raw.headers.get(HeaderField.XForwardedFor);
-    this.socketAddress = params.server.requestIP(this.raw) || undefined;
     this.ip = this.normalizeIp(
-      xff ? xff?.split(',')[0]?.trim() : this.raw.headers.get(HeaderField.XRealIp) ?? this.socketAddress?.address,
+      xff
+        ? xff?.split(',')[0]?.trim()
+        : (rawReq.headers.get(HEADER_FIELD.X_REAL_IP) ??
+            socketAddress?.address),
     );
-
-    const xfProto = this.headers.get(HeaderField.XForwardedProto) ?? '';
-    this._isHttps = xfProto.toLowerCase().includes(Protocol.Https) || this.protocol === Protocol.Https;
-  }
-
-  /**
-   * Get the headers of the request
-   * @returns The headers of the request
-   */
-  get headers() {
-    return this.raw.headers;
-  }
-
-  /**
-   * Get the URL of the request
-   * @returns The URL of the request
-   */
-  get url() {
-    return this.raw.url;
-  }
-
-  /**
-   * Get the method of the request
-   * @returns The method of the request
-   */
-  get method() {
-    return this.raw.method as HttpMethodValue;
-  }
-
-  /**
-   * Get the family of the request
-   * @returns The family of the request
-   */
-  get family() {
-    return this.socketAddress?.family;
-  }
-
-  /**
-   * Get the query params of the request
-   * @returns The query params of the request
-   */
-  get queryParams() {
-    return this._queryParams;
-  }
-
-  /**
-   * Get the body of the request
-   * @returns The body of the request
-   */
-  get body() {
-    return this._body;
-  }
-
-  /**
-   * Get the cookies of the request
-   * @returns The cookies of the request
-   */
-  get cookies() {
-    return this._cookies;
-  }
-
-  /**
-   * Check if the request is HTTPS
-   * @returns True if the request is HTTPS, false otherwise
-   */
-  isHttps() {
-    return this._isHttps;
-  }
-
-  /**
-   * Set the cookies of the request
-   * @param cookies - The cookies of the request
-   * @returns The request instance
-   */
-  setCookies(cookies: CookieMap | undefined) {
-    this._cookies = cookies;
-
-    return this;
-  }
-
-  /**
-   * Set the query params of the request
-   * @param queryParams - The query params of the request
-   * @returns The request instance
-   */
-  setQueryParams(queryParams: Record<string, string>) {
-    this._queryParams = queryParams;
-
-    return this;
-  }
-
-  /**
-   * Set the body of the request
-   * @param body - The body of the request
-   * @returns The request instance
-   */
-  setBody(body: any) {
-    this._body = body;
-
-    return this;
-  }
-
-  /**
-   * Attach arbitrary data to the request lifecycle.
-   * @param key - The key to store the value under.
-   * @param value - The value to store.
-   * @returns The request instance.
-   */
-  setCustomData<TValue>(key: string, value: TValue) {
-    this._customData.set(key, value);
-
-    return this;
-  }
-
-  /**
-   * Retrieve previously stored custom data from the request.
-   * @param key - The key of the value to retrieve.
-   * @returns The stored value or undefined.
-   */
-  getCustomData<TValue>(key: string): TValue | undefined {
-    return this._customData.get(key) as TValue | undefined;
   }
 
   /**

@@ -57,19 +57,26 @@ export interface HandleRequestResult {
   response: RustBunnerResponse;
 }
 
+/**
+ * Rust Bunner Request
+ * @description The request interface for Rust Bunner
+ */
 export interface RustBunnerRequest {
-  url: string;
   httpMethod: HttpMethodValue;
   path: string;
-  headers: Record<string, any>;
   cookies: Record<string, any>;
-  contentType: string;
-  charset: string;
+  contentType: string | null;
+  contentLength: number | null;
+  charset: string | null;
   params: Record<string, any> | null;
   queryParams: Record<string, any> | null;
-  body: Record<string, any>;
+  body: Record<string, any> | null;
 }
 
+/**
+ * Rust Bunner Response
+ * @description The response interface for Rust Bunner
+ */
 export interface RustBunnerResponse {
   httpStatus: HttpStatusCode;
   headers: Record<string, any>;

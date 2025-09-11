@@ -34,16 +34,19 @@ pub struct BunnerResponse {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct BunnerRequest {
-    #[serde(skip_serializing, skip_deserializing)]
-    pub url: String,
     #[serde(rename = "httpMethod")]
     pub http_method: HttpMethod,
+    #[serde(skip_serializing, skip_deserializing)]
+    pub url: String,
     pub path: String,
+    #[serde(default, skip_serializing, skip_deserializing)]
     pub headers: serde_json::Value,
     pub cookies: serde_json::Value,
     #[serde(rename = "contentType")]
-    pub content_type: String,
-    pub charset: String,
+    pub content_type: Option<String>,
+    #[serde(rename = "contentLength")]
+    pub content_length: Option<u64>,
+    pub charset: Option<String>,
     pub params: Option<serde_json::Value>,
     #[serde(rename = "queryParams")]
     pub query_params: Option<serde_json::Value>,

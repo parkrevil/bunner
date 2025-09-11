@@ -28,12 +28,16 @@ impl Middleware for HeaderParser {
                     let v = kv.next().map(|s| s.trim().trim_matches('"')).unwrap_or("");
 
                     if k == "charset" {
-                        req.charset = v.to_string();
+                        req.charset = Some(v.to_string());
                     }
                 }
             }
 
-            req.content_type = ct_main.trim().to_string();
+            req.content_type = Some(ct_main.trim().to_string());
+        }
+
+        if let Some(ct) = payload.headers.get("content-length") {
+            req.content_length = Some(ct.parse::<u64>().unwrap_or(0));
         }
 
         true

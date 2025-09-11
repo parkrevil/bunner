@@ -25,8 +25,9 @@ fn run_chain(payload: &HandleRequestPayload) -> (BunnerRequest, BunnerResponse) 
         path: String::new(),
         headers: serde_json::Value::Object(serde_json::Map::new()),
         cookies: serde_json::Value::Object(serde_json::Map::new()),
-        content_type: String::new(),
-        charset: String::new(),
+        content_type: None,
+        content_length: None,
+        charset: None,
         params: None,
         query_params: None,
         body: None,
@@ -46,8 +47,8 @@ mod header_parsing {
         headers.insert("content-type".to_string(), "application/json; charset=utf-8".to_string());
         let payload = make_payload("http://localhost/a", headers, None);
         let (req, _res) = run_chain(&payload);
-        assert_eq!(req.content_type, "application/json");
-        assert_eq!(req.charset, "utf-8");
+        assert_eq!(req.content_type.unwrap(), "application/json");
+        assert_eq!(req.charset.unwrap(), "utf-8");
     }
 }
 
@@ -220,7 +221,7 @@ mod body_parsing {
         let payload = make_payload("http://localhost/a", headers, Some("{\"k\":1}"));
         let (req, _res) = run_chain(&payload);
         assert_eq!(req.body.unwrap().get("k").unwrap(), 1);
-        assert_eq!(req.charset, "utf-8");
+        assert_eq!(req.charset.as_deref(), Some("utf-8"));
     }
 
     #[test]
