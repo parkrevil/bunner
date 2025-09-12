@@ -2,6 +2,7 @@ use serde::Serialize;
 use serde_json::json;
 use std::ffi::CString;
 use std::os::raw::c_char;
+use std::thread;
 
 pub fn serialize_to_cstring<T: Serialize>(value: &T) -> *mut c_char {
     match serde_json::to_string(value) {
@@ -17,7 +18,17 @@ pub fn serialize_to_cstring<T: Serialize>(value: &T) -> *mut c_char {
 /// Build a standard error detail payload with mandatory operation and optional extra fields.
 /// This is crate-wide and should be preferred over module-local helpers.
 pub fn make_error_detail(operation: &str, extra: serde_json::Value) -> serde_json::Value {
-    let mut base = json!({"operation": operation});
+    let ts = {
+        #[allow(unused_imports)]
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default();
+        // milliseconds since epoch for portability without chrono dependency
+        now.as_millis()
+    };
+    let thread_id = format!("{:?}", thread::current().id());
+    let mut base = json!({"operation": operation, "ts": ts, "thread": thread_id});
     if let serde_json::Value::Object(ref mut map) = base {
         match extra {
             serde_json::Value::Object(extra_map) => {
