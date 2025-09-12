@@ -6,6 +6,7 @@
     clippy::print_stdout,
     clippy::print_stderr
 )]
+#![deny(unsafe_op_in_unsafe_fn)]
 use once_cell::sync::OnceCell;
 use std::ffi::CStr;
 use std::os::raw::c_char;

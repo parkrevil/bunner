@@ -6,6 +6,7 @@
     clippy::print_stdout,
     clippy::print_stderr,
 )]
+#![deny(unsafe_op_in_unsafe_fn)]
 pub mod enums;
 pub mod errors;
 pub mod helpers;
@@ -114,7 +115,7 @@ pub unsafe extern "C" fn destroy(handle: HttpServerHandle) {
 
         return;
     }
-
+    
     let http_server = unsafe { Box::from_raw(handle) };
 
     drop(http_server);
