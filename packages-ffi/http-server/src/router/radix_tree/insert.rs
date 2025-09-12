@@ -154,20 +154,29 @@ impl RadixTree {
 }
 
 fn sort_static_children(node: &mut RadixTreeNode, interner: &Interner) {
-    if node.static_keys.len() == node.static_vals.len() && node.static_keys.len() > 1 {
-        let mut pairs: Vec<(u32, String, super::NodeBox)> = node
-            .static_keys
-            .iter()
-            .cloned()
-            .zip(node.static_vals.iter().map(|nb| super::NodeBox(nb.0)))
-            .map(|(k, v)| (interner.intern(k.as_str()), k, v))
+    let len = node.static_keys.len();
+    if len == node.static_vals.len() && len > 1 {
+        // Build index list sorted by interned key id (no key clones)
+        let mut order: Vec<(u32, usize)> = (0..len)
+            .map(|i| (interner.intern(node.static_keys[i].as_str()), i))
             .collect();
-        pairs.sort_unstable_by(|a, b| a.0.cmp(&b.0));
-        node.static_keys.clear();
+        order.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+
+        // Snapshot values (re-wrap pointers) and move keys out without cloning
+        let mut old_keys = std::mem::take(&mut node.static_keys);
+        let old_vals: Vec<super::NodeBox> = node
+            .static_vals
+            .iter()
+            .map(|nb| super::NodeBox(nb.0))
+            .collect();
+
+        node.static_keys.reserve(len);
         node.static_vals.clear();
-        for (_id, k, v) in pairs.into_iter() {
-            node.static_keys.push(k);
-            node.static_vals.push(v);
+        for &(_id, idx) in order.iter() {
+            let key = std::mem::take(&mut old_keys[idx]);
+            node.static_keys.push(key);
+            // rewrap NonNull pointer for new order without cloning node data
+            node.static_vals.push(super::NodeBox(old_vals[idx].0));
         }
     }
 }
