@@ -41,7 +41,12 @@ pub fn make_error_detail(operation: &str, extra: serde_json::Value) -> serde_jso
         now.as_millis()
     };
     let thread_id = format!("{:?}", thread::current().id());
-    let mut base = json!({"operation": operation, "ts": ts, "thread": thread_id});
+    let mut base = json!({
+        "operation": operation,
+        "ts": ts,
+        "thread": thread_id,
+        "version": env!("CARGO_PKG_VERSION")
+    });
     if let serde_json::Value::Object(ref mut map) = base {
         match extra {
             serde_json::Value::Object(extra_map) => {
