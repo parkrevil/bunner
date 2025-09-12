@@ -31,4 +31,3 @@ rstest.workspace = true
 default = []
 test = []
 router-high = []
-production = []

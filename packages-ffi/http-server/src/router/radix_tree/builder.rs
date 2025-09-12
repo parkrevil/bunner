@@ -85,34 +85,25 @@ pub(super) fn finalize(tree: &mut RadixTree) {
     // Build static full maps for O(1) lookup when path is entirely static
     build_static_map(tree);
 
-    #[cfg(any(feature = "production", feature = "test"))]
-    {
-        // Runtime cleanup for production builds: free capacities not needed at runtime
-        super::traversal::traverse_mut(&mut tree.root_node, |n| {
-            // Pattern ordering aid not needed for runtime matching
-            n.pattern_children_idx.clear();
-            n.pattern_children_idx.shrink_to_fit();
+    super::traversal::traverse_mut(&mut tree.root_node, |n| {
+        n.pattern_children_idx.clear();
+        n.pattern_children_idx.shrink_to_fit();
 
-            // When static full map is used, per-node maps can be trimmed
-            if !tree.enable_static_route_full_mapping {
-                n.static_children_idx_ids.shrink_to_fit();
-                n.static_children.shrink_to_fit();
-            }
-        });
-
-        // Interner reverse table not needed for runtime matching
-        tree.interner.runtime_cleanup();
-
-        // If pruning disabled, drop bitmaps to minimal footprint
-        if !tree.enable_root_level_pruning {
-            tree.method_first_byte_bitmaps = [[0; 4]; super::HTTP_METHOD_COUNT];
-            tree.method_length_buckets = [0; super::HTTP_METHOD_COUNT];
+        if !tree.enable_static_route_full_mapping {
+            n.static_children_idx_ids.shrink_to_fit();
+            n.static_children.shrink_to_fit();
         }
+    });
 
-        // Static full map: shrink each map to fit
-        for m in 0..super::HTTP_METHOD_COUNT {
-            tree.static_route_full_mapping[m].shrink_to_fit();
-        }
+    tree.interner.runtime_cleanup();
+
+    if !tree.enable_root_level_pruning {
+        tree.method_first_byte_bitmaps = [[0; 4]; super::HTTP_METHOD_COUNT];
+        tree.method_length_buckets = [0; super::HTTP_METHOD_COUNT];
+    }
+
+    for m in 0..super::HTTP_METHOD_COUNT {
+        tree.static_route_full_mapping[m].shrink_to_fit();
     }
 }
 

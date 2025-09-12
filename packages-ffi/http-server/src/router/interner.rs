@@ -34,14 +34,11 @@ impl Interner {
         }
     }
 
-    #[cfg(any(feature = "production", feature = "test"))]
     #[inline]
     pub fn runtime_cleanup(&self) {
-        // After finalize in production, we only need forward lookups via `get`.
-        // Free reverse table capacity to reduce memory footprint.
         let mut rev = self.rev.write();
+
         rev.clear();
         rev.shrink_to_fit();
     }
-    // end impl
 }
