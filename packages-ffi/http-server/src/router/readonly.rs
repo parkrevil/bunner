@@ -95,25 +95,11 @@ impl RouterReadOnly {
 
         let normalized = normalize_path(path);
 
-        if !is_path_character_allowed(&normalized) {
-            return Err(RouterError::new(
-                RouterErrorCode::MatchPathContainsDisallowedCharacters,
-                "Normalized path contains disallowed characters".to_string(),
-                Some(crate::util::make_error_detail(
-                    "find",
-                    serde_json::json!({
-                        "path": normalized,
-                        "method": method as u8
-                    }),
-                )),
-            ));
-        }
-
         if let Some(k) = self.find_static(method, &normalized) {
             return Ok((k, Vec::new()));
         }
 
-        let mut out_params: Vec<(String, String)> = Vec::new();
+        let mut out_params: Vec<(String, String)> = Vec::with_capacity(2);
         if let Some((rk, params)) = self.root.find_from(method, &normalized, 0, &mut out_params) {
             Ok((rk, params))
         } else {
