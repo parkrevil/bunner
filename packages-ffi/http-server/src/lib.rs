@@ -1,3 +1,11 @@
+#![deny(
+    clippy::dbg_macro,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::panic,
+    clippy::print_stdout,
+    clippy::print_stderr,
+)]
 pub mod enums;
 pub mod errors;
 pub mod helpers;

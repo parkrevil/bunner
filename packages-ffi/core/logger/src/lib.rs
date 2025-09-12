@@ -1,8 +1,16 @@
+#![deny(
+    clippy::dbg_macro,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::panic,
+    clippy::print_stdout,
+    clippy::print_stderr
+)]
 use once_cell::sync::OnceCell;
 use std::ffi::CStr;
 use std::os::raw::c_char;
 use tracing::{debug, error, info, trace, warn};
-use tracing_subscriber::{EnvFilter, fmt};
+use tracing_subscriber::{fmt, EnvFilter};
 
 static LOGGER_INIT: OnceCell<()> = OnceCell::new();
 
