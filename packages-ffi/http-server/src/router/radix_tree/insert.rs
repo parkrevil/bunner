@@ -52,17 +52,10 @@ impl RadixTree {
         let arena_ptr: *const bumpalo::Bump = &self.arena;
 
         for (i, pat) in parsed_segments.iter().enumerate() {
-            let seg = pat
-                .parts
-                .iter()
-                .map(|p| match p {
-                    SegmentPart::Literal(s) => s.clone(),
-                    SegmentPart::Param { name } => format!(":{}", name),
-                })
-                .collect::<Vec<String>>()
-                .join("");
-
-            if seg == "*" {
+            // Fast check without allocation: single literal '*' means wildcard
+            let is_wildcard =
+                matches!(pat.parts.as_slice(), [SegmentPart::Literal(s)] if s.as_str() == "*");
+            if is_wildcard {
                 return handle_wildcard_insert(
                     current,
                     method,
@@ -72,8 +65,27 @@ impl RadixTree {
                 );
             }
 
-            if pattern_is_pure_static(pat, &seg) {
-                current = current.descend_static_mut_with_alloc(seg.to_string(), || {
+            // Detect pure static without building a joined string
+            if pat.parts.len() == 1 {
+                if let SegmentPart::Literal(lit) = &pat.parts[0] {
+                    current = current.descend_static_mut_with_alloc(lit.clone(), || {
+                        create_node_box_from_arena_pointer(arena_ptr)
+                    });
+                    sort_static_children(current, &self.interner);
+                } else {
+                    current = find_or_create_pattern_child(current, pat, arena_ptr)?;
+                }
+            } else if pattern_is_pure_static(pat, "") {
+                // Unlikely path; keep safety for helper parity
+                let joined = pat
+                    .parts
+                    .iter()
+                    .map(|p| match p {
+                        SegmentPart::Literal(s) => s.as_str(),
+                        _ => "",
+                    })
+                    .collect::<String>();
+                current = current.descend_static_mut_with_alloc(joined, || {
                     create_node_box_from_arena_pointer(arena_ptr)
                 });
                 sort_static_children(current, &self.interner);
@@ -110,17 +122,9 @@ impl RadixTree {
         let arena_ptr: *const bumpalo::Bump = &self.arena;
 
         for (i, pat) in parsed_segments.iter().enumerate() {
-            let seg = pat
-                .parts
-                .iter()
-                .map(|p| match p {
-                    SegmentPart::Literal(s) => s.clone(),
-                    SegmentPart::Param { name } => format!(":{}", name),
-                })
-                .collect::<Vec<String>>()
-                .join("");
-
-            if seg == "*" {
+            let is_wildcard =
+                matches!(pat.parts.as_slice(), [SegmentPart::Literal(s)] if s.as_str() == "*");
+            if is_wildcard {
                 return handle_wildcard_insert_preassigned(
                     current,
                     method,
@@ -130,8 +134,25 @@ impl RadixTree {
                 );
             }
 
-            if pattern_is_pure_static(pat, &seg) {
-                current = current.descend_static_mut_with_alloc(seg.to_string(), || {
+            if pat.parts.len() == 1 {
+                if let SegmentPart::Literal(lit) = &pat.parts[0] {
+                    current = current.descend_static_mut_with_alloc(lit.clone(), || {
+                        create_node_box_from_arena_pointer(arena_ptr)
+                    });
+                    sort_static_children(current, &self.interner);
+                } else {
+                    current = find_or_create_pattern_child(current, pat, arena_ptr)?;
+                }
+            } else if pattern_is_pure_static(pat, "") {
+                let joined = pat
+                    .parts
+                    .iter()
+                    .map(|p| match p {
+                        SegmentPart::Literal(s) => s.as_str(),
+                        _ => "",
+                    })
+                    .collect::<String>();
+                current = current.descend_static_mut_with_alloc(joined, || {
                     create_node_box_from_arena_pointer(arena_ptr)
                 });
                 sort_static_children(current, &self.interner);
