@@ -97,6 +97,7 @@ pub(super) fn finalize(tree: &mut RadixTree) {
 
     tree.interner.runtime_cleanup();
 
+    // For stability, only drop bitmaps if pruning is disabled
     if !tree.enable_root_level_pruning {
         tree.method_first_byte_bitmaps = [[0; 4]; super::HTTP_METHOD_COUNT];
         tree.method_length_buckets = [0; super::HTTP_METHOD_COUNT];
@@ -256,23 +257,6 @@ fn build_static_map(tree: &mut RadixTree) {
     for m in 0..HTTP_METHOD_COUNT {
         tree.static_route_full_mapping[m].clear();
     }
-    #[cfg(feature = "router-high")]
-    {
-        // Reserve capacity heuristically when high profile is enabled
-        let mut approx = 0usize;
-        super::traversal::traverse(&tree.root_node, |n| {
-            for i in 0..HTTP_METHOD_COUNT {
-                if n.routes[i] != 0 {
-                    approx += 1;
-                }
-            }
-        });
-        if approx > 0 {
-            for m in 0..HTTP_METHOD_COUNT {
-                tree.static_route_full_mapping[m].reserve(approx / 2 + 8);
-            }
-        }
-    }
     if tree.enable_static_route_full_mapping {
         let mut path_buf = String::from("");
         collect_static(
@@ -293,7 +277,7 @@ pub(super) fn rebuild_intern_ids(node: &mut RadixTreeNode, interner: &Interner) 
         node.static_key_ids.reserve(node.static_keys.len());
 
         for k in node.static_keys.iter() {
-            node.static_key_ids.push(interner.intern(k.as_str()));
+            node.static_key_ids.push(interner.intern(k.as_ref()));
         }
 
         if node.static_vals_idx.len() == node.static_keys.len() && node.static_keys.len() >= 16 {

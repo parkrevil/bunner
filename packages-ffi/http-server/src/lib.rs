@@ -27,11 +27,10 @@ use crate::util::serialize_to_cstring;
 use std::{
     ffi::{CStr, CString},
     os::raw::c_char,
-    sync::Arc,
+    sync::{Arc, OnceLock},
 };
 use thread_pool::submit_job;
 
-#[cfg(feature = "test")]
 use thread_pool::shutdown_pool;
 
 #[cfg(feature = "test")]
@@ -63,7 +62,7 @@ pub type HttpServerHandle = *mut HttpServer;
 #[repr(C)]
 pub struct HttpServer {
     router: parking_lot::RwLock<router::Router>,
-    router_readonly: Arc<parking_lot::RwLock<Option<Arc<router::RouterReadOnly>>>>,
+    router_readonly: OnceLock<Arc<router::RouterReadOnly>>,
 }
 
 fn make_router_sealed_error(
@@ -100,7 +99,7 @@ pub extern "C" fn init() -> HttpServerHandle {
     tracing::event!(tracing::Level::INFO, "http_server init");
     let server = Box::new(HttpServer {
         router: parking_lot::RwLock::new(router::Router::new(None)),
-        router_readonly: Arc::new(parking_lot::RwLock::new(None)),
+        router_readonly: OnceLock::new(),
     });
 
     Box::into_raw(server)
@@ -116,9 +115,7 @@ pub extern "C" fn init() -> HttpServerHandle {
 pub unsafe extern "C" fn destroy(handle: HttpServerHandle) {
     tracing::event!(tracing::Level::INFO, "http_server destroy called");
     if handle.is_null() {
-        #[cfg(feature = "test")]
         shutdown_pool();
-
         return;
     }
 
@@ -126,7 +123,6 @@ pub unsafe extern "C" fn destroy(handle: HttpServerHandle) {
 
     drop(http_server);
 
-    #[cfg(feature = "test")]
     shutdown_pool();
 }
 
@@ -175,7 +171,7 @@ pub unsafe extern "C" fn add_route(
     let router_mut = &mut *guard;
     let path_str = unsafe { CStr::from_ptr(path) }.to_string_lossy();
 
-    if http_server.router_readonly.read().as_ref().is_some() {
+    if http_server.router_readonly.get().is_some() {
         let detail = serde_json::json!({ "path": path_str });
         let e = make_router_sealed_error("add_route", detail, false);
         return serialize_to_cstring(&HttpServerError::from(e));
@@ -183,7 +179,7 @@ pub unsafe extern "C" fn add_route(
 
     match router_mut.add(http_method, &path_str) {
         Ok(k) => {
-            tracing::event!(tracing::Level::INFO, method=?http_method, path=%path_str, key=k, "route added");
+            tracing::event!(tracing::Level::DEBUG, method=?http_method, path=%path_str, key=k, "route added");
             serialize_to_cstring(&AddRouteResult { key: k })
         }
         Err(e) => {
@@ -243,50 +239,52 @@ pub unsafe extern "C" fn add_routes(
         }
     };
 
-    let routes: Vec<(HttpMethod, String)> =
-        match serde_json::from_str::<Vec<(HttpMethod, String)>>(routes_str) {
-            Ok(r) => r,
-            Err(e) => {
-                let msg = e.to_string();
+    // Typed error handling: first parse as (u8, String), then validate method values explicitly
+    let routes_u8: Vec<(u8, String)> = match serde_json::from_str::<Vec<(u8, String)>>(routes_str) {
+        Ok(r) => r,
+        Err(e) => {
+            let http_error = HttpServerError::new(
+                HttpServerErrorCode::InvalidJsonString,
+                "Invalid JSON string for routes list".to_string(),
+                Some(crate::util::make_error_detail(
+                    "add_routes",
+                    serde_json::json!({
+                        "routesLength": routes_str.len(),
+                        "routesPreview": routes_str.chars().take(200).collect::<String>(),
+                        "serdeError": e.to_string()
+                    }),
+                )),
+            );
+            return serialize_to_cstring(&http_error);
+        }
+    };
 
-                if msg.contains("InvalidHttpMethod") {
-                    let http_error = HttpServerError::new(
-                        HttpServerErrorCode::InvalidHttpMethod,
-                        "Invalid HTTP method in routes payload".to_string(),
-                        Some(crate::util::make_error_detail(
-                            "add_routes",
-                            serde_json::json!({
-                                "routesLength": routes_str.len(),
-                                "routesPreview": routes_str.chars().take(200).collect::<String>(),
-                                "serdeError": msg
-                            }),
-                        )),
-                    );
-                    return serialize_to_cstring(&http_error);
-                } else {
-                    let http_error = HttpServerError::new(
-                        HttpServerErrorCode::InvalidJsonString,
-                        "Invalid JSON string for routes list".to_string(),
-                        Some(crate::util::make_error_detail(
-                            "add_routes",
-                            serde_json::json!({
-                                "routesLength": routes_str.len(),
-                                "routesPreview": routes_str.chars().take(200).collect::<String>(),
-                                "serdeError": msg
-                            }),
-                        )),
-                    );
-                    return serialize_to_cstring(&http_error);
-                }
+    let mut routes: Vec<(HttpMethod, String)> = Vec::with_capacity(routes_u8.len());
+    for (m, p) in routes_u8.into_iter() {
+        match HttpMethod::from_u8(m) {
+            Ok(hm) => routes.push((hm, p)),
+            Err(_) => {
+                let http_error = HttpServerError::new(
+                    HttpServerErrorCode::InvalidHttpMethod,
+                    "Invalid HTTP method in routes payload".to_string(),
+                    Some(crate::util::make_error_detail(
+                        "add_routes",
+                        serde_json::json!({
+                            "invalidMethod": m
+                        }),
+                    )),
+                );
+                return serialize_to_cstring(&http_error);
             }
-        };
+        }
+    }
 
     let http_server = unsafe { &*handle };
     let mut guard = http_server.router.write();
     let router_mut = &mut *guard;
     let routes_count = routes.len();
 
-    if http_server.router_readonly.read().as_ref().is_some() {
+    if http_server.router_readonly.get().is_some() {
         let detail = serde_json::json!({ "count": routes_count });
         let be = make_router_sealed_error("add_routes", detail, true);
         return serialize_to_cstring(&HttpServerError::from(be));
@@ -295,7 +293,7 @@ pub unsafe extern "C" fn add_routes(
     match router_mut.add_bulk(routes) {
         Ok(r) => {
             let cnt = r.len();
-            tracing::event!(tracing::Level::INFO, count = cnt as u64, "routes added");
+            tracing::event!(tracing::Level::DEBUG, count = cnt as u64, "routes added");
             serialize_to_cstring(&r)
         }
         Err(e) => {
@@ -410,11 +408,7 @@ pub unsafe extern "C" fn handle_request(
 
     let payload_owned: String = payload_str.to_owned();
     let http_server = unsafe { &*handle };
-    let ro_opt = {
-        let ro_guard = http_server.router_readonly.read();
-
-        ro_guard.as_ref().map(Arc::clone)
-    };
+    let ro_opt = http_server.router_readonly.get().map(Arc::clone);
 
     if ro_opt.is_none() {
         let http_error = HttpServerError::new(
@@ -437,34 +431,12 @@ pub unsafe extern "C" fn handle_request(
     let ro = ro_opt.unwrap();
     let payload_owned_for_job = payload_owned;
 
-    let (done_tx, done_rx) = std::sync::mpsc::channel::<()>();
     match submit_job(Box::new(move || {
+        // Worker will always perform the callback; main thread only observes enqueue success/failure
         request_handler::process_job(cb, request_id_owned, payload_owned_for_job, ro);
-
-        let _ = done_tx.send(());
     })) {
         Ok(()) => {
             tracing::event!(tracing::Level::DEBUG, "request enqueued");
-            use std::time::Duration;
-            match done_rx.recv_timeout(Duration::from_millis(500)) {
-                Ok(()) => {}
-                Err(_timeout) => {
-                    tracing::event!(tracing::Level::WARN, reason="worker_timeout", timeout_ms=500u64, request_id=%request_id_str);
-                    let http_error = HttpServerError::new(
-                        HttpServerErrorCode::QueueFull,
-                        "Request timed out waiting for worker".to_string(),
-                        Some(crate::util::make_error_detail(
-                            "handle_request",
-                            serde_json::json!({
-                                "requestId": request_id_str,
-                                "reason": "timeout",
-                                "timeoutMs": 500
-                            }),
-                        )),
-                    );
-                    callback_handle_request(cb, Some(request_id_str), 0, &http_error);
-                }
-            }
         }
         Err(_e) => {
             tracing::event!(tracing::Level::WARN, reason="queue_full", request_id=%request_id_str);
@@ -498,10 +470,7 @@ pub unsafe extern "C" fn seal_routes(handle: HttpServerHandle) {
 
         // Build read-only after finalize
         let ro = guard.build_readonly();
-        {
-            let mut s = http_server.router_readonly.write();
-            *s = Some(Arc::new(ro));
-        }
+        let _ = http_server.router_readonly.set(Arc::new(ro));
 
         // Drop the builder router by replacing with a minimal empty sealed router
         *guard = router::Router::new(None);

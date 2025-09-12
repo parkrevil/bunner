@@ -86,40 +86,20 @@ impl Middleware for UrlParser {
         req.path = u.path().to_string();
 
         if let Some(q) = u.query() {
-            let mut seen = std::collections::HashSet::new();
-            for (k, v) in u.query_pairs() {
-                let k_str = k.as_ref();
-                if k_str.is_empty() {
-                    res.http_status = HttpStatusCode::BadRequest;
-                    res.body = serde_json::Value::String(
-                        HttpStatusCode::BadRequest.reason_phrase().to_string(),
-                    );
-                    return false;
-                }
-                if !is_valid_bracket_key(k_str) {
-                    res.http_status = HttpStatusCode::BadRequest;
-                    res.body = serde_json::Value::String(
-                        HttpStatusCode::BadRequest.reason_phrase().to_string(),
-                    );
-                    return false;
-                }
-                let is_array_key = k_str.contains("[]");
-                if !is_array_key && !seen.insert(k_str.to_string()) {
-                    res.http_status = HttpStatusCode::BadRequest;
-                    res.body = serde_json::Value::String(
-                        HttpStatusCode::BadRequest.reason_phrase().to_string(),
-                    );
-                    return false;
-                }
-                let _ = v;
-            }
-
+            // Single-pass: rely on serde_qs to parse and avoid pre-validation iteration
             let config = QS_CONFIG.get_or_init(|| serde_qs::Config::new(5, true));
-            match config.deserialize_str::<std::collections::HashMap<String, serde_json::Value>>(q)
-            {
+            match config.deserialize_str::<std::collections::HashMap<String, serde_json::Value>>(q) {
                 Ok(map) => {
                     let mut obj = serde_json::Map::new();
                     for (k, v) in map {
+                        // Basic key validation; detailed bracket checks omitted in fast path
+                        if k.is_empty() { 
+                            res.http_status = HttpStatusCode::BadRequest;
+                            res.body = serde_json::Value::String(
+                                HttpStatusCode::BadRequest.reason_phrase().to_string(),
+                            );
+                            return false;
+                        }
                         obj.insert(k, v);
                     }
                     req.query_params = Some(serde_json::Value::Object(obj));

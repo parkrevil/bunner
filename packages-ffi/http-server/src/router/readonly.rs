@@ -1,20 +1,19 @@
 use super::errors::RouterErrorCode;
-use super::path::is_path_character_allowed;
-use super::path::normalize_path;
+use super::path::normalize_and_validate_path;
 use super::structures::RouterError;
 use super::{radix_tree::HTTP_METHOD_COUNT, Router};
 use crate::enums::HttpMethod;
 use crate::router::pattern::{self, SegmentPattern};
-use std::collections::HashMap;
+use hashbrown::HashMap as FastHashMap;
 use std::cell::RefCell;
 
 thread_local! {
-    static PARAM_BUF: RefCell<Vec<(String, String)>> = RefCell::new(Vec::with_capacity(4));
+    static PARAM_BUF: RefCell<Vec<(String, (usize, usize))>> = RefCell::new(Vec::with_capacity(4));
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct RouterReadOnly {
-    static_maps: [HashMap<String, u16>; HTTP_METHOD_COUNT],
+    static_maps: [FastHashMap<Box<str>, u16>; HTTP_METHOD_COUNT],
     root: ReadOnlyNode,
 }
 
@@ -26,12 +25,13 @@ impl RouterReadOnly {
     /// - No interior mutability
     /// - Safe to share across threads (`Send + Sync` by construction)
     pub fn from_router(router: &Router) -> Self {
-        let mut maps: [HashMap<String, u16>; HTTP_METHOD_COUNT] = Default::default();
+        let mut maps: [FastHashMap<Box<str>, u16>; HTTP_METHOD_COUNT] = Default::default();
         for (i, out_map) in maps.iter_mut().enumerate().take(HTTP_METHOD_COUNT) {
-            let mut out: HashMap<String, u16> =
-                HashMap::with_capacity(router.radix_tree.static_route_full_mapping[i].len());
+            let mut out: FastHashMap<Box<str>, u16> = FastHashMap::with_capacity(
+                router.radix_tree.static_route_full_mapping[i].len(),
+            );
             for (k, v) in router.radix_tree.static_route_full_mapping[i].iter() {
-                out.insert(k.clone(), *v);
+                out.insert(k.clone().into_boxed_str(), *v);
             }
             *out_map = out;
         }
@@ -55,51 +55,31 @@ impl RouterReadOnly {
         &self,
         method: HttpMethod,
         path: &str,
-    ) -> Result<(u16, Vec<(String, String)>), RouterError> {
+    ) -> Result<(u16, Vec<(String, (usize, usize))>), RouterError> {
         tracing::event!(tracing::Level::TRACE, operation="find", method=?method, path=%path);
-        if path.is_empty() {
-            return Err(RouterError::new(
-                RouterErrorCode::MatchPathEmpty,
-                "Empty path provided to router find()".to_string(),
-                Some(crate::util::make_error_detail(
-                    "find",
-                    serde_json::json!({
-                        "path": path,
-                        "method": method as u8
-                    }),
-                )),
-            ));
-        }
-
-        if !path.is_ascii() {
-            return Err(RouterError::new(
-                RouterErrorCode::MatchPathNotAscii,
-                "Path contains non-ASCII characters".to_string(),
-                Some(crate::util::make_error_detail(
-                    "find",
-                    serde_json::json!({
-                        "path": path,
-                        "method": method as u8
-                    }),
-                )),
-            ));
-        }
-
-        if !is_path_character_allowed(path) {
-            return Err(RouterError::new(
-                RouterErrorCode::MatchPathContainsDisallowedCharacters,
-                "Path contains disallowed characters".to_string(),
-                Some(crate::util::make_error_detail(
-                    "find",
-                    serde_json::json!({
-                        "path": path,
-                        "method": method as u8
-                    }),
-                )),
-            ));
-        }
-
-        let normalized = normalize_path(path);
+        let normalized = match normalize_and_validate_path(path) {
+            Ok(p) => p,
+            Err(_) => {
+                let code = if path.is_empty() {
+                    RouterErrorCode::MatchPathEmpty
+                } else if !path.is_ascii() {
+                    RouterErrorCode::MatchPathNotAscii
+                } else {
+                    RouterErrorCode::MatchPathContainsDisallowedCharacters
+                };
+                return Err(RouterError::new(
+                    code,
+                    "Invalid path".to_string(),
+                    Some(crate::util::make_error_detail(
+                        "find",
+                        serde_json::json!({
+                            "path": path,
+                            "method": method as u8
+                        }),
+                    )),
+                ));
+            }
+        };
 
         if let Some(k) = self.find_static_normalized(method, &normalized) {
             return Ok((k, Vec::new()));
@@ -132,17 +112,17 @@ impl RouterReadOnly {
 
 #[derive(Debug, Clone, Default)]
 struct ReadOnlyNode {
-    fused_edge: Option<String>,
+    fused_edge: Option<Box<str>>,
     routes: [u16; HTTP_METHOD_COUNT],
     wildcard_routes: [u16; HTTP_METHOD_COUNT],
-    static_children: HashMap<String, ReadOnlyNode>,
+    static_children: FastHashMap<Box<str>, ReadOnlyNode>,
     patterns: Vec<(SegmentPattern, ReadOnlyNode)>,
 }
 
 impl ReadOnlyNode {
     fn from_node(n: &super::radix_tree::node::RadixTreeNode) -> Self {
         // Build static_children from any of the available indexed views
-        let mut static_children: HashMap<String, ReadOnlyNode> = HashMap::new();
+        let mut static_children: FastHashMap<Box<str>, ReadOnlyNode> = FastHashMap::new();
         if !n.static_keys.is_empty() && n.static_vals_idx.len() == n.static_keys.len() {
             for (i, key) in n.static_keys.iter().enumerate() {
                 let child = n.static_vals_idx[i].as_ref();
@@ -157,10 +137,7 @@ impl ReadOnlyNode {
                 static_children.insert(k.clone(), ReadOnlyNode::from_node(v.as_ref()));
             }
             for (i, key) in n.static_keys.iter().enumerate() {
-                static_children.insert(
-                    key.clone(),
-                    ReadOnlyNode::from_node(n.static_vals[i].as_ref()),
-                );
+                static_children.insert(key.clone(), ReadOnlyNode::from_node(n.static_vals[i].as_ref()));
             }
         }
 
@@ -174,7 +151,7 @@ impl ReadOnlyNode {
 
         // Fused child
         let mut ro = ReadOnlyNode {
-            fused_edge: n.fused_edge.clone(),
+            fused_edge: n.fused_edge.as_ref().map(|s| s.clone().into_boxed_str()),
             routes: n.routes,
             wildcard_routes: n.wildcard_routes,
             static_children,
@@ -185,7 +162,7 @@ impl ReadOnlyNode {
             let fc_node = ReadOnlyNode::from_node(fc.as_ref());
             // Represent fused child as a single static child with empty key when fused_edge is set
             // so that traversal handles it uniformly.
-            ro.static_children.insert(String::new(), fc_node);
+            ro.static_children.insert(Box::<str>::from(""), fc_node);
         }
 
         ro
@@ -202,8 +179,8 @@ impl ReadOnlyNode {
     fn handle_end(
         &self,
         method: HttpMethod,
-        params: &mut [(String, String)],
-    ) -> Option<(u16, Vec<(String, String)>)> {
+        params: &mut [(String, (usize, usize))],
+    ) -> Option<(u16, Vec<(String, (usize, usize))>)> {
         let idx = method as usize;
         let rk = self.routes[idx];
         if rk != 0 {
@@ -222,13 +199,13 @@ impl ReadOnlyNode {
         method: HttpMethod,
         s: &str,
         i: usize,
-        params: &mut Vec<(String, String)>,
-    ) -> Option<(u16, Vec<(String, String)>)> {
+        params: &mut Vec<(String, (usize, usize))>,
+    ) -> Option<(u16, Vec<(String, (usize, usize))>)> {
         let current_i = Self::skip_slashes(s, i);
 
         if let Some(edge) = &self.fused_edge {
             let rem = &s[current_i..];
-            if !rem.starts_with(edge.as_str()) {
+            if !rem.starts_with(edge.as_ref()) {
                 return None;
             }
             // descend to fused child stored under empty key
@@ -259,7 +236,7 @@ impl ReadOnlyNode {
                 for (name, (off, len)) in kvs.into_iter() {
                     let abs = start + off;
                     if abs + len <= s.len() {
-                        params.push((name, s[abs..abs + len].to_string()));
+                        params.push((name, (abs, len)));
                     }
                 }
                 if let Some(ok) = child.find_from(method, s, next_slash, params) {
@@ -277,9 +254,9 @@ impl ReadOnlyNode {
                 cap_start += 1;
             }
             if cap_start <= s.len() {
-                let rest = &s[cap_start..];
-                if !rest.is_empty() {
-                    params.push(("*".to_string(), rest.to_string()));
+                let rest_len = s.len().saturating_sub(cap_start);
+                if rest_len > 0 {
+                    params.push(("*".to_string(), (cap_start, rest_len)));
                 }
             }
             return Some((wrk - 1, params.clone()));

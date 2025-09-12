@@ -11,8 +11,12 @@ pub fn init_tracing_once() {
     ONCE.call_once(|| {
         #[allow(unused_imports)]
         use tracing_subscriber::{fmt, EnvFilter};
-        // If RUST_LOG is not set, default to global info
-        let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+        // Precedence: BUNNER_HTTP_SERVER_LOG_LEVEL > RUST_LOG > "info"
+        let filter = if let Ok(level) = std::env::var("BUNNER_HTTP_SERVER_LOG_LEVEL") {
+            EnvFilter::try_new(level).unwrap_or_else(|_| EnvFilter::new("info"))
+        } else {
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"))
+        };
         let _ = fmt().with_env_filter(filter).compact().try_init();
     });
 }

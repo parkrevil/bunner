@@ -4,21 +4,21 @@ use hashbrown::HashMap as FastHashMap;
 pub(super) fn collect_static(
     n: &RadixTreeNode,
     buf: &mut String,
-    maps: &mut [FastHashMap<String, u16>; HTTP_METHOD_COUNT],
+    maps: &mut [FastHashMap<Box<str>, u16>; HTTP_METHOD_COUNT],
 ) {
     let base_len = buf.len();
     if let Some(edge) = n.fused_edge.as_ref() {
         if buf.is_empty() {
             buf.push('/');
         }
-        buf.push_str(edge.as_str());
+        buf.push_str(edge.as_ref());
     }
     for (i, &rk) in n.routes.iter().enumerate() {
         if rk != 0 {
             let key = if buf.is_empty() {
-                "/".to_string()
+                Box::<str>::from("/")
             } else {
-                buf.clone()
+                buf.to_owned().into_boxed_str()
             };
             maps[i].insert(key, rk);
         }
@@ -27,7 +27,7 @@ pub(super) fn collect_static(
         for (k_idx, nb) in n.static_keys.iter().zip(n.static_vals_idx.iter()) {
             let prev = buf.len();
             buf.push('/');
-            buf.push_str(k_idx.as_str());
+            buf.push_str(k_idx.as_ref());
             collect_static(nb.as_ref(), buf, maps);
             buf.truncate(prev);
         }
@@ -35,7 +35,7 @@ pub(super) fn collect_static(
     for (k, v) in n.static_children.iter() {
         let prev = buf.len();
         buf.push('/');
-        buf.push_str(k.as_str());
+        buf.push_str(k.as_ref());
         collect_static(v.as_ref(), buf, maps);
         buf.truncate(prev);
     }

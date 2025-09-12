@@ -22,6 +22,7 @@ bitflags = "2"
 url = "2"
 cookie = "0.18"
 serde_qs = "0.15"
+crossbeam-channel = "0.5"
 
 [dev-dependencies]
 libc.workspace = true
@@ -30,4 +31,3 @@ rstest.workspace = true
 [features]
 default = []
 test = []
-router-high = []

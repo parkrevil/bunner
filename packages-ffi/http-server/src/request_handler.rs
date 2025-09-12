@@ -72,7 +72,7 @@ pub fn process_job(
         url: payload.url.clone(),
         http_method,
         path: String::new(),
-        headers: serde_json::Value::Object(serde_json::Map::new()),
+        headers: payload.headers.clone(),
         cookies: serde_json::Value::Object(serde_json::Map::new()),
         content_type: None,
         content_length: None,
@@ -102,13 +102,15 @@ pub fn process_job(
 
     match ro.find(http_method, &request.path) {
         Ok((route_key, params_vec)) => {
-            // Build params JSON as object map; use None when empty
+            // Materialize params only once here from (offset, len)
             let params_json = if params_vec.is_empty() {
                 None
             } else {
                 let mut obj = serde_json::Map::new();
-                for (k, v) in params_vec.iter() {
-                    obj.insert(k.clone(), JsonValue::String(v.clone()));
+                for (k, (start, len)) in params_vec.iter() {
+                    if *start + *len <= request.path.len() {
+                        obj.insert(k.clone(), JsonValue::String(request.path[*start..*start + *len].to_string()));
+                    }
                 }
                 Some(JsonValue::Object(obj))
             };

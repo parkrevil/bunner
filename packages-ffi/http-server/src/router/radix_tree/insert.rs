@@ -70,7 +70,7 @@ impl RadixTree {
             // Detect pure static without building a joined string
             if pat.parts.len() == 1 {
                 if let SegmentPart::Literal(lit) = &pat.parts[0] {
-                    current = current.descend_static_mut_with_alloc(lit.clone(), || {
+                    current = current.descend_static_mut_with_alloc(lit.as_str(), || {
                         create_node_box_from_arena_pointer(arena_ptr)
                     });
                     sort_static_children(current, &self.interner);
@@ -87,7 +87,7 @@ impl RadixTree {
                         _ => "",
                     })
                     .collect::<String>();
-                current = current.descend_static_mut_with_alloc(joined, || {
+                current = current.descend_static_mut_with_alloc(joined.as_str(), || {
                     create_node_box_from_arena_pointer(arena_ptr)
                 });
                 sort_static_children(current, &self.interner);

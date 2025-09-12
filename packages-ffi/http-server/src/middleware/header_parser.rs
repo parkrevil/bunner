@@ -12,8 +12,8 @@ impl Middleware for HeaderParser {
         payload: &HandleRequestPayload,
     ) -> bool {
         tracing::event!(tracing::Level::TRACE, operation = "header_parser");
-        req.headers = serde_json::to_value(&payload.headers)
-            .unwrap_or_else(|_| serde_json::Value::Object(serde_json::Map::new()));
+        // keep as HashMap to avoid JSON conversion cost on hot path
+        req.headers = payload.headers.clone();
 
         // content-type and charset
         if let Some(ct) = payload.headers.get("content-type") {

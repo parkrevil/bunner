@@ -18,11 +18,8 @@ use crate::router::interner::Interner;
 
 pub(super) const HTTP_METHOD_COUNT: usize = 7;
 
-#[cfg(not(feature = "test"))]
+// Fixed maximum routes across all builds for predictable memory layout
 pub(super) const MAX_ROUTES: u16 = 65_535;
-
-#[cfg(feature = "test")]
-pub(super) const MAX_ROUTES: u16 = 100;
 
 const STATIC_MAP_THRESHOLD: usize = 50;
 

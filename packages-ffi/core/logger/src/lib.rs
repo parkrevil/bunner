@@ -28,7 +28,12 @@ pub enum LogLevel {
 #[unsafe(no_mangle)]
 pub extern "C" fn init() {
     LOGGER_INIT.get_or_init(|| {
-        let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+        // Precedence: BUNNER_LOG_LEVEL > RUST_LOG > "info"
+        let filter = if let Ok(level) = std::env::var("BUNNER_LOG_LEVEL") {
+            EnvFilter::try_new(level).unwrap_or_else(|_| EnvFilter::new("info"))
+        } else {
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"))
+        };
 
         let subscriber = fmt().with_env_filter(filter).finish();
 

@@ -43,13 +43,13 @@ bitflags! {
     }
 }
 
-pub(super) type StaticMap = FastHashMap<String, NodeBox>;
-pub(super) type StaticMapIdx = FastHashMap<String, super::NodeBox>;
+pub(super) type StaticMap = FastHashMap<Box<str>, NodeBox>;
+pub(super) type StaticMapIdx = FastHashMap<Box<str>, super::NodeBox>;
 
 #[derive(Debug, Default)]
 pub struct RadixTreeNode {
     // optimize small number of siblings before promoting to map
-    pub(crate) static_keys: SmallVec<[String; 16]>,
+    pub(crate) static_keys: SmallVec<[Box<str>; 16]>,
     pub(crate) static_vals: SmallVec<[NodeBox; 16]>,
     // index-based mirror for arena-backed nodes (built during sealing)
     pub(crate) static_vals_idx: SmallVec<[super::NodeBox; 16]>,
@@ -122,17 +122,17 @@ impl RadixTreeNode {
     /// Same as `descend_static_mut` but uses provided allocator for child creation.
     pub(super) fn descend_static_mut_with_alloc<F>(
         &mut self,
-        key: String,
+        key: &str,
         alloc: F,
     ) -> &mut RadixTreeNode
     where
         F: FnOnce() -> NodeBox,
     {
         if self.static_children.is_empty() && self.static_keys.len() < 4 {
-            if let Some(pos) = self.static_keys.iter().position(|k| k == &key) {
+            if let Some(pos) = self.static_keys.iter().position(|k| k.as_ref() == key) {
                 return self.static_vals[pos].as_mut();
             }
-            self.static_keys.push(key);
+            self.static_keys.push(key.to_owned().into_boxed_str());
             self.static_vals.push(alloc());
             let last = self.static_vals.len() - 1;
             return self.static_vals[last].as_mut();
@@ -143,7 +143,7 @@ impl RadixTreeNode {
             }
         }
         self.static_children
-            .entry(key)
+            .entry(key.to_owned().into_boxed_str())
             .or_insert_with(alloc)
             .as_mut()
     }
@@ -158,7 +158,7 @@ impl RadixTreeNode {
     }
 
     #[cfg(feature = "test")]
-    pub fn get_static_keys_for_test(&self) -> &SmallVec<[String; 16]> {
+    pub fn get_static_keys_for_test(&self) -> &SmallVec<[Box<str>; 16]> {
         &self.static_keys
     }
 }

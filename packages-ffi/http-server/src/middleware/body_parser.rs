@@ -23,23 +23,30 @@ impl Middleware for BodyParser {
         }
 
         let body = payload.body.as_ref().unwrap();
+        // Only parse JSON when explicit application/json
+        let is_json = req
+            .headers
+            .get("content-type")
+            .map(|ct| ct.split(';').next().unwrap_or("").trim().eq_ignore_ascii_case("application/json"))
+            .unwrap_or(false);
 
-        match serde_json::from_str::<JsonValue>(body) {
-            Ok(v) => req.body = Some(v),
-            Err(_) => {
-                res.http_status = HttpStatusCode::UnsupportedMediaType;
-                res.body = serde_json::Value::String(
-                    HttpStatusCode::UnsupportedMediaType
-                        .reason_phrase()
-                        .to_string(),
-                );
-                tracing::event!(
-                    tracing::Level::TRACE,
-                    operation = "body_parser_reject",
-                    reason = "invalid_json"
-                );
-
-                return false;
+        if is_json {
+            match serde_json::from_str::<JsonValue>(body) {
+                Ok(v) => req.body = Some(v),
+                Err(_) => {
+                    res.http_status = HttpStatusCode::UnsupportedMediaType;
+                    res.body = serde_json::Value::String(
+                        HttpStatusCode::UnsupportedMediaType
+                            .reason_phrase()
+                            .to_string(),
+                    );
+                    tracing::event!(
+                        tracing::Level::TRACE,
+                        operation = "body_parser_reject",
+                        reason = "invalid_json"
+                    );
+                    return false;
+                }
             }
         }
         true
