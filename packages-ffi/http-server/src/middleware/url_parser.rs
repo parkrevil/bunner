@@ -1,5 +1,5 @@
-use crate::middleware::chain::Middleware;
 use crate::enums::HttpStatusCode;
+use crate::middleware::chain::Middleware;
 use crate::structure::{BunnerRequest, BunnerResponse, HandleRequestPayload};
 use std::sync::OnceLock;
 use url::Url;

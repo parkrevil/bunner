@@ -1,6 +1,7 @@
 use std::os::raw::c_char;
 use std::sync::Arc;
 
+use crate::enums::HttpMethod;
 use crate::errors::HttpServerErrorCode;
 use crate::helpers::callback_handle_request;
 use crate::middleware::body_parser::BodyParser;
@@ -8,7 +9,6 @@ use crate::middleware::chain::Chain;
 use crate::middleware::cookie_parser::CookieParser;
 use crate::middleware::header_parser::HeaderParser;
 use crate::middleware::url_parser::UrlParser;
-use crate::enums::HttpMethod;
 use crate::router;
 use crate::structure::HttpServerError;
 use crate::structure::{BunnerRequest, BunnerResponse, HandleRequestOutput, HandleRequestPayload};

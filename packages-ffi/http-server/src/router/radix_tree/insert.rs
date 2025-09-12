@@ -1,11 +1,11 @@
 use super::{
-    create_node_box_from_arena_pointer, node::PatternMeta, RadixTree, RadixTreeNode, MAX_ROUTES,
+    MAX_ROUTES, RadixTree, RadixTreeNode, create_node_box_from_arena_pointer, node::PatternMeta,
 };
 use crate::enums::HttpMethod;
 use crate::router::errors::RouterErrorCode;
 use crate::router::interner::Interner;
 use crate::router::pattern::{
-    pattern_compatible_policy, pattern_is_pure_static, pattern_score, SegmentPart, SegmentPattern,
+    SegmentPart, SegmentPattern, pattern_compatible_policy, pattern_is_pure_static, pattern_score,
 };
 use crate::router::structures::RouterError;
 use hashbrown::HashSet;

@@ -1,12 +1,12 @@
-use bunner_http_server::request_handler;
 use bunner_http_server::enums::HttpStatusCode;
+use bunner_http_server::errors::HttpServerErrorCode;
+use bunner_http_server::request_handler;
+use bunner_http_server::router::RouterErrorCode;
 use bunner_http_server::router::{Router, RouterOptions, RouterReadOnly};
 use bunner_http_server::structure::HandleRequestOutput;
-use bunner_http_server::errors::HttpServerErrorCode;
-use bunner_http_server::router::RouterErrorCode;
 use serde_json::json;
-use std::ffi::{c_char, CStr};
-use std::sync::{mpsc, Arc};
+use std::ffi::{CStr, c_char};
+use std::sync::{Arc, mpsc};
 
 mod common;
 use common::make_req_id;
@@ -24,9 +24,15 @@ extern "C" fn test_callback(req_id_ptr: *const c_char, _route_key: u16, res_ptr:
 
 fn setup_router() -> Arc<RouterReadOnly> {
     let mut router = Router::new(Some(RouterOptions::default()));
-    router.add(bunner_http_server::enums::HttpMethod::Get, "/users/:id").unwrap();
-    router.add(bunner_http_server::enums::HttpMethod::Post, "/files/*").unwrap();
-    router.add(bunner_http_server::enums::HttpMethod::Get, "/static").unwrap();
+    router
+        .add(bunner_http_server::enums::HttpMethod::Get, "/users/:id")
+        .unwrap();
+    router
+        .add(bunner_http_server::enums::HttpMethod::Post, "/files/*")
+        .unwrap();
+    router
+        .add(bunner_http_server::enums::HttpMethod::Get, "/static")
+        .unwrap();
     router.finalize();
     Arc::new(router.build_readonly())
 }
@@ -48,7 +54,6 @@ fn run_test_and_get_error_code(payload: serde_json::Value) -> u16 {
     let res: serde_json::Value = serde_json::from_str(&rx.recv().unwrap()).unwrap();
     res.get("code").unwrap().as_u64().unwrap() as u16
 }
-
 
 // --- Test Modules (Domain-Driven) ---
 
@@ -112,7 +117,8 @@ mod request_parsing {
 
     #[test]
     fn should_handle_empty_query_and_body() {
-        let payload = json!({"httpMethod": 0, "url": "http://[::1]/users/ipv6", "headers": {}, "body": null});
+        let payload =
+            json!({"httpMethod": 0, "url": "http://[::1]/users/ipv6", "headers": {}, "body": null});
         let out = run_test_and_get_result(payload);
         assert!(out.request.query_params.is_none());
         assert!(out.request.body.is_none());
@@ -127,8 +133,14 @@ mod request_parsing {
             "body": "this is plain text"
         });
         let out = run_test_and_get_result(payload);
-        assert_eq!(out.response.http_status, HttpStatusCode::UnsupportedMediaType);
-        assert_eq!(out.response.body, json!(HttpStatusCode::UnsupportedMediaType.reason_phrase()));
+        assert_eq!(
+            out.response.http_status,
+            HttpStatusCode::UnsupportedMediaType
+        );
+        assert_eq!(
+            out.response.body,
+            json!(HttpStatusCode::UnsupportedMediaType.reason_phrase())
+        );
     }
 
     mod body_fallbacks {
@@ -143,8 +155,14 @@ mod request_parsing {
                 "body": "{invalid}"
             });
             let out = super::run_test_and_get_result(payload);
-            assert_eq!(out.response.http_status, HttpStatusCode::UnsupportedMediaType);
-            assert_eq!(out.response.body, json!(HttpStatusCode::UnsupportedMediaType.reason_phrase()));
+            assert_eq!(
+                out.response.http_status,
+                HttpStatusCode::UnsupportedMediaType
+            );
+            assert_eq!(
+                out.response.body,
+                json!(HttpStatusCode::UnsupportedMediaType.reason_phrase())
+            );
         }
     }
 }
@@ -194,7 +212,8 @@ mod routing_logic {
 
     #[test]
     fn should_match_static_route() {
-        let payload = json!({"httpMethod": 0, "url": "http://localhost/static", "headers": {}, "body": null});
+        let payload =
+            json!({"httpMethod": 0, "url": "http://localhost/static", "headers": {}, "body": null});
         let out = run_test_and_get_result(payload);
         assert!(out.request.params.is_none());
     }
@@ -210,7 +229,10 @@ mod routing_logic {
     fn should_match_wildcard_route_and_extract_path() {
         let payload = json!({"httpMethod": 1, "url": "http://test.com/files/path/to/my/file.txt", "headers": {}, "body": null});
         let out = run_test_and_get_result(payload);
-        assert_eq!(out.request.params.unwrap().get("*").unwrap(), "path/to/my/file.txt");
+        assert_eq!(
+            out.request.params.unwrap().get("*").unwrap(),
+            "path/to/my/file.txt"
+        );
     }
 }
 
@@ -229,20 +251,14 @@ mod error_handling {
 
         let res: serde_json::Value = serde_json::from_str(&rx.recv().unwrap()).unwrap();
         let code = res.get("code").unwrap().as_u64().unwrap() as u16;
-        assert_eq!(
-            code,
-            HttpServerErrorCode::InvalidJsonString.code()
-        );
+        assert_eq!(code, HttpServerErrorCode::InvalidJsonString.code());
     }
 
     #[test]
     fn should_fail_on_payload_missing_required_fields() {
         let payload = json!({"httpMethod": 0, "headers": {}, "body": null}); // Missing "url"
         let code = run_test_and_get_error_code(payload);
-        assert_eq!(
-            code,
-            HttpServerErrorCode::InvalidJsonString.code()
-        );
+        assert_eq!(code, HttpServerErrorCode::InvalidJsonString.code());
     }
 
     #[test]
@@ -250,17 +266,17 @@ mod error_handling {
         let payload = json!({"httpMethod": 0, "url": "://bad-url", "headers": {}, "body": null});
         let out = super::run_test_and_get_result(payload);
         assert_eq!(out.response.http_status, HttpStatusCode::BadRequest);
-        assert_eq!(out.response.body, json!(HttpStatusCode::BadRequest.reason_phrase()));
+        assert_eq!(
+            out.response.body,
+            json!(HttpStatusCode::BadRequest.reason_phrase())
+        );
     }
 
     #[test]
     fn should_fail_when_route_is_not_found() {
         let payload = json!({"httpMethod": 0, "url": "http://a.com/this/route/does/not/exist", "headers": {}, "body": null});
         let code = run_test_and_get_error_code(payload);
-        assert_eq!(
-            code,
-            RouterErrorCode::MatchNotFound.code()
-        );
+        assert_eq!(code, RouterErrorCode::MatchNotFound.code());
     }
 
     #[test]
@@ -268,6 +284,9 @@ mod error_handling {
         let payload = json!({"httpMethod": 0, "url": "http://a.com/users/1?a[=malformed", "headers": {}, "body": null});
         let out = super::run_test_and_get_result(payload);
         assert_eq!(out.response.http_status, HttpStatusCode::BadRequest);
-        assert_eq!(out.response.body, json!(HttpStatusCode::BadRequest.reason_phrase()));
+        assert_eq!(
+            out.response.body,
+            json!(HttpStatusCode::BadRequest.reason_phrase())
+        );
     }
 }

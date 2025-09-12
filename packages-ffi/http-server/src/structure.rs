@@ -2,8 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::{
-    errors::HttpServerErrorCode,
     enums::{HttpMethod, HttpStatusCode},
+    errors::HttpServerErrorCode,
 };
 
 #[derive(Serialize, Deserialize, Debug)]

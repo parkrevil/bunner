@@ -1,13 +1,17 @@
 use bunner_http_server as srv;
-use std::ffi::{c_char, CStr};
-use std::sync::{mpsc, Mutex, OnceLock};
+use std::ffi::{CStr, c_char};
+use std::sync::{Mutex, OnceLock, mpsc};
 
 #[allow(dead_code)]
 pub static GLOBAL_TX: OnceLock<Mutex<Option<mpsc::Sender<String>>>> = OnceLock::new();
 
 #[allow(dead_code)]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn global_callback(_req_id_ptr: *const c_char, _route_key: u16, res_ptr: *mut c_char) {
+pub extern "C" fn global_callback(
+    _req_id_ptr: *const c_char,
+    _route_key: u16,
+    res_ptr: *mut c_char,
+) {
     let res_str = unsafe { CStr::from_ptr(res_ptr).to_str().unwrap().to_owned() };
     let lock = GLOBAL_TX.get_or_init(|| Mutex::new(None));
     if let Some(tx) = lock.lock().unwrap().as_ref() {

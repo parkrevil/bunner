@@ -8,9 +8,9 @@ pub mod structure;
 mod thread_pool;
 pub mod util;
 
+use crate::enums::HttpMethod;
 use crate::errors::HttpServerErrorCode;
 use crate::helpers::callback_handle_request;
-use crate::enums::HttpMethod;
 use crate::router::errors::RouterErrorCode as RCode;
 use crate::router::structures::RouterError as RError;
 use crate::structure::{AddRouteResult, HttpServerError};
@@ -151,7 +151,7 @@ pub unsafe extern "C" fn add_route(
                         "pathPtr": format!("{:p}", path)
                     }),
                 )),
-            ))
+            ));
         }
     };
     let http_server = unsafe { &*handle };

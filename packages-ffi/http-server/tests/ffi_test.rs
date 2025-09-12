@@ -1,12 +1,12 @@
-use bunner_http_server::structure::{AddRouteResult, HandleRequestOutput};
 use bunner_http_server::errors::HttpServerErrorCode;
 use bunner_http_server::router::RouterErrorCode;
+use bunner_http_server::structure::{AddRouteResult, HandleRequestOutput};
 use bunner_http_server::*;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::ffi::{c_char, CStr, CString};
+use std::ffi::{CStr, CString, c_char};
 use std::ptr::null_mut;
-use std::sync::{mpsc, Arc, Barrier};
+use std::sync::{Arc, Barrier, mpsc};
 mod common;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
@@ -73,10 +73,7 @@ mod lifecycle_management {
             handle_request(std::ptr::null_mut(), std::ptr::null(), std::ptr::null(), cb);
         });
         let res: FfiError = serde_json::from_str(&out).unwrap();
-        assert_eq!(
-            res.code,
-            HttpServerErrorCode::HandleIsNull.code()
-        );
+        assert_eq!(res.code, HttpServerErrorCode::HandleIsNull.code());
     }
 }
 
@@ -250,7 +247,10 @@ mod request_processing {
             let res = out.request;
             assert_eq!(res.params.unwrap()["id"], "123");
             assert_eq!(res.query_params.unwrap()["q"], "test");
-            assert_eq!(res.body.unwrap(), serde_json::from_str::<serde_json::Value>("{\"key\":\"val\"}").unwrap());
+            assert_eq!(
+                res.body.unwrap(),
+                serde_json::from_str::<serde_json::Value>("{\"key\":\"val\"}").unwrap()
+            );
         }
         unsafe { destroy(handle) };
     }
@@ -268,10 +268,7 @@ mod request_processing {
             }
         });
         let res: FfiError = serde_json::from_str(&out).unwrap();
-        assert_eq!(
-            res.code,
-            HttpServerErrorCode::InvalidRequestId.code()
-        );
+        assert_eq!(res.code, HttpServerErrorCode::InvalidRequestId.code());
         unsafe { destroy(handle) };
     }
 
@@ -298,10 +295,7 @@ mod request_processing {
             handle_request(handle, dummy_req.as_ptr(), to_cstr(&payload).as_ptr(), cb);
         });
         let res: FfiError = serde_json::from_str(&out).unwrap();
-        assert_eq!(
-            res.code,
-            HttpServerErrorCode::QueueFull.code()
-        );
+        assert_eq!(res.code, HttpServerErrorCode::QueueFull.code());
 
         unsafe { destroy(handle) };
 
@@ -388,18 +382,13 @@ mod request_processing {
     #[test]
     fn should_not_crash_on_null_request_id() {
         let handle = init();
-        let out = helpers::with_capture(|cb| {
-            unsafe {
-                seal_routes(handle);
-                let payload = json!({ "httpMethod": 0, "url": "http://localhost/a", "headers": {}, "body": null }).to_string();
-                handle_request(handle, null_mut(), to_cstr(&payload).as_ptr(), cb);
-            }
+        let out = helpers::with_capture(|cb| unsafe {
+            seal_routes(handle);
+            let payload = json!({ "httpMethod": 0, "url": "http://localhost/a", "headers": {}, "body": null }).to_string();
+            handle_request(handle, null_mut(), to_cstr(&payload).as_ptr(), cb);
         });
         let res: FfiError = serde_json::from_str(&out).unwrap();
-        assert_eq!(
-            res.code,
-            HttpServerErrorCode::InvalidRequestId.code()
-        );
+        assert_eq!(res.code, HttpServerErrorCode::InvalidRequestId.code());
         unsafe { destroy(handle) };
     }
 }
@@ -480,7 +469,9 @@ mod ffi_utilities {
 
     #[test]
     fn free_string_should_noop_on_null() {
-        unsafe { free_string(std::ptr::null_mut()); }
+        unsafe {
+            free_string(std::ptr::null_mut());
+        }
         // No assertion: test passes if no crash occurs
     }
 }

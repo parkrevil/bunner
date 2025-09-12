@@ -1,15 +1,19 @@
+use bunner_http_server::enums::HttpMethod;
+use bunner_http_server::enums::HttpStatusCode;
 use bunner_http_server::middleware::body_parser::BodyParser;
 use bunner_http_server::middleware::chain::Chain;
 use bunner_http_server::middleware::cookie_parser::CookieParser;
 use bunner_http_server::middleware::header_parser::HeaderParser;
 use bunner_http_server::middleware::url_parser::UrlParser;
-use bunner_http_server::enums::HttpMethod;
-use bunner_http_server::enums::HttpStatusCode;
 use bunner_http_server::structure::{BunnerRequest, BunnerResponse, HandleRequestPayload};
 use serde_json::json;
 use std::collections::HashMap;
 
-fn make_payload(url: &str, headers: HashMap<String, String>, body: Option<&str>) -> HandleRequestPayload {
+fn make_payload(
+    url: &str,
+    headers: HashMap<String, String>,
+    body: Option<&str>,
+) -> HandleRequestPayload {
     HandleRequestPayload {
         http_method: 0,
         url: url.to_string(),
@@ -32,8 +36,16 @@ fn run_chain(payload: &HandleRequestPayload) -> (BunnerRequest, BunnerResponse) 
         query_params: None,
         body: None,
     };
-    let mut res = BunnerResponse { http_status: HttpStatusCode::OK, headers: None, body: serde_json::Value::Null };
-    let chain = Chain::new().with(HeaderParser).with(UrlParser).with(CookieParser).with(BodyParser);
+    let mut res = BunnerResponse {
+        http_status: HttpStatusCode::OK,
+        headers: None,
+        body: serde_json::Value::Null,
+    };
+    let chain = Chain::new()
+        .with(HeaderParser)
+        .with(UrlParser)
+        .with(CookieParser)
+        .with(BodyParser);
     let _ = chain.execute(&mut req, &mut res, payload);
     (req, res)
 }
@@ -44,7 +56,10 @@ mod header_parsing {
     #[test]
     fn should_parse_content_type_and_charset() {
         let mut headers = HashMap::new();
-        headers.insert("content-type".to_string(), "application/json; charset=utf-8".to_string());
+        headers.insert(
+            "content-type".to_string(),
+            "application/json; charset=utf-8".to_string(),
+        );
         let payload = make_payload("http://localhost/a", headers, None);
         let (req, _res) = run_chain(&payload);
         assert_eq!(req.content_type.unwrap(), "application/json");
@@ -108,11 +123,7 @@ mod url_parsing {
     #[test]
     fn should_parse_5_level_nested_object_query_params() {
         let headers = HashMap::new();
-        let payload = make_payload(
-            "http://a.com/a?a[b][c][d][e]=1",
-            headers,
-            None,
-        );
+        let payload = make_payload("http://a.com/a?a[b][c][d][e]=1", headers, None);
         let (req, res) = run_chain(&payload);
         assert_eq!(res.http_status, HttpStatusCode::OK);
 
@@ -217,7 +228,10 @@ mod body_parsing {
     #[test]
     fn should_parse_json_body_when_content_type_is_json() {
         let mut headers = HashMap::new();
-        headers.insert("content-type".to_string(), "application/json; charset=utf-8".to_string());
+        headers.insert(
+            "content-type".to_string(),
+            "application/json; charset=utf-8".to_string(),
+        );
         let payload = make_payload("http://localhost/a", headers, Some("{\"k\":1}"));
         let (req, _res) = run_chain(&payload);
         assert_eq!(req.body.unwrap().get("k").unwrap(), 1);
@@ -231,7 +245,10 @@ mod body_parsing {
         let payload = make_payload("http://localhost/a", headers, Some("hello"));
         let (_req, res) = run_chain(&payload);
         assert_eq!(res.http_status, HttpStatusCode::UnsupportedMediaType);
-        assert_eq!(res.body, json!(HttpStatusCode::UnsupportedMediaType.reason_phrase()));
+        assert_eq!(
+            res.body,
+            json!(HttpStatusCode::UnsupportedMediaType.reason_phrase())
+        );
     }
 
     #[test]
@@ -241,6 +258,9 @@ mod body_parsing {
         let payload = make_payload("http://localhost/a", headers, Some("{invalid}"));
         let (_req, res) = run_chain(&payload);
         assert_eq!(res.http_status, HttpStatusCode::UnsupportedMediaType);
-        assert_eq!(res.body, json!(HttpStatusCode::UnsupportedMediaType.reason_phrase()));
+        assert_eq!(
+            res.body,
+            json!(HttpStatusCode::UnsupportedMediaType.reason_phrase())
+        );
     }
 }
