@@ -1,5 +1,5 @@
-use super::HTTP_METHOD_COUNT;
 use super::node::RadixTreeNode;
+use super::HTTP_METHOD_COUNT;
 
 /// Computes and sets the method bitmask for a node and its subtree.
 #[inline]

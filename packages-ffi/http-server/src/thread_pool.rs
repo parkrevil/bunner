@@ -1,7 +1,6 @@
 use std::sync::{
-    Arc, Mutex, OnceLock,
     atomic::{AtomicBool, Ordering},
-    mpsc,
+    mpsc, Arc, Mutex, OnceLock,
 };
 use std::thread;
 
@@ -30,17 +29,15 @@ fn init() -> mpsc::SyncSender<Task> {
     let rx = Arc::new(Mutex::new(rx));
     for _ in 0..workers {
         let rx_cloned = Arc::clone(&rx);
-        thread::spawn(move || {
-            loop {
-                let msg = {
-                    let guard = rx_cloned.lock().unwrap();
-                    guard.recv()
-                };
-                match msg {
-                    Ok(Task::Job(job)) => job(),
-                    Ok(Task::Shutdown) => break,
-                    Err(_) => break,
-                }
+        thread::spawn(move || loop {
+            let msg = {
+                let guard = rx_cloned.lock().unwrap();
+                guard.recv()
+            };
+            match msg {
+                Ok(Task::Job(job)) => job(),
+                Ok(Task::Shutdown) => break,
+                Err(_) => break,
             }
         });
     }

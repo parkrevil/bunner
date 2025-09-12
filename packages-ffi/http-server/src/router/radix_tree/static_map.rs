@@ -1,4 +1,4 @@
-use super::{HTTP_METHOD_COUNT, node::RadixTreeNode};
+use super::{node::RadixTreeNode, HTTP_METHOD_COUNT};
 use hashbrown::HashMap as FastHashMap;
 
 pub(super) fn collect_static(

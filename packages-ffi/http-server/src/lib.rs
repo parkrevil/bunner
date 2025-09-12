@@ -4,7 +4,7 @@
     clippy::unimplemented,
     clippy::panic,
     clippy::print_stdout,
-    clippy::print_stderr,
+    clippy::print_stderr
 )]
 #![deny(unsafe_op_in_unsafe_fn)]
 pub mod enums;
@@ -115,7 +115,7 @@ pub unsafe extern "C" fn destroy(handle: HttpServerHandle) {
 
         return;
     }
-    
+
     let http_server = unsafe { Box::from_raw(handle) };
 
     drop(http_server);
@@ -426,7 +426,25 @@ pub unsafe extern "C" fn handle_request(
         let _ = done_tx.send(());
     })) {
         Ok(()) => {
-            let _ = done_rx.recv();
+            use std::time::Duration;
+            match done_rx.recv_timeout(Duration::from_millis(500)) {
+                Ok(()) => {}
+                Err(_timeout) => {
+                    let http_error = HttpServerError::new(
+                        HttpServerErrorCode::QueueFull,
+                        "Request timed out waiting for worker".to_string(),
+                        Some(crate::util::make_error_detail(
+                            "handle_request",
+                            serde_json::json!({
+                                "requestId": request_id_str,
+                                "reason": "timeout",
+                                "timeoutMs": 500
+                            }),
+                        )),
+                    );
+                    callback_handle_request(cb, Some(request_id_str), 0, &http_error);
+                }
+            }
         }
         Err(_e) => {
             let http_error = HttpServerError::new(
