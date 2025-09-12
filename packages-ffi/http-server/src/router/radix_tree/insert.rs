@@ -177,27 +177,33 @@ impl RadixTree {
 fn sort_static_children(node: &mut RadixTreeNode, interner: &Interner) {
     let len = node.static_keys.len();
     if len == node.static_vals.len() && len > 1 {
-        // Build index list sorted by interned key id (no key clones)
-        let mut order: Vec<(u32, usize)> = (0..len)
-            .map(|i| (interner.intern(node.static_keys[i].as_str()), i))
-            .collect();
-        order.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+        // Ensure key id cache is aligned; avoid repeated interner allocations
+        if node.static_key_ids.len() != len {
+            node.static_key_ids.clear();
+            node.static_key_ids.reserve(len);
+            for k in node.static_keys.iter() {
+                node.static_key_ids.push(interner.intern(k.as_str()));
+            }
+        }
 
-        // Snapshot values (re-wrap pointers) and move keys out without cloning
+        // Indices sorted by cached key ids
+        let mut indices: Vec<usize> = (0..len).collect();
+        indices.sort_unstable_by_key(|&i| node.static_key_ids[i]);
+
+        // Move out keys/vals/ids without reallocating, then rebuild in order
         let mut old_keys = std::mem::take(&mut node.static_keys);
-        let old_vals: Vec<super::NodeBox> = node
-            .static_vals
-            .iter()
-            .map(|nb| super::NodeBox(nb.0))
-            .collect();
+        let old_vals = std::mem::take(&mut node.static_vals);
+        let old_ids = std::mem::take(&mut node.static_key_ids);
 
         node.static_keys.reserve(len);
-        node.static_vals.clear();
-        for &(_id, idx) in order.iter() {
-            let key = std::mem::take(&mut old_keys[idx]);
-            node.static_keys.push(key);
-            // rewrap NonNull pointer for new order without cloning node data
-            node.static_vals.push(super::NodeBox(old_vals[idx].0));
+        node.static_vals.reserve(len);
+        node.static_key_ids.reserve(len);
+
+        for &i in indices.iter() {
+            node.static_keys.push(std::mem::take(&mut old_keys[i]));
+            // NodeBox clone is a cheap pointer copy; avoids moving out of index
+            node.static_vals.push(old_vals[i].clone());
+            node.static_key_ids.push(old_ids[i]);
         }
     }
 }
