@@ -63,6 +63,7 @@ pub fn submit_job(job: Job) -> Result<(), mpsc::TrySendError<Task>> {
     tx.try_send(Task::Job(job))
 }
 
+#[cfg(feature = "test")]
 pub fn shutdown_pool() {
     if let (Some(lock), Some(&workers)) = (TASK_SENDER.get(), WORKER_COUNT.get()) {
         JUST_SHUTDOWN.store(true, Ordering::SeqCst);

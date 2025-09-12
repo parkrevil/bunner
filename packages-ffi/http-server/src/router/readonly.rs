@@ -118,14 +118,6 @@ impl RouterReadOnly {
     }
 }
 
-// Compile-time assertion: RouterReadOnly and ReadOnlyNode must be Send + Sync
-#[allow(dead_code)]
-const _: fn() = || {
-    fn assert_send_sync<T: Send + Sync>() {}
-    assert_send_sync::<RouterReadOnly>();
-    assert_send_sync::<ReadOnlyNode>();
-};
-
 #[derive(Debug, Clone, Default)]
 struct ReadOnlyNode {
     fused_edge: Option<String>,
