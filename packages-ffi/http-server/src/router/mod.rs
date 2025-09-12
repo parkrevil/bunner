@@ -8,7 +8,7 @@ pub mod structures;
 
 use crate::r#enum::HttpMethod;
 pub use errors::RouterErrorCode;
-use path::{is_path_character_allowed, normalize_path};
+// path utils are consumed by readonly module only
 pub use readonly::RouterReadOnly;
 pub use structures::RouterError;
 
@@ -41,70 +41,6 @@ impl Router {
         self.radix_tree.insert_bulk(entries)
     }
 
-    pub fn find(
-        &self,
-        method: HttpMethod,
-        path: &str,
-    ) -> Result<(u16, Vec<(String, String)>), RouterError> {
-        if path.is_empty() {
-            return Err(RouterError::new(
-                RouterErrorCode::MatchPathEmpty,
-                "Request path is empty".to_string(),
-                Some(serde_json::json!({"operation":"find","path": path})),
-            ));
-        }
-
-        if !path.is_ascii() {
-            return Err(RouterError::new(
-                RouterErrorCode::MatchPathNotAscii,
-                "Request path contains non-ASCII characters".to_string(),
-                Some(serde_json::json!({"operation":"find","path": path})),
-            ));
-        }
-
-        if !is_path_character_allowed(path) {
-            return Err(RouterError::new(
-                RouterErrorCode::MatchPathContainsDisallowedCharacters,
-                "Request path contains disallowed characters".to_string(),
-                Some(serde_json::json!({"operation":"find","path": path})),
-            ));
-        }
-
-        let normalized_path = normalize_path(path);
-
-        if !is_path_character_allowed(&normalized_path) {
-            return Err(RouterError::new(
-                RouterErrorCode::MatchPathContainsDisallowedCharacters,
-                "Normalized request path contains disallowed characters".to_string(),
-                Some(serde_json::json!({"operation":"find","path": normalized_path})),
-            ));
-        }
-
-        if let Some(match_result) = self.radix_tree.find_normalized(method, &normalized_path) {
-            let mut parameter_pairs = Vec::with_capacity(match_result.parameter_offsets.len());
-
-            for (parameter_name, (start_offset, length)) in
-                match_result.parameter_offsets.into_iter()
-            {
-                let parameter_value = &normalized_path[start_offset..start_offset + length];
-
-                parameter_pairs.push((parameter_name, parameter_value.to_string()));
-            }
-
-            Ok((match_result.route_key, parameter_pairs))
-        } else {
-            Err(RouterError::new(
-                RouterErrorCode::MatchNotFound,
-                format!(
-                    "No route matched path '{}' for method {:?}",
-                    normalized_path, method
-                ),
-                Some(
-                    serde_json::json!({"operation":"find","path": normalized_path, "method": method as u8}),
-                ),
-            ))
-        }
-    }
 
     pub fn finalize(&mut self) {
         self.radix_tree.finalize();

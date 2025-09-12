@@ -11,16 +11,16 @@ pub mod helpers;
 use std::{
     ffi::{CStr, CString},
     os::raw::c_char,
-    ptr,
     sync::Arc,
 };
 use crate::errors::HttpServerErrorCode;
+use crate::router::errors::RouterErrorCode as RCode;
+use crate::router::structures::RouterError as RError;
 use crate::structure::{AddRouteResult, HttpServerError};
 use crate::util::{make_ffi_bunner_error_result, serialize_to_cstring};
 use crate::r#enum::HttpMethod;
 use crate::util::make_ffi_result;
 use crate::helpers::callback_handle_request;
-use serde::Serialize;
 use thread_pool::submit_job;
 
 
@@ -59,18 +59,17 @@ pub struct HttpServer {
     router_readonly: Arc<parking_lot::RwLock<Option<Arc<router::RouterReadOnly>>>>,
 }
 
-fn make_router_sealed_error(operation: &str, extra_detail: serde_json::Value, bulk: bool) -> HttpServerError {
+fn make_router_sealed_error(operation: &str, extra_detail: serde_json::Value, bulk: bool) -> RError {
     let mut detail = serde_json::json!({
         "operation": operation,
         "reason": "router_sealed"
     });
-    if let serde_json::Value::Object(ref mut d) = detail {
-        if let serde_json::Value::Object(extra) = extra_detail {
-            d.extend(extra);
-        }
+    if let serde_json::Value::Object(ref mut d) = detail
+        && let serde_json::Value::Object(extra) = extra_detail {
+        d.extend(extra);
     }
-    HttpServerError::new(
-        HttpServerErrorCode::RouterSealedCannotInsert,
+    RError::new(
+        RCode::RouterSealedCannotInsert,
         if bulk {
             "Router is sealed; cannot insert bulk routes".to_string()
         } else {
@@ -149,7 +148,7 @@ pub unsafe extern "C" fn add_route(
     if http_server.router_readonly.read().as_ref().is_some() {
         let detail = serde_json::json!({ "path": path_str });
         let e = make_router_sealed_error("add_route", detail, false);
-        return make_ffi_bunner_error_result(&e);
+        return make_ffi_bunner_error_result(&HttpServerError::from(e));
     }
 
     match router_mut.add(http_method, &path_str) {
@@ -233,7 +232,7 @@ pub unsafe extern "C" fn add_routes(
     if http_server.router_readonly.read().as_ref().is_some() {
         let detail = serde_json::json!({ "count": routes_count });
         let be = make_router_sealed_error("add_routes", detail, true);
-        return make_ffi_bunner_error_result(&be);
+        return make_ffi_bunner_error_result(&HttpServerError::from(be));
     }
 
     match router_mut.add_bulk(routes) {
@@ -324,7 +323,7 @@ pub unsafe extern "C" fn handle_request(
         );
         callback_handle_request(
             cb,
-            Some(&request_id_str),
+            Some(request_id_str),
             0,
             &http_error,
         );
@@ -341,7 +340,7 @@ pub unsafe extern "C" fn handle_request(
             );
             callback_handle_request(
                 cb,
-                Some(&request_id_str),
+                Some(request_id_str),
                 0,
                 &http_error,
             );
@@ -366,7 +365,7 @@ pub unsafe extern "C" fn handle_request(
 
         callback_handle_request(
             cb,
-            Some(&request_id_str),
+            Some(request_id_str),
             0,
             &http_error,
         );
@@ -395,7 +394,7 @@ pub unsafe extern "C" fn handle_request(
             );
             callback_handle_request(
                 cb,
-                Some(&request_id_str),
+                Some(request_id_str),
                 0,
                 &http_error,
             );

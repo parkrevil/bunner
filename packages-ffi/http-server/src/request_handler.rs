@@ -30,7 +30,7 @@ pub fn process_job(
         Ok(p) => p,
         Err(e) => {
             let bunner_error = HttpServerError::new(
-                e.into(),
+                e,
                 format!("Error occurred: {:?}", e),
                 Some(serde_json::json!({"operation": "parse_payload"}))
             );
@@ -43,7 +43,7 @@ pub fn process_job(
         Ok(m) => m,
         Err(e) => {
             let bunner_error = HttpServerError::new(
-                e.into(),
+                e,
                 format!("Error occurred: {:?}", e),
                 Some(serde_json::json!({"operation": "http_method_parse"}))
             );
@@ -84,15 +84,16 @@ pub fn process_job(
     }
 
     match ro.find(http_method, &request.path) {
-        Some((route_key, params_vec)) => {
-            // Build params JSON; use None when empty
+        Ok((route_key, params_vec)) => {
+            // Build params JSON as object map; use None when empty
             let params_json = if params_vec.is_empty() {
                 None
             } else {
-                Some(
-                    serde_json::to_value(&params_vec)
-                        .unwrap_or_else(|_| JsonValue::Object(serde_json::Map::new())),
-                )
+                let mut obj = serde_json::Map::new();
+                for (k, v) in params_vec.iter() {
+                    obj.insert(k.clone(), JsonValue::String(v.clone()));
+                }
+                Some(JsonValue::Object(obj))
             };
             request.params = params_json;
 
@@ -105,20 +106,9 @@ pub fn process_job(
                 &output,
             );
         }
-        None => {
-            let router_error = crate::router::RouterError {
-                code: crate::router::RouterErrorCode::MatchNotFound,
-                error: crate::router::RouterErrorCode::MatchNotFound.as_str().to_string(),
-                description: "No matching route was found".to_string(),
-                detail: Some(serde_json::json!({"operation": "find", "path": request.path, "method": http_method as u8})),
-            };
+        Err(router_error) => {
             let be = HttpServerError::from(router_error);
-            callback_handle_request(
-                cb,
-                Some(&request_id_owned),
-                0,
-                &be,
-            );
+            callback_handle_request(cb, Some(&request_id_owned), 0, &be);
         }
     }
 }

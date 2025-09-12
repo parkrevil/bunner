@@ -90,10 +90,9 @@ impl HttpServerError {
 impl HttpServerError {
     pub fn merge_detail(&mut self, new_detail: serde_json::Value) {
         if let Some(existing_detail) = self.detail.as_mut() {
-            if let serde_json::Value::Object(existing_map) = existing_detail {
-                if let serde_json::Value::Object(new_map) = new_detail {
-                    existing_map.extend(new_map);
-                }
+            if let serde_json::Value::Object(existing_map) = existing_detail
+                && let serde_json::Value::Object(new_map) = new_detail {
+                existing_map.extend(new_map);
             }
         } else {
             self.detail = Some(new_detail);

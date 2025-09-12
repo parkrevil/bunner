@@ -390,8 +390,9 @@ mod bulk_registration {
             ]);
             assert_eq!(res.map_err(|e| e.code), Err(RouterErrorCode::RouteWildcardSegmentNotAtEnd));
             r.finalize();
+            let ro = r.build_readonly();
             assert_eq!(
-                r.find(HttpMethod::Get, "/ok").map_err(|e| e.code),
+                ro.find(HttpMethod::Get, "/ok").map_err(|e| e.code),
                 Err(RouterErrorCode::MatchNotFound),
                 "no partial commit should have occurred",
             );
@@ -408,8 +409,9 @@ mod bulk_registration {
             let res = r.add_bulk(entries);
             assert!(matches!(res.map_err(|e| e.code), Err(RouterErrorCode::MaxRoutesExceeded)));
             r.finalize();
+            let ro = r.build_readonly();
             assert_eq!(
-                r.find(HttpMethod::Get, "/r0").map_err(|e| e.code),
+                ro.find(HttpMethod::Get, "/r0").map_err(|e| e.code),
                 Err(RouterErrorCode::MatchNotFound),
                 "no routes should be visible after overflow error",
             );
@@ -481,8 +483,9 @@ mod matching {
             r.add(HttpMethod::Get, "/").unwrap();
             r.add(HttpMethod::Get, "/health").unwrap();
             r.finalize();
-            assert!(r.find(HttpMethod::Get, "/").is_ok());
-            assert!(r.find(HttpMethod::Get, "/health").is_ok());
+            let ro = r.build_readonly();
+            assert!(ro.find(HttpMethod::Get, "/").is_ok());
+            assert!(ro.find(HttpMethod::Get, "/health").is_ok());
         }
 
         #[test]
@@ -490,7 +493,8 @@ mod matching {
             let mut r = rapi::Router::new(None);
             r.add(HttpMethod::Get, "/users/:id/posts/:post_id").unwrap();
             r.finalize();
-            let m = r.find(HttpMethod::Get, "/users/123/posts/abc").unwrap();
+            let ro = r.build_readonly();
+            let m = ro.find(HttpMethod::Get, "/users/123/posts/abc").unwrap();
             assert_eq!(m.1.len(), 2);
             assert_eq!(m.1[0].0.as_str(), "id");
             assert_eq!(m.1[0].1.as_str(), "123");
@@ -503,7 +507,8 @@ mod matching {
             let mut r = rapi::Router::new(None);
             r.add(HttpMethod::Get, "/files/*").unwrap();
             r.finalize();
-            let m = r.find(HttpMethod::Get, "/files/a/b/c.txt").unwrap();
+            let ro = r.build_readonly();
+            let m = ro.find(HttpMethod::Get, "/files/a/b/c.txt").unwrap();
             assert_eq!(m.1.len(), 1);
             assert_eq!(m.1[0].0.as_str(), "*");
             assert_eq!(m.1[0].1.as_str(), "a/b/c.txt");
@@ -514,13 +519,14 @@ mod matching {
             let mut r = Router::new(None);
             r.add(HttpMethod::Get, "/files/*").unwrap();
             r.finalize();
-            let m = r.find(HttpMethod::Get, "/files/").unwrap();
+            let ro = r.build_readonly();
+            let m = ro.find(HttpMethod::Get, "/files/").unwrap();
             assert_eq!(
                 m.1.len(),
                 0,
                 "Wildcard should capture an empty value for '/files/'"
             );
-            let m2 = r.find(HttpMethod::Get, "/files").unwrap();
+            let m2 = ro.find(HttpMethod::Get, "/files").unwrap();
             assert_eq!(
                 m2.1.len(),
                 0,
@@ -535,7 +541,7 @@ mod matching {
         fn when_path_is_empty() {
             let r = rapi::Router::new(None);
             assert_eq!(
-                r.find(HttpMethod::Get, "").map_err(|e| e.code),
+                r.build_readonly().find(HttpMethod::Get, "").map_err(|e| e.code),
                 Err(RouterErrorCode::MatchPathEmpty)
             );
         }
@@ -544,7 +550,7 @@ mod matching {
         fn when_path_is_not_ascii() {
             let r = rapi::Router::new(None);
             assert_eq!(
-                r.find(HttpMethod::Get, "/café").map_err(|e| e.code),
+                r.build_readonly().find(HttpMethod::Get, "/café").map_err(|e| e.code),
                 Err(RouterErrorCode::MatchPathNotAscii)
             );
         }
@@ -554,7 +560,7 @@ mod matching {
             let r = rapi::Router::new(None);
             for p in ["/a b", "/a?b", "/a#b", "/a%b"].iter() {
                 assert_eq!(
-                    r.find(HttpMethod::Get, p).map_err(|e| e.code),
+                    r.build_readonly().find(HttpMethod::Get, p).map_err(|e| e.code),
                     Err(RouterErrorCode::MatchPathContainsDisallowedCharacters)
                 );
             }
@@ -565,8 +571,9 @@ mod matching {
             let mut r = rapi::Router::new(None);
             r.add(HttpMethod::Get, "/ok").unwrap();
             r.finalize();
+            let ro = r.build_readonly();
             assert_eq!(
-                r.find(HttpMethod::Get, "/missing").map_err(|e| e.code),
+                ro.find(HttpMethod::Get, "/missing").map_err(|e| e.code),
                 Err(RouterErrorCode::MatchNotFound)
             );
         }
@@ -576,7 +583,8 @@ mod matching {
             let mut r = rapi::Router::new(None);
             r.add(HttpMethod::Get, "/only-get").unwrap();
             r.finalize();
-            assert!(r.find(HttpMethod::Post, "/only-get").is_err());
+            let ro = r.build_readonly();
+            assert!(ro.find(HttpMethod::Post, "/only-get").is_err());
         }
 
         #[test]
@@ -586,8 +594,9 @@ mod matching {
             r.finalize();
             let too_long_id = "b".repeat(MAX_SEGMENT_LENGTH + 1);
             let invalid_path = format!("/users/{}", too_long_id);
+            let ro = r.build_readonly();
             assert!(matches!(
-                r.find(HttpMethod::Get, &invalid_path).map_err(|e| e.code),
+                ro.find(HttpMethod::Get, &invalid_path).map_err(|e| e.code),
                 Err(RouterErrorCode::MatchNotFound)
             ));
         }
@@ -601,7 +610,8 @@ mod matching {
             r.add(HttpMethod::Get, "/users/:id").unwrap();
             let k_static = r.add(HttpMethod::Get, "/users/me").unwrap();
             r.finalize();
-            let m = r.find(HttpMethod::Get, "/users/me").unwrap();
+            let ro = r.build_readonly();
+            let m = ro.find(HttpMethod::Get, "/users/me").unwrap();
             assert_eq!(m.0, k_static);
             assert!(m.1.is_empty());
         }
@@ -612,7 +622,8 @@ mod matching {
             r.add(HttpMethod::Get, "/f/*").unwrap();
             let k_static = r.add(HttpMethod::Get, "/f/static").unwrap();
             r.finalize();
-            let m = r.find(HttpMethod::Get, "/f/static").unwrap();
+            let ro = r.build_readonly();
+            let m = ro.find(HttpMethod::Get, "/f/static").unwrap();
             assert_eq!(m.0, k_static);
         }
 
@@ -624,12 +635,13 @@ mod matching {
             let k_wildcard = r.add(HttpMethod::Get, "/search/*").unwrap();
             let k_param = r.add(HttpMethod::Get, "/search/:query").unwrap();
             r.finalize();
+            let ro = r.build_readonly();
 
-            let m_param = r.find(HttpMethod::Get, "/search/rust-lang").unwrap();
+            let m_param = ro.find(HttpMethod::Get, "/search/rust-lang").unwrap();
             assert_eq!(m_param.0, k_param);
             assert_eq!(m_param.1.len(), 1);
 
-            let m_wildcard = r.find(HttpMethod::Get, "/search/rust/lang").unwrap();
+            let m_wildcard = ro.find(HttpMethod::Get, "/search/rust/lang").unwrap();
             assert_eq!(m_wildcard.0, k_wildcard);
         }
     }
@@ -645,8 +657,9 @@ mod behavior {
             let mut r = Router::new(None);
             r.add(HttpMethod::Get, "/api/users").unwrap();
             r.finalize();
-            assert!(r.find(HttpMethod::Get, "/api/users/").is_ok());
-            assert!(r.find(HttpMethod::Get, "/api/users").is_ok());
+            let ro = r.build_readonly();
+            assert!(ro.find(HttpMethod::Get, "/api/users/").is_ok());
+            assert!(ro.find(HttpMethod::Get, "/api/users").is_ok());
         }
 
         #[test]
@@ -654,7 +667,8 @@ mod behavior {
             let mut r = Router::new(None);
             r.add(HttpMethod::Get, "/a/b").unwrap();
             r.finalize();
-            assert!(r.find(HttpMethod::Get, "/a//b").is_err());
+            let ro = r.build_readonly();
+            assert!(ro.find(HttpMethod::Get, "/a//b").is_err());
         }
     }
     mod case_sensitivity {
@@ -664,8 +678,9 @@ mod behavior {
             let mut r = Router::new(None);
             r.add(HttpMethod::Get, "/About").unwrap();
             r.finalize();
-            assert!(r.find(HttpMethod::Get, "/about").is_err());
-            assert!(r.find(HttpMethod::Get, "/About").is_ok());
+            let ro = r.build_readonly();
+            assert!(ro.find(HttpMethod::Get, "/about").is_err());
+            assert!(ro.find(HttpMethod::Get, "/About").is_ok());
         }
     }
     mod lifecycle {
@@ -674,7 +689,8 @@ mod behavior {
         fn allows_matching_before_finalization() {
             let mut r = Router::new(None);
             r.add(HttpMethod::Get, "/ok").unwrap();
-            assert!(r.find(HttpMethod::Get, "/ok").is_ok());
+            let ro = r.build_readonly();
+            assert!(ro.find(HttpMethod::Get, "/ok").is_ok());
         }
     }
 }
@@ -689,9 +705,10 @@ mod security {
             r.add(HttpMethod::Get, "/a/./b").unwrap();
             r.add(HttpMethod::Get, "/a/../b").unwrap();
             r.finalize();
-            assert!(r.find(HttpMethod::Get, "/a/./b").is_ok());
-            assert!(r.find(HttpMethod::Get, "/a/../b").is_ok());
-            assert!(r.find(HttpMethod::Get, "/a/b").is_err());
+            let ro = r.build_readonly();
+            assert!(ro.find(HttpMethod::Get, "/a/./b").is_ok());
+            assert!(ro.find(HttpMethod::Get, "/a/../b").is_ok());
+            assert!(ro.find(HttpMethod::Get, "/a/b").is_err());
         }
     }
     mod injection {
@@ -712,7 +729,7 @@ mod security {
             let mut r = Router::new(None);
             r.add(HttpMethod::Get, "/file/:name").unwrap();
             let path_with_null = "/file/image.jpg\0.txt";
-            let find_result = r.find(HttpMethod::Get, path_with_null);
+            let find_result = r.build_readonly().find(HttpMethod::Get, path_with_null);
             assert_eq!(
                 find_result.map_err(|e| e.code),
                 Err(RouterErrorCode::MatchPathContainsDisallowedCharacters)
@@ -728,7 +745,7 @@ mod security {
                 Err(RouterErrorCode::RoutePathContainsDisallowedCharacters)
             );
             assert_eq!(
-                r.find(HttpMethod::Get, path_with_encoded_slash).map_err(|e| e.code),
+                r.build_readonly().find(HttpMethod::Get, path_with_encoded_slash).map_err(|e| e.code),
                 Err(RouterErrorCode::MatchPathContainsDisallowedCharacters)
             );
         }
@@ -742,7 +759,7 @@ mod security {
             assert!(r.add(HttpMethod::Get, &deep_path).is_ok());
             r.finalize();
             let request_path = "/".to_string() + &"a/".repeat(100) + "123";
-            assert!(r.find(HttpMethod::Get, &request_path).is_ok());
+            assert!(r.build_readonly().find(HttpMethod::Get, &request_path).is_ok());
         }
 
         #[test]
@@ -758,7 +775,7 @@ mod security {
             for i in 0..30 {
                 request_path.push_str(&format!("/value{}", i));
             }
-            assert!(r.find(HttpMethod::Get, &request_path).is_ok());
+            assert!(r.build_readonly().find(HttpMethod::Get, &request_path).is_ok());
         }
 
         #[test]
@@ -769,7 +786,7 @@ mod security {
             let long_segment = "x".repeat(10000);
             let path = format!("/a/{}/c", long_segment);
             assert!(matches!(
-                r.find(HttpMethod::Get, &path).map_err(|e| e.code),
+                r.build_readonly().find(HttpMethod::Get, &path).map_err(|e| e.code),
                 Err(RouterErrorCode::MatchNotFound)
             ));
         }
@@ -780,7 +797,7 @@ mod security {
             r.add(HttpMethod::Get, "/users/:id").unwrap();
             r.finalize();
             let special_path = "/users/special'chars()*,;=";
-            let m = r.find(HttpMethod::Get, special_path).unwrap();
+            let m = r.build_readonly().find(HttpMethod::Get, special_path).unwrap();
             assert_eq!(m.1.len(), 1);
             assert_eq!(m.1[0].0.as_str(), "id");
             assert_eq!(m.1[0].1.as_str(), "special'chars()*,;=");
@@ -809,9 +826,11 @@ mod optimizations {
             r2.finalize();
 
             for p in ["/x/abc", "/y/static", "/zzz"].iter() {
+                let ro1 = r1.build_readonly();
+                let ro2 = r2.build_readonly();
                 assert_eq!(
-                    r1.find(HttpMethod::Get, p).is_ok(),
-                    r2.find(HttpMethod::Get, p).is_ok()
+                    ro1.find(HttpMethod::Get, p).is_ok(),
+                    ro2.find(HttpMethod::Get, p).is_ok()
                 );
             }
         }
@@ -835,9 +854,11 @@ mod optimizations {
             r2.finalize();
 
             for p in ["/s/a", "/s/b", "/s/x"].iter() {
+                let ro1 = r1.build_readonly();
+                let ro2 = r2.build_readonly();
                 assert_eq!(
-                    r1.find(HttpMethod::Get, p).is_ok(),
-                    r2.find(HttpMethod::Get, p).is_ok()
+                    ro1.find(HttpMethod::Get, p).is_ok(),
+                    ro2.find(HttpMethod::Get, p).is_ok()
                 );
             }
         }

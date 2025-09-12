@@ -29,7 +29,7 @@ const STATIC_MAP_THRESHOLD: usize = 50;
 mod alloc;
 mod builder;
 mod compression;
-mod find;
+// find module removed; runtime lookups use RouterReadOnly
 mod indices;
 mod insert;
 mod mask;

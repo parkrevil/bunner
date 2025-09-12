@@ -3,7 +3,7 @@ use bitflags::bitflags;
 use hashbrown::HashMap as FastHashMap;
 use smallvec::SmallVec;
 
-use crate::router::pattern::{SegmentPart, SegmentPattern};
+use crate::router::pattern::SegmentPattern;
 
 use super::HTTP_METHOD_COUNT;
 
@@ -119,73 +119,6 @@ impl RadixTreeNode {
         self.method_mask = mask;
     }
 
-    #[inline(always)]
-    pub(super) fn get_static_child(
-        &self,
-        key: &str,
-        key_id: Option<u32>,
-    ) -> Option<&RadixTreeNode> {
-        // --- Fast path for sealed/indexed nodes ---
-        if !self.static_vals_idx.is_empty() {
-            if let Some(id) = key_id {
-                if let Some(node) = self.static_children_idx_ids.get(&id) {
-                    return Some(node.as_ref());
-                }
-                if !self.static_key_ids.is_empty()
-                    && let Ok(pos) = self.static_key_ids.binary_search(&id)
-                {
-                    return Some(self.static_vals_idx[pos].as_ref());
-                }
-            }
-
-            if !self.static_hash_table.is_empty() {
-                let size = self.static_hash_table.len();
-                let mut h: u64 = self.static_hash_seed;
-                for &b in key.as_bytes() {
-                    h ^= b as u64;
-                    h = h.wrapping_mul(1099511628211);
-                }
-                let mut idx = (h as usize) & (size - 1);
-                let mut steps = 0usize;
-                while steps < size {
-                    let pos = self.static_hash_table[idx];
-                    if pos == -1 {
-                        break;
-                    }
-                    let p = pos as usize;
-                    if self.static_keys[p].as_str() == key {
-                        return Some(self.static_vals_idx[p].as_ref());
-                    }
-                    idx = (idx + 1) & (size - 1);
-                    steps += 1;
-                }
-            }
-
-            if let Some(node) = self.static_children_idx.get(key) {
-                return Some(node.as_ref());
-            }
-
-            if self.static_keys.len() <= 12 {
-                if let Some(pos) = self.static_keys.iter().position(|k| k.as_str() == key) {
-                    return Some(self.static_vals_idx[pos].as_ref());
-                }
-            } else if let Ok(pos) = self.static_keys.binary_search_by(|k| k.as_str().cmp(key)) {
-                return Some(self.static_vals_idx[pos].as_ref());
-            }
-
-            return None; // Indexed node, but not found
-        }
-
-        // --- Slow path for non-sealed/unindexed nodes ---
-        if let Some(n) = self.static_children.get(key) {
-            return Some(n.as_ref());
-        }
-        if let Some(pos) = self.static_keys.iter().position(|k| k.as_str() == key) {
-            return Some(self.static_vals[pos].as_ref());
-        }
-
-        None
-    }
 
     /// Same as `descend_static_mut` but uses provided allocator for child creation.
     pub(super) fn descend_static_mut_with_alloc<F>(
@@ -216,46 +149,6 @@ impl RadixTreeNode {
             .as_mut()
     }
 
-    #[inline]
-    pub(super) fn pattern_candidates_for(&self, comp: &str) -> SmallVec<[u16; 8]> {
-        debug_assert!(comp.is_ascii());
-        let mut out: SmallVec<[u16; 8]> = SmallVec::new();
-
-        if let Some(v) = self.pattern_first_literal.get(comp) {
-            for &i in v.iter() {
-                out.push(i);
-            }
-            return out;
-        }
-
-        if let Some(&b) = comp.as_bytes().first()
-            && let Some(v) = self.pattern_first_lit_head.get(&b)
-        {
-            for &i in v.iter() {
-                if let Some(SegmentPart::Literal(l0)) =
-                    self.patterns.get(i as usize).and_then(|p| p.parts.first())
-                    && comp.len() >= l0.len()
-                    && &comp[..l0.len()] == l0.as_str()
-                {
-                    out.push(i);
-                }
-            }
-
-            if !out.is_empty() {
-                return out;
-            }
-        }
-
-        for (idx, pat) in self.patterns.iter().enumerate() {
-            if let Some(SegmentPart::Literal(l0)) = pat.parts.first()
-                && comp.len() >= l0.len()
-                && &comp[..l0.len()] == l0.as_str()
-            {
-                out.push(idx as u16);
-            }
-        }
-        out
-    }
 
     #[cfg(feature = "test")]
     pub fn get_child_for_test(&self, key: &str) -> Option<&RadixTreeNode> {

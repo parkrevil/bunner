@@ -1,4 +1,8 @@
-use super::{normalize_path, radix_tree::HTTP_METHOD_COUNT, Router};
+use super::{radix_tree::HTTP_METHOD_COUNT, Router};
+use super::path::normalize_path;
+use super::path::is_path_character_allowed;
+use super::errors::RouterErrorCode;
+use super::structures::RouterError;
 use crate::r#enum::HttpMethod;
 use crate::router::pattern::{self, SegmentPattern};
 use std::collections::HashMap;
@@ -42,15 +46,62 @@ impl RouterReadOnly {
         self.static_maps[idx].get(&normalized).cloned()
     }
 
-    pub fn find(&self, method: HttpMethod, path: &str) -> Option<(u16, HashMap<String, String>)> {
-        let normalized = normalize_path(path);
-        if let Some(k) = self.find_static(method, &normalized) {
-            return Some((k, HashMap::new()));
+    pub fn find(
+        &self,
+        method: HttpMethod,
+        path: &str,
+    ) -> Result<(u16, Vec<(String, String)>), RouterError> {
+        if path.is_empty() {
+            return Err(RouterError::new(
+                RouterErrorCode::MatchPathEmpty,
+                "Match path is empty".to_string(),
+                Some(serde_json::json!({ "operation": "find", "path": path, "method": method as u8 })),
+            ));
         }
+
+        if !path.is_ascii() {
+            return Err(RouterError::new(
+                RouterErrorCode::MatchPathNotAscii,
+                "Match path contains non-ascii characters".to_string(),
+                Some(serde_json::json!({ "operation": "find", "path": path, "method": method as u8 })),
+            ));
+        }
+
+        if !is_path_character_allowed(path) {
+            return Err(RouterError::new(
+                RouterErrorCode::MatchPathContainsDisallowedCharacters,
+                "Match path contains disallowed characters".to_string(),
+                Some(serde_json::json!({ "operation": "find", "path": path, "method": method as u8 })),
+            ));
+        }
+
+        let normalized = normalize_path(path);
+
+        if !is_path_character_allowed(&normalized) {
+            return Err(RouterError::new(
+                RouterErrorCode::MatchPathContainsDisallowedCharacters,
+                "Normalized path contains disallowed characters".to_string(),
+                Some(serde_json::json!({ "operation": "find", "path": normalized, "method": method as u8 })),
+            ));
+        }
+
+        if let Some(k) = self.find_static(method, &normalized) {
+            return Ok((k, Vec::new()));
+        }
+
         let mut out_params: Vec<(String, String)> = Vec::new();
-        self.root
+        if let Some((rk, params)) = self
+            .root
             .find_from(method, &normalized, 0, &mut out_params)
-            .map(|(rk, v)| (rk, v.into_iter().collect()))
+        {
+            Ok((rk, params))
+        } else {
+            Err(RouterError::new(
+                RouterErrorCode::MatchNotFound,
+                "No matching route was found".to_string(),
+                Some(serde_json::json!({ "operation": "find", "path": normalized, "method": method as u8 })),
+            ))
+        }
     }
 }
 

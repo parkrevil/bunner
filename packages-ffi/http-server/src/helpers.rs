@@ -1,15 +1,6 @@
-use std::{
-    ffi::{CStr, CString},
-    os::raw::c_char,
-    ptr,
-    sync::Arc,
-};
-use crate::errors::HttpServerErrorCode;
-use crate::structure::{AddRouteResult, HttpServerError};
-use crate::util::{make_ffi_bunner_error_result, serialize_to_cstring};
-use crate::r#enum::HttpMethod;
-use crate::util::make_ffi_result;
+use crate::util::serialize_to_cstring;
 use serde::Serialize;
+use std::{ffi::CString, os::raw::c_char, ptr};
 
 #[inline(always)]
 pub fn callback_handle_request<T: Serialize>(
@@ -26,7 +17,7 @@ pub fn callback_handle_request<T: Serialize>(
             std::mem::forget(cstr);
 
             ptr
-        },
+        }
         None => ptr::null(),
     };
 

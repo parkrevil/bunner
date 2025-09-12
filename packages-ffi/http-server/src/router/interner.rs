@@ -30,10 +30,6 @@ impl Interner {
         id
     }
 
-    #[inline]
-    pub fn get(&self, s: &str) -> Option<u32> {
-        self.map.get(s).map(|v| *v)
-    }
 
     #[cfg(any(feature = "production", feature = "test"))]
     #[inline]
