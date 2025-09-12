@@ -268,8 +268,11 @@ impl RadixTree {
                 uniq.insert(s.clone());
             }
         }
-        for s in uniq.iter() {
-            let _ = self.interner.intern(s.as_str());
+        // Warm interner with literals in deterministic order to reduce hash collisions
+        let mut uniq_vec: Vec<&str> = uniq.iter().map(|s| s.as_str()).collect();
+        uniq_vec.sort_unstable();
+        for s in uniq_vec.into_iter() {
+            let _ = self.interner.intern(s);
         }
 
         // Phase B: preassign keys then commit; bucket sort for locality then preserve idx mapping

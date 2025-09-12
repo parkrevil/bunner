@@ -58,6 +58,7 @@ pub fn pattern_score(p: &SegmentPattern) -> u16 {
 
     let mut param_count = 0u16;
 
+    // Heuristic: prefer shorter trailing literals to tighten early mismatches
     for (idx, part) in p.parts.iter().enumerate() {
         match part {
             SegmentPart::Literal(l) => {
@@ -70,7 +71,8 @@ pub fn pattern_score(p: &SegmentPattern) -> u16 {
         }
     }
 
-    s += last_lit_len.min(32) * 5;
+    // Boost shorter last literal a bit more for earlier pruning
+    s += (32u16.saturating_sub(last_lit_len.min(32))) * 2;
 
     if param_count > 0 {
         s = s.saturating_sub((param_count - 1) * 6);

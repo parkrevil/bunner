@@ -6,6 +6,11 @@ use super::{radix_tree::HTTP_METHOD_COUNT, Router};
 use crate::enums::HttpMethod;
 use crate::router::pattern::{self, SegmentPattern};
 use std::collections::HashMap;
+use std::cell::RefCell;
+
+thread_local! {
+    static PARAM_BUF: RefCell<Vec<(String, String)>> = RefCell::new(Vec::with_capacity(4));
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct RouterReadOnly {
@@ -40,10 +45,9 @@ impl RouterReadOnly {
     }
 
     #[inline]
-    pub fn find_static(&self, method: HttpMethod, path: &str) -> Option<u16> {
-        let normalized = normalize_path(path);
+    fn find_static_normalized(&self, method: HttpMethod, normalized: &str) -> Option<u16> {
         let idx = method as usize;
-        self.static_maps[idx].get(&normalized).cloned()
+        self.static_maps[idx].get(normalized).cloned()
     }
 
     #[tracing::instrument(skip(self, path), fields(method=?method, path=%path))]
@@ -97,13 +101,19 @@ impl RouterReadOnly {
 
         let normalized = normalize_path(path);
 
-        if let Some(k) = self.find_static(method, &normalized) {
+        if let Some(k) = self.find_static_normalized(method, &normalized) {
             return Ok((k, Vec::new()));
         }
 
-        let mut out_params: Vec<(String, String)> = Vec::with_capacity(2);
-        if let Some((rk, params)) = self.root.find_from(method, &normalized, 0, &mut out_params) {
-            Ok((rk, params))
+        let found = PARAM_BUF.with(|cell| {
+            let mut buf = cell.borrow_mut();
+            buf.clear();
+            self.root.find_from(method, &normalized, 0, &mut buf)
+        });
+
+        if let Some((rk, params)) = found {
+            // Clone to return an owned Vec while retaining buffer capacity in TLS
+            Ok((rk, params.clone()))
         } else {
             Err(RouterError::new(
                 RouterErrorCode::MatchNotFound,
