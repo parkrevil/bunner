@@ -1,4 +1,4 @@
-use dashmap::DashMap;
+use dashmap::{mapref::entry::Entry, DashMap};
 use parking_lot::RwLock;
 
 #[derive(Debug, Default)]
@@ -20,14 +20,18 @@ impl Interner {
         if let Some(id) = self.map.get(s).map(|v| *v) {
             return id;
         }
+
+        // Acquire reverse table lock once; use entry to avoid a second get.
         let mut rev = self.rev.write();
-        if let Some(id) = self.map.get(s).map(|v| *v) {
-            return id;
+        match self.map.entry(s.to_string()) {
+            Entry::Occupied(e) => *e.get(),
+            Entry::Vacant(v) => {
+                let id = rev.len() as u32;
+                rev.push(s.to_string());
+                v.insert(id);
+                id
+            }
         }
-        let id = rev.len() as u32;
-        rev.push(s.to_string());
-        self.map.insert(s.to_string(), id);
-        id
     }
 
     #[cfg(any(feature = "production", feature = "test"))]
