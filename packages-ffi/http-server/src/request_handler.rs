@@ -2,6 +2,7 @@ use std::os::raw::c_char;
 use std::sync::Arc;
 
 use crate::errors::HttpServerErrorCode;
+use crate::helpers::callback_handle_request;
 use crate::middleware::body_parser::BodyParser;
 use crate::middleware::chain::Chain;
 use crate::middleware::cookie_parser::CookieParser;
@@ -9,9 +10,8 @@ use crate::middleware::header_parser::HeaderParser;
 use crate::middleware::url_parser::UrlParser;
 use crate::r#enum::HttpMethod;
 use crate::router;
-use crate::structure::{BunnerRequest, BunnerResponse, HandleRequestOutput, HandleRequestPayload};
-use crate::helpers::callback_handle_request;
 use crate::structure::HttpServerError;
+use crate::structure::{BunnerRequest, BunnerResponse, HandleRequestOutput, HandleRequestPayload};
 use serde_json::Value as JsonValue;
 
 #[inline]
@@ -29,10 +29,18 @@ pub fn process_job(
     let payload = match parse_payload(&payload_owned_for_job) {
         Ok(p) => p,
         Err(e) => {
+            let preview: String = payload_owned_for_job.chars().take(200).collect();
             let bunner_error = HttpServerError::new(
                 e,
-                format!("Error occurred: {:?}", e),
-                Some(serde_json::json!({"operation": "parse_payload"}))
+                "Failed to parse request payload JSON".to_string(),
+                Some(crate::util::make_error_detail(
+                    "parse_payload",
+                    serde_json::json!({
+                        "requestId": request_id_owned,
+                        "payloadPreview": preview,
+                        "payloadLength": payload_owned_for_job.len()
+                    }),
+                )),
             );
             callback_handle_request(cb, Some(&request_id_owned), 0, &bunner_error);
             return;
@@ -44,8 +52,14 @@ pub fn process_job(
         Err(e) => {
             let bunner_error = HttpServerError::new(
                 e,
-                format!("Error occurred: {:?}", e),
-                Some(serde_json::json!({"operation": "http_method_parse"}))
+                "Invalid HTTP method in request payload".to_string(),
+                Some(crate::util::make_error_detail(
+                    "http_method_parse",
+                    serde_json::json!({
+                        "requestId": request_id_owned,
+                        "httpMethod": payload.http_method
+                    }),
+                )),
             );
             callback_handle_request(cb, Some(&request_id_owned), 0, &bunner_error);
             return;
@@ -79,7 +93,7 @@ pub fn process_job(
     // Execute middleware chain; if any middleware stops (returns false), callback immediately with current output
     if !chain.execute(&mut request, &mut response, &payload) {
         let output = HandleRequestOutput { request, response };
-    callback_handle_request(cb, Some(&request_id_owned), 0, &output);
+        callback_handle_request(cb, Some(&request_id_owned), 0, &output);
         return;
     }
 
@@ -99,15 +113,17 @@ pub fn process_job(
 
             let output = HandleRequestOutput { request, response };
 
-            callback_handle_request(
-                cb,
-                Some(&request_id_owned),
-                route_key,
-                &output,
-            );
+            callback_handle_request(cb, Some(&request_id_owned), route_key, &output);
         }
         Err(router_error) => {
-            let be = HttpServerError::from(router_error);
+            let mut be = HttpServerError::from(router_error);
+            let extra = serde_json::json!({
+                "operation": "handle_request_find",
+                "requestId": request_id_owned,
+                "method": http_method as u8,
+                "path": request.path
+            });
+            be.merge_detail(extra);
             callback_handle_request(cb, Some(&request_id_owned), 0, &be);
         }
     }

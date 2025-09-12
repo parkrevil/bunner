@@ -1,28 +1,26 @@
 pub mod r#enum;
 pub mod errors;
+pub mod helpers;
 pub mod middleware;
 pub mod request_handler;
 pub mod router;
 pub mod structure;
 mod thread_pool;
 pub mod util;
-pub mod helpers;
 
+use crate::errors::HttpServerErrorCode;
+use crate::helpers::callback_handle_request;
+use crate::r#enum::HttpMethod;
+use crate::router::errors::RouterErrorCode as RCode;
+use crate::router::structures::RouterError as RError;
+use crate::structure::{AddRouteResult, HttpServerError};
+use crate::util::serialize_to_cstring;
 use std::{
     ffi::{CStr, CString},
     os::raw::c_char,
     sync::Arc,
 };
-use crate::errors::HttpServerErrorCode;
-use crate::router::errors::RouterErrorCode as RCode;
-use crate::router::structures::RouterError as RError;
-use crate::structure::{AddRouteResult, HttpServerError};
-use crate::util::{make_ffi_bunner_error_result, serialize_to_cstring};
-use crate::r#enum::HttpMethod;
-use crate::util::make_ffi_result;
-use crate::helpers::callback_handle_request;
 use thread_pool::submit_job;
-
 
 #[cfg(feature = "test")]
 use thread_pool::shutdown_pool;
@@ -59,13 +57,18 @@ pub struct HttpServer {
     router_readonly: Arc<parking_lot::RwLock<Option<Arc<router::RouterReadOnly>>>>,
 }
 
-fn make_router_sealed_error(operation: &str, extra_detail: serde_json::Value, bulk: bool) -> RError {
+fn make_router_sealed_error(
+    operation: &str,
+    extra_detail: serde_json::Value,
+    bulk: bool,
+) -> RError {
     let mut detail = serde_json::json!({
         "operation": operation,
         "reason": "router_sealed"
     });
     if let serde_json::Value::Object(ref mut d) = detail
-        && let serde_json::Value::Object(extra) = extra_detail {
+        && let serde_json::Value::Object(extra) = extra_detail
+    {
         d.extend(extra);
     }
     RError::new(
@@ -103,7 +106,7 @@ pub unsafe extern "C" fn destroy(handle: HttpServerHandle) {
 
         return;
     }
-    
+
     let http_server = unsafe { Box::from_raw(handle) };
 
     drop(http_server);
@@ -126,19 +129,30 @@ pub unsafe extern "C" fn add_route(
     if handle.is_null() {
         let http_error = HttpServerError::new(
             HttpServerErrorCode::HandleIsNull,
-            "Handle is null".to_string(),
-            Some(serde_json::json!({"operation": "add_route"}))
+            "Null handle passed to add_route".to_string(),
+            Some(crate::util::make_error_detail(
+                "add_route",
+                serde_json::json!(null),
+            )),
         );
         return serialize_to_cstring(&http_error);
     }
 
     let http_method = match HttpMethod::from_u8(http_method) {
         Ok(m) => m,
-        Err(e) => return serialize_to_cstring(&HttpServerError::new(
-            e,
-            format!("Error occurred: {:?}", e),
-            None,
-        )),
+        Err(e) => {
+            return serialize_to_cstring(&HttpServerError::new(
+                e,
+                "Invalid httpMethod value when adding route".to_string(),
+                Some(crate::util::make_error_detail(
+                    "add_route",
+                    serde_json::json!({
+                        "httpMethod": http_method,
+                        "pathPtr": format!("{:p}", path)
+                    }),
+                )),
+            ))
+        }
     };
     let http_server = unsafe { &*handle };
     let mut guard = http_server.router.write();
@@ -148,20 +162,19 @@ pub unsafe extern "C" fn add_route(
     if http_server.router_readonly.read().as_ref().is_some() {
         let detail = serde_json::json!({ "path": path_str });
         let e = make_router_sealed_error("add_route", detail, false);
-        return make_ffi_bunner_error_result(&HttpServerError::from(e));
+        return serialize_to_cstring(&HttpServerError::from(e));
     }
 
     match router_mut.add(http_method, &path_str) {
-        Ok(k) => {
-            make_ffi_result(&AddRouteResult { key: k })
-        }
+        Ok(k) => serialize_to_cstring(&AddRouteResult { key: k }),
         Err(e) => {
             let mut bunner_error = HttpServerError::from(e);
-            let detail = serde_json::json!({"operation": "add_route", "path": path_str});
+            let detail =
+                crate::util::make_error_detail("add_route", serde_json::json!({"path": path_str}));
 
             bunner_error.merge_detail(detail);
 
-            make_ffi_bunner_error_result(&bunner_error)
+            serialize_to_cstring(&bunner_error)
         }
     }
 }
@@ -182,8 +195,11 @@ pub unsafe extern "C" fn add_routes(
     if handle.is_null() {
         let http_error = HttpServerError::new(
             HttpServerErrorCode::HandleIsNull,
-            "Handle is null".to_string(),
-            Some(serde_json::json!({"operation": "add_routes"}))
+            "Null handle passed to add_routes".to_string(),
+            Some(crate::util::make_error_detail(
+                "add_routes",
+                serde_json::json!(null),
+            )),
         );
         return serialize_to_cstring(&http_error);
     }
@@ -193,8 +209,14 @@ pub unsafe extern "C" fn add_routes(
         Err(_) => {
             let http_error = HttpServerError::new(
                 HttpServerErrorCode::InvalidJsonString,
-                "Invalid JSON string".to_string(),
-                Some(serde_json::json!({"operation": "add_routes"}))
+                "Invalid UTF-8 JSON string passed to add_routes".to_string(),
+                Some(crate::util::make_error_detail(
+                    "add_routes",
+                    serde_json::json!({
+                        "reason": "non_utf8",
+                        "routesPtr": format!("{:p}", routes_ptr)
+                    }),
+                )),
             );
             return serialize_to_cstring(&http_error);
         }
@@ -209,15 +231,29 @@ pub unsafe extern "C" fn add_routes(
                 if msg.contains("InvalidHttpMethod") {
                     let http_error = HttpServerError::new(
                         HttpServerErrorCode::InvalidHttpMethod,
-                        "Invalid HTTP method".to_string(),
-                        Some(serde_json::json!({"operation": "add_routes"}))
+                        "Invalid HTTP method in routes payload".to_string(),
+                        Some(crate::util::make_error_detail(
+                            "add_routes",
+                            serde_json::json!({
+                                "routesLength": routes_str.len(),
+                                "routesPreview": routes_str.chars().take(200).collect::<String>(),
+                                "serdeError": msg
+                            }),
+                        )),
                     );
                     return serialize_to_cstring(&http_error);
                 } else {
                     let http_error = HttpServerError::new(
                         HttpServerErrorCode::InvalidJsonString,
-                        "Invalid JSON string".to_string(),
-                        Some(serde_json::json!({"operation": "add_routes"}))
+                        "Invalid JSON string for routes list".to_string(),
+                        Some(crate::util::make_error_detail(
+                            "add_routes",
+                            serde_json::json!({
+                                "routesLength": routes_str.len(),
+                                "routesPreview": routes_str.chars().take(200).collect::<String>(),
+                                "serdeError": msg
+                            }),
+                        )),
                     );
                     return serialize_to_cstring(&http_error);
                 }
@@ -232,11 +268,11 @@ pub unsafe extern "C" fn add_routes(
     if http_server.router_readonly.read().as_ref().is_some() {
         let detail = serde_json::json!({ "count": routes_count });
         let be = make_router_sealed_error("add_routes", detail, true);
-        return make_ffi_bunner_error_result(&HttpServerError::from(be));
+        return serialize_to_cstring(&HttpServerError::from(be));
     }
 
     match router_mut.add_bulk(routes) {
-        Ok(r) => make_ffi_result(r),
+        Ok(r) => serialize_to_cstring(&r),
         Err(e) => {
             let mut bunner_error = HttpServerError::from(e);
             let detail = serde_json::json!({
@@ -246,7 +282,7 @@ pub unsafe extern "C" fn add_routes(
 
             bunner_error.merge_detail(detail);
 
-            make_ffi_bunner_error_result(&bunner_error)
+            serialize_to_cstring(&bunner_error)
         }
     }
 }
@@ -266,15 +302,13 @@ pub unsafe extern "C" fn handle_request(
     if handle.is_null() {
         let http_error = HttpServerError::new(
             HttpServerErrorCode::HandleIsNull,
-            "Handle is null".to_string(),
-            Some(serde_json::json!({"operation": "handle_request"}))
+            "Null handle passed to handle_request".to_string(),
+            Some(crate::util::make_error_detail(
+                "handle_request",
+                serde_json::json!(null),
+            )),
         );
-        callback_handle_request(
-            cb,
-            None,
-            0,
-            &http_error,
-        );
+        callback_handle_request(cb, None, 0, &http_error);
         return;
     }
 
@@ -282,15 +316,13 @@ pub unsafe extern "C" fn handle_request(
     if request_id_ptr.is_null() {
         let http_error = HttpServerError::new(
             HttpServerErrorCode::InvalidRequestId,
-            "Invalid request id".to_string(),
-            Some(serde_json::json!({"operation": "handle_request"}))
+            "Request id pointer is null".to_string(),
+            Some(crate::util::make_error_detail(
+                "handle_request",
+                serde_json::json!(null),
+            )),
         );
-        callback_handle_request(
-            cb,
-            None,
-            0,
-            &http_error,
-        );
+        callback_handle_request(cb, None, 0, &http_error);
         return;
     }
 
@@ -300,15 +332,15 @@ pub unsafe extern "C" fn handle_request(
             Err(_) => {
                 let http_error = HttpServerError::new(
                     HttpServerErrorCode::InvalidRequestId,
-                    "Invalid request id".to_string(),
-                    Some(serde_json::json!({"operation": "handle_request"}))
+                    "Request id is not valid UTF-8".to_string(),
+                    Some(crate::util::make_error_detail(
+                        "handle_request",
+                        serde_json::json!({
+                            "requestIdPtr": format!("{:p}", request_id_ptr)
+                        }),
+                    )),
                 );
-                callback_handle_request(
-                    cb,
-                    None,
-                    0,
-                    &http_error,
-                );
+                callback_handle_request(cb, None, 0, &http_error);
                 return;
             }
         }
@@ -318,15 +350,15 @@ pub unsafe extern "C" fn handle_request(
     if payload_ptr.is_null() {
         let http_error = HttpServerError::new(
             HttpServerErrorCode::InvalidPayload,
-            "Invalid payload".to_string(),
-            Some(serde_json::json!({"operation": "handle_request"}))
+            "Payload pointer is null".to_string(),
+            Some(crate::util::make_error_detail(
+                "handle_request",
+                serde_json::json!({
+                    "requestId": request_id_str
+                }),
+            )),
         );
-        callback_handle_request(
-            cb,
-            Some(request_id_str),
-            0,
-            &http_error,
-        );
+        callback_handle_request(cb, Some(request_id_str), 0, &http_error);
         return;
     }
 
@@ -335,15 +367,16 @@ pub unsafe extern "C" fn handle_request(
         Err(_) => {
             let http_error = HttpServerError::new(
                 HttpServerErrorCode::InvalidJsonString,
-                "Invalid JSON string".to_string(),
-                Some(serde_json::json!({"operation": "handle_request"}))
+                "Payload is not valid UTF-8 JSON".to_string(),
+                Some(crate::util::make_error_detail(
+                    "handle_request",
+                    serde_json::json!({
+                        "requestId": request_id_str,
+                        "payloadPtr": format!("{:p}", payload_ptr)
+                    }),
+                )),
             );
-            callback_handle_request(
-                cb,
-                Some(request_id_str),
-                0,
-                &http_error,
-            );
+            callback_handle_request(cb, Some(request_id_str), 0, &http_error);
             return;
         }
     };
@@ -359,16 +392,16 @@ pub unsafe extern "C" fn handle_request(
     if ro_opt.is_none() {
         let http_error = HttpServerError::new(
             HttpServerErrorCode::RouteNotSealed,
-            "Route not sealed".to_string(),
-            Some(serde_json::json!({"operation": "handle_request"}))
+            "Routes not sealed; call seal_routes before handling requests".to_string(),
+            Some(crate::util::make_error_detail(
+                "handle_request",
+                serde_json::json!({
+                    "requestId": request_id_str
+                }),
+            )),
         );
 
-        callback_handle_request(
-            cb,
-            Some(request_id_str),
-            0,
-            &http_error,
-        );
+        callback_handle_request(cb, Some(request_id_str), 0, &http_error);
 
         return;
     }
@@ -389,15 +422,15 @@ pub unsafe extern "C" fn handle_request(
         Err(_e) => {
             let http_error = HttpServerError::new(
                 HttpServerErrorCode::QueueFull,
-                "Queue is full".to_string(),
-                Some(serde_json::json!({"operation": "handle_request"}))
+                "Request queue is full".to_string(),
+                Some(crate::util::make_error_detail(
+                    "handle_request",
+                    serde_json::json!({
+                        "requestId": request_id_str
+                    }),
+                )),
             );
-            callback_handle_request(
-                cb,
-                Some(request_id_str),
-                0,
-                &http_error,
-            );
+            callback_handle_request(cb, Some(request_id_str), 0, &http_error);
         }
     }
 }

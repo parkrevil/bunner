@@ -17,8 +17,11 @@ impl RadixTree {
         if self.root_node.is_sealed() {
             return Err(RouterError::new(
                 RouterErrorCode::RouterSealedCannotInsert,
-                format!("Router is sealed; cannot insert path: '{}'", path),
-                Some(json!({"operation":"insert","path": path})),
+                format!("Router is sealed; cannot insert path '{}'", path),
+                Some(crate::util::make_error_detail(
+                    "insert",
+                    json!({"path": path}),
+                )),
             ));
         }
         self.root_node.set_dirty(true);
@@ -40,7 +43,7 @@ impl RadixTree {
             return Err(RouterError::new(
                 RouterErrorCode::RouterSealedCannotInsert,
                 "Router is sealed; cannot insert parsed segments".to_string(),
-                Some(json!({"operation":"insert_parsed"})),
+                Some(crate::util::make_error_detail("insert_parsed", json!(null))),
             ));
         }
         self.root_node.set_dirty(true);
@@ -178,8 +181,11 @@ fn find_or_create_pattern_child<'a>(
         if !pattern_compatible_policy(exist, pat) {
             return Err(RouterError::new(
                 RouterErrorCode::RouteParamNameConflictAtSamePosition,
-                "Parameter name conflict at the same position between patterns".to_string(),
-                Some(json!({"operation":"find_or_create_pattern_child"})),
+                "Parameter name conflict at same position between patterns".to_string(),
+                Some(crate::util::make_error_detail(
+                    "find_or_create_pattern_child",
+                    json!(null),
+                )),
             ));
         }
     }
@@ -216,9 +222,10 @@ fn handle_wildcard_insert(
                 "Wildcard segment '*' must be the final segment; found at index {} of {}",
                 index, total_segments
             ),
-            Some(
-                json!({"operation":"handle_wildcard_insert","index": index, "total_segments": total_segments}),
-            ),
+            Some(crate::util::make_error_detail(
+                "handle_wildcard_insert",
+                json!({"index": index, "total_segments": total_segments}),
+            )),
         ));
     }
     let method_idx = method as usize;
@@ -226,7 +233,10 @@ fn handle_wildcard_insert(
         return Err(RouterError::new(
             RouterErrorCode::RouteWildcardAlreadyExistsForMethod,
             "Wildcard route already exists for this method at the node".to_string(),
-            Some(json!({"operation":"handle_wildcard_insert","method":method as u8})),
+            Some(crate::util::make_error_detail(
+                "handle_wildcard_insert",
+                json!({"method":method as u8}),
+            )),
         ));
     }
     let key = next_route_key.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -252,9 +262,10 @@ fn handle_wildcard_insert_preassigned(
                 "Wildcard segment '*' must be the final segment; found at index {} of {}",
                 index, total_segments
             ),
-            Some(
-                json!({"operation":"handle_wildcard_insert_preassigned","index": index, "total_segments": total_segments}),
-            ),
+            Some(crate::util::make_error_detail(
+                "handle_wildcard_insert_preassigned",
+                json!({"index": index, "total_segments": total_segments}),
+            )),
         ));
     }
     let method_idx = method as usize;
@@ -262,7 +273,10 @@ fn handle_wildcard_insert_preassigned(
         return Err(RouterError::new(
             RouterErrorCode::RouteWildcardAlreadyExistsForMethod,
             "Wildcard route already exists for this method at the node".to_string(),
-            Some(json!({"operation":"handle_wildcard_insert_preassigned","method":method as u8})),
+            Some(crate::util::make_error_detail(
+                "handle_wildcard_insert_preassigned",
+                json!({"method":method as u8}),
+            )),
         ));
     }
     node.wildcard_routes[method_idx] = assigned_key + 1;
@@ -280,7 +294,10 @@ fn assign_route_key(
         return Err(RouterError::new(
             RouterErrorCode::RouteConflictOnDuplicatePath,
             "A route already exists for this path and method".to_string(),
-            Some(json!({"operation":"assign_route_key","method": method as u8})),
+            Some(crate::util::make_error_detail(
+                "assign_route_key",
+                json!({"method": method as u8}),
+            )),
         ));
     }
     let current_key = next_route_key.load(std::sync::atomic::Ordering::Relaxed);
@@ -288,7 +305,10 @@ fn assign_route_key(
         return Err(RouterError::new(
             RouterErrorCode::MaxRoutesExceeded,
             "Maximum number of routes exceeded".to_string(),
-            Some(json!({"operation":"assign_route_key","current_key": current_key})),
+            Some(crate::util::make_error_detail(
+                "assign_route_key",
+                json!({"current_key": current_key, "maxRoutes": MAX_ROUTES}),
+            )),
         ));
     }
     let key = next_route_key.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -314,7 +334,10 @@ fn assign_route_key_preassigned(
                 "A route already exists for this path and method when preassigning key={}",
                 assigned_key
             ),
-            Some(json!({"operation":"assign_route_key_preassigned","assigned_key": assigned_key})),
+            Some(crate::util::make_error_detail(
+                "assign_route_key_preassigned",
+                json!({"assigned_key": assigned_key}),
+            )),
         ));
     }
     node.routes[method_idx] = assigned_key + 1;
@@ -337,14 +360,20 @@ pub(super) fn prepare_path_segments_standalone(
         return Err(RouterError::new(
             RouterErrorCode::RoutePathEmpty,
             "The provided route path is empty".to_string(),
-            Some(json!({"operation":"prepare_path_segments_standalone","path": path})),
+            Some(crate::util::make_error_detail(
+                "prepare_path_segments_standalone",
+                json!({"path": path}),
+            )),
         ));
     }
     if !path.is_ascii() {
         return Err(RouterError::new(
             RouterErrorCode::RoutePathNotAscii,
             "The route path is not ASCII".to_string(),
-            Some(json!({"operation":"prepare_path_segments_standalone","path": path})),
+            Some(crate::util::make_error_detail(
+                "prepare_path_segments_standalone",
+                json!({"path": path}),
+            )),
         ));
     }
 
@@ -354,14 +383,20 @@ pub(super) fn prepare_path_segments_standalone(
         return Err(RouterError::new(
             RouterErrorCode::RoutePathSyntaxInvalid,
             "Route path contains empty segments (e.g., '//')".to_string(),
-            Some(json!({"operation":"prepare_path_segments_standalone","path": path})),
+            Some(crate::util::make_error_detail(
+                "prepare_path_segments_standalone",
+                json!({"path": path}),
+            )),
         ));
     }
     if !crate::router::path::is_path_character_allowed(&norm) {
         return Err(RouterError::new(
             RouterErrorCode::RoutePathContainsDisallowedCharacters,
             "Route path contains disallowed characters".to_string(),
-            Some(json!({"operation":"prepare_path_segments_standalone","path": path})),
+            Some(crate::util::make_error_detail(
+                "prepare_path_segments_standalone",
+                json!({"path": path}),
+            )),
         ));
     }
 
@@ -374,7 +409,10 @@ pub(super) fn prepare_path_segments_standalone(
         return Err(RouterError::new(
             RouterErrorCode::RoutePathSyntaxInvalid,
             "Route path syntax invalid after normalization".to_string(),
-            Some(json!({"operation":"prepare_path_segments_standalone","path": path})),
+            Some(crate::util::make_error_detail(
+                "prepare_path_segments_standalone",
+                json!({"path": path}),
+            )),
         ));
     }
 
@@ -402,9 +440,10 @@ pub(super) fn prepare_path_segments_standalone(
                     "Pattern length exceeds allowed limits for segment '{}' in path '{}'",
                     seg, path
                 ),
-                Some(
-                    json!({"operation":"prepare_path_segments_standalone","path": path, "segment": seg}),
-                ),
+                Some(crate::util::make_error_detail(
+                    "prepare_path_segments_standalone",
+                    json!({"path": path, "segment": seg}),
+                )),
             ));
         }
 
@@ -414,9 +453,10 @@ pub(super) fn prepare_path_segments_standalone(
                     return Err(RouterError::new(
                         RouterErrorCode::RouteDuplicateParamNameInRoute,
                         format!("Duplicate parameter name '{}' in route '{}'", name, path),
-                        Some(
-                            json!({"operation":"prepare_path_segments_standalone","param": name, "path": path}),
-                        ),
+                        Some(crate::util::make_error_detail(
+                            "prepare_path_segments_standalone",
+                            json!({"param": name, "path": path}),
+                        )),
                     ));
                 }
                 seen_params.insert(name.clone());

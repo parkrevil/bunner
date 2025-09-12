@@ -289,7 +289,14 @@ impl RadixTree {
                 return Err(super::structures::RouterError::new(
                     super::errors::RouterErrorCode::MaxRoutesExceeded,
                     "Maximum number of routes exceeded when reserving bulk keys".to_string(),
-                    Some(serde_json::json!({"operation":"insert_bulk","requested": n})),
+                    Some(crate::util::make_error_detail(
+                        "insert_bulk",
+                        serde_json::json!({
+                            "requested": n,
+                            "currentNextKey": cur,
+                            "maxRoutes": MAX_ROUTES
+                        }),
+                    )),
                 ));
             }
             self.next_route_key.fetch_add(n as u16, Ordering::Relaxed)

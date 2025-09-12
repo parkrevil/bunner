@@ -1,8 +1,8 @@
-use super::{radix_tree::HTTP_METHOD_COUNT, Router};
-use super::path::normalize_path;
-use super::path::is_path_character_allowed;
 use super::errors::RouterErrorCode;
+use super::path::is_path_character_allowed;
+use super::path::normalize_path;
 use super::structures::RouterError;
+use super::{radix_tree::HTTP_METHOD_COUNT, Router};
 use crate::r#enum::HttpMethod;
 use crate::router::pattern::{self, SegmentPattern};
 use std::collections::HashMap;
@@ -54,24 +54,42 @@ impl RouterReadOnly {
         if path.is_empty() {
             return Err(RouterError::new(
                 RouterErrorCode::MatchPathEmpty,
-                "Match path is empty".to_string(),
-                Some(serde_json::json!({ "operation": "find", "path": path, "method": method as u8 })),
+                "Empty path provided to router find()".to_string(),
+                Some(crate::util::make_error_detail(
+                    "find",
+                    serde_json::json!({
+                        "path": path,
+                        "method": method as u8
+                    }),
+                )),
             ));
         }
 
         if !path.is_ascii() {
             return Err(RouterError::new(
                 RouterErrorCode::MatchPathNotAscii,
-                "Match path contains non-ascii characters".to_string(),
-                Some(serde_json::json!({ "operation": "find", "path": path, "method": method as u8 })),
+                "Path contains non-ASCII characters".to_string(),
+                Some(crate::util::make_error_detail(
+                    "find",
+                    serde_json::json!({
+                        "path": path,
+                        "method": method as u8
+                    }),
+                )),
             ));
         }
 
         if !is_path_character_allowed(path) {
             return Err(RouterError::new(
                 RouterErrorCode::MatchPathContainsDisallowedCharacters,
-                "Match path contains disallowed characters".to_string(),
-                Some(serde_json::json!({ "operation": "find", "path": path, "method": method as u8 })),
+                "Path contains disallowed characters".to_string(),
+                Some(crate::util::make_error_detail(
+                    "find",
+                    serde_json::json!({
+                        "path": path,
+                        "method": method as u8
+                    }),
+                )),
             ));
         }
 
@@ -81,7 +99,13 @@ impl RouterReadOnly {
             return Err(RouterError::new(
                 RouterErrorCode::MatchPathContainsDisallowedCharacters,
                 "Normalized path contains disallowed characters".to_string(),
-                Some(serde_json::json!({ "operation": "find", "path": normalized, "method": method as u8 })),
+                Some(crate::util::make_error_detail(
+                    "find",
+                    serde_json::json!({
+                        "path": normalized,
+                        "method": method as u8
+                    }),
+                )),
             ));
         }
 
@@ -90,16 +114,19 @@ impl RouterReadOnly {
         }
 
         let mut out_params: Vec<(String, String)> = Vec::new();
-        if let Some((rk, params)) = self
-            .root
-            .find_from(method, &normalized, 0, &mut out_params)
-        {
+        if let Some((rk, params)) = self.root.find_from(method, &normalized, 0, &mut out_params) {
             Ok((rk, params))
         } else {
             Err(RouterError::new(
                 RouterErrorCode::MatchNotFound,
-                "No matching route was found".to_string(),
-                Some(serde_json::json!({ "operation": "find", "path": normalized, "method": method as u8 })),
+                "No route matched for given method and path".to_string(),
+                Some(crate::util::make_error_detail(
+                    "find",
+                    serde_json::json!({
+                        "path": normalized,
+                        "method": method as u8
+                    }),
+                )),
             ))
         }
     }

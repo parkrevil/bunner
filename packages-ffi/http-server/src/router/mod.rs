@@ -41,7 +41,6 @@ impl Router {
         self.radix_tree.insert_bulk(entries)
     }
 
-
     pub fn finalize(&mut self) {
         self.radix_tree.finalize();
     }

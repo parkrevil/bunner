@@ -30,7 +30,6 @@ impl Interner {
         id
     }
 
-
     #[cfg(any(feature = "production", feature = "test"))]
     #[inline]
     pub fn runtime_cleanup(&self) {

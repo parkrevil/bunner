@@ -1,7 +1,10 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::{r#enum::{HttpMethod, HttpStatusCode}, errors::HttpServerErrorCode};
+use crate::{
+    errors::HttpServerErrorCode,
+    r#enum::{HttpMethod, HttpStatusCode},
+};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AddRouteResult {
@@ -91,7 +94,8 @@ impl HttpServerError {
     pub fn merge_detail(&mut self, new_detail: serde_json::Value) {
         if let Some(existing_detail) = self.detail.as_mut() {
             if let serde_json::Value::Object(existing_map) = existing_detail
-                && let serde_json::Value::Object(new_map) = new_detail {
+                && let serde_json::Value::Object(new_map) = new_detail
+            {
                 existing_map.extend(new_map);
             }
         } else {

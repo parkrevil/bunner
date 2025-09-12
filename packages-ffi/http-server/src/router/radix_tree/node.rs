@@ -119,7 +119,6 @@ impl RadixTreeNode {
         self.method_mask = mask;
     }
 
-
     /// Same as `descend_static_mut` but uses provided allocator for child creation.
     pub(super) fn descend_static_mut_with_alloc<F>(
         &mut self,
@@ -148,7 +147,6 @@ impl RadixTreeNode {
             .or_insert_with(alloc)
             .as_mut()
     }
-
 
     #[cfg(feature = "test")]
     pub fn get_child_for_test(&self, key: &str) -> Option<&RadixTreeNode> {
