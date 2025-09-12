@@ -1,17 +1,11 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::r#enum::{HttpMethod, HttpStatusCode};
+use crate::{r#enum::{HttpMethod, HttpStatusCode}, errors::HttpServerErrorCode};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AddRouteResult {
     pub key: u16,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct FfiError {
-    pub code: u16,
-    pub message: Option<String>,
 }
 
 // Payload/result for async handle_request
@@ -60,20 +54,49 @@ pub struct HandleRequestOutput {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct BunnerErrorData {
+pub struct HttpServerError {
     pub code: u16,
     pub error: String,
     pub description: String,
     pub detail: Option<serde_json::Value>,
 }
 
-impl From<crate::router::RouterError> for BunnerErrorData {
+impl From<crate::router::RouterError> for HttpServerError {
     fn from(router_error: crate::router::RouterError) -> Self {
-        BunnerErrorData {
-            code: router_error.code as u16,
+        HttpServerError {
+            code: router_error.code.code(),
             error: router_error.error.clone(),
             description: router_error.description.clone(),
             detail: router_error.detail.clone(),
+        }
+    }
+}
+
+impl HttpServerError {
+    pub fn new(
+        code: HttpServerErrorCode,
+        description: String,
+        detail: Option<serde_json::Value>,
+    ) -> Self {
+        HttpServerError {
+            error: code.as_str().to_string(),
+            code: code.code(),
+            description,
+            detail,
+        }
+    }
+}
+
+impl HttpServerError {
+    pub fn merge_detail(&mut self, new_detail: serde_json::Value) {
+        if let Some(existing_detail) = self.detail.as_mut() {
+            if let serde_json::Value::Object(existing_map) = existing_detail {
+                if let serde_json::Value::Object(new_map) = new_detail {
+                    existing_map.extend(new_map);
+                }
+            }
+        } else {
+            self.detail = Some(new_detail);
         }
     }
 }

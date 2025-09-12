@@ -25,14 +25,3 @@ impl RouterError {
         }
     }
 }
-
-impl From<RouterErrorCode> for RouterError {
-    fn from(code: RouterErrorCode) -> Self {
-        // Fallback conversion when a contextual description is not provided at the call site.
-        RouterError::new(
-            code,
-            format!("Router error: {}", code.as_str()),
-            Some(serde_json::json!({"operation":"unknown","code": code as u16})),
-        )
-    }
-}

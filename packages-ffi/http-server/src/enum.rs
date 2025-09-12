@@ -1,4 +1,4 @@
-use crate::errors::HttpServerError;
+use crate::errors::HttpServerErrorCode;
 use serde::de::{Deserialize, Deserializer};
 use serde::Serializer;
 
@@ -16,7 +16,7 @@ pub enum HttpMethod {
 
 impl HttpMethod {
     #[inline(always)]
-    pub fn from_u8(n: u8) -> Result<Self, HttpServerError> {
+    pub fn from_u8(n: u8) -> Result<Self, HttpServerErrorCode> {
         match n {
             0 => Ok(Self::Get),
             1 => Ok(Self::Post),
@@ -25,7 +25,7 @@ impl HttpMethod {
             4 => Ok(Self::Delete),
             5 => Ok(Self::Options),
             6 => Ok(Self::Head),
-            _ => Err(HttpServerError::InvalidHttpMethod),
+            _ => Err(HttpServerErrorCode::InvalidHttpMethod),
         }
     }
 }
@@ -60,7 +60,7 @@ impl serde::Serialize for HttpMethod {
 }
 
 impl std::str::FromStr for HttpMethod {
-    type Err = HttpServerError;
+    type Err = HttpServerErrorCode;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
@@ -71,7 +71,7 @@ impl std::str::FromStr for HttpMethod {
             "PATCH" => Ok(Self::Patch),
             "HEAD" => Ok(Self::Head),
             "OPTIONS" => Ok(Self::Options),
-            _ => Err(HttpServerError::InvalidHttpMethod),
+            _ => Err(HttpServerErrorCode::InvalidHttpMethod),
         }
     }
 }

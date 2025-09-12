@@ -1,5 +1,5 @@
 use bunner_http_server::structure::{AddRouteResult, HandleRequestOutput};
-use bunner_http_server::errors::HttpServerError;
+use bunner_http_server::errors::HttpServerErrorCode;
 use bunner_http_server::router::RouterErrorCode;
 use bunner_http_server::*;
 use serde::{Deserialize, Serialize};
@@ -75,7 +75,7 @@ mod lifecycle_management {
         let res: FfiError = serde_json::from_str(&out).unwrap();
         assert_eq!(
             res.code,
-            HttpServerError::HandleIsNull.code()
+            HttpServerErrorCode::HandleIsNull.code()
         );
     }
 }
@@ -156,7 +156,7 @@ mod route_management {
             let res: Result<Vec<u16>, _> = from_ptr(add_routes(handle, routes_cstr.as_ptr()));
             assert_eq!(
                 res.unwrap_err().code,
-                HttpServerError::InvalidHttpMethod.code(),
+                HttpServerErrorCode::InvalidHttpMethod.code(),
                 "Should return invalid http method error"
             );
         }
@@ -171,7 +171,7 @@ mod route_management {
             let res: Result<Vec<u16>, _> = from_ptr(add_routes(handle, routes_cstr.as_ptr()));
             assert_eq!(
                 res.unwrap_err().code,
-                HttpServerError::InvalidJsonString.code(),
+                HttpServerErrorCode::InvalidJsonString.code(),
                 "Should return invalid json error"
             );
         }
@@ -270,7 +270,7 @@ mod request_processing {
         let res: FfiError = serde_json::from_str(&out).unwrap();
         assert_eq!(
             res.code,
-            HttpServerError::InvalidRequestId.code()
+            HttpServerErrorCode::InvalidRequestId.code()
         );
         unsafe { destroy(handle) };
     }
@@ -300,7 +300,7 @@ mod request_processing {
         let res: FfiError = serde_json::from_str(&out).unwrap();
         assert_eq!(
             res.code,
-            HttpServerError::QueueFull.code()
+            HttpServerErrorCode::QueueFull.code()
         );
 
         unsafe { destroy(handle) };
@@ -329,7 +329,7 @@ mod request_processing {
             let res: FfiError = serde_json::from_str(&rx.recv().unwrap()).unwrap();
             assert_eq!(
                 res.code,
-                HttpServerError::RouteNotSealed.code(),
+                HttpServerErrorCode::RouteNotSealed.code(),
                 "Should return RouteNotSealed error"
             );
         }
@@ -378,7 +378,7 @@ mod request_processing {
             let res: FfiError = serde_json::from_str(&rx.recv().unwrap()).unwrap();
             assert_eq!(
                 res.code,
-                HttpServerError::InvalidPayload.code(),
+                HttpServerErrorCode::InvalidPayload.code(),
                 "Should return InvalidPayload error"
             );
         }
@@ -398,7 +398,7 @@ mod request_processing {
         let res: FfiError = serde_json::from_str(&out).unwrap();
         assert_eq!(
             res.code,
-            HttpServerError::InvalidRequestId.code()
+            HttpServerErrorCode::InvalidRequestId.code()
         );
         unsafe { destroy(handle) };
     }

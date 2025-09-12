@@ -2,7 +2,7 @@ use bunner_http_server::request_handler;
 use bunner_http_server::r#enum::HttpStatusCode;
 use bunner_http_server::router::{Router, RouterOptions, RouterReadOnly};
 use bunner_http_server::structure::HandleRequestOutput;
-use bunner_http_server::errors::HttpServerError;
+use bunner_http_server::errors::HttpServerErrorCode;
 use bunner_http_server::router::RouterErrorCode;
 use serde_json::json;
 use std::ffi::{c_char, CStr};
@@ -231,7 +231,7 @@ mod error_handling {
         let code = res.get("code").unwrap().as_u64().unwrap() as u16;
         assert_eq!(
             code,
-            HttpServerError::InvalidJsonString.code()
+            HttpServerErrorCode::InvalidJsonString.code()
         );
     }
 
@@ -241,7 +241,7 @@ mod error_handling {
         let code = run_test_and_get_error_code(payload);
         assert_eq!(
             code,
-            HttpServerError::InvalidJsonString.code()
+            HttpServerErrorCode::InvalidJsonString.code()
         );
     }
 

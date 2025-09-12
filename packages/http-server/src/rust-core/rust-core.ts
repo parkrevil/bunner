@@ -72,12 +72,18 @@ export class RustCore extends BaseRustCore<
 
     this.handleRequestCb = new JSCallback(
       (requestIdPtr: Pointer, routeKey: FFIType.u16, resultPtr: Pointer) => {
-        console.log('routeKey', routeKey);
-
         let requestId: string | undefined;
         let entry: JSCallbackEntry<HandleRequestResult> | undefined;
 
         try {
+          if (!requestIdPtr) {
+            throw new Error('Request ID pointer is null');
+          }
+
+          if (!resultPtr) {
+            throw new Error('Result pointer is null');
+          }
+
           requestId = pointerToString(requestIdPtr);
 
           if (requestIdPtr) {

@@ -6,12 +6,31 @@ pub mod router;
 pub mod structure;
 mod thread_pool;
 pub mod util;
+pub mod helpers;
+
+use std::{
+    ffi::{CStr, CString},
+    os::raw::c_char,
+    ptr,
+    sync::Arc,
+};
+use crate::errors::HttpServerErrorCode;
+use crate::structure::{AddRouteResult, HttpServerError};
+use crate::util::{make_ffi_bunner_error_result, serialize_to_cstring};
+use crate::r#enum::HttpMethod;
+use crate::util::make_ffi_result;
+use crate::helpers::callback_handle_request;
+use serde::Serialize;
+use thread_pool::submit_job;
+
+
+#[cfg(feature = "test")]
+use thread_pool::shutdown_pool;
 
 #[cfg(feature = "test")]
 pub mod thread_pool_test_support {
     use std::sync::mpsc::TrySendError;
 
-    /// Submit a job to the internal thread pool without leaking internal types.
     pub fn submit<F>(job: F) -> Result<(), &'static str>
     where
         F: FnOnce() + Send + 'static,
@@ -23,57 +42,50 @@ pub mod thread_pool_test_support {
         }
     }
 
-    /// Shutdown the internal thread pool.
     pub fn shutdown() {
         crate::thread_pool::shutdown_pool();
     }
 
-    /// Force the global thread pool to behave as if its queue is full (test-only).
     pub fn set_force_full(value: bool) {
         crate::thread_pool::set_force_full(value);
     }
 }
-
-use std::{
-    ffi::{CStr, CString},
-    os::raw::c_char,
-    sync::Arc,
-};
-
-use crate::errors::HttpServerError;
-use crate::structure::AddRouteResult;
-use crate::util::{make_ffi_bunner_error_result, make_ffi_error_result};
-use crate::{r#enum::HttpMethod, util::make_ffi_result};
-use thread_pool::shutdown_pool;
-use thread_pool::submit_job;
 
 pub type HttpServerHandle = *mut HttpServer;
 
 #[repr(C)]
 pub struct HttpServer {
     router: parking_lot::RwLock<router::Router>,
-    readonly: Arc<parking_lot::RwLock<Option<Arc<router::RouterReadOnly>>>>,
+    router_readonly: Arc<parking_lot::RwLock<Option<Arc<router::RouterReadOnly>>>>,
 }
 
-// (internal helpers removed; logic lives in request_handler)
-
-#[inline(always)]
-fn callback_handle_request(
-    cb: extern "C" fn(*const c_char, u16, *mut c_char),
-    request_id: &str,
-    route_key: u16,
-    result_ptr: *mut c_char,
-) {
-    let request_id_c = CString::new(request_id).unwrap();
-    cb(request_id_c.as_ptr(), route_key, result_ptr);
-    std::mem::forget(request_id_c);
+fn make_router_sealed_error(operation: &str, extra_detail: serde_json::Value, bulk: bool) -> HttpServerError {
+    let mut detail = serde_json::json!({
+        "operation": operation,
+        "reason": "router_sealed"
+    });
+    if let serde_json::Value::Object(ref mut d) = detail {
+        if let serde_json::Value::Object(extra) = extra_detail {
+            d.extend(extra);
+        }
+    }
+    HttpServerError::new(
+        HttpServerErrorCode::RouterSealedCannotInsert,
+        if bulk {
+            "Router is sealed; cannot insert bulk routes".to_string()
+        } else {
+            "Router is sealed; cannot insert routes".to_string()
+        },
+        Some(detail),
+    )
 }
 
+/// Initializes a new HttpServer instance and returns its handle.
 #[unsafe(no_mangle)]
 pub extern "C" fn init() -> HttpServerHandle {
     let server = Box::new(HttpServer {
         router: parking_lot::RwLock::new(router::Router::new(None)),
-        readonly: Arc::new(parking_lot::RwLock::new(None)),
+        router_readonly: Arc::new(parking_lot::RwLock::new(None)),
     });
 
     Box::into_raw(server)
@@ -86,16 +98,18 @@ pub extern "C" fn init() -> HttpServerHandle {
 /// After calling this function, the handle is dangling and must not be used again.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn destroy(handle: HttpServerHandle) {
-    // Allow destroying a null handle without panicking
     if handle.is_null() {
-        // Ensure global worker pool is shutdown on destroy as per requirement
+        #[cfg(feature = "test")]
         shutdown_pool();
+
         return;
     }
-
+    
     let http_server = unsafe { Box::from_raw(handle) };
+
     drop(http_server);
-    // Ensure global worker pool is shutdown on destroy as per requirement
+
+    #[cfg(feature = "test")]
     shutdown_pool();
 }
 
@@ -111,38 +125,43 @@ pub unsafe extern "C" fn add_route(
     path: *const c_char,
 ) -> *mut c_char {
     if handle.is_null() {
-        return make_ffi_error_result(HttpServerError::HandleIsNull, None);
+        let http_error = HttpServerError::new(
+            HttpServerErrorCode::HandleIsNull,
+            "Handle is null".to_string(),
+            Some(serde_json::json!({"operation": "add_route"}))
+        );
+        return serialize_to_cstring(&http_error);
     }
 
     let http_method = match HttpMethod::from_u8(http_method) {
         Ok(m) => m,
-        Err(e) => return make_ffi_error_result(e, None),
+        Err(e) => return serialize_to_cstring(&HttpServerError::new(
+            e,
+            format!("Error occurred: {:?}", e),
+            None,
+        )),
     };
     let http_server = unsafe { &*handle };
     let mut guard = http_server.router.write();
     let router_mut = &mut *guard;
     let path_str = unsafe { CStr::from_ptr(path) }.to_string_lossy();
-    if http_server.readonly.read().as_ref().is_some() {
-        let detail =
-            serde_json::json!({"operation":"add_route","reason":"router_sealed","path": path_str});
-        let be = crate::structure::BunnerErrorData {
-            code: crate::router::RouterErrorCode::RouterSealedCannotInsert.into(),
-            error: crate::router::RouterErrorCode::RouterSealedCannotInsert
-                .as_str()
-                .to_string(),
-            description: "Router is sealed; cannot insert routes".to_string(),
-            detail: Some(detail),
-        };
-        return make_ffi_bunner_error_result(&be);
+
+    if http_server.router_readonly.read().as_ref().is_some() {
+        let detail = serde_json::json!({ "path": path_str });
+        let e = make_router_sealed_error("add_route", detail, false);
+        return make_ffi_bunner_error_result(&e);
     }
 
     match router_mut.add(http_method, &path_str) {
         Ok(k) => {
-            let result = AddRouteResult { key: k };
-            make_ffi_result(&result)
+            make_ffi_result(&AddRouteResult { key: k })
         }
         Err(e) => {
-            let bunner_error = crate::structure::BunnerErrorData::from(e);
+            let mut bunner_error = HttpServerError::from(e);
+            let detail = serde_json::json!({"operation": "add_route", "path": path_str});
+
+            bunner_error.merge_detail(detail);
+
             make_ffi_bunner_error_result(&bunner_error)
         }
     }
@@ -162,13 +181,23 @@ pub unsafe extern "C" fn add_routes(
     routes_ptr: *const c_char,
 ) -> *mut c_char {
     if handle.is_null() {
-        return make_ffi_error_result(HttpServerError::HandleIsNull, None);
+        let http_error = HttpServerError::new(
+            HttpServerErrorCode::HandleIsNull,
+            "Handle is null".to_string(),
+            Some(serde_json::json!({"operation": "add_routes"}))
+        );
+        return serialize_to_cstring(&http_error);
     }
 
     let routes_str = match unsafe { CStr::from_ptr(routes_ptr).to_str() } {
         Ok(s) => s,
         Err(_) => {
-            return make_ffi_error_result(HttpServerError::InvalidJsonString, None);
+            let http_error = HttpServerError::new(
+                HttpServerErrorCode::InvalidJsonString,
+                "Invalid JSON string".to_string(),
+                Some(serde_json::json!({"operation": "add_routes"}))
+            );
+            return serialize_to_cstring(&http_error);
         }
     };
 
@@ -179,9 +208,19 @@ pub unsafe extern "C" fn add_routes(
                 let msg = e.to_string();
 
                 if msg.contains("InvalidHttpMethod") {
-                    return make_ffi_error_result(HttpServerError::InvalidHttpMethod, None);
+                    let http_error = HttpServerError::new(
+                        HttpServerErrorCode::InvalidHttpMethod,
+                        "Invalid HTTP method".to_string(),
+                        Some(serde_json::json!({"operation": "add_routes"}))
+                    );
+                    return serialize_to_cstring(&http_error);
                 } else {
-                    return make_ffi_error_result(HttpServerError::InvalidJsonString, None);
+                    let http_error = HttpServerError::new(
+                        HttpServerErrorCode::InvalidJsonString,
+                        "Invalid JSON string".to_string(),
+                        Some(serde_json::json!({"operation": "add_routes"}))
+                    );
+                    return serialize_to_cstring(&http_error);
                 }
             }
         };
@@ -189,32 +228,26 @@ pub unsafe extern "C" fn add_routes(
     let http_server = unsafe { &*handle };
     let mut guard = http_server.router.write();
     let router_mut = &mut *guard;
-
     let routes_count = routes.len();
-    if http_server.readonly.read().as_ref().is_some() {
-        let detail = serde_json::json!({"operation":"add_routes","reason":"router_sealed","count": routes_count});
-        let be = crate::structure::BunnerErrorData {
-            code: crate::router::RouterErrorCode::RouterSealedCannotInsert.into(),
-            error: crate::router::RouterErrorCode::RouterSealedCannotInsert
-                .as_str()
-                .to_string(),
-            description: "Router is sealed; cannot insert bulk routes".to_string(),
-            detail: Some(detail),
-        };
+
+    if http_server.router_readonly.read().as_ref().is_some() {
+        let detail = serde_json::json!({ "count": routes_count });
+        let be = make_router_sealed_error("add_routes", detail, true);
         return make_ffi_bunner_error_result(&be);
     }
+
     match router_mut.add_bulk(routes) {
         Ok(r) => make_ffi_result(r),
         Err(e) => {
-            // include payload size and a small snippet for context
-            let detail = serde_json::json!({"operation": "add_routes", "count": routes_count});
-            let be = crate::structure::BunnerErrorData {
-                code: (e.code as u16),
-                error: e.error.clone(),
-                description: format!("Failed to add bulk routes: {}", e.description),
-                detail: Some(detail),
-            };
-            make_ffi_bunner_error_result(&be)
+            let mut bunner_error = HttpServerError::from(e);
+            let detail = serde_json::json!({
+              "operation": "add_routes",
+              "count": routes_count
+            });
+
+            bunner_error.merge_detail(detail);
+
+            make_ffi_bunner_error_result(&bunner_error)
         }
     }
 }
@@ -228,27 +261,36 @@ pub unsafe extern "C" fn add_routes(
 pub unsafe extern "C" fn handle_request(
     handle: HttpServerHandle,
     request_id_ptr: *const c_char,
-    paylaod_ptr: *const c_char,
+    payload_ptr: *const c_char,
     cb: extern "C" fn(*const c_char, u16, *mut c_char),
 ) {
     if handle.is_null() {
+        let http_error = HttpServerError::new(
+            HttpServerErrorCode::HandleIsNull,
+            "Handle is null".to_string(),
+            Some(serde_json::json!({"operation": "handle_request"}))
+        );
         callback_handle_request(
             cb,
-            "",
+            None,
             0,
-            make_ffi_error_result(HttpServerError::HandleIsNull, None),
+            &http_error,
         );
-
         return;
     }
 
     // If request_id is null, return InvalidRequestId error
     if request_id_ptr.is_null() {
+        let http_error = HttpServerError::new(
+            HttpServerErrorCode::InvalidRequestId,
+            "Invalid request id".to_string(),
+            Some(serde_json::json!({"operation": "handle_request"}))
+        );
         callback_handle_request(
             cb,
-            "",
+            None,
             0,
-            make_ffi_error_result(HttpServerError::InvalidRequestId, None),
+            &http_error,
         );
         return;
     }
@@ -257,11 +299,16 @@ pub unsafe extern "C" fn handle_request(
         match unsafe { CStr::from_ptr(request_id_ptr).to_str() } {
             Ok(s) => s,
             Err(_) => {
+                let http_error = HttpServerError::new(
+                    HttpServerErrorCode::InvalidRequestId,
+                    "Invalid request id".to_string(),
+                    Some(serde_json::json!({"operation": "handle_request"}))
+                );
                 callback_handle_request(
                     cb,
-                    "",
+                    None,
                     0,
-                    make_ffi_error_result(HttpServerError::InvalidRequestId, None),
+                    &http_error,
                 );
                 return;
             }
@@ -269,24 +316,34 @@ pub unsafe extern "C" fn handle_request(
     };
 
     // If payload pointer is null, return InvalidPayload error
-    if paylaod_ptr.is_null() {
+    if payload_ptr.is_null() {
+        let http_error = HttpServerError::new(
+            HttpServerErrorCode::InvalidPayload,
+            "Invalid payload".to_string(),
+            Some(serde_json::json!({"operation": "handle_request"}))
+        );
         callback_handle_request(
             cb,
-            request_id_str,
+            Some(&request_id_str),
             0,
-            make_ffi_error_result(HttpServerError::InvalidPayload, None),
+            &http_error,
         );
         return;
     }
 
-    let payload_str = match unsafe { CStr::from_ptr(paylaod_ptr).to_str() } {
+    let payload_str = match unsafe { CStr::from_ptr(payload_ptr).to_str() } {
         Ok(s) => s,
         Err(_) => {
+            let http_error = HttpServerError::new(
+                HttpServerErrorCode::InvalidJsonString,
+                "Invalid JSON string".to_string(),
+                Some(serde_json::json!({"operation": "handle_request"}))
+            );
             callback_handle_request(
                 cb,
-                request_id_str,
+                Some(&request_id_str),
                 0,
-                make_ffi_error_result(HttpServerError::InvalidJsonString, None),
+                &http_error,
             );
             return;
         }
@@ -295,18 +352,25 @@ pub unsafe extern "C" fn handle_request(
     let payload_owned: String = payload_str.to_owned();
     let http_server = unsafe { &*handle };
     let ro_opt = {
-        let ro_guard = http_server.readonly.read();
+        let ro_guard = http_server.router_readonly.read();
 
         ro_guard.as_ref().map(Arc::clone)
     };
 
     if ro_opt.is_none() {
+        let http_error = HttpServerError::new(
+            HttpServerErrorCode::RouteNotSealed,
+            "Route not sealed".to_string(),
+            Some(serde_json::json!({"operation": "handle_request"}))
+        );
+
         callback_handle_request(
             cb,
-            request_id_str,
+            Some(&request_id_str),
             0,
-            make_ffi_error_result(HttpServerError::RouteNotSealed, None),
+            &http_error,
         );
+
         return;
     }
 
@@ -317,17 +381,23 @@ pub unsafe extern "C" fn handle_request(
     let (done_tx, done_rx) = std::sync::mpsc::channel::<()>();
     match submit_job(Box::new(move || {
         request_handler::process_job(cb, request_id_owned, payload_owned_for_job, ro);
+
         let _ = done_tx.send(());
     })) {
         Ok(()) => {
             let _ = done_rx.recv();
         }
         Err(_e) => {
+            let http_error = HttpServerError::new(
+                HttpServerErrorCode::QueueFull,
+                "Queue is full".to_string(),
+                Some(serde_json::json!({"operation": "handle_request"}))
+            );
             callback_handle_request(
                 cb,
-                request_id_str,
+                Some(&request_id_str),
                 0,
-                make_ffi_error_result(HttpServerError::QueueFull, None),
+                &http_error,
             );
         }
     }
@@ -342,15 +412,19 @@ pub unsafe extern "C" fn seal_routes(handle: HttpServerHandle) {
     let http_server = unsafe { &*handle };
     {
         let mut guard = http_server.router.write();
+
         guard.finalize();
+
         // Build read-only after finalize
         let ro = guard.build_readonly();
         {
-            let mut s = http_server.readonly.write();
+            let mut s = http_server.router_readonly.write();
             *s = Some(Arc::new(ro));
         }
+
         // Drop the builder router by replacing with a minimal empty sealed router
         *guard = router::Router::new(None);
+
         guard.finalize();
     }
 }
