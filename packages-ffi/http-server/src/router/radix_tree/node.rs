@@ -49,8 +49,8 @@ pub(super) type StaticMapIdx = FastHashMap<Box<str>, super::NodeBox>;
 #[derive(Debug, Default)]
 pub struct RadixTreeNode {
     // optimize small number of siblings before promoting to map
-    pub(crate) static_keys: SmallVec<[Box<str>; 16]>,
-    pub(crate) static_vals: SmallVec<[NodeBox; 16]>,
+    pub(crate) static_keys: SmallVec<[Box<str>; 32]>,
+    pub(crate) static_vals: SmallVec<[NodeBox; 32]>,
     // index-based mirror for arena-backed nodes (built during sealing)
     pub(crate) static_vals_idx: SmallVec<[super::NodeBox; 16]>,
     // interned ids aligned with static_keys
@@ -63,18 +63,18 @@ pub struct RadixTreeNode {
     pub(super) static_hash_seed: u64,
     pub(super) static_hash_table: SmallVec<[i32; 32]>, // stores index into static_vals_idx/static_keys, -1 means empty
     // SoA: separate pattern specs and node handles
-    pub(crate) patterns: SmallVec<[SegmentPattern; 4]>,
-    pub(crate) pattern_nodes: SmallVec<[NodeBox; 4]>,
+    pub(crate) patterns: SmallVec<[SegmentPattern; 8]>,
+    pub(crate) pattern_nodes: SmallVec<[NodeBox; 8]>,
     // ordered view indices for fast iteration
-    pub(super) pattern_children_idx: SmallVec<[usize; 16]>,
+    pub(super) pattern_children_idx: SmallVec<[usize; 32]>,
     // first literal -> indices in pattern_children (to reduce regex calls)
-    pub(super) pattern_first_literal: FastHashMap<String, SmallVec<[u16; 16]>>,
+    pub(super) pattern_first_literal: FastHashMap<String, SmallVec<[u16; 32]>>,
     // first literal head byte -> indices (fast prefix filtering)
-    pub(super) pattern_first_lit_head: FastHashMap<u8, SmallVec<[u16; 16]>>,
+    pub(super) pattern_first_lit_head: FastHashMap<u8, SmallVec<[u16; 32]>>,
     // param-first patterns (indices) for quick fallback without full scan
-    pub(super) pattern_param_first: SmallVec<[u16; 16]>,
+    pub(super) pattern_param_first: SmallVec<[u16; 32]>,
     // 압축된 패턴 메타데이터 (기존 3개 SmallVec을 1개로 통합)
-    pub(super) pattern_meta: SmallVec<[PatternMeta; 4]>,
+    pub(super) pattern_meta: SmallVec<[PatternMeta; 8]>,
     pub(crate) routes: [u16; HTTP_METHOD_COUNT],
     pub(crate) wildcard_routes: [u16; HTTP_METHOD_COUNT],
     pub(super) flags: NodeFlags,

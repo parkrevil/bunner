@@ -2,6 +2,8 @@ use crate::enums::HttpStatusCode;
 use crate::middleware::chain::Middleware;
 use crate::structure::{BunnerRequest, BunnerResponse, HandleRequestPayload};
 use serde_json::Value as JsonValue;
+#[cfg(feature = "simd-json")]
+use simd_json as simdjson;
 
 pub struct BodyParser;
 
@@ -27,11 +29,22 @@ impl Middleware for BodyParser {
         let is_json = req
             .headers
             .get("content-type")
-            .map(|ct| ct.split(';').next().unwrap_or("").trim().eq_ignore_ascii_case("application/json"))
+            .map(|ct| {
+                ct.split(';')
+                    .next()
+                    .unwrap_or("")
+                    .trim()
+                    .eq_ignore_ascii_case("application/json")
+            })
             .unwrap_or(false);
 
         if is_json {
-            match serde_json::from_str::<JsonValue>(body) {
+            #[cfg(feature = "simd-json")]
+            let parsed: Result<JsonValue, _> = simdjson::from_str(body);
+            #[cfg(not(feature = "simd-json"))]
+            let parsed: Result<JsonValue, _> = serde_json::from_str(body);
+
+            match parsed {
                 Ok(v) => req.body = Some(v),
                 Err(_) => {
                     res.http_status = HttpStatusCode::UnsupportedMediaType;

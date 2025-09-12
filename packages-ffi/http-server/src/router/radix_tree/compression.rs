@@ -34,14 +34,14 @@ fn compress_node(n: &mut RadixTreeNode) {
             return;
         }
         let (k, c) = n.static_children.drain().next().unwrap();
-        (k, c)
+        (k.to_string(), c)
     } else if !n.static_keys.is_empty() {
         if n.static_keys.len() != 1 {
             return;
         }
         let k = n.static_keys.pop().unwrap();
         let c = n.static_vals.pop().unwrap();
-        (k, c)
+        (k.to_string(), c)
     } else {
         return;
     };

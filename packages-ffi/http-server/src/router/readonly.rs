@@ -1,7 +1,7 @@
 use super::errors::RouterErrorCode;
 use super::path::normalize_and_validate_path;
 use super::structures::RouterError;
-use super::{radix_tree::HTTP_METHOD_COUNT, Router};
+use super::{Router, radix_tree::HTTP_METHOD_COUNT};
 use crate::enums::HttpMethod;
 use crate::router::pattern::{self, SegmentPattern};
 use hashbrown::HashMap as FastHashMap;
@@ -27,13 +27,8 @@ impl RouterReadOnly {
     pub fn from_router(router: &Router) -> Self {
         let mut maps: [FastHashMap<Box<str>, u16>; HTTP_METHOD_COUNT] = Default::default();
         for (i, out_map) in maps.iter_mut().enumerate().take(HTTP_METHOD_COUNT) {
-            let mut out: FastHashMap<Box<str>, u16> = FastHashMap::with_capacity(
-                router.radix_tree.static_route_full_mapping[i].len(),
-            );
-            for (k, v) in router.radix_tree.static_route_full_mapping[i].iter() {
-                out.insert(k.clone().into_boxed_str(), *v);
-            }
-            *out_map = out;
+            // 직접 clone하는 것이 더 명확하고 효율적
+            *out_map = router.radix_tree.static_route_full_mapping[i].clone();
         }
 
         let root = ReadOnlyNode::from_node(&router.radix_tree.root_node);
@@ -59,25 +54,17 @@ impl RouterReadOnly {
         tracing::event!(tracing::Level::TRACE, operation="find", method=?method, path=%path);
         let normalized = match normalize_and_validate_path(path) {
             Ok(p) => p,
-            Err(_) => {
-                let code = if path.is_empty() {
-                    RouterErrorCode::MatchPathEmpty
-                } else if !path.is_ascii() {
-                    RouterErrorCode::MatchPathNotAscii
-                } else {
-                    RouterErrorCode::MatchPathContainsDisallowedCharacters
-                };
-                return Err(RouterError::new(
-                    code,
-                    "Invalid path".to_string(),
-                    Some(crate::util::make_error_detail(
-                        "find",
-                        serde_json::json!({
-                            "path": path,
-                            "method": method as u8
-                        }),
-                    )),
-                ));
+            Err(mut err) => {
+                // Update the error context for route matching operation
+                err.stage = "route_matching".to_string();
+                err.cause = "routing".to_string();
+                if let Some(ref mut extra) = err.extra {
+                    if let Some(obj) = extra.as_object_mut() {
+                        obj.insert("method".to_string(), serde_json::json!(method as u8));
+                        obj.insert("operation".to_string(), serde_json::json!("route_matching"));
+                    }
+                }
+                return Err(err);
             }
         };
 
@@ -97,14 +84,15 @@ impl RouterReadOnly {
         } else {
             Err(RouterError::new(
                 RouterErrorCode::MatchNotFound,
+                "router",
+                "route_matching",
+                "routing",
                 "No route matched for given method and path".to_string(),
-                Some(crate::util::make_error_detail(
-                    "find",
-                    serde_json::json!({
+                Some(serde_json::json!({
                         "path": normalized,
-                        "method": method as u8
-                    }),
-                )),
+                        "method": method as u8,
+                        "operation": "route_lookup"
+                    })),
             ))
         }
     }
@@ -137,7 +125,10 @@ impl ReadOnlyNode {
                 static_children.insert(k.clone(), ReadOnlyNode::from_node(v.as_ref()));
             }
             for (i, key) in n.static_keys.iter().enumerate() {
-                static_children.insert(key.clone(), ReadOnlyNode::from_node(n.static_vals[i].as_ref()));
+                static_children.insert(
+                    key.clone(),
+                    ReadOnlyNode::from_node(n.static_vals[i].as_ref()),
+                );
             }
         }
 
@@ -220,7 +211,11 @@ impl ReadOnlyNode {
         }
 
         let start = current_i;
-        let next_slash = s[start..].find('/').map_or(s.len(), |pos| start + pos);
+        let next_slash = s[start..]
+            .as_bytes()
+            .iter()
+            .position(|&b| b == b'/')
+            .map_or(s.len(), |pos| start + pos);
         let seg = &s[start..next_slash];
 
         if let Some(next_node) = self.static_children.get(seg)

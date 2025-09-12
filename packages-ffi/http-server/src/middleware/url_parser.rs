@@ -1,60 +1,11 @@
 use crate::enums::HttpStatusCode;
 use crate::middleware::chain::Middleware;
 use crate::structure::{BunnerRequest, BunnerResponse, HandleRequestPayload};
+use crate::util::get_limits;
 use std::sync::OnceLock;
 use url::Url;
 
 static QS_CONFIG: OnceLock<serde_qs::Config> = OnceLock::new();
-
-fn is_valid_name_segment(seg: &str) -> bool {
-    if seg.is_empty() {
-        return false;
-    }
-    seg.bytes().all(|c| {
-        matches!(c,
-            b'A'..=b'Z' |
-            b'a'..=b'z' |
-            b'0'..=b'9' |
-            b'_' | b'-'
-        )
-    })
-}
-
-fn is_valid_bracket_key(key: &str) -> bool {
-    if key.is_empty() {
-        return false;
-    }
-
-    let bytes = key.as_bytes();
-    let mut i = 0usize;
-    while i < bytes.len() && bytes[i] != b'[' {
-        i += 1;
-    }
-    let base = &key[..i];
-    if !is_valid_name_segment(base) {
-        return false;
-    }
-
-    while i < bytes.len() {
-        if bytes[i] != b'[' {
-            return false;
-        }
-        i += 1;
-        let start = i;
-        while i < bytes.len() && bytes[i] != b']' {
-            i += 1;
-        }
-        if i >= bytes.len() {
-            return false;
-        }
-        let seg = &key[start..i];
-        if !seg.is_empty() && !is_valid_name_segment(seg) {
-            return false;
-        }
-        i += 1;
-    }
-    true
-}
 
 pub struct UrlParser;
 
@@ -87,13 +38,22 @@ impl Middleware for UrlParser {
 
         if let Some(q) = u.query() {
             // Single-pass: rely on serde_qs to parse and avoid pre-validation iteration
-            let config = QS_CONFIG.get_or_init(|| serde_qs::Config::new(5, true));
-            match config.deserialize_str::<std::collections::HashMap<String, serde_json::Value>>(q) {
+            let limits = get_limits();
+            let config = QS_CONFIG.get_or_init(|| serde_qs::Config::new(limits.qs_max_depth, true));
+            match config.deserialize_str::<std::collections::HashMap<String, serde_json::Value>>(q)
+            {
                 Ok(map) => {
+                    if map.len() > limits.qs_max_keys {
+                        res.http_status = HttpStatusCode::BadRequest;
+                        res.body = serde_json::Value::String(
+                            HttpStatusCode::BadRequest.reason_phrase().to_string(),
+                        );
+                        return false;
+                    }
                     let mut obj = serde_json::Map::new();
                     for (k, v) in map {
                         // Basic key validation; detailed bracket checks omitted in fast path
-                        if k.is_empty() { 
+                        if k.is_empty() {
                             res.http_status = HttpStatusCode::BadRequest;
                             res.body = serde_json::Value::String(
                                 HttpStatusCode::BadRequest.reason_phrase().to_string(),

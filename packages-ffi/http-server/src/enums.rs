@@ -1,6 +1,6 @@
 use crate::errors::HttpServerErrorCode;
-use serde::de::{Deserialize, Deserializer};
 use serde::Serializer;
+use serde::de::{Deserialize, Deserializer};
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy)]

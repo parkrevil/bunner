@@ -35,7 +35,7 @@ pub mod node;
 mod static_map;
 pub mod traversal;
 
-use alloc::{create_node_box_from_arena_pointer, NodeBox};
+use alloc::{NodeBox, create_node_box_from_arena_pointer};
 pub use node::RadixTreeNode;
 #[cfg(feature = "test")]
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -56,7 +56,7 @@ pub struct RadixTree {
     pub(super) method_first_byte_bitmaps: [[u64; 4]; HTTP_METHOD_COUNT],
     pub(super) root_parameter_first_present: [bool; HTTP_METHOD_COUNT],
     pub(super) root_wildcard_present: [bool; HTTP_METHOD_COUNT],
-    pub(super) static_route_full_mapping: [FastHashMap<String, u16>; HTTP_METHOD_COUNT],
+    pub(super) static_route_full_mapping: [FastHashMap<Box<str>, u16>; HTTP_METHOD_COUNT],
     pub(super) method_length_buckets: [u64; HTTP_METHOD_COUNT],
     pub enable_root_level_pruning: bool,
     pub enable_static_route_full_mapping: bool,
@@ -68,7 +68,7 @@ impl RadixTree {
         Self {
             root_node: RadixTreeNode::default(),
             options: configuration,
-            arena: Bump::with_capacity(64 * 1024),
+            arena: Bump::with_capacity(128 * 1024),
             interner: Interner::new(),
             method_first_byte_bitmaps: [[0; 4]; HTTP_METHOD_COUNT],
             root_parameter_first_present: [false; HTTP_METHOD_COUNT],
@@ -92,8 +92,11 @@ impl RadixTree {
         if self.root_node.is_sealed() {
             return Err(super::structures::RouterError::new(
                 super::errors::RouterErrorCode::RouterSealedCannotInsert,
+                "router",
+                "route_registration",
+                "validation",
                 "Router is sealed; cannot insert bulk routes".to_string(),
-                Some(serde_json::json!({"operation":"insert_bulk"})),
+                Some(serde_json::json!({"operation": "insert_bulk", "sealed": true})),
             ));
         }
 
@@ -288,15 +291,16 @@ impl RadixTree {
             if cur as usize + n >= MAX_ROUTES as usize {
                 return Err(super::structures::RouterError::new(
                     super::errors::RouterErrorCode::MaxRoutesExceeded,
+                    "router",
+                    "route_registration",
+                    "validation",
                     "Maximum number of routes exceeded when reserving bulk keys".to_string(),
-                    Some(crate::util::make_error_detail(
-                        "insert_bulk",
-                        serde_json::json!({
+                    Some(serde_json::json!({
                             "requested": n,
                             "currentNextKey": cur,
-                            "maxRoutes": MAX_ROUTES
-                        }),
-                    )),
+                            "maxRoutes": MAX_ROUTES,
+                            "operation": "bulk_key_reservation"
+                        })),
                 ));
             }
             self.next_route_key.fetch_add(n as u16, Ordering::Relaxed)
@@ -304,7 +308,7 @@ impl RadixTree {
         let mut out = vec![0u16; n];
         for (idx, method, segs, _h, _l, _s, _lits) in pre.into_iter() {
             let assigned = base + (idx as u16) + 1; // stored keys are +1 encoded
-                                                    // pass decoded value to helper (helper will re-encode)
+            // pass decoded value to helper (helper will re-encode)
             out[idx] = self.insert_parsed_preassigned(method, segs, assigned - 1)?;
         }
         Ok(out)

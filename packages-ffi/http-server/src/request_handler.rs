@@ -1,5 +1,7 @@
+use percent_encoding::percent_decode_str;
 use std::os::raw::c_char;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::enums::HttpMethod;
 use crate::errors::HttpServerErrorCode;
@@ -16,8 +18,17 @@ use serde_json::Value as JsonValue;
 
 #[inline]
 fn parse_payload(payload_str: &str) -> Result<HandleRequestPayload, HttpServerErrorCode> {
-    serde_json::from_str::<HandleRequestPayload>(payload_str)
-        .map_err(|_| HttpServerErrorCode::InvalidJsonString)
+    #[cfg(feature = "simd-json")]
+    {
+        let mut bytes = payload_str.as_bytes().to_vec();
+        simd_json::serde::from_slice::<HandleRequestPayload>(&mut bytes)
+            .map_err(|_| HttpServerErrorCode::InvalidJsonString)
+    }
+    #[cfg(not(feature = "simd-json"))]
+    {
+        serde_json::from_str::<HandleRequestPayload>(payload_str)
+            .map_err(|_| HttpServerErrorCode::InvalidJsonString)
+    }
 }
 
 #[tracing::instrument(skip(cb, payload_owned_for_job, ro), fields(request_id=%request_id_owned))]
@@ -26,22 +37,24 @@ pub fn process_job(
     request_id_owned: String,
     payload_owned_for_job: String,
     ro: Arc<router::RouterReadOnly>,
+    cancel: Option<Arc<AtomicBool>>,
 ) {
+    if let Some(ref c) = cancel {
+        if c.load(Ordering::SeqCst) {
+            return;
+        }
+    }
     let payload = match parse_payload(&payload_owned_for_job) {
         Ok(p) => p,
         Err(e) => {
             let preview: String = payload_owned_for_job.chars().take(200).collect();
             let bunner_error = HttpServerError::new(
                 e,
+                "http_server",
+                "parse_payload",
+                "parsing",
                 "Failed to parse request payload JSON".to_string(),
-                Some(crate::util::make_error_detail(
-                    "parse_payload",
-                    serde_json::json!({
-                        "requestId": request_id_owned,
-                        "payloadPreview": preview,
-                        "payloadLength": payload_owned_for_job.len()
-                    }),
-                )),
+                Some(serde_json::json!({"requestId": request_id_owned, "payloadPreview": preview, "payloadLength": payload_owned_for_job.len()})),
             );
             tracing::event!(tracing::Level::ERROR, reason="parse_payload_error", request_id=%request_id_owned);
             callback_handle_request(cb, Some(&request_id_owned), 0, &bunner_error);
@@ -49,19 +62,27 @@ pub fn process_job(
         }
     };
 
-    let http_method = match HttpMethod::from_u8(payload.http_method) {
+    run_with_parsed_payload(cb, request_id_owned, payload, ro, cancel);
+}
+
+#[tracing::instrument(skip(cb, payload_parsed, ro), fields(request_id=%request_id_owned))]
+pub fn run_with_parsed_payload(
+    cb: extern "C" fn(*const c_char, u16, *mut c_char),
+    request_id_owned: String,
+    payload_parsed: HandleRequestPayload,
+    ro: Arc<router::RouterReadOnly>,
+    cancel: Option<Arc<AtomicBool>>,
+) {
+    let http_method = match HttpMethod::from_u8(payload_parsed.http_method) {
         Ok(m) => m,
         Err(e) => {
             let bunner_error = HttpServerError::new(
                 e,
+                "http_server",
+                "parse_payload",
+                "validation",
                 "Invalid HTTP method in request payload".to_string(),
-                Some(crate::util::make_error_detail(
-                    "http_method_parse",
-                    serde_json::json!({
-                        "requestId": request_id_owned,
-                        "httpMethod": payload.http_method
-                    }),
-                )),
+                Some(serde_json::json!({"requestId": request_id_owned, "httpMethod": payload_parsed.http_method})),
             );
             callback_handle_request(cb, Some(&request_id_owned), 0, &bunner_error);
             return;
@@ -69,10 +90,10 @@ pub fn process_job(
     };
 
     let mut request = BunnerRequest {
-        url: payload.url.clone(),
+        url: payload_parsed.url.clone(),
         http_method,
         path: String::new(),
-        headers: payload.headers.clone(),
+        headers: payload_parsed.headers.clone(),
         cookies: serde_json::Value::Object(serde_json::Map::new()),
         content_type: None,
         content_length: None,
@@ -93,9 +114,14 @@ pub fn process_job(
         .with(BodyParser);
 
     // Execute middleware chain; if any middleware stops (returns false), callback immediately with current output
-    if !chain.execute(&mut request, &mut response, &payload) {
+    if let Some(ref c) = cancel {
+        if c.load(Ordering::SeqCst) {
+            return;
+        }
+    }
+    if !chain.execute(&mut request, &mut response, &payload_parsed) {
         let output = HandleRequestOutput { request, response };
-        tracing::event!(tracing::Level::TRACE, step = "middleware_stopped");
+        tracing::event!(tracing::Level::TRACE, step = "middleware_stopped", request_id=%request_id_owned);
         callback_handle_request(cb, Some(&request_id_owned), 0, &output);
         return;
     }
@@ -109,7 +135,9 @@ pub fn process_job(
                 let mut obj = serde_json::Map::new();
                 for (k, (start, len)) in params_vec.iter() {
                     if *start + *len <= request.path.len() {
-                        obj.insert(k.clone(), JsonValue::String(request.path[*start..*start + *len].to_string()));
+                        let raw = &request.path[*start..*start + *len];
+                        let decoded = percent_decode_str(raw).decode_utf8_lossy().to_string();
+                        obj.insert(k.clone(), JsonValue::String(decoded));
                     }
                 }
                 Some(JsonValue::Object(obj))
@@ -120,7 +148,8 @@ pub fn process_job(
             tracing::event!(
                 tracing::Level::TRACE,
                 step = "route_match",
-                route_key = route_key as u64
+                route_key = route_key as u64,
+                request_id=%request_id_owned
             );
 
             callback_handle_request(cb, Some(&request_id_owned), route_key, &output);
@@ -133,8 +162,8 @@ pub fn process_job(
                 "method": http_method as u8,
                 "path": request.path
             });
-            be.merge_detail(extra);
-            tracing::event!(tracing::Level::TRACE, step = "route_not_found");
+            be.merge_extra(extra);
+            tracing::event!(tracing::Level::TRACE, step = "route_not_found", request_id=%request_id_owned);
             callback_handle_request(cb, Some(&request_id_owned), 0, &be);
         }
     }

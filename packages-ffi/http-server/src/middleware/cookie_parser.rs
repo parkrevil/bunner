@@ -1,5 +1,6 @@
 use crate::middleware::chain::Middleware;
 use crate::structure::{BunnerRequest, BunnerResponse, HandleRequestPayload};
+use crate::util::get_limits;
 use cookie::Cookie;
 use serde_json::json;
 
@@ -14,16 +15,18 @@ impl Middleware for CookieParser {
         _payload: &HandleRequestPayload,
     ) -> bool {
         tracing::event!(tracing::Level::TRACE, operation = "cookie_parser");
-        if let Some(c) = req
-            .headers
-            .get("cookie")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string())
-        {
+        if let Some(c) = req.headers.get("cookie").cloned() {
+            let limits = get_limits();
+            if c.len() > limits.cookie_max_bytes {
+                return true;
+            }
             let map: std::collections::HashMap<String, String> = Cookie::split_parse(c.as_str())
                 .filter_map(|c| c.ok())
                 .map(|c| (c.name().to_string(), c.value().to_string()))
                 .collect();
+            if map.len() > limits.cookie_max_count {
+                return true;
+            }
 
             req.cookies = json!(map);
         }

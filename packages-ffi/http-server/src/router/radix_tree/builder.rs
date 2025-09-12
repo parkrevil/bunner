@@ -2,7 +2,7 @@ use super::compression::compress_root_node;
 use super::mask::compute_mask;
 use super::memory::{shrink_node, warm_node};
 use super::static_map::collect_static;
-use super::{node::RadixTreeNode, RadixTree, HTTP_METHOD_COUNT, STATIC_MAP_THRESHOLD};
+use super::{HTTP_METHOD_COUNT, RadixTree, STATIC_MAP_THRESHOLD, node::RadixTreeNode};
 use super::{traversal::traverse, traversal::traverse_mut};
 use crate::router::interner::Interner;
 
@@ -324,7 +324,7 @@ pub(super) fn rebuild_intern_ids(node: &mut RadixTreeNode, interner: &Interner) 
     node.static_children_idx_ids.clear();
     if !node.static_children.is_empty() {
         for (k, v) in node.static_children.iter() {
-            let id = interner.intern(k.as_str());
+            let id = interner.intern(k);
             node.static_children_idx_ids.insert(id, super::NodeBox(v.0));
         }
     }

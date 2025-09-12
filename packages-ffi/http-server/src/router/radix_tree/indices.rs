@@ -33,7 +33,7 @@ pub(super) fn build_indices(root: &mut RadixTreeNode, interner: &Interner) {
                 node.static_vals_idx.extend(tmp_idxs);
             }
             if !node.static_children.is_empty() {
-                let keys: SmallVec<[String; 16]> = node.static_children.keys().cloned().collect();
+                let keys: SmallVec<[Box<str>; 16]> = node.static_children.keys().cloned().collect();
                 for k in keys {
                     if let Some(v) = node.static_children.get(&k) {
                         node.static_children_idx.insert(k, super::NodeBox(v.0));

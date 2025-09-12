@@ -60,8 +60,15 @@ pub struct HandleRequestOutput {
 pub struct HttpServerError {
     pub code: u16,
     pub error: String,
+    pub subsystem: String,
+    pub stage: String,
+    pub cause: String,
+    pub ts: u64,
+    pub thread: String,
+    pub version: String,
     pub description: String,
-    pub detail: Option<serde_json::Value>,
+    #[serde(rename = "extra")]
+    pub extra: Option<serde_json::Value>,
 }
 
 impl From<crate::router::RouterError> for HttpServerError {
@@ -69,37 +76,67 @@ impl From<crate::router::RouterError> for HttpServerError {
         HttpServerError {
             code: router_error.code.code(),
             error: router_error.error.clone(),
+            subsystem: router_error.subsystem.clone(),
+            stage: router_error.stage.clone(),
+            cause: router_error.cause.clone(),
+            ts: router_error.ts,
+            thread: router_error.thread.clone(),
+            version: env!("CARGO_PKG_VERSION").to_string(),
             description: router_error.description.clone(),
-            detail: router_error.detail.clone(),
+            extra: router_error.extra.clone(),
         }
     }
 }
 
 impl HttpServerError {
+    fn generate_metadata() -> (u64, String, String) {
+        let ts = {
+            use std::time::{SystemTime, UNIX_EPOCH};
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default();
+            now.as_millis() as u64
+        };
+        let thread = format!("{:?}", std::thread::current().id());
+        let version = env!("CARGO_PKG_VERSION").to_string();
+        (ts, thread, version)
+    }
+
     pub fn new(
         code: HttpServerErrorCode,
+        subsystem: &str,
+        stage: &str,
+        cause: &str,
         description: String,
-        detail: Option<serde_json::Value>,
+        extra: Option<serde_json::Value>,
     ) -> Self {
+        let (ts, thread, version) = Self::generate_metadata();
+        
         HttpServerError {
-            error: code.as_str().to_string(),
             code: code.code(),
+            error: code.as_str().to_string(),
+            subsystem: subsystem.to_string(),
+            stage: stage.to_string(),
+            cause: cause.to_string(),
             description,
-            detail,
+            extra,
+            ts,
+            thread,
+            version,
         }
     }
 }
 
 impl HttpServerError {
-    pub fn merge_detail(&mut self, new_detail: serde_json::Value) {
-        if let Some(existing_detail) = self.detail.as_mut() {
-            if let serde_json::Value::Object(existing_map) = existing_detail
-                && let serde_json::Value::Object(new_map) = new_detail
+    pub fn merge_extra(&mut self, new_extra: serde_json::Value) {
+        if let Some(existing) = self.extra.as_mut() {
+            if let serde_json::Value::Object(existing_map) = existing
+                && let serde_json::Value::Object(new_map) = new_extra
             {
                 existing_map.extend(new_map);
             }
         } else {
-            self.detail = Some(new_detail);
+            self.extra = Some(new_extra);
         }
     }
 }

@@ -23,6 +23,8 @@ url = "2"
 cookie = "0.18"
 serde_qs = "0.15"
 crossbeam-channel = "0.5"
+percent-encoding = "2"
+simd-json = { version = "0.13", features = ["serde_impl"], optional = true }
 
 [dev-dependencies]
 libc.workspace = true

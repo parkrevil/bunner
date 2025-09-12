@@ -1,9 +1,10 @@
 use crossbeam_channel as xchan;
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
     OnceLock,
+    atomic::{AtomicBool, Ordering},
 };
 use std::thread;
+use std::thread::JoinHandle;
 
 type Job = Box<dyn FnOnce() + Send + 'static>;
 
@@ -16,6 +17,7 @@ static TASK_SENDER: OnceLock<xchan::Sender<Task>> = OnceLock::new();
 static TASK_RECEIVER: OnceLock<xchan::Receiver<Task>> = OnceLock::new();
 static WORKER_COUNT: OnceLock<usize> = OnceLock::new();
 static JUST_SHUTDOWN: AtomicBool = AtomicBool::new(false);
+static WORKER_HANDLES: OnceLock<std::sync::Mutex<Vec<JoinHandle<()>>>> = OnceLock::new();
 #[cfg(feature = "test")]
 static FORCE_QUEUE_FULL: AtomicBool = AtomicBool::new(false);
 
@@ -28,7 +30,9 @@ fn env_usize(key: &str, default: usize, min: usize, max: usize) -> usize {
 }
 
 fn init() -> xchan::Sender<Task> {
-    let default_workers = thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
+    let default_workers = thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4);
     let workers = env_usize("BUNNER_HTTP_WORKERS", default_workers, 1, 256);
     let capacity = env_usize("BUNNER_HTTP_QUEUE_CAP", 512, 1, 65_536);
 
@@ -44,15 +48,30 @@ fn init() -> xchan::Sender<Task> {
 
     if WORKER_COUNT.get().is_none() {
         let _ = WORKER_COUNT.set(workers);
+        let handles_vec =
+            WORKER_HANDLES.get_or_init(|| std::sync::Mutex::new(Vec::with_capacity(workers)));
         for _ in 0..workers {
             let rx = TASK_RECEIVER.get().unwrap().clone();
-            thread::spawn(move || loop {
-                match rx.recv() {
-                    Ok(Task::Job(job)) => job(),
-                    Ok(Task::Shutdown) => break,
-                    Err(_) => break,
-                }
-            });
+            if let Ok(handle) = thread::Builder::new()
+                .name("bunner-http-worker".to_string())
+                .spawn(move || {
+                    loop {
+                        match rx.recv() {
+                            Ok(Task::Job(job)) => {
+                                let res =
+                                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(job));
+                                if res.is_err() {
+                                    tracing::event!(tracing::Level::ERROR, reason = "job_panic");
+                                }
+                            }
+                            Ok(Task::Shutdown) => break,
+                            Err(_) => break,
+                        }
+                    }
+                })
+            {
+                let _ = handles_vec.lock().map(|mut v| v.push(handle));
+            }
         }
     }
 
@@ -71,8 +90,12 @@ pub fn submit_job(job: Job) -> Result<(), xchan::TrySendError<Task>> {
         Ok(()) => Ok(()),
         Err(e) => {
             match &e {
-                xchan::TrySendError::Full(_) => tracing::event!(tracing::Level::TRACE, reason = "full"),
-                xchan::TrySendError::Disconnected(_) => tracing::event!(tracing::Level::TRACE, reason = "disconnected"),
+                xchan::TrySendError::Full(_) => {
+                    tracing::event!(tracing::Level::TRACE, reason = "full")
+                }
+                xchan::TrySendError::Disconnected(_) => {
+                    tracing::event!(tracing::Level::TRACE, reason = "disconnected")
+                }
             }
             Err(e)
         }
@@ -90,6 +113,13 @@ pub fn shutdown_pool() {
         for _ in 0..workers {
             // ignore error if already disconnected
             let _ = tx.send(Task::Shutdown);
+        }
+        if let Some(handles_mutex) = WORKER_HANDLES.get() {
+            if let Ok(mut handles) = handles_mutex.lock() {
+                for h in handles.drain(..) {
+                    let _ = h.join();
+                }
+            }
         }
     }
 }
