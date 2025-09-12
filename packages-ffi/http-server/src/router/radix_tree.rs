@@ -13,7 +13,7 @@ type ParsedEntry = (
 );
 
 use super::RouterOptions;
-use crate::r#enum::HttpMethod;
+use crate::enums::HttpMethod;
 use crate::router::interner::Interner;
 
 pub(super) const HTTP_METHOD_COUNT: usize = 7;

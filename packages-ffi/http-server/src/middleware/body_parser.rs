@@ -1,5 +1,5 @@
 use crate::middleware::chain::Middleware;
-use crate::r#enum::HttpStatusCode;
+use crate::enums::HttpStatusCode;
 use crate::structure::{BunnerRequest, BunnerResponse, HandleRequestPayload};
 use serde_json::Value as JsonValue;
 

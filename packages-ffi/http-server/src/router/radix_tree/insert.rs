@@ -1,7 +1,7 @@
 use super::{
     create_node_box_from_arena_pointer, node::PatternMeta, RadixTree, RadixTreeNode, MAX_ROUTES,
 };
-use crate::r#enum::HttpMethod;
+use crate::enums::HttpMethod;
 use crate::router::errors::RouterErrorCode;
 use crate::router::interner::Interner;
 use crate::router::pattern::{

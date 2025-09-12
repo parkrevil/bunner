@@ -1,4 +1,4 @@
-pub mod r#enum;
+pub mod enums;
 pub mod errors;
 pub mod helpers;
 pub mod middleware;
@@ -10,7 +10,7 @@ pub mod util;
 
 use crate::errors::HttpServerErrorCode;
 use crate::helpers::callback_handle_request;
-use crate::r#enum::HttpMethod;
+use crate::enums::HttpMethod;
 use crate::router::errors::RouterErrorCode as RCode;
 use crate::router::structures::RouterError as RError;
 use crate::structure::{AddRouteResult, HttpServerError};

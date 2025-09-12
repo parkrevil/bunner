@@ -3,7 +3,7 @@ use super::path::is_path_character_allowed;
 use super::path::normalize_path;
 use super::structures::RouterError;
 use super::{radix_tree::HTTP_METHOD_COUNT, Router};
-use crate::r#enum::HttpMethod;
+use crate::enums::HttpMethod;
 use crate::router::pattern::{self, SegmentPattern};
 use std::collections::HashMap;
 

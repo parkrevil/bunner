@@ -1,5 +1,5 @@
 use bunner_http_server::request_handler;
-use bunner_http_server::r#enum::HttpStatusCode;
+use bunner_http_server::enums::HttpStatusCode;
 use bunner_http_server::router::{Router, RouterOptions, RouterReadOnly};
 use bunner_http_server::structure::HandleRequestOutput;
 use bunner_http_server::errors::HttpServerErrorCode;
@@ -24,9 +24,9 @@ extern "C" fn test_callback(req_id_ptr: *const c_char, _route_key: u16, res_ptr:
 
 fn setup_router() -> Arc<RouterReadOnly> {
     let mut router = Router::new(Some(RouterOptions::default()));
-    router.add(bunner_http_server::r#enum::HttpMethod::Get, "/users/:id").unwrap();
-    router.add(bunner_http_server::r#enum::HttpMethod::Post, "/files/*").unwrap();
-    router.add(bunner_http_server::r#enum::HttpMethod::Get, "/static").unwrap();
+    router.add(bunner_http_server::enums::HttpMethod::Get, "/users/:id").unwrap();
+    router.add(bunner_http_server::enums::HttpMethod::Post, "/files/*").unwrap();
+    router.add(bunner_http_server::enums::HttpMethod::Get, "/static").unwrap();
     router.finalize();
     Arc::new(router.build_readonly())
 }

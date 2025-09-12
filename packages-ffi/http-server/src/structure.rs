@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use crate::{
     errors::HttpServerErrorCode,
-    r#enum::{HttpMethod, HttpStatusCode},
+    enums::{HttpMethod, HttpStatusCode},
 };
 
 #[derive(Serialize, Deserialize, Debug)]

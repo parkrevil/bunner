@@ -8,7 +8,7 @@ use crate::middleware::chain::Chain;
 use crate::middleware::cookie_parser::CookieParser;
 use crate::middleware::header_parser::HeaderParser;
 use crate::middleware::url_parser::UrlParser;
-use crate::r#enum::HttpMethod;
+use crate::enums::HttpMethod;
 use crate::router;
 use crate::structure::HttpServerError;
 use crate::structure::{BunnerRequest, BunnerResponse, HandleRequestOutput, HandleRequestPayload};
@@ -80,7 +80,7 @@ pub fn process_job(
         body: None,
     };
     let mut response = BunnerResponse {
-        http_status: crate::r#enum::HttpStatusCode::OK,
+        http_status: crate::enums::HttpStatusCode::OK,
         headers: None,
         body: serde_json::Value::Null,
     };

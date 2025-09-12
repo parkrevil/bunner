@@ -1,7 +1,7 @@
 #![allow(clippy::redundant_clone)]
 #![allow(clippy::field_reassign_with_default)]
 
-use bunner_http_server::r#enum::HttpMethod;
+use bunner_http_server::enums::HttpMethod;
 use bunner_http_server::router::radix_tree::node::MAX_SEGMENT_LENGTH;
 use bunner_http_server::router::{self as rapi, Router, RouterErrorCode, RouterOptions, RouterError};
 

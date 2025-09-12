@@ -6,7 +6,7 @@ pub mod radix_tree;
 pub mod readonly;
 pub mod structures;
 
-use crate::r#enum::HttpMethod;
+use crate::enums::HttpMethod;
 pub use errors::RouterErrorCode;
 // path utils are consumed by readonly module only
 pub use readonly::RouterReadOnly;
