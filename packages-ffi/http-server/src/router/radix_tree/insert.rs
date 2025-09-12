@@ -14,6 +14,7 @@ use std::sync::atomic::AtomicU16;
 
 impl RadixTree {
     pub fn insert(&mut self, method: HttpMethod, path: &str) -> Result<u16, RouterError> {
+        tracing::event!(tracing::Level::TRACE, operation="insert", method=?method, path=%path);
         if self.root_node.is_sealed() {
             return Err(RouterError::new(
                 RouterErrorCode::RouterSealedCannotInsert,
@@ -39,6 +40,7 @@ impl RadixTree {
         method: HttpMethod,
         parsed_segments: Vec<SegmentPattern>,
     ) -> Result<u16, RouterError> {
+        tracing::event!(tracing::Level::TRACE, operation="insert_parsed", method=?method, segments=parsed_segments.len() as u64);
         if self.root_node.is_sealed() {
             return Err(RouterError::new(
                 RouterErrorCode::RouterSealedCannotInsert,
@@ -106,6 +108,7 @@ impl RadixTree {
         parsed_segments: Vec<SegmentPattern>,
         assigned_key: u16,
     ) -> Result<u16, RouterError> {
+        tracing::event!(tracing::Level::TRACE, operation="insert_parsed_preassigned", method=?method, segments=parsed_segments.len() as u64, assigned_key=assigned_key as u64);
         if self.root_node.is_sealed() {
             return Err(RouterError::new(
                 RouterErrorCode::RouterSealedCannotInsert,

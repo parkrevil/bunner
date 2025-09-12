@@ -1,3 +1,4 @@
+#[tracing::instrument(level = "trace", skip(path), fields(path_len=path.len() as u64))]
 pub(crate) fn normalize_path(path: &str) -> String {
     if path.len() <= 1 || path.as_bytes().last().is_none() || path.as_bytes().last() != Some(&b'/')
     {
@@ -18,6 +19,7 @@ pub(crate) fn normalize_path(path: &str) -> String {
 }
 
 #[inline]
+#[tracing::instrument(level = "trace", skip(path), fields(path_len=path.len() as u64))]
 pub(crate) fn is_path_character_allowed(path: &str) -> bool {
     for &byte_value in path.as_bytes() {
         if byte_value <= 0x20 {

@@ -46,11 +46,13 @@ impl RouterReadOnly {
         self.static_maps[idx].get(&normalized).cloned()
     }
 
+    #[tracing::instrument(skip(self, path), fields(method=?method, path=%path))]
     pub fn find(
         &self,
         method: HttpMethod,
         path: &str,
     ) -> Result<(u16, Vec<(String, String)>), RouterError> {
+        tracing::event!(tracing::Level::TRACE, operation="find", method=?method, path=%path);
         if path.is_empty() {
             return Err(RouterError::new(
                 RouterErrorCode::MatchPathEmpty,
@@ -204,6 +206,7 @@ impl ReadOnlyNode {
         None
     }
 
+    #[tracing::instrument(level = "trace", skip(self, s, params), fields(i=i as u64))]
     fn find_from(
         &self,
         method: HttpMethod,

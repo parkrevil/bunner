@@ -107,6 +107,7 @@ pub fn pattern_is_pure_static(p: &SegmentPattern, key_seg: &str) -> bool {
     }
 }
 
+#[tracing::instrument(level = "trace", skip(seg_l, pat), fields(seg=%seg, parts=pat.parts.len() as u64))]
 pub fn match_segment(seg: &str, seg_l: &str, pat: &SegmentPattern) -> Option<CaptureList> {
     let mut i = 0usize;
     let mut i_l = 0usize;
@@ -185,6 +186,7 @@ pub fn match_segment(seg: &str, seg_l: &str, pat: &SegmentPattern) -> Option<Cap
     }
 }
 
+#[tracing::instrument(level = "trace", fields(segment=%seg))]
 pub(crate) fn parse_segment(seg: &str) -> Result<SegmentPattern, RouterError> {
     if seg.contains('(') || seg.contains(')') {
         return Err(RouterError::new(

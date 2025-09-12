@@ -93,7 +93,11 @@ fn make_router_sealed_error(
 
 /// Initializes a new HttpServer instance and returns its handle.
 #[unsafe(no_mangle)]
+#[tracing::instrument(skip_all, fields(operation = "init"))]
 pub extern "C" fn init() -> HttpServerHandle {
+    // Initialize tracing only once
+    crate::util::init_tracing_once();
+    tracing::event!(tracing::Level::INFO, "http_server init");
     let server = Box::new(HttpServer {
         router: parking_lot::RwLock::new(router::Router::new(None)),
         router_readonly: Arc::new(parking_lot::RwLock::new(None)),
@@ -108,7 +112,9 @@ pub extern "C" fn init() -> HttpServerHandle {
 /// The `handle` pointer must be a valid pointer returned by `init`.
 /// After calling this function, the handle is dangling and must not be used again.
 #[unsafe(no_mangle)]
+#[tracing::instrument(skip_all, fields(operation="destroy", handle=?handle))]
 pub unsafe extern "C" fn destroy(handle: HttpServerHandle) {
+    tracing::event!(tracing::Level::INFO, "http_server destroy called");
     if handle.is_null() {
         #[cfg(feature = "test")]
         shutdown_pool();
@@ -130,6 +136,7 @@ pub unsafe extern "C" fn destroy(handle: HttpServerHandle) {
 /// - The `handle` pointer must be a valid pointer returned by `init`.
 /// - The `path` pointer must point to a valid, null-terminated C string.
 #[unsafe(no_mangle)]
+#[tracing::instrument(skip_all, fields(operation="add_route", http_method=http_method))]
 pub unsafe extern "C" fn add_route(
     handle: HttpServerHandle,
     http_method: u8,
@@ -175,8 +182,12 @@ pub unsafe extern "C" fn add_route(
     }
 
     match router_mut.add(http_method, &path_str) {
-        Ok(k) => serialize_to_cstring(&AddRouteResult { key: k }),
+        Ok(k) => {
+            tracing::event!(tracing::Level::INFO, method=?http_method, path=%path_str, key=k, "route added");
+            serialize_to_cstring(&AddRouteResult { key: k })
+        }
         Err(e) => {
+            tracing::event!(tracing::Level::ERROR, code=?e.code, path=%path_str, "add_route error");
             let mut bunner_error = HttpServerError::from(e);
             let detail =
                 crate::util::make_error_detail("add_route", serde_json::json!({"path": path_str}));
@@ -197,6 +208,7 @@ pub unsafe extern "C" fn add_route(
 /// - The returned pointer is allocated by Rust and must be freed by calling `free_string`.
 /// - Passing invalid pointers or non-UTF8 data is undefined behavior.
 #[unsafe(no_mangle)]
+#[tracing::instrument(skip_all, fields(operation = "add_routes"))]
 pub unsafe extern "C" fn add_routes(
     handle: HttpServerHandle,
     routes_ptr: *const c_char,
@@ -281,8 +293,13 @@ pub unsafe extern "C" fn add_routes(
     }
 
     match router_mut.add_bulk(routes) {
-        Ok(r) => serialize_to_cstring(&r),
+        Ok(r) => {
+            let cnt = r.len();
+            tracing::event!(tracing::Level::INFO, count = cnt as u64, "routes added");
+            serialize_to_cstring(&r)
+        }
         Err(e) => {
+            tracing::event!(tracing::Level::ERROR, code=?e.code, count=routes_count as u64, "add_routes error");
             let mut bunner_error = HttpServerError::from(e);
             let detail = serde_json::json!({
               "operation": "add_routes",
@@ -302,6 +319,7 @@ pub unsafe extern "C" fn add_routes(
 /// - The `handle` pointer must be a valid pointer returned by `init`.
 /// - The `request_json` pointer must point to a valid, null-terminated C string.
 #[unsafe(no_mangle)]
+#[tracing::instrument(skip_all, fields(operation = "handle_request"))]
 pub unsafe extern "C" fn handle_request(
     handle: HttpServerHandle,
     request_id_ptr: *const c_char,
@@ -426,10 +444,12 @@ pub unsafe extern "C" fn handle_request(
         let _ = done_tx.send(());
     })) {
         Ok(()) => {
+            tracing::event!(tracing::Level::DEBUG, "request enqueued");
             use std::time::Duration;
             match done_rx.recv_timeout(Duration::from_millis(500)) {
                 Ok(()) => {}
                 Err(_timeout) => {
+                    tracing::event!(tracing::Level::WARN, reason="worker_timeout", timeout_ms=500u64, request_id=%request_id_str);
                     let http_error = HttpServerError::new(
                         HttpServerErrorCode::QueueFull,
                         "Request timed out waiting for worker".to_string(),
@@ -447,6 +467,7 @@ pub unsafe extern "C" fn handle_request(
             }
         }
         Err(_e) => {
+            tracing::event!(tracing::Level::WARN, reason="queue_full", request_id=%request_id_str);
             let http_error = HttpServerError::new(
                 HttpServerErrorCode::QueueFull,
                 "Request queue is full".to_string(),
@@ -467,6 +488,7 @@ pub unsafe extern "C" fn handle_request(
 /// # Safety
 /// The `handle` pointer must be a valid pointer returned by `init`.
 #[unsafe(no_mangle)]
+#[tracing::instrument(skip_all, fields(operation = "seal_routes"))]
 pub unsafe extern "C" fn seal_routes(handle: HttpServerHandle) {
     let http_server = unsafe { &*handle };
     {
@@ -486,6 +508,7 @@ pub unsafe extern "C" fn seal_routes(handle: HttpServerHandle) {
 
         guard.finalize();
     }
+    tracing::event!(tracing::Level::INFO, "routes sealed");
 }
 
 /// Frees the memory for a C string that was allocated by Rust.

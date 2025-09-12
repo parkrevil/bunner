@@ -4,6 +4,19 @@ use std::ffi::CString;
 use std::os::raw::c_char;
 use std::thread;
 
+// tracing initialization (idempotent)
+#[allow(dead_code)]
+pub fn init_tracing_once() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        #[allow(unused_imports)]
+        use tracing_subscriber::{fmt, EnvFilter};
+        // If RUST_LOG is not set, default to global info
+        let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+        let _ = fmt().with_env_filter(filter).compact().try_init();
+    });
+}
+
 pub fn serialize_to_cstring<T: Serialize>(value: &T) -> *mut c_char {
     match serde_json::to_string(value) {
         Ok(json_string) => CString::new(json_string).unwrap().into_raw(),

@@ -20,6 +20,7 @@ fn parse_payload(payload_str: &str) -> Result<HandleRequestPayload, HttpServerEr
         .map_err(|_| HttpServerErrorCode::InvalidJsonString)
 }
 
+#[tracing::instrument(skip(cb, payload_owned_for_job, ro), fields(request_id=%request_id_owned))]
 pub fn process_job(
     cb: extern "C" fn(*const c_char, u16, *mut c_char),
     request_id_owned: String,
@@ -42,6 +43,7 @@ pub fn process_job(
                     }),
                 )),
             );
+            tracing::event!(tracing::Level::ERROR, reason="parse_payload_error", request_id=%request_id_owned);
             callback_handle_request(cb, Some(&request_id_owned), 0, &bunner_error);
             return;
         }
@@ -93,6 +95,7 @@ pub fn process_job(
     // Execute middleware chain; if any middleware stops (returns false), callback immediately with current output
     if !chain.execute(&mut request, &mut response, &payload) {
         let output = HandleRequestOutput { request, response };
+        tracing::event!(tracing::Level::TRACE, step = "middleware_stopped");
         callback_handle_request(cb, Some(&request_id_owned), 0, &output);
         return;
     }
@@ -112,6 +115,11 @@ pub fn process_job(
             request.params = params_json;
 
             let output = HandleRequestOutput { request, response };
+            tracing::event!(
+                tracing::Level::TRACE,
+                step = "route_match",
+                route_key = route_key as u64
+            );
 
             callback_handle_request(cb, Some(&request_id_owned), route_key, &output);
         }
@@ -124,6 +132,7 @@ pub fn process_job(
                 "path": request.path
             });
             be.merge_detail(extra);
+            tracing::event!(tracing::Level::TRACE, step = "route_not_found");
             callback_handle_request(cb, Some(&request_id_owned), 0, &be);
         }
     }

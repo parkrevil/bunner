@@ -6,12 +6,18 @@ use serde_json::Value as JsonValue;
 pub struct BodyParser;
 
 impl Middleware for BodyParser {
+    #[tracing::instrument(level = "trace", skip(self, req, res, payload), fields(has_body=payload.body.is_some()))]
     fn handle(
         &self,
         req: &mut BunnerRequest,
         res: &mut BunnerResponse,
         payload: &HandleRequestPayload,
     ) -> bool {
+        tracing::event!(
+            tracing::Level::TRACE,
+            operation = "body_parser",
+            has_body = payload.body.is_some()
+        );
         if payload.body.is_none() {
             return true;
         }
@@ -26,6 +32,11 @@ impl Middleware for BodyParser {
                     HttpStatusCode::UnsupportedMediaType
                         .reason_phrase()
                         .to_string(),
+                );
+                tracing::event!(
+                    tracing::Level::TRACE,
+                    operation = "body_parser_reject",
+                    reason = "invalid_json"
                 );
 
                 return false;

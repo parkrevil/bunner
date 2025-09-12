@@ -4,12 +4,14 @@ use crate::structure::{BunnerRequest, BunnerResponse, HandleRequestPayload};
 pub struct HeaderParser;
 
 impl Middleware for HeaderParser {
+    #[tracing::instrument(level = "trace", skip(self, req, _res, payload), fields(ct=payload.headers.get("content-type").map(|s| s.as_str()).unwrap_or("")))]
     fn handle(
         &self,
         req: &mut BunnerRequest,
         _res: &mut BunnerResponse,
         payload: &HandleRequestPayload,
     ) -> bool {
+        tracing::event!(tracing::Level::TRACE, operation = "header_parser");
         req.headers = serde_json::to_value(&payload.headers)
             .unwrap_or_else(|_| serde_json::Value::Object(serde_json::Map::new()));
 

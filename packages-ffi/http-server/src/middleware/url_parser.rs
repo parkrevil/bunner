@@ -59,18 +59,25 @@ fn is_valid_bracket_key(key: &str) -> bool {
 pub struct UrlParser;
 
 impl Middleware for UrlParser {
+    #[tracing::instrument(level = "trace", skip(self, req, res, payload), fields(url=%payload.url))]
     fn handle(
         &self,
         req: &mut BunnerRequest,
         res: &mut BunnerResponse,
         payload: &HandleRequestPayload,
     ) -> bool {
+        tracing::event!(tracing::Level::TRACE, operation="url_parser", url=%payload.url);
         let u = match Url::parse(payload.url.as_str()) {
             Ok(u) => u,
             Err(_) => {
                 res.http_status = HttpStatusCode::BadRequest;
                 res.body = serde_json::Value::String(
                     HttpStatusCode::BadRequest.reason_phrase().to_string(),
+                );
+                tracing::event!(
+                    tracing::Level::TRACE,
+                    operation = "url_parser_reject",
+                    reason = "url_parse_error"
                 );
                 return false;
             }
@@ -121,6 +128,11 @@ impl Middleware for UrlParser {
                     res.http_status = HttpStatusCode::BadRequest;
                     res.body = serde_json::Value::String(
                         HttpStatusCode::BadRequest.reason_phrase().to_string(),
+                    );
+                    tracing::event!(
+                        tracing::Level::TRACE,
+                        operation = "url_parser_reject",
+                        reason = "qs_deserialize_error"
                     );
                     return false;
                 }

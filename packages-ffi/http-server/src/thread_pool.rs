@@ -27,6 +27,12 @@ fn init() -> mpsc::SyncSender<Task> {
     let capacity = 512; // project convention: fixed capacity
     let (tx, rx) = mpsc::sync_channel::<Task>(capacity);
     let rx = Arc::new(Mutex::new(rx));
+    tracing::event!(
+        tracing::Level::INFO,
+        workers = workers as u64,
+        capacity = capacity as u64,
+        "thread_pool init"
+    );
     for _ in 0..workers {
         let rx_cloned = Arc::clone(&rx);
         thread::spawn(move || loop {
@@ -45,6 +51,7 @@ fn init() -> mpsc::SyncSender<Task> {
     tx
 }
 
+#[tracing::instrument(level = "trace", skip(job))]
 pub fn submit_job(job: Job) -> Result<(), mpsc::TrySendError<Task>> {
     #[cfg(feature = "test")]
     if FORCE_QUEUE_FULL.load(Ordering::SeqCst) {
@@ -60,7 +67,16 @@ pub fn submit_job(job: Job) -> Result<(), mpsc::TrySendError<Task>> {
         *guard = Some(init());
     }
     let tx = guard.as_ref().unwrap();
-    tx.try_send(Task::Job(job))
+    let res = tx.try_send(Task::Job(job));
+    if let Err(ref e) = res {
+        match e {
+            mpsc::TrySendError::Full(_) => tracing::event!(tracing::Level::TRACE, reason = "full"),
+            mpsc::TrySendError::Disconnected(_) => {
+                tracing::event!(tracing::Level::TRACE, reason = "disconnected")
+            }
+        }
+    }
+    res
 }
 
 #[cfg(feature = "test")]
@@ -69,6 +85,11 @@ pub fn shutdown_pool() {
         JUST_SHUTDOWN.store(true, Ordering::SeqCst);
         let mut opt = lock.lock().unwrap();
         if let Some(tx) = opt.take() {
+            tracing::event!(
+                tracing::Level::INFO,
+                workers = workers as u64,
+                "thread_pool shutdown"
+            );
             for _ in 0..workers {
                 // Block to ensure delivery even if queue is saturated
                 let _ = tx.send(Task::Shutdown);
