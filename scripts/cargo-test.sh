@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 # Run all tests once for the entire workspace to avoid duplicate executions
-BACKTRACE=1 cargo nextest run --workspace --target-dir "$ROOT_DIR/target" --features test
+BACKTRACE=1 cargo nextest run --workspace --target-dir "$ROOT_DIR/target" --features test,simd-json
 
 # After tests, copy built dynamic libraries to each package's bin directory
 for manifest in $(find "$ROOT_DIR/packages-ffi" -type f -name Cargo.toml); do

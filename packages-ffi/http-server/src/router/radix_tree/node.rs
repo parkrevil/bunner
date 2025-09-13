@@ -151,14 +151,14 @@ impl RadixTreeNode {
     #[cfg(feature = "test")]
     pub fn get_child_for_test(&self, key: &str) -> Option<&RadixTreeNode> {
         // After finalize, children are in static_keys and static_vals_idx for binary search
-        if let Ok(pos) = self.static_keys.binary_search_by(|k| k.as_str().cmp(key)) {
+        if let Ok(pos) = self.static_keys.binary_search_by(|k| k.as_ref().cmp(key)) {
             return Some(self.static_vals[pos].as_ref());
         }
         None
     }
 
     #[cfg(feature = "test")]
-    pub fn get_static_keys_for_test(&self) -> &SmallVec<[Box<str>; 16]> {
+    pub fn get_static_keys_for_test(&self) -> &SmallVec<[Box<str>; 32]> {
         &self.static_keys
     }
 }

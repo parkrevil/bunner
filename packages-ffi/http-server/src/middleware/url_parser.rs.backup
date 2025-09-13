@@ -1,0 +1,339 @@
+use crate::enums::HttpStatusCode;
+use crate::middleware::chain::Middleware;
+use crate::structure::{BunnerRequest, BunnerResponse, HandleRequestPayload};
+use std::sync::OnceLock;
+use url::Url;
+
+static QS_CONFIG: OnceLock<serde_qs::Config> = OnceLock::new();
+
+pub struct UrlParser;
+
+impl UrlParser {
+    /// Check if character is a valid hex digit
+    fn is_hex_digit(c: u8) -> bool {
+        (c >= b'0' && c <= b'9') || (c >= b'A' && c <= b'F') || (c >= b'a' && c <= b'f')
+    }
+
+    /// Check if character is unreserved according to RFC 3986
+    fn is_unreserved_char(c: u8) -> bool {
+        (c >= b'A' && c <= b'Z') ||
+        (c >= b'a' && c <= b'z') ||
+        (c >= b'0' && c <= b'9') ||
+        c == b'-' || c == b'.' || c == b'_' || c == b'~'
+    }
+
+    /// Check if character is a sub-delimiter according to RFC 3986
+    fn is_sub_delim(c: u8) -> bool {
+        c == b'!' || c == b'$' || c == b'&' || c == b'\'' ||
+        c == b'(' || c == b')' || c == b'*' || c == b'+' ||
+        c == b',' || c == b';' || c == b'='
+    }
+
+    /// Validate query parameter key according to RFC 3986
+    /// Keys can contain unreserved characters, percent-encoded sequences, and brackets for arrays/objects
+    fn is_malformed_key(key: &str) -> bool {
+        if key.is_empty() {
+            return true;
+        }
+
+        let bytes = key.as_bytes();
+        let mut bracket_depth = 0;
+        let mut i = 0;
+
+        while i < bytes.len() {
+            match bytes[i] {
+                b'[' => {
+                    bracket_depth += 1;
+                    if bracket_depth > 10 {
+                        return true; // Too deep nesting (reasonable limit)
+                    }
+                    // Allow bracket at start for array syntax like tags[]
+                    // But reject double brackets like [[
+                    if i > 0 && bytes[i - 1] == b'[' {
+                        return true; // Double bracket
+                    }
+                }
+                b']' => {
+                    if bracket_depth == 0 {
+                        return true; // Closing bracket without opening
+                    }
+                    bracket_depth -= 1;
+                }
+                b'%' => {
+                    // Check for valid percent encoding
+                    if i + 2 >= bytes.len() {
+                        return true; // Incomplete percent encoding
+                    }
+                    let hex1 = bytes[i + 1];
+                    let hex2 = bytes[i + 2];
+                    if !Self::is_hex_digit(hex1) || !Self::is_hex_digit(hex2) {
+                        return true; // Invalid hex digits
+                    }
+                    i += 2; // Skip the hex digits
+                }
+                b'=' => {
+                    // Equals sign should not appear in key (it's the separator)
+                    return true;
+                }
+                c => {
+                    // Check for valid characters according to RFC 3986
+                    // Unreserved = ALPHA / DIGIT / "-" / "." / "_" / "~"
+                    if !Self::is_unreserved_char(c) && !Self::is_sub_delim(c) && c != b':' && c != b'@' {
+                        // Allow some additional characters that are commonly used in query keys
+                        return true;
+                    }
+                }
+            }
+            i += 1;
+        }
+
+        // Unclosed brackets at end
+        bracket_depth > 0
+    }
+
+    /// Check if URL contains non-ASCII characters in domain
+    fn has_non_ascii_domain(url_str: &str) -> bool {
+        if let Some(domain_start) = url_str.find("://") {
+            let after_scheme = &url_str[domain_start + 3..];
+            if let Some(domain_end) = after_scheme.find('/') {
+                let domain = &after_scheme[..domain_end];
+                !domain.is_ascii()
+            } else if let Some(domain_end) = after_scheme.find('?') {
+                let domain = &after_scheme[..domain_end];
+                !domain.is_ascii()
+            } else {
+                !after_scheme.is_ascii()
+            }
+        } else {
+            false
+        }
+    }
+}
+    /// Validate query parameter key according to RFC 3986
+    /// Keys can contain unreserved characters, percent-encoded sequences, and brackets for arrays/objects
+    fn is_malformed_key(key: &str) -> bool {
+        if key.is_empty() {
+            return true;
+        }
+
+        let bytes = key.as_bytes();
+        let mut bracket_depth = 0;
+        let mut i = 0;
+
+        while i < bytes.len() {
+            match bytes[i] {
+                b'[' => {
+                    bracket_depth += 1;
+                    if bracket_depth > 10 {
+                        return true; // Too deep nesting (reasonable limit)
+                    }
+                    // Allow bracket at start for array syntax like tags[]
+                    // But reject double brackets like [[
+                    if i > 0 && bytes[i - 1] == b'[' {
+                        return true; // Double bracket
+                    }
+                }
+                b']' => {
+                    if bracket_depth == 0 {
+                        return true; // Closing bracket without opening
+                    }
+                    bracket_depth -= 1;
+                }
+                b'%' => {
+                    // Check for valid percent encoding
+                    if i + 2 >= bytes.len() {
+                        return true; // Incomplete percent encoding
+                    }
+                    let hex1 = bytes[i + 1];
+                    let hex2 = bytes[i + 2];
+                    if !Self::is_hex_digit(hex1) || !Self::is_hex_digit(hex2) {
+                        return true; // Invalid hex digits
+                    }
+                    i += 2; // Skip the hex digits
+                }
+                b'=' => {
+                    // Equals sign should not appear in key (it's the separator)
+                    return true;
+                }
+                c => {
+                    // Check for valid characters according to RFC 3986
+                    // Unreserved = ALPHA / DIGIT / "-" / "." / "_" / "~"
+                    if !Self::is_unreserved_char(c) && !Self::is_sub_delim(c) && c != b':' && c != b'@' {
+                        // Allow some additional characters that are commonly used in query keys
+                        return true;
+                    }
+                }
+            }
+            i += 1;
+        }
+
+        // Unclosed brackets at end
+        bracket_depth > 0
+    }
+
+    /// Check if character is a valid hex digit
+    fn is_hex_digit(c: u8) -> bool {
+        (c >= b'0' && c <= b'9') || (c >= b'A' && c <= b'F') || (c >= b'a' && c <= b'f')
+    }
+
+    /// Check if character is unreserved according to RFC 3986
+    fn is_unreserved_char(c: u8) -> bool {
+        (c >= b'A' && c <= b'Z') ||
+        (c >= b'a' && c <= b'z') ||
+        (c >= b'0' && c <= b'9') ||
+        c == b'-' || c == b'.' || c == b'_' || c == b'~'
+    }
+
+    /// Check if character is a sub-delimiter according to RFC 3986
+    fn is_sub_delim(c: u8) -> bool {
+        c == b'!' || c == b'$' || c == b'&' || c == b'\'' ||
+        c == b'(' || c == b')' || c == b'*' || c == b'+' ||
+        c == b',' || c == b';' || c == b'='
+    }
+
+    /// Check if URL contains non-ASCII characters in domain
+    fn has_non_ascii_domain(url_str: &str) -> bool {
+        if let Some(domain_start) = url_str.find("://") {
+            let after_scheme = &url_str[domain_start + 3..];
+            if let Some(domain_end) = after_scheme.find('/') {
+                let domain = &after_scheme[..domain_end];
+                !domain.is_ascii()
+            } else if let Some(domain_end) = after_scheme.find('?') {
+                let domain = &after_scheme[..domain_end];
+                !domain.is_ascii()
+            } else {
+                !after_scheme.is_ascii()
+            }
+        } else {
+            false
+        }
+    }
+}
+
+impl Middleware for UrlParser {
+    #[tracing::instrument(level = "trace", skip(self, req, res, payload), fields(url=%payload.url))]
+    fn handle(
+        &self,
+        req: &mut BunnerRequest,
+        res: &mut BunnerResponse,
+        payload: &HandleRequestPayload,
+    ) -> bool {
+        tracing::event!(tracing::Level::TRACE, operation="url_parser", url=%payload.url);
+
+        // Check for non-ASCII domain names
+        if Self::has_non_ascii_domain(&payload.url) {
+            res.http_status = HttpStatusCode::BadRequest;
+            res.body = serde_json::Value::String(
+                HttpStatusCode::BadRequest.reason_phrase().to_string(),
+            );
+            tracing::event!(
+                tracing::Level::TRACE,
+                operation = "url_parser_reject",
+                reason = "non_ascii_domain"
+            );
+            return false;
+        }
+
+        let u = match Url::parse(payload.url.as_str()) {
+            Ok(u) => u,
+            Err(_) => {
+                res.http_status = HttpStatusCode::BadRequest;
+                res.body = serde_json::Value::String(
+                    HttpStatusCode::BadRequest.reason_phrase().to_string(),
+                );
+                tracing::event!(
+                    tracing::Level::TRACE,
+                    operation = "url_parser_reject",
+                    reason = "url_parse_error"
+                );
+                return false;
+            }
+        };
+
+        req.path = u.path().to_string();
+
+        if let Some(q) = u.query() {
+            // Check for clearly malformed query parameters
+            // Allow valid bracket syntax like tags[]=value, user[name]=value
+            // But reject obviously malformed patterns
+            if q.contains("[=") || q.contains("]=") {
+                // Reject bracket directly followed by equals: [key]=value or key]=value
+                res.http_status = HttpStatusCode::BadRequest;
+                res.body = serde_json::Value::String(
+                    HttpStatusCode::BadRequest.reason_phrase().to_string(),
+                );
+                tracing::event!(
+                    tracing::Level::TRACE,
+                    operation = "url_parser_reject",
+                    reason = "malformed_bracket_equals"
+                );
+                return false;
+            } else if q.contains("[[") && q.contains("]]") && !q.contains("]=") {
+                // Allow valid nested: a[b][c]=value
+                // But reject malformed: a[[b]]=value (double brackets)
+                res.http_status = HttpStatusCode::BadRequest;
+                res.body = serde_json::Value::String(
+                    HttpStatusCode::BadRequest.reason_phrase().to_string(),
+                );
+                tracing::event!(
+                    tracing::Level::TRACE,
+                    operation = "url_parser_reject",
+                    reason = "malformed_nested_syntax"
+                );
+                return false;
+            } else if q.starts_with('[') || q.ends_with('[') || q.ends_with(']') {
+                // Reject queries starting/ending with brackets
+                res.http_status = HttpStatusCode::BadRequest;
+                res.body = serde_json::Value::String(
+                    HttpStatusCode::BadRequest.reason_phrase().to_string(),
+                );
+                tracing::event!(
+                    tracing::Level::TRACE,
+                    operation = "url_parser_reject",
+                    reason = "unmatched_brackets"
+                );
+                return false;
+            }
+
+            // Single-pass: rely on serde_qs to parse and avoid pre-validation iteration
+            let config = QS_CONFIG.get_or_init(|| serde_qs::Config::new(5, true));
+            match config.deserialize_str::<std::collections::HashMap<String, serde_json::Value>>(q)
+            {
+                Ok(map) => {
+                    let mut obj = serde_json::Map::new();
+                    for (k, v) in map {
+                        // Validate each key for malformed syntax
+                        if Self::is_malformed_key(&k) {
+                            res.http_status = HttpStatusCode::BadRequest;
+                            res.body = serde_json::Value::String(
+                                HttpStatusCode::BadRequest.reason_phrase().to_string(),
+                            );
+                            tracing::event!(
+                                tracing::Level::TRACE,
+                                operation = "url_parser_reject",
+                                reason = "malformed_key"
+                            );
+                            return false;
+                        }
+                        obj.insert(k, v);
+                    }
+                    req.query_params = Some(serde_json::Value::Object(obj));
+                }
+                Err(_) => {
+                    res.http_status = HttpStatusCode::BadRequest;
+                    res.body = serde_json::Value::String(
+                        HttpStatusCode::BadRequest.reason_phrase().to_string(),
+                    );
+                    tracing::event!(
+                        tracing::Level::TRACE,
+                        operation = "url_parser_reject",
+                        reason = "qs_deserialize_error"
+                    );
+                    return false;
+                }
+            }
+        }
+
+        true
+    }
+}

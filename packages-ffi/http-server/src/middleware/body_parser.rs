@@ -26,7 +26,7 @@ impl Middleware for BodyParser {
 
         let body = payload.body.as_ref().unwrap();
         // Only parse JSON when explicit application/json
-        let is_json = req
+        let content_type = req
             .headers
             .get("content-type")
             .map(|ct| {
@@ -34,13 +34,20 @@ impl Middleware for BodyParser {
                     .next()
                     .unwrap_or("")
                     .trim()
-                    .eq_ignore_ascii_case("application/json")
-            })
+                    .to_ascii_lowercase()
+            });
+
+        let is_json = content_type
+            .as_ref()
+            .map(|ct| ct == "application/json")
             .unwrap_or(false);
 
         if is_json {
             #[cfg(feature = "simd-json")]
-            let parsed: Result<JsonValue, _> = simdjson::from_str(body);
+            let parsed: Result<JsonValue, _> = {
+                let mut body_str = body.clone();
+                unsafe { simdjson::from_str(&mut body_str) }
+            };
             #[cfg(not(feature = "simd-json"))]
             let parsed: Result<JsonValue, _> = serde_json::from_str(body);
 
@@ -61,6 +68,20 @@ impl Middleware for BodyParser {
                     return false;
                 }
             }
+        } else if content_type.is_some() {
+            // Reject non-JSON content types when there's a body
+            res.http_status = HttpStatusCode::UnsupportedMediaType;
+            res.body = serde_json::Value::String(
+                HttpStatusCode::UnsupportedMediaType
+                    .reason_phrase()
+                    .to_string(),
+            );
+            tracing::event!(
+                tracing::Level::TRACE,
+                operation = "body_parser_reject",
+                reason = "non_json_content_type"
+            );
+            return false;
         }
         true
     }

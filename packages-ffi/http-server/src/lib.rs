@@ -14,8 +14,9 @@ pub mod middleware;
 pub mod request_handler;
 pub mod router;
 pub mod structure;
-mod thread_pool;
 pub mod util;
+mod callback_dispatcher;
+mod thread_pool;
 
 use crate::enums::HttpMethod;
 use crate::errors::HttpServerErrorCode;
@@ -24,29 +25,40 @@ use crate::router::errors::RouterErrorCode as RCode;
 use crate::router::structures::RouterError as RError;
 use crate::structure::{AddRouteResult, HttpServerError};
 use crate::util::{
-    Limits, serialize_to_cstring, set_limits, set_log_level_override,
+     serialize_to_cstring
 };
 use std::{
     ffi::{CStr, CString},
     os::raw::c_char,
     sync::{Arc, OnceLock},
 };
-use thread_pool::submit_job;
+use crate::thread_pool::submit_job;
 
-use thread_pool::shutdown_pool;
+use crate::thread_pool::shutdown_pool;
+
+// Helper function to reduce code duplication
+fn handle_null_handle_error(operation: &str) -> *mut c_char {
+    let http_error = HttpServerError::new(
+        HttpServerErrorCode::HandleIsNull,
+        "http_server",
+        operation,
+        "validation",
+        format!("Null handle passed to {}", operation),
+        Some(serde_json::json!(null)),
+    );
+    serialize_to_cstring(&http_error)
+}
 
 #[cfg(feature = "test")]
 pub mod thread_pool_test_support {
-    use std::sync::mpsc::TrySendError;
-
     pub fn submit<F>(job: F) -> Result<(), &'static str>
     where
         F: FnOnce() + Send + 'static,
     {
         match crate::thread_pool::submit_job(Box::new(job)) {
             Ok(()) => Ok(()),
-            Err(TrySendError::Full(_)) => Err("full"),
-            Err(TrySendError::Disconnected(_)) => Err("disconnected"),
+            Err(crossbeam_channel::TrySendError::Full(_)) => Err("full"),
+            Err(crossbeam_channel::TrySendError::Disconnected(_)) => Err("disconnected"),
         }
     }
 
@@ -100,8 +112,6 @@ fn make_router_sealed_error(
 #[unsafe(no_mangle)]
 #[tracing::instrument(skip_all, fields(operation = "init"))]
 pub extern "C" fn init() -> HttpServerHandle {
-    // Initialize tracing only once
-    crate::util::init_tracing_once();
     tracing::event!(tracing::Level::INFO, "http_server init");
     let server = Box::new(HttpServer {
         router: parking_lot::RwLock::new(router::Router::new(None)),
@@ -146,15 +156,22 @@ pub unsafe extern "C" fn add_route(
     path: *const c_char,
 ) -> *mut c_char {
     if handle.is_null() {
-        let http_error = HttpServerError::new(
-            HttpServerErrorCode::HandleIsNull,
+        return handle_null_handle_error("add_route");
+    }
+
+    // Check if path pointer is null
+    if path.is_null() {
+        let err = HttpServerError::new(
+            HttpServerErrorCode::InvalidPayload,
             "http_server",
             "add_route",
             "validation",
-            "Null handle passed to add_route".to_string(),
-            Some(serde_json::json!(null)),
+            "Path pointer is null".to_string(),
+            Some(serde_json::json!({
+                "httpMethod": http_method
+            })),
         );
-        return serialize_to_cstring(&http_error);
+        return serialize_to_cstring(&err);
     }
 
     let http_method = match HttpMethod::from_u8(http_method) {
@@ -220,12 +237,17 @@ pub unsafe extern "C" fn add_routes(
     routes_ptr: *const c_char,
 ) -> *mut c_char {
     if handle.is_null() {
+        return handle_null_handle_error("add_routes");
+    }
+
+    // Check if routes_ptr is null
+    if routes_ptr.is_null() {
         let http_error = HttpServerError::new(
-            HttpServerErrorCode::HandleIsNull,
+            HttpServerErrorCode::InvalidPayload,
             "http_server",
             "add_routes",
             "validation",
-            "Null handle passed to add_routes".to_string(),
+            "Routes pointer is null".to_string(),
             Some(serde_json::json!(null)),
         );
         return serialize_to_cstring(&http_error);
@@ -424,7 +446,6 @@ pub unsafe extern "C" fn handle_request(
 
     let request_id_owned = request_id_str.to_owned();
     let ro = ro_opt.unwrap();
-    let payload_owned_for_job = payload_owned;
     let cancel_flag = {
         let mut map = http_server.cancel_map.write();
         let f = Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -437,7 +458,7 @@ pub unsafe extern "C" fn handle_request(
         request_handler::process_job(
             cb,
             request_id_owned.clone(),
-            payload_owned_for_job,
+            payload_owned,
             ro,
             Some(cancel_flag),
         );
@@ -516,106 +537,3 @@ pub unsafe extern "C" fn cancel_request(handle: HttpServerHandle, request_id_ptr
         }
     }
 }
-
-/// Length-based variant of add_routes
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn add_routes_bytes(
-    handle: HttpServerHandle,
-    ptr: *const u8,
-    len: usize,
-) -> *mut c_char {
-    if handle.is_null() || ptr.is_null() {
-        return serialize_to_cstring(&HttpServerError::new(
-            HttpServerErrorCode::HandleIsNull,
-            "http_server",
-            "add_routes",
-            "validation",
-            "Null handle or ptr".to_string(),
-            None,
-        ));
-    }
-    let bytes = unsafe { std::slice::from_raw_parts(ptr, len) };
-    let s = match std::str::from_utf8(bytes) {
-        Ok(v) => v,
-        Err(_) => {
-            return serialize_to_cstring(&HttpServerError::new(
-                HttpServerErrorCode::InvalidJsonString,
-                "http_server",
-                "add_routes",
-                "parsing",
-                "Invalid UTF-8 JSON".to_string(),
-                None,
-            ));
-        }
-    };
-    unsafe { add_routes(handle, CString::new(s).unwrap().as_ptr()) }
-}
-
-/// Length-based variant of handle_request
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn handle_request_bytes(
-    handle: HttpServerHandle,
-    request_id_ptr: *const u8,
-    request_id_len: usize,
-    payload_ptr: *const u8,
-    payload_len: usize,
-    cb: extern "C" fn(*const c_char, u16, *mut c_char),
-) {
-    if handle.is_null() || request_id_ptr.is_null() || payload_ptr.is_null() {
-        return;
-    }
-    let rid_bytes = unsafe { std::slice::from_raw_parts(request_id_ptr, request_id_len) };
-    let payload_bytes = unsafe { std::slice::from_raw_parts(payload_ptr, payload_len) };
-    let rid = match std::str::from_utf8(rid_bytes) {
-        Ok(v) => v,
-        Err(_) => {
-            return;
-        }
-    };
-    let payload = match std::str::from_utf8(payload_bytes) {
-        Ok(v) => v,
-        Err(_) => {
-            return;
-        }
-    };
-    unsafe {
-        handle_request(
-            handle,
-            CString::new(rid).unwrap().as_ptr(),
-            CString::new(payload).unwrap().as_ptr(),
-            cb,
-        )
-    }
-}
-
-/// Set log level via enum number (0=trace,1=debug,2=info,3=warn,4=error). Overrides env.
-#[unsafe(no_mangle)]
-pub extern "C" fn set_log_level(level: u8) {
-    let level_str = match level {
-        0 => "trace",
-        1 => "debug",
-        2 => "info",
-        3 => "warn",
-        4 => "error",
-        _ => "info",
-    };
-    let _ = set_log_level_override(level_str);
-}
-
-/// Set runtime limits (query depth/keys, cookie bytes/count)
-#[unsafe(no_mangle)]
-pub extern "C" fn set_runtime_limits(
-    qs_max_depth: usize,
-    qs_max_keys: usize,
-    cookie_max_bytes: usize,
-    cookie_max_count: usize,
-) {
-    let _ = set_limits(Limits {
-        qs_max_depth,
-        qs_max_keys,
-        cookie_max_bytes,
-        cookie_max_count,
-    });
-}
-
-// (streaming API removed)

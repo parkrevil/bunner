@@ -6,6 +6,9 @@ use crate::{
     errors::HttpServerErrorCode,
 };
 
+// Cache version string to avoid repeated env! calls
+static VERSION: &str = env!("CARGO_PKG_VERSION");
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AddRouteResult {
     pub key: u16,
@@ -81,7 +84,7 @@ impl From<crate::router::RouterError> for HttpServerError {
             cause: router_error.cause.clone(),
             ts: router_error.ts,
             thread: router_error.thread.clone(),
-            version: env!("CARGO_PKG_VERSION").to_string(),
+            version: VERSION.to_string(),
             description: router_error.description.clone(),
             extra: router_error.extra.clone(),
         }
@@ -89,7 +92,7 @@ impl From<crate::router::RouterError> for HttpServerError {
 }
 
 impl HttpServerError {
-    fn generate_metadata() -> (u64, String, String) {
+    fn generate_metadata() -> (u64, String) {
         let ts = {
             use std::time::{SystemTime, UNIX_EPOCH};
             let now = SystemTime::now()
@@ -98,8 +101,7 @@ impl HttpServerError {
             now.as_millis() as u64
         };
         let thread = format!("{:?}", std::thread::current().id());
-        let version = env!("CARGO_PKG_VERSION").to_string();
-        (ts, thread, version)
+        (ts, thread)
     }
 
     pub fn new(
@@ -110,7 +112,7 @@ impl HttpServerError {
         description: String,
         extra: Option<serde_json::Value>,
     ) -> Self {
-        let (ts, thread, version) = Self::generate_metadata();
+        let (ts, thread) = Self::generate_metadata();
         
         HttpServerError {
             code: code.code(),
@@ -122,7 +124,7 @@ impl HttpServerError {
             extra,
             ts,
             thread,
-            version,
+            version: VERSION.to_string(),
         }
     }
 }
