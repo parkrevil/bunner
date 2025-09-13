@@ -47,8 +47,10 @@ pub fn deserialize<T: DeserializeOwned>(json_str: &str) -> Result<T, InternalErr
 }
 
 #[cfg(not(feature = "simd-json"))]
-pub fn deserialize_with_serde_json<T: DeserializeOwned>(json_str: &str) -> Result<T, InternalErrorCode> {
-        tracing::error!("ddddddddddddddddd");
+pub fn deserialize_with_serde_json<T: DeserializeOwned>(
+    json_str: &str,
+) -> Result<T, InternalErrorCode> {
+    tracing::error!("ddddddddddddddddd");
 
     serde_json::from_str(json_str).map_err(|err| {
         tracing::error!("serde_json deserialization error: {:?}", err);
@@ -74,15 +76,16 @@ pub fn to_c_string(value: &str) -> *mut c_char {
     match CString::new(value) {
         Ok(cstr) => cstr.into_raw(),
         Err(e) => {
-            tracing::trace!("Failed to create CString, value contains null bytes: {:?}", e);
+            tracing::trace!(
+                "Failed to create CString, value contains null bytes: {:?}",
+                e
+            );
             std::ptr::null_mut()
         }
     }
 }
 
-pub fn serialize_and_to_c_string<T: Serialize>(
-    value: &T,
-) -> *mut c_char {
+pub fn serialize_and_to_c_string<T: Serialize>(value: &T) -> *mut c_char {
     match serialize(value) {
         Ok(json_string) => to_c_string(&json_string),
         Err(e) => {

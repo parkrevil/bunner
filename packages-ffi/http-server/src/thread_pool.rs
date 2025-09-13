@@ -20,7 +20,7 @@ static JUST_SHUTDOWN: AtomicBool = AtomicBool::new(false);
 static WORKER_HANDLES: OnceLock<std::sync::Mutex<Vec<JoinHandle<()>>>> = OnceLock::new();
 #[cfg(feature = "test")]
 thread_local! {
-    static FORCE_QUEUE_FULL: std::cell::Cell<bool> = std::cell::Cell::new(false);
+    static FORCE_QUEUE_FULL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 fn env_usize(key: &str, default: usize, min: usize, max: usize) -> usize {
@@ -116,11 +116,11 @@ pub fn shutdown_pool() {
             // ignore error if already disconnected
             let _ = tx.send(Task::Shutdown);
         }
-        if let Some(handles_mutex) = WORKER_HANDLES.get() {
-            if let Ok(mut handles) = handles_mutex.lock() {
-                for h in handles.drain(..) {
-                    let _ = h.join();
-                }
+        if let Some(handles_mutex) = WORKER_HANDLES.get()
+            && let Ok(mut handles) = handles_mutex.lock()
+        {
+            for h in handles.drain(..) {
+                let _ = h.join();
             }
         }
     }

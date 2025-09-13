@@ -53,7 +53,9 @@ impl Middleware for HeaderParser {
 }
 
 // RFC 7231 준수 content-type 파싱 함수
-fn parse_content_type(content_type: &str) -> Result<(String, std::collections::HashMap<String, String>), &'static str> {
+fn parse_content_type(
+    content_type: &str,
+) -> Result<(String, std::collections::HashMap<String, String>), &'static str> {
     let content_type = content_type.trim();
 
     if content_type.is_empty() {
@@ -78,11 +80,13 @@ fn parse_content_type(content_type: &str) -> Result<(String, std::collections::H
             }
 
             let mut kv = param.splitn(2, '=');
-            let key = kv.next()
+            let key = kv
+                .next()
                 .map(|s| s.trim().to_lowercase())
                 .ok_or("invalid parameter format")?;
 
-            let value = kv.next()
+            let value = kv
+                .next()
                 .map(|s| s.trim().trim_matches('"'))
                 .unwrap_or("")
                 .to_string();

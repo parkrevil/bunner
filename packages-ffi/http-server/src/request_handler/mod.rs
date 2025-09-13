@@ -1,13 +1,10 @@
-pub mod request_handler;
-pub use request_handler::handle;
-
-pub mod helpers;
-pub use helpers::callback_handle_request;
-
-pub mod types;
-pub use types::HandleRequestCallback;
-
 mod callback_dispatcher;
-
+mod handler;
+mod helpers;
 mod structures;
-pub use structures::{HandleRequestPayload, BunnerRequest, BunnerResponse};
+mod types;
+
+pub use handler::handle;
+pub use helpers::callback_handle_request;
+pub use structures::{BunnerRequest, BunnerResponse, HandleRequestPayload};
+pub use types::HandleRequestCallback;

@@ -1,6 +1,6 @@
+use serde_qs::Config as QsConfig;
 use std::sync::OnceLock;
 use url::Url;
-use serde_qs::Config as QsConfig;
 
 use crate::enums::HttpStatusCode;
 use crate::middleware::chain::Middleware;
@@ -44,11 +44,10 @@ impl Middleware for UrlParser {
         req.path = u.path().to_string();
 
         if let Some(q) = u.query() {
-            let config = QS_CONFIG.get_or_init(|| {
-                QsConfig::new(32, false)
-            });
+            let config = QS_CONFIG.get_or_init(|| QsConfig::new(32, false));
 
-            match config.deserialize_str::<std::collections::HashMap<String, serde_json::Value>>(q) {
+            match config.deserialize_str::<std::collections::HashMap<String, serde_json::Value>>(q)
+            {
                 Ok(map) => {
                     let mut obj = serde_json::Map::new();
                     for (k, v) in map {

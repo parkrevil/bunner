@@ -1,6 +1,6 @@
+use super::{HandleRequestCallback, callback_dispatcher};
+use crate::utils::json;
 use serde::Serialize;
-use crate::utils::{json};
-use super::{callback_dispatcher, HandleRequestCallback};
 
 #[inline(always)]
 pub fn callback_handle_request<T: Serialize>(

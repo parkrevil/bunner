@@ -26,16 +26,13 @@ impl Middleware for BodyParser {
 
         let body = payload.body.as_ref().unwrap();
         // Only parse JSON when explicit application/json
-        let content_type = req
-            .headers
-            .get("content-type")
-            .map(|ct| {
-                ct.split(';')
-                    .next()
-                    .unwrap_or("")
-                    .trim()
-                    .to_ascii_lowercase()
-            });
+        let content_type = req.headers.get("content-type").map(|ct| {
+            ct.split(';')
+                .next()
+                .unwrap_or("")
+                .trim()
+                .to_ascii_lowercase()
+        });
 
         let is_json = content_type
             .as_ref()
@@ -79,7 +76,11 @@ impl Middleware for BodyParser {
             tracing::event!(
                 tracing::Level::TRACE,
                 operation = "body_parser_reject",
-                reason = if content_type.is_some() { "non_json_content_type" } else { "missing_content_type" }
+                reason = if content_type.is_some() {
+                    "non_json_content_type"
+                } else {
+                    "missing_content_type"
+                }
             );
             return false;
         }

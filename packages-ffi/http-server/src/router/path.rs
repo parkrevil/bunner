@@ -1,30 +1,30 @@
 use crate::router::errors::RouterErrorCode;
-use crate::router::structures::RouterError;
+use crate::router::structures::{RouterError, RouterResult};
 use serde_json::json;
 
 #[inline]
 #[tracing::instrument(level = "trace", skip(path), fields(path_len=path.len() as u64))]
-pub(crate) fn normalize_and_validate_path(path: &str) -> Result<String, RouterError> {
+pub(crate) fn normalize_and_validate_path(path: &str) -> RouterResult<String> {
     if !path.is_ascii() {
-        return Err(RouterError::new(
+        return Err(Box::new(RouterError::new(
             RouterErrorCode::RoutePathNotAscii,
             "router",
             "path_processing",
             "validation",
             "Path contains non-ASCII characters".to_string(),
             Some(json!({"path": path, "operation": "normalize_and_validate"})),
-        ));
+        )));
     }
     let bytes = path.as_bytes();
     if bytes.is_empty() {
-        return Err(RouterError::new(
+        return Err(Box::new(RouterError::new(
             RouterErrorCode::RoutePathEmpty,
-            "router", 
+            "router",
             "path_processing",
             "validation",
             "Path is empty".to_string(),
             Some(json!({"path": path, "operation": "normalize_and_validate"})),
-        ));
+        )));
     }
     let mut end = bytes.len();
     while end > 1 && bytes[end - 1] == b'/' {
@@ -34,14 +34,16 @@ pub(crate) fn normalize_and_validate_path(path: &str) -> Result<String, RouterEr
     // Validate allowed characters while scanning once
     for &b in &bytes[..end] {
         if b <= 0x20 {
-            return Err(RouterError::new(
+            return Err(Box::new(RouterError::new(
                 RouterErrorCode::RoutePathContainsDisallowedCharacters,
                 "router",
-                "path_processing", 
+                "path_processing",
                 "validation",
                 "Path contains control characters or spaces".to_string(),
-                Some(json!({"path": path, "invalid_byte": b, "operation": "normalize_and_validate"})),
-            ));
+                Some(
+                    json!({"path": path, "invalid_byte": b, "operation": "normalize_and_validate"}),
+                ),
+            )));
         }
         match b {
             b'a'..=b'z'
@@ -66,14 +68,18 @@ pub(crate) fn normalize_and_validate_path(path: &str) -> Result<String, RouterEr
             | b'@'
             | b'/'
             | b'%' => {}
-            _ => return Err(RouterError::new(
-                RouterErrorCode::RoutePathContainsDisallowedCharacters,
-                "router",
-                "path_processing",
-                "validation", 
-                "Path contains disallowed characters".to_string(),
-                Some(json!({"path": path, "invalid_byte": b, "invalid_char": b as char, "operation": "normalize_and_validate"})),
-            )),
+            _ => {
+                return Err(Box::new(RouterError::new(
+                    RouterErrorCode::RoutePathContainsDisallowedCharacters,
+                    "router",
+                    "path_processing",
+                    "validation",
+                    "Path contains disallowed characters".to_string(),
+                    Some(
+                        json!({"path": path, "invalid_byte": b, "invalid_char": b as char, "operation": "normalize_and_validate"}),
+                    ),
+                )));
+            }
         }
     }
 
@@ -88,17 +94,17 @@ pub(crate) fn normalize_and_validate_path(path: &str) -> Result<String, RouterEr
         normalized = normalized.replace("//", "/");
     }
     if normalized == "/.." || normalized.starts_with("/../") || normalized.contains("/../") {
-        return Err(RouterError::new(
+        return Err(Box::new(RouterError::new(
             RouterErrorCode::RoutePathSyntaxInvalid,
             "router",
             "path_processing",
             "validation",
             "Path contains invalid parent directory references".to_string(),
-            Some(json!({"path": path, "normalized": normalized, "operation": "normalize_and_validate"})),
-        ));
+            Some(
+                json!({"path": path, "normalized": normalized, "operation": "normalize_and_validate"}),
+            ),
+        )));
     }
 
     Ok(normalized)
 }
-
-

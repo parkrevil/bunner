@@ -1,6 +1,6 @@
 use super::errors::RouterErrorCode;
 use super::path::normalize_and_validate_path;
-use super::structures::RouterError;
+use super::structures::{RouterError, RouterResult};
 use super::{Router, radix_tree::HTTP_METHOD_COUNT};
 use crate::enums::HttpMethod;
 use crate::router::pattern::{self, SegmentPattern};
@@ -16,6 +16,8 @@ pub struct RouterReadOnly {
     static_maps: [FastHashMap<Box<str>, u16>; HTTP_METHOD_COUNT],
     root: ReadOnlyNode,
 }
+
+type RouteMatch = (u16, Vec<(String, (usize, usize))>);
 
 impl RouterReadOnly {
     /// Read-only router built for lock-free concurrent lookups.
@@ -46,25 +48,23 @@ impl RouterReadOnly {
     }
 
     #[tracing::instrument(skip(self, path), fields(method=?method, path=%path))]
-    pub fn find(
-        &self,
-        method: HttpMethod,
-        path: &str,
-    ) -> Result<(u16, Vec<(String, (usize, usize))>), RouterError> {
+    pub fn find(&self, method: HttpMethod, path: &str) -> RouterResult<RouteMatch> {
         tracing::event!(tracing::Level::TRACE, operation="find", method=?method, path=%path);
         let normalized = match normalize_and_validate_path(path) {
             Ok(p) => p,
-            Err(mut err) => {
+            Err(err_box) => {
+                // Unbox so we can mutate context fields, then re-box for the RouterResult
+                let mut err = *err_box;
                 // Update the error context for route matching operation
                 err.stage = "route_matching".to_string();
                 err.cause = "routing".to_string();
-                if let Some(ref mut extra) = err.extra {
-                    if let Some(obj) = extra.as_object_mut() {
-                        obj.insert("method".to_string(), serde_json::json!(method as u8));
-                        obj.insert("operation".to_string(), serde_json::json!("route_matching"));
-                    }
+                if let Some(ref mut extra) = err.extra
+                    && let Some(obj) = extra.as_object_mut()
+                {
+                    obj.insert("method".to_string(), serde_json::json!(method as u8));
+                    obj.insert("operation".to_string(), serde_json::json!("route_matching"));
                 }
-                return Err(err);
+                return Err(Box::new(err));
             }
         };
 
@@ -82,18 +82,18 @@ impl RouterReadOnly {
             // Clone to return an owned Vec while retaining buffer capacity in TLS
             Ok((rk, params.clone()))
         } else {
-            Err(RouterError::new(
+            Err(Box::new(RouterError::new(
                 RouterErrorCode::MatchNotFound,
                 "router",
                 "route_matching",
                 "routing",
                 "No route matched for given method and path".to_string(),
                 Some(serde_json::json!({
-                        "path": normalized,
-                        "method": method as u8,
-                        "operation": "route_lookup"
-                    })),
-            ))
+                    "path": normalized,
+                    "method": method as u8,
+                    "operation": "route_lookup"
+                })),
+            )))
         }
     }
 }
@@ -171,7 +171,7 @@ impl ReadOnlyNode {
         &self,
         method: HttpMethod,
         params: &mut [(String, (usize, usize))],
-    ) -> Option<(u16, Vec<(String, (usize, usize))>)> {
+    ) -> Option<RouteMatch> {
         let idx = method as usize;
         let rk = self.routes[idx];
         if rk != 0 {
@@ -191,7 +191,7 @@ impl ReadOnlyNode {
         s: &str,
         i: usize,
         params: &mut Vec<(String, (usize, usize))>,
-    ) -> Option<(u16, Vec<(String, (usize, usize))>)> {
+    ) -> Option<RouteMatch> {
         let current_i = Self::skip_slashes(s, i);
 
         if let Some(edge) = &self.fused_edge {
@@ -211,8 +211,7 @@ impl ReadOnlyNode {
         }
 
         let start = current_i;
-        let next_slash = s[start..]
-            .as_bytes()
+        let next_slash = s.as_bytes()[start..]
             .iter()
             .position(|&b| b == b'/')
             .map_or(s.len(), |pos| start + pos);

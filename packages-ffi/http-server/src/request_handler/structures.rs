@@ -1,8 +1,6 @@
+use crate::enums::{HttpMethod, HttpStatusCode};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use crate::{
-    enums::{HttpMethod, HttpStatusCode},
-};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct BunnerResponse {

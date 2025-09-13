@@ -11,6 +11,7 @@ pub use errors::RouterErrorCode;
 // path utils are consumed by readonly module only
 pub use readonly::RouterReadOnly;
 pub use structures::RouterError;
+use structures::RouterResult;
 
 #[derive(Debug, Default)]
 pub struct RouteMatchResult {
@@ -30,11 +31,11 @@ impl Router {
         }
     }
 
-    pub fn add(&mut self, method: HttpMethod, path: &str) -> Result<u16, RouterError> {
+    pub fn add(&mut self, method: HttpMethod, path: &str) -> RouterResult<u16> {
         self.radix_tree.insert(method, path)
     }
 
-    pub fn add_bulk<I>(&mut self, entries: I) -> Result<Vec<u16>, RouterError>
+    pub fn add_bulk<I>(&mut self, entries: I) -> RouterResult<Vec<u16>>
     where
         I: IntoIterator<Item = (HttpMethod, String)>,
     {

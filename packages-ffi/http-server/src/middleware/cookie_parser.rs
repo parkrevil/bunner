@@ -14,7 +14,7 @@ impl Middleware for CookieParser {
         _payload: &HandleRequestPayload,
     ) -> bool {
         tracing::event!(tracing::Level::TRACE, operation = "cookie_parser");
-        if let Some(c) = req.headers.get(&"cookie".to_string()).cloned() {
+        if let Some(c) = req.headers.get("cookie").cloned() {
             let map: std::collections::HashMap<String, String> = parse_cookies(&c);
 
             req.cookies = json!(map);
@@ -44,13 +44,14 @@ fn parse_cookies(cookie_header: &str) -> std::collections::HashMap<String, Strin
                 if !current_name.is_empty() {
                     let name = current_name.trim().to_string();
                     let value = current_value.trim().to_string();
-                    let processed_value = if value.starts_with('"') && value.ends_with('"') && value.len() >= 2 {
-                        // 따옴표 제거 및 이스케이프 처리
-                        let inner = &value[1..value.len()-1];
-                        inner.replace("\\\"", "\"").replace("\\\\", "\\")
-                    } else {
-                        value
-                    };
+                    let processed_value =
+                        if value.starts_with('"') && value.ends_with('"') && value.len() >= 2 {
+                            // 따옴표 제거 및 이스케이프 처리
+                            let inner = &value[1..value.len() - 1];
+                            inner.replace("\\\"", "\"").replace("\\\\", "\\")
+                        } else {
+                            value
+                        };
                     map.insert(name, processed_value);
                 }
                 current_name.clear();
@@ -86,8 +87,9 @@ fn parse_cookies(cookie_header: &str) -> std::collections::HashMap<String, Strin
     if !current_name.is_empty() {
         let name = current_name.trim().to_string();
         let value = current_value.trim().to_string();
-        let processed_value = if value.starts_with('"') && value.ends_with('"') && value.len() >= 2 {
-            let inner = &value[1..value.len()-1];
+        let processed_value = if value.starts_with('"') && value.ends_with('"') && value.len() >= 2
+        {
+            let inner = &value[1..value.len() - 1];
             inner.replace("\\\"", "\"").replace("\\\\", "\\")
         } else {
             value

@@ -19,14 +19,14 @@ pub mod utils;
 
 use crate::enums::HttpMethod;
 use crate::errors::{HttpServerError, HttpServerErrorCode};
-use crate::request_handler::callback_handle_request;
+use crate::request_handler::{callback_handle_request, handle as process_request};
 use crate::router::errors::RouterErrorCode;
 use crate::router::structures::RouterError;
 use crate::structure::AddRouteResult;
 use crate::thread_pool::{shutdown_pool, submit_job};
 use crate::utils::{json, string};
 use std::{
-    ffi::{CStr},
+    ffi::CStr,
     os::raw::c_char,
     sync::{Arc, OnceLock},
 };
@@ -431,7 +431,7 @@ pub unsafe extern "C" fn handle_request(
         return;
     }
 
-    let payload_str = match string::cstr_to_str(payload_ptr) {
+    let payload_str = match unsafe { string::cstr_to_str(payload_ptr) } {
         Ok(s) => s,
         Err(_) => {
             let err = HttpServerError::new(
@@ -484,7 +484,7 @@ pub unsafe extern "C" fn handle_request(
 
     match submit_job(Box::new(move || {
         // Worker will always perform the callback; main thread only observes enqueue success/failure
-        request_handler::handle(
+        process_request(
             cb,
             request_id_owned.clone(),
             payload_owned,
@@ -555,10 +555,15 @@ pub unsafe extern "C" fn seal_routes(handle: HttpServerHandle) {
 /// After calling this function, the pointer is dangling and must not be used again.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn free_string(ptr: *mut c_char) {
-    string::free_string(ptr);
+    unsafe { string::free_string(ptr) };
 }
 
 /// Cancels an in-flight request by id (no callback will be sent if not already).
+///
+/// # Safety
+/// - `handle` must be a valid pointer returned by `init`.
+/// - `request_id_ptr` must be a valid, non-null, null-terminated C string pointer to the request id.
+/// - The pointer must remain valid for the duration of the call.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cancel_request(handle: HttpServerHandle, request_id_ptr: *const c_char) {
     if handle.is_null() || request_id_ptr.is_null() {

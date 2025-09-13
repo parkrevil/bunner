@@ -67,3 +67,6 @@ impl RouterError {
         }
     }
 }
+
+// Use boxed RouterError in Results to avoid large error-variant sizes on the stack.
+pub type RouterResult<T> = Result<T, Box<RouterError>>;

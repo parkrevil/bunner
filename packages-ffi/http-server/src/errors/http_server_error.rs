@@ -1,5 +1,5 @@
 use crate::constants::PACKAGE_VERSION;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[repr(u16)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
@@ -73,6 +73,12 @@ impl From<crate::router::RouterError> for HttpServerError {
     }
 }
 
+impl From<Box<crate::router::RouterError>> for HttpServerError {
+    fn from(router_error: Box<crate::router::RouterError>) -> Self {
+        HttpServerError::from(*router_error)
+    }
+}
+
 impl HttpServerError {
     fn generate_metadata() -> (u64, String) {
         let ts = {
@@ -95,7 +101,7 @@ impl HttpServerError {
         extra: Option<serde_json::Value>,
     ) -> Self {
         let (ts, thread) = Self::generate_metadata();
-        
+
         HttpServerError {
             code: code.code(),
             error: code.as_str().to_string(),

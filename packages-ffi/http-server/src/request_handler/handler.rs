@@ -1,17 +1,17 @@
+use percent_encoding::percent_decode_str;
+use serde_json::Value as JsonValue;
 use std::os::raw::c_char;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use serde_json::{Value as JsonValue};
-use percent_encoding::percent_decode_str;
 
 use crate::enums::HttpMethod;
-use crate::middleware::{Chain, BodyParser, CookieParser, HeaderParser, UrlParser};
-use crate::router;
 use crate::errors::{HttpServerError, HttpServerErrorCode};
+use crate::middleware::{BodyParser, Chain, CookieParser, HeaderParser, UrlParser};
+use crate::router;
 use crate::utils::json;
 
-use super::{callback_handle_request, BunnerRequest, BunnerResponse, HandleRequestPayload};
 use super::structures::HandleRequestOutput;
+use super::{BunnerRequest, BunnerResponse, HandleRequestPayload, callback_handle_request};
 
 #[tracing::instrument(skip(cb, payload_owned_for_job, ro), fields(request_id=%request_id_owned))]
 pub fn handle(
@@ -21,10 +21,10 @@ pub fn handle(
     ro: Arc<router::RouterReadOnly>,
     cancel: Option<Arc<AtomicBool>>,
 ) {
-    if let Some(ref c) = cancel {
-        if c.load(Ordering::SeqCst) {
-            return;
-        }
+    if let Some(ref c) = cancel
+        && c.load(Ordering::SeqCst)
+    {
+        return;
     }
 
     let payload_parsed = match json::deserialize::<HandleRequestPayload>(&payload_owned_for_job) {
@@ -37,7 +37,9 @@ pub fn handle(
                 "parse_payload",
                 "parsing",
                 "Failed to parse request payload JSON".to_string(),
-                Some(serde_json::json!({"requestId": request_id_owned, "payloadPreview": preview, "payloadLength": payload_owned_for_job.len()})),
+                Some(
+                    serde_json::json!({"requestId": request_id_owned, "payloadPreview": preview, "payloadLength": payload_owned_for_job.len()}),
+                ),
             );
 
             tracing::event!(tracing::Level::ERROR, reason="parse_payload_error", request_id=%request_id_owned);
@@ -57,7 +59,9 @@ pub fn handle(
                 "parse_payload",
                 "validation",
                 "Invalid HTTP method in request payload".to_string(),
-                Some(serde_json::json!({"requestId": request_id_owned, "httpMethod": payload_parsed.http_method})),
+                Some(
+                    serde_json::json!({"requestId": request_id_owned, "httpMethod": payload_parsed.http_method}),
+                ),
             );
 
             callback_handle_request(cb, Some(request_id_owned.as_str()), None, &bunner_error);
@@ -90,10 +94,10 @@ pub fn handle(
         .with(CookieParser)
         .with(BodyParser);
 
-    if let Some(ref c) = cancel {
-        if c.load(Ordering::SeqCst) {
-            return;
-        }
+    if let Some(ref c) = cancel
+        && c.load(Ordering::SeqCst)
+    {
+        return;
     }
 
     if !chain.execute(&mut request, &mut response, &payload_parsed) {
@@ -136,7 +140,12 @@ pub fn handle(
                 request_id=%request_id_owned
             );
 
-            callback_handle_request(cb, Some(request_id_owned.as_str()), Some(route_key), &output);
+            callback_handle_request(
+                cb,
+                Some(request_id_owned.as_str()),
+                Some(route_key),
+                &output,
+            );
         }
         Err(router_error) => {
             let mut be = HttpServerError::from(router_error);

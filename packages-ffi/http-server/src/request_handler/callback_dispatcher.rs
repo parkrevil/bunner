@@ -1,10 +1,10 @@
 use crossbeam_channel as xchan;
-use std::ffi::{c_void, CString};
+use std::ffi::{CString, c_void};
 use std::os::raw::c_char;
 use std::sync::OnceLock;
 
-use crate::utils::string;
 use super::HandleRequestCallback;
+use crate::utils::string;
 
 struct CallbackJob {
     callback: HandleRequestCallback,
@@ -32,57 +32,63 @@ fn init() -> xchan::Sender<CallbackJob> {
 
     std::thread::Builder::new()
         .name("bunner-callback-dispatcher".to_string())
-        .spawn(|| loop {
-            match RX.get().unwrap().recv() {
-                Ok(job) => {
-                    tracing::event!(
-                        tracing::Level::TRACE,
-                        stage = "dispatcher_recv",
-                        has_req_id = job.request_id.is_some(),
-                        route_key = job.route_key
-                    );
+        .spawn(|| {
+            while let Ok(job) = RX.get().unwrap().recv() {
+                tracing::event!(
+                    tracing::Level::TRACE,
+                    stage = "dispatcher_recv",
+                    has_req_id = job.request_id.is_some(),
+                    route_key = job.route_key
+                );
 
-                    // Create a temporary C string for req_id valid only during the call
-                    let request_id_cstr: Option<CString> = job
-                        .request_id
-                        .as_ref()
-                        .and_then(|s| CString::new(s.as_str()).ok());
-                    let request_id_ptr = request_id_cstr
-                        .as_ref()
-                        .map(|s| s.as_ptr())
-                        .unwrap_or(std::ptr::null());
+                // Create a temporary C string for req_id valid only during the call
+                let request_id_cstr: Option<CString> = job
+                    .request_id
+                    .as_ref()
+                    .and_then(|s| CString::new(s.as_str()).ok());
+                let request_id_ptr = request_id_cstr
+                    .as_ref()
+                    .map(|s| s.as_ptr())
+                    .unwrap_or(std::ptr::null());
 
-                    // SAFETY: res_ptr is expected to be a valid pointer allocated by Rust.
-                    // The callback should free it; however, if the callback panics, we catch and free here.
-                    let res = std::panic::catch_unwind(|| {
-                        (job.callback)(request_id_ptr, job.route_key.unwrap_or_default(), job.result_ptr)
-                    });
+                // SAFETY: res_ptr is expected to be a valid pointer allocated by Rust.
+                // The callback should free it; however, if the callback panics, we catch and free here.
+                let res = std::panic::catch_unwind(|| {
+                    (job.callback)(
+                        request_id_ptr,
+                        job.route_key.unwrap_or_default(),
+                        job.result_ptr,
+                    )
+                });
 
-                    if res.is_err() {
-                        // Callback panicked: ensure we free the buffer to avoid leaks.
-                        string::free_string(job.result_ptr);
+                if res.is_err() {
+                    // Callback panicked: ensure we free the buffer to avoid leaks.
+                    unsafe { string::free_string(job.result_ptr) };
 
-                        tracing::event!(tracing::Level::ERROR, reason = "callback_panic_caught");
-                    }
-
-                    tracing::event!(
-                        tracing::Level::TRACE,
-                        stage = "dispatcher_done",
-                        cleaned = job.owned_ptr.is_some()
-                    );
-
-                    if let (Some(optr), Some(clean)) = (job.owned_ptr, job.cleanup) {
-                        unsafe { clean(optr) };
-                    }
+                    tracing::event!(tracing::Level::ERROR, reason = "callback_panic_caught");
                 }
-                Err(_) => break,
+
+                tracing::event!(
+                    tracing::Level::TRACE,
+                    stage = "dispatcher_done",
+                    cleaned = job.owned_ptr.is_some()
+                );
+
+                if let (Some(optr), Some(clean)) = (job.owned_ptr, job.cleanup) {
+                    unsafe { clean(optr) };
+                }
             }
         })
         .ok();
     tx
 }
 
-pub fn enqueue(callback: HandleRequestCallback, request_id: Option<&str>, route_key: Option<u16>, res_ptr: *mut c_char) {
+pub fn enqueue(
+    callback: HandleRequestCallback,
+    request_id: Option<&str>,
+    route_key: Option<u16>,
+    res_ptr: *mut c_char,
+) {
     let tx = TX.get_or_init(init);
 
     tracing::event!(
@@ -108,6 +114,6 @@ pub fn enqueue(callback: HandleRequestCallback, request_id: Option<&str>, route_
         );
         // If sending fails, we must free the result pointer to prevent a memory leak,
         // as the dispatcher thread will never receive it.
-        crate::utils::string::free_string(res_ptr);
+        unsafe { string::free_string(res_ptr) };
     }
 }

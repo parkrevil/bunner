@@ -14,12 +14,19 @@ mod serialize {
     #[test]
     fn handles_special_floats() {
         #[derive(serde::Serialize)]
-        struct WithFloat { v: f64 }
+        struct WithFloat {
+            v: f64,
+        }
 
         // Just verify they don't cause errors
         assert!(serialize(&WithFloat { v: f64::NAN }).is_ok());
         assert!(serialize(&WithFloat { v: f64::INFINITY }).is_ok());
-        assert!(serialize(&WithFloat { v: f64::NEG_INFINITY }).is_ok());
+        assert!(
+            serialize(&WithFloat {
+                v: f64::NEG_INFINITY
+            })
+            .is_ok()
+        );
     }
 
     #[test]
@@ -57,12 +64,19 @@ mod serialize_with_serde_json {
     #[test]
     fn handles_special_floats() {
         #[derive(serde::Serialize)]
-        struct WithFloat { v: f64 }
+        struct WithFloat {
+            v: f64,
+        }
 
         // Just verify they don't cause errors
         assert!(serialize(&WithFloat { v: f64::NAN }).is_ok());
         assert!(serialize(&WithFloat { v: f64::INFINITY }).is_ok());
-        assert!(serialize(&WithFloat { v: f64::NEG_INFINITY }).is_ok());
+        assert!(
+            serialize(&WithFloat {
+                v: f64::NEG_INFINITY
+            })
+            .is_ok()
+        );
     }
 
     #[test]
@@ -99,12 +113,19 @@ mod serialize_with_simd_json {
     #[test]
     fn handles_special_floats() {
         #[derive(serde::Serialize)]
-        struct WithFloat { v: f64 }
+        struct WithFloat {
+            v: f64,
+        }
 
         // Just verify they don't cause errors
         assert!(serialize(&WithFloat { v: f64::NAN }).is_ok());
         assert!(serialize(&WithFloat { v: f64::INFINITY }).is_ok());
-        assert!(serialize(&WithFloat { v: f64::NEG_INFINITY }).is_ok());
+        assert!(
+            serialize(&WithFloat {
+                v: f64::NEG_INFINITY
+            })
+            .is_ok()
+        );
     }
 
     #[test]
@@ -222,7 +243,10 @@ mod to_c_string {
     fn converts_to_c_string_and_round_trips() {
         let value = "valid string ✓ 한글 😊";
         let ptr = to_c_string(value);
-        assert!(!ptr.is_null(), "Pointer should not be null for valid string");
+        assert!(
+            !ptr.is_null(),
+            "Pointer should not be null for valid string"
+        );
 
         // SAFETY: The pointer is not null and was created from a valid string,
         // so it's safe to convert back. We are also taking ownership.
@@ -237,14 +261,20 @@ mod to_c_string {
     fn returns_null_on_null_byte_in_string() {
         let value = "bad\0string";
         let ptr = to_c_string(value);
-        assert!(ptr.is_null(), "Pointer should be null for string with null byte");
+        assert!(
+            ptr.is_null(),
+            "Pointer should be null for string with null byte"
+        );
     }
 
     #[test]
     fn handles_empty_string() {
         let value = "";
         let ptr = to_c_string(value);
-        assert!(!ptr.is_null(), "Pointer should not be null for an empty string");
+        assert!(
+            !ptr.is_null(),
+            "Pointer should not be null for an empty string"
+        );
 
         // SAFETY: The pointer is not null and was created from an empty string.
         unsafe {
@@ -258,7 +288,10 @@ mod to_c_string {
     fn handles_long_string() {
         let value = "a".repeat(10000);
         let ptr = to_c_string(&value);
-        assert!(!ptr.is_null(), "Pointer should not be null for a long string");
+        assert!(
+            !ptr.is_null(),
+            "Pointer should not be null for a long string"
+        );
 
         // SAFETY: The pointer is not null and was created from a long string.
         unsafe {
@@ -278,7 +311,10 @@ mod serialize_and_to_c_string {
     fn serializes_and_converts_to_c_string() {
         let value = vec!["example", "test"];
         let ptr = serialize_and_to_c_string(&value);
-        assert!(!ptr.is_null(), "Pointer should not be null for valid serialization");
+        assert!(
+            !ptr.is_null(),
+            "Pointer should not be null for valid serialization"
+        );
 
         // SAFETY: The pointer is not null and comes from a successful serialization.
         unsafe {
@@ -301,7 +337,9 @@ mod serialize_and_to_c_string {
         assert!(!ptr_nan.is_null());
         let ptr_inf = serialize_and_to_c_string(&WithFloat { v: f64::INFINITY });
         assert!(!ptr_inf.is_null());
-        let ptr_neg_inf = serialize_and_to_c_string(&WithFloat { v: f64::NEG_INFINITY });
+        let ptr_neg_inf = serialize_and_to_c_string(&WithFloat {
+            v: f64::NEG_INFINITY,
+        });
         assert!(!ptr_neg_inf.is_null());
 
         // SAFETY: Clean up the allocated memory to prevent leaks in tests.
@@ -331,7 +369,10 @@ mod serialize_and_to_c_string {
         }
 
         let ptr = serialize_and_to_c_string(&FailingType);
-        assert!(ptr.is_null(), "Pointer should be null on serialization failure");
+        assert!(
+            ptr.is_null(),
+            "Pointer should be null on serialization failure"
+        );
     }
 
     #[test]
