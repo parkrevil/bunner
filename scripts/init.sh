@@ -48,6 +48,8 @@ ensure_cargo_tool cargo-criterion cargo-criterion
 ensure_cargo_tool cargo-udeps cargo-udeps
 ensure_cargo_tool cargo-udeps cargo-udeps
 ensure_cargo_tool cargo-edit cargo-edit
+ensure_cargo_tool cargo-edit cargo-edit
+ensure_cargo_tool cargo-tarpaulin cargo-tarpaulin
 
 # Install Bun dependencies
 bun i
