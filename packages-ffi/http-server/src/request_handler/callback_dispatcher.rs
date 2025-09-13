@@ -3,13 +3,14 @@ use std::ffi::{c_void, CString};
 use std::os::raw::c_char;
 use std::sync::OnceLock;
 
-type FfiCallback = extern "C" fn(*const c_char, u16, *mut c_char);
+use crate::utils::string;
+use super::HandleRequestCallback;
 
 struct CallbackJob {
-    cb: FfiCallback,
-    req_id: Option<String>,
-    route_key: u16,
-    res_ptr: *mut c_char,
+    callback: HandleRequestCallback,
+    request_id: Option<String>,
+    route_key: Option<u16>,
+    result_ptr: *mut c_char,
     owned_ptr: Option<*mut c_void>,
     cleanup: Option<unsafe fn(*mut c_void)>,
 }
@@ -23,9 +24,12 @@ unsafe impl Send for CallbackJob {}
 static TX: OnceLock<xchan::Sender<CallbackJob>> = OnceLock::new();
 static RX: OnceLock<xchan::Receiver<CallbackJob>> = OnceLock::new();
 
+const CALLBACK_CHANNEL_CAPACITY: usize = 1024;
+
 fn init() -> xchan::Sender<CallbackJob> {
-    let (tx, rx) = xchan::unbounded::<CallbackJob>();
+    let (tx, rx) = xchan::bounded::<CallbackJob>(CALLBACK_CHANNEL_CAPACITY);
     let _ = RX.set(rx);
+
     std::thread::Builder::new()
         .name("bunner-callback-dispatcher".to_string())
         .spawn(|| loop {
@@ -34,15 +38,16 @@ fn init() -> xchan::Sender<CallbackJob> {
                     tracing::event!(
                         tracing::Level::TRACE,
                         stage = "dispatcher_recv",
-                        has_req_id = job.req_id.is_some(),
-                        route_key = job.route_key as u64
+                        has_req_id = job.request_id.is_some(),
+                        route_key = job.route_key
                     );
+
                     // Create a temporary C string for req_id valid only during the call
-                    let req_id_c: Option<CString> = job
-                        .req_id
+                    let request_id_cstr: Option<CString> = job
+                        .request_id
                         .as_ref()
                         .and_then(|s| CString::new(s.as_str()).ok());
-                    let req_id_ptr = req_id_c
+                    let request_id_ptr = request_id_cstr
                         .as_ref()
                         .map(|s| s.as_ptr())
                         .unwrap_or(std::ptr::null());
@@ -50,22 +55,25 @@ fn init() -> xchan::Sender<CallbackJob> {
                     // SAFETY: res_ptr is expected to be a valid pointer allocated by Rust.
                     // The callback should free it; however, if the callback panics, we catch and free here.
                     let res = std::panic::catch_unwind(|| {
-                        (job.cb)(req_id_ptr, job.route_key, job.res_ptr)
+                        (job.callback)(request_id_ptr, job.route_key.unwrap_or_default(), job.result_ptr)
                     });
+
                     if res.is_err() {
                         // Callback panicked: ensure we free the buffer to avoid leaks.
-                        unsafe { crate::free_string(job.res_ptr) };
+                        string::free_string(job.result_ptr);
+
                         tracing::event!(tracing::Level::ERROR, reason = "callback_panic_caught");
                     }
+
                     tracing::event!(
                         tracing::Level::TRACE,
                         stage = "dispatcher_done",
                         cleaned = job.owned_ptr.is_some()
                     );
+
                     if let (Some(optr), Some(clean)) = (job.owned_ptr, job.cleanup) {
                         unsafe { clean(optr) };
                     }
-                    // Drop req_id_c here so its memory isn't leaked; res_ptr must be freed by callback.
                 }
                 Err(_) => break,
             }
@@ -74,20 +82,32 @@ fn init() -> xchan::Sender<CallbackJob> {
     tx
 }
 
-pub fn enqueue(cb: FfiCallback, req_id: Option<&str>, route_key: u16, res_ptr: *mut c_char) {
+pub fn enqueue(callback: HandleRequestCallback, request_id: Option<&str>, route_key: Option<u16>, res_ptr: *mut c_char) {
     let tx = TX.get_or_init(init);
+
     tracing::event!(
         tracing::Level::TRACE,
         stage = "dispatcher_enqueue",
-        has_req_id = req_id.is_some(),
-        route_key = route_key as u64
+        has_req_id = request_id.is_some(),
+        route_key = route_key
     );
-    let _ = tx.send(CallbackJob {
-        cb,
-        req_id: req_id.map(|s| s.to_owned()),
+
+    let send_result = tx.send(CallbackJob {
+        callback,
+        request_id: request_id.map(|s| s.to_string()),
         route_key,
-        res_ptr,
+        result_ptr: res_ptr,
         owned_ptr: None,
         cleanup: None,
     });
+
+    if let Err(e) = send_result {
+        tracing::error!(
+            "Failed to enqueue callback job. Channel may be full or disconnected. Error: {:?}",
+            e
+        );
+        // If sending fails, we must free the result pointer to prevent a memory leak,
+        // as the dispatcher thread will never receive it.
+        crate::utils::string::free_string(res_ptr);
+    }
 }

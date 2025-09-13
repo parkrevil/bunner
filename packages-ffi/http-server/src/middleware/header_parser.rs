@@ -1,5 +1,5 @@
 use crate::middleware::chain::Middleware;
-use crate::structure::{BunnerRequest, BunnerResponse, HandleRequestPayload};
+use crate::request_handler::{BunnerRequest, BunnerResponse, HandleRequestPayload};
 
 pub struct HeaderParser;
 

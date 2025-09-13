@@ -1,3 +1,4 @@
-pub mod json_utils;
+pub mod json;
+pub mod string;
 
-mod json_utils_test;
+mod json_test;

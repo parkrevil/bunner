@@ -7,35 +7,29 @@
     clippy::print_stderr
 )]
 #![deny(unsafe_op_in_unsafe_fn)]
+pub mod constants;
 pub mod enums;
 pub mod errors;
-pub mod helpers;
 pub mod middleware;
 pub mod request_handler;
 pub mod router;
 pub mod structure;
-pub mod util;
-pub mod utils;
-mod callback_dispatcher;
 mod thread_pool;
+pub mod utils;
 
 use crate::enums::HttpMethod;
-use crate::errors::HttpServerErrorCode;
-use crate::helpers::callback_handle_request;
-use crate::router::errors::RouterErrorCode as RCode;
-use crate::router::structures::RouterError as RError;
-use crate::structure::{AddRouteResult, HttpServerError};
-use crate::util::{
-     serialize_to_cstring
-};
+use crate::errors::{HttpServerError, HttpServerErrorCode};
+use crate::request_handler::callback_handle_request;
+use crate::router::errors::RouterErrorCode;
+use crate::router::structures::RouterError;
+use crate::structure::AddRouteResult;
+use crate::thread_pool::{shutdown_pool, submit_job};
+use crate::utils::{json, string};
 use std::{
-    ffi::{CStr, CString},
+    ffi::{CStr},
     os::raw::c_char,
     sync::{Arc, OnceLock},
 };
-use crate::thread_pool::submit_job;
-
-use crate::thread_pool::shutdown_pool;
 
 // Helper function to reduce code duplication
 fn handle_null_handle_error(operation: &str) -> *mut c_char {
@@ -47,7 +41,8 @@ fn handle_null_handle_error(operation: &str) -> *mut c_char {
         format!("Null handle passed to {}", operation),
         Some(serde_json::json!(null)),
     );
-    serialize_to_cstring(&http_error)
+
+    json::serialize_and_to_c_string(&http_error)
 }
 
 #[cfg(feature = "test")]
@@ -85,18 +80,20 @@ fn make_router_sealed_error(
     operation: &str,
     extra_detail: serde_json::Value,
     bulk: bool,
-) -> RError {
+) -> RouterError {
     let mut detail = serde_json::json!({
         "operation": operation,
         "reason": "router_sealed"
     });
+
     if let serde_json::Value::Object(ref mut d) = detail
         && let serde_json::Value::Object(extra) = extra_detail
     {
         d.extend(extra);
     }
-    RError::new(
-        RCode::RouterSealedCannotInsert,
+
+    RouterError::new(
+        RouterErrorCode::RouterSealedCannotInsert,
         "router",
         "route_registration",
         "validation",
@@ -109,11 +106,11 @@ fn make_router_sealed_error(
     )
 }
 
-/// Initializes a new HttpServer instance and returns its handle.
 #[unsafe(no_mangle)]
 #[tracing::instrument(skip_all, fields(operation = "init"))]
 pub extern "C" fn init() -> HttpServerHandle {
     tracing::event!(tracing::Level::INFO, "http_server init");
+
     let server = Box::new(HttpServer {
         router: parking_lot::RwLock::new(router::Router::new(None)),
         router_readonly: OnceLock::new(),
@@ -132,6 +129,7 @@ pub extern "C" fn init() -> HttpServerHandle {
 #[tracing::instrument(skip_all, fields(operation="destroy", handle=?handle))]
 pub unsafe extern "C" fn destroy(handle: HttpServerHandle) {
     tracing::event!(tracing::Level::INFO, "http_server destroy called");
+
     if handle.is_null() {
         shutdown_pool();
         return;
@@ -172,53 +170,62 @@ pub unsafe extern "C" fn add_route(
                 "httpMethod": http_method
             })),
         );
-        return serialize_to_cstring(&err);
+
+        return json::serialize_and_to_c_string(&err);
     }
 
     let http_method = match HttpMethod::from_u8(http_method) {
         Ok(m) => m,
         Err(e) => {
-            let detail = serde_json::json!({
-                    "httpMethod": http_method,
-                    "pathPtr": format!("{:p}", path)
-                });
             let err = HttpServerError::new(
                 e,
                 "http_server",
                 "add_route",
                 "validation",
                 "Invalid httpMethod value when adding route".to_string(),
-                Some(detail),
+                Some(serde_json::json!({
+                    "httpMethod": http_method,
+                    "pathPtr": format!("{:p}", path)
+                })),
             );
-            return serialize_to_cstring(&err);
+
+            return json::serialize_and_to_c_string(&err);
         }
     };
+
     let http_server = unsafe { &*handle };
     let mut guard = http_server.router.write();
     let router_mut = &mut *guard;
     let path_str = unsafe { CStr::from_ptr(path) }.to_string_lossy();
 
     if http_server.router_readonly.get().is_some() {
-        let detail = serde_json::json!({ "path": path_str });
-        let e = make_router_sealed_error("add_route", detail, false);
+        let e = make_router_sealed_error(
+            "add_route",
+            serde_json::json!({
+              "path": path_str,
+            }),
+            false,
+        );
         let he = HttpServerError::from(e);
-        return serialize_to_cstring(&he);
+
+        return json::serialize_and_to_c_string(&he);
     }
 
     match router_mut.add(http_method, &path_str) {
         Ok(k) => {
             tracing::event!(tracing::Level::DEBUG, method=?http_method, path=%path_str, key=k, "route added");
-            serialize_to_cstring(&AddRouteResult { key: k })
+
+            json::serialize_and_to_c_string(&AddRouteResult { key: k })
         }
         Err(e) => {
             tracing::event!(tracing::Level::ERROR, code=?e.code, path=%path_str, "add_route error");
+
             let mut bunner_error = HttpServerError::from(e);
-            let detail =
-                serde_json::json!({"path": path_str});
+            let detail = serde_json::json!({"path": path_str});
 
             bunner_error.merge_extra(detail);
 
-            serialize_to_cstring(&bunner_error)
+            json::serialize_and_to_c_string(&bunner_error)
         }
     }
 }
@@ -241,7 +248,6 @@ pub unsafe extern "C" fn add_routes(
         return handle_null_handle_error("add_routes");
     }
 
-    // Check if routes_ptr is null
     if routes_ptr.is_null() {
         let http_error = HttpServerError::new(
             HttpServerErrorCode::InvalidRoutes,
@@ -251,7 +257,8 @@ pub unsafe extern "C" fn add_routes(
             "Routes pointer is null".to_string(),
             Some(serde_json::json!(null)),
         );
-        return serialize_to_cstring(&http_error);
+
+        return json::serialize_and_to_c_string(&http_error);
     }
 
     let routes_str = match unsafe { CStr::from_ptr(routes_ptr).to_str() } {
@@ -268,11 +275,11 @@ pub unsafe extern "C" fn add_routes(
                     "routesPtr": format!("{:p}", routes_ptr)
                 })),
             );
-            return serialize_to_cstring(&http_error);
+
+            return json::serialize_and_to_c_string(&http_error);
         }
     };
 
-    // Typed error handling: first parse as (u8, String), then validate method values explicitly
     let routes_u8: Vec<(u8, String)> = match serde_json::from_str::<Vec<(u8, String)>>(routes_str) {
         Ok(r) => r,
         Err(e) => {
@@ -282,13 +289,17 @@ pub unsafe extern "C" fn add_routes(
                 "add_routes",
                 "parsing",
                 "Invalid JSON string for routes list".to_string(),
-                Some(serde_json::json!({"routesLength": routes_str.len(), "routesPreview": routes_str.chars().take(200).collect::<String>(), "serdeError": e.to_string()})),
+                Some(
+                    serde_json::json!({"routesLength": routes_str.len(), "routesPreview": routes_str.chars().take(200).collect::<String>(), "serdeError": e.to_string()}),
+                ),
             );
-            return serialize_to_cstring(&http_error);
+
+            return json::serialize_and_to_c_string(&http_error);
         }
     };
 
     let mut routes: Vec<(HttpMethod, String)> = Vec::with_capacity(routes_u8.len());
+
     for (m, p) in routes_u8.into_iter() {
         match HttpMethod::from_u8(m) {
             Ok(hm) => routes.push((hm, p)),
@@ -301,7 +312,8 @@ pub unsafe extern "C" fn add_routes(
                     "Invalid HTTP method in routes payload".to_string(),
                     Some(serde_json::json!({"invalidMethod": m})),
                 );
-                return serialize_to_cstring(&http_error);
+
+                return json::serialize_and_to_c_string(&http_error);
             }
         }
     }
@@ -315,25 +327,28 @@ pub unsafe extern "C" fn add_routes(
         let detail = serde_json::json!({ "count": routes_count });
         let be = make_router_sealed_error("add_routes", detail, true);
         let he = HttpServerError::from(be);
-        return serialize_to_cstring(&he);
+
+        return json::serialize_and_to_c_string(&he);
     }
 
     match router_mut.add_bulk(routes) {
         Ok(r) => {
             let cnt = r.len();
+
             tracing::event!(tracing::Level::DEBUG, count = cnt as u64, "routes added");
-            serialize_to_cstring(&r)
+
+            json::serialize_and_to_c_string(&r)
         }
         Err(e) => {
             tracing::event!(tracing::Level::ERROR, code=?e.code, count=routes_count as u64, "add_routes error");
+
             let mut bunner_error = HttpServerError::from(e);
-            let detail = serde_json::json!({
-              "count": routes_count
-            });
 
-            bunner_error.merge_extra(detail);
+            bunner_error.merge_extra(serde_json::json!({
+                "count": routes_count
+            }));
 
-            serialize_to_cstring(&bunner_error)
+            json::serialize_and_to_c_string(&bunner_error)
         }
     }
 }
@@ -352,7 +367,7 @@ pub unsafe extern "C" fn handle_request(
     cb: extern "C" fn(*const c_char, u16, *mut c_char),
 ) {
     if handle.is_null() {
-        let http_error = HttpServerError::new(
+        let err = HttpServerError::new(
             HttpServerErrorCode::HandleIsNull,
             "http_server",
             "handle_request",
@@ -360,11 +375,12 @@ pub unsafe extern "C" fn handle_request(
             "Null handle passed to handle_request".to_string(),
             Some(serde_json::json!(null)),
         );
-        callback_handle_request(cb, None, 0, &http_error);
+
+        callback_handle_request(cb, None, None, &err);
+
         return;
     }
 
-    // If request_id is null, return InvalidRequestId error
     if request_id_ptr.is_null() {
         let http_error = HttpServerError::new(
             HttpServerErrorCode::InvalidRequestId,
@@ -374,7 +390,9 @@ pub unsafe extern "C" fn handle_request(
             "Request id pointer is null".to_string(),
             Some(serde_json::json!(null)),
         );
-        callback_handle_request(cb, None, 0, &http_error);
+
+        callback_handle_request(cb, None, None, &http_error);
+
         return;
     }
 
@@ -390,15 +408,16 @@ pub unsafe extern "C" fn handle_request(
                     "Request id is not valid UTF-8".to_string(),
                     Some(serde_json::json!({"requestIdPtr": format!("{:p}", request_id_ptr)})),
                 );
-                callback_handle_request(cb, None, 0, &http_error);
+
+                callback_handle_request(cb, None, None, &http_error);
+
                 return;
             }
         }
     };
 
-    // If payload pointer is null, return InvalidPayload error
     if payload_ptr.is_null() {
-        let http_error = HttpServerError::new(
+        let err = HttpServerError::new(
             HttpServerErrorCode::InvalidPayload,
             "http_server",
             "handle_request",
@@ -406,22 +425,28 @@ pub unsafe extern "C" fn handle_request(
             "Payload pointer is null".to_string(),
             Some(serde_json::json!({"requestId": request_id_str})),
         );
-        callback_handle_request(cb, Some(request_id_str), 0, &http_error);
+
+        callback_handle_request(cb, Some(request_id_str), None, &err);
+
         return;
     }
 
-    let payload_str = match unsafe { CStr::from_ptr(payload_ptr).to_str() } {
+    let payload_str = match string::cstr_to_str(payload_ptr) {
         Ok(s) => s,
         Err(_) => {
-            let http_error = HttpServerError::new(
+            let err = HttpServerError::new(
                 HttpServerErrorCode::InvalidPayload,
                 "http_server",
                 "handle_request",
                 "parsing",
                 "Payload is not valid UTF-8 JSON".to_string(),
-                Some(serde_json::json!({"requestId": request_id_str, "payloadPtr": format!("{:p}", payload_ptr)})),
+                Some(
+                    serde_json::json!({"requestId": request_id_str, "payloadPtr": format!("{:p}", payload_ptr)}),
+                ),
             );
-            callback_handle_request(cb, Some(request_id_str), 0, &http_error);
+
+            callback_handle_request(cb, Some(request_id_str), None, &err);
+
             return;
         }
     };
@@ -441,7 +466,7 @@ pub unsafe extern "C" fn handle_request(
             Some(serde_json::json!({"requestId": request_id_str})),
         );
 
-        callback_handle_request(cb, Some(request_id_str), 0, &http_error);
+        callback_handle_request(cb, Some(request_id_str), None, &http_error);
 
         return;
     }
@@ -451,19 +476,22 @@ pub unsafe extern "C" fn handle_request(
     let cancel_flag = {
         let mut map = http_server.cancel_map.write();
         let f = Arc::new(std::sync::atomic::AtomicBool::new(false));
+
         map.insert(request_id_owned.clone(), Arc::clone(&f));
+
         f
     };
 
     match submit_job(Box::new(move || {
         // Worker will always perform the callback; main thread only observes enqueue success/failure
-        request_handler::process_job(
+        request_handler::handle(
             cb,
             request_id_owned.clone(),
             payload_owned,
             ro,
             Some(cancel_flag),
         );
+
         // cleanup cancel map entry best-effort (can't access server here; leave for timeout GC or future hook)
         let _ = request_id_owned;
     })) {
@@ -477,6 +505,7 @@ pub unsafe extern "C" fn handle_request(
                 request_id = %request_id_str,
                 payload_len = payload_len_for_log as u64
             );
+
             let http_error = HttpServerError::new(
                 HttpServerErrorCode::QueueFull,
                 "thread_pool",
@@ -485,7 +514,8 @@ pub unsafe extern "C" fn handle_request(
                 "Request queue is full".to_string(),
                 Some(serde_json::json!({"requestId": request_id_str})),
             );
-            callback_handle_request(cb, Some(request_id_str), 0, &http_error);
+
+            callback_handle_request(cb, Some(request_id_str), None, &http_error);
         }
     }
 }
@@ -498,6 +528,7 @@ pub unsafe extern "C" fn handle_request(
 #[tracing::instrument(skip_all, fields(operation = "seal_routes"))]
 pub unsafe extern "C" fn seal_routes(handle: HttpServerHandle) {
     let http_server = unsafe { &*handle };
+
     {
         let mut guard = http_server.router.write();
 
@@ -512,6 +543,7 @@ pub unsafe extern "C" fn seal_routes(handle: HttpServerHandle) {
 
         guard.finalize();
     }
+
     tracing::event!(tracing::Level::INFO, "routes sealed");
 }
 
@@ -523,11 +555,7 @@ pub unsafe extern "C" fn seal_routes(handle: HttpServerHandle) {
 /// After calling this function, the pointer is dangling and must not be used again.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn free_string(ptr: *mut c_char) {
-    if !ptr.is_null() {
-        unsafe {
-            let _ = CString::from_raw(ptr);
-        }
-    }
+    string::free_string(ptr);
 }
 
 /// Cancels an in-flight request by id (no callback will be sent if not already).

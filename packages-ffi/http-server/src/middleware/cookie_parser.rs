@@ -1,6 +1,7 @@
-use crate::middleware::chain::Middleware;
-use crate::structure::{BunnerRequest, BunnerResponse, HandleRequestPayload};
 use serde_json::json;
+
+use crate::middleware::chain::Middleware;
+use crate::request_handler::{BunnerRequest, BunnerResponse, HandleRequestPayload};
 
 pub struct CookieParser;
 
@@ -13,7 +14,7 @@ impl Middleware for CookieParser {
         _payload: &HandleRequestPayload,
     ) -> bool {
         tracing::event!(tracing::Level::TRACE, operation = "cookie_parser");
-        if let Some(c) = req.headers.get("cookie").cloned() {
+        if let Some(c) = req.headers.get(&"cookie".to_string()).cloned() {
             let map: std::collections::HashMap<String, String> = parse_cookies(&c);
 
             req.cookies = json!(map);

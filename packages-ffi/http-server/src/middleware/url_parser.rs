@@ -1,9 +1,10 @@
-use crate::enums::HttpStatusCode;
-use crate::middleware::chain::Middleware;
-use crate::structure::{BunnerRequest, BunnerResponse, HandleRequestPayload};
 use std::sync::OnceLock;
 use url::Url;
 use serde_qs::Config as QsConfig;
+
+use crate::enums::HttpStatusCode;
+use crate::middleware::chain::Middleware;
+use crate::request_handler::{BunnerRequest, BunnerResponse, HandleRequestPayload};
 
 static QS_CONFIG: OnceLock<serde_qs::Config> = OnceLock::new();
 
