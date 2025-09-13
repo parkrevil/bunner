@@ -1,7 +1,7 @@
 use crate::errors::internal_error::InternalErrorCode;
-use serde::Serialize;
 use serde::de::DeserializeOwned;
-use std::ffi::{CString, c_char};
+use serde::Serialize;
+use std::ffi::{c_char, CString};
 
 #[cfg(feature = "simd-json")]
 use simd_json;
@@ -50,8 +50,6 @@ pub fn deserialize<T: DeserializeOwned>(json_str: &str) -> Result<T, InternalErr
 pub fn deserialize_with_serde_json<T: DeserializeOwned>(
     json_str: &str,
 ) -> Result<T, InternalErrorCode> {
-    tracing::error!("ddddddddddddddddd");
-
     serde_json::from_str(json_str).map_err(|err| {
         tracing::error!("serde_json deserialization error: {:?}", err);
 

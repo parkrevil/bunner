@@ -14,3 +14,9 @@ rstest = "0.23"
 normal = []
 development = ["rstest"]
 build = []
+
+# Test configuration for GitHub Copilot context
+[workspace.metadata.testing]
+guide = "TEST_GUIDE.md"
+naming_convention = "*_test.rs"
+helper_module = "tests/helpers.rs"
