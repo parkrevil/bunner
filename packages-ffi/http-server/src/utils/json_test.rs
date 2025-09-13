@@ -21,12 +21,10 @@ mod serialize {
         // Just verify they don't cause errors
         assert!(serialize(&WithFloat { v: f64::NAN }).is_ok());
         assert!(serialize(&WithFloat { v: f64::INFINITY }).is_ok());
-        assert!(
-            serialize(&WithFloat {
-                v: f64::NEG_INFINITY
-            })
-            .is_ok()
-        );
+        assert!(serialize(&WithFloat {
+            v: f64::NEG_INFINITY
+        })
+        .is_ok());
     }
 
     #[test]
@@ -71,12 +69,10 @@ mod serialize_with_serde_json {
         // Just verify they don't cause errors
         assert!(serialize(&WithFloat { v: f64::NAN }).is_ok());
         assert!(serialize(&WithFloat { v: f64::INFINITY }).is_ok());
-        assert!(
-            serialize(&WithFloat {
-                v: f64::NEG_INFINITY
-            })
-            .is_ok()
-        );
+        assert!(serialize(&WithFloat {
+            v: f64::NEG_INFINITY
+        })
+        .is_ok());
     }
 
     #[test]
@@ -120,12 +116,10 @@ mod serialize_with_simd_json {
         // Just verify they don't cause errors
         assert!(serialize(&WithFloat { v: f64::NAN }).is_ok());
         assert!(serialize(&WithFloat { v: f64::INFINITY }).is_ok());
-        assert!(
-            serialize(&WithFloat {
-                v: f64::NEG_INFINITY
-            })
-            .is_ok()
-        );
+        assert!(serialize(&WithFloat {
+            v: f64::NEG_INFINITY
+        })
+        .is_ok());
     }
 
     #[test]
