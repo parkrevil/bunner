@@ -15,6 +15,7 @@ pub mod request_handler;
 pub mod router;
 pub mod structure;
 pub mod util;
+pub mod utils;
 mod callback_dispatcher;
 mod thread_pool;
 
@@ -243,7 +244,7 @@ pub unsafe extern "C" fn add_routes(
     // Check if routes_ptr is null
     if routes_ptr.is_null() {
         let http_error = HttpServerError::new(
-            HttpServerErrorCode::InvalidPayload,
+            HttpServerErrorCode::InvalidRoutes,
             "http_server",
             "add_routes",
             "validation",
@@ -257,7 +258,7 @@ pub unsafe extern "C" fn add_routes(
         Ok(s) => s,
         Err(_) => {
             let http_error = HttpServerError::new(
-                HttpServerErrorCode::InvalidJsonString,
+                HttpServerErrorCode::InvalidRoutes,
                 "http_server",
                 "add_routes",
                 "parsing",
@@ -276,7 +277,7 @@ pub unsafe extern "C" fn add_routes(
         Ok(r) => r,
         Err(e) => {
             let http_error = HttpServerError::new(
-                HttpServerErrorCode::InvalidJsonString,
+                HttpServerErrorCode::InvalidRoutes,
                 "http_server",
                 "add_routes",
                 "parsing",
@@ -413,7 +414,7 @@ pub unsafe extern "C" fn handle_request(
         Ok(s) => s,
         Err(_) => {
             let http_error = HttpServerError::new(
-                HttpServerErrorCode::InvalidJsonString,
+                HttpServerErrorCode::InvalidPayload,
                 "http_server",
                 "handle_request",
                 "parsing",

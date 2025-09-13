@@ -3,12 +3,12 @@
 pub enum HttpServerErrorCode {
     HandleIsNull = 1,
     InvalidHttpMethod,
-    InvalidJsonString,
     InvalidRequestId,
     RouteNotSealed,
     RouterSealedCannotInsert,
     QueueFull,
     InvalidPayload,
+    InvalidRoutes,
 }
 
 impl HttpServerErrorCode {
@@ -28,12 +28,20 @@ impl HttpServerErrorCode {
         match self {
             HttpServerErrorCode::HandleIsNull => "HandleIsNull",
             HttpServerErrorCode::InvalidHttpMethod => "InvalidHttpMethod",
-            HttpServerErrorCode::InvalidJsonString => "InvalidJsonString",
             HttpServerErrorCode::InvalidRequestId => "InvalidRequestId",
             HttpServerErrorCode::RouteNotSealed => "RouteNotSealed",
             HttpServerErrorCode::RouterSealedCannotInsert => "RouterSealedCannotInsert",
             HttpServerErrorCode::QueueFull => "QueueFull",
             HttpServerErrorCode::InvalidPayload => "InvalidPayload",
+            HttpServerErrorCode::InvalidRoutes => "InvalidRoutes",
         }
     }
+}
+
+#[repr(u16)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InternalErrorCode {
+    InvalidCString,
+    InvalidJsonValue,
+    InvalidJsonString,
 }

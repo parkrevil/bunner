@@ -1,4 +1,4 @@
-.PHONY: lint, format, test
+.PHONY: lint, format, test, coverage
 
 lint:
 	# Strict for library/bin targets
@@ -21,4 +21,9 @@ format:
 	cargo fmt --all
 
 test:
-	@RUST_LOG=trace ./scripts/cargo-test.sh
+	@export RUST_LOG=trace BACKTRACE=1 && \
+	cargo nextest run --package bunner-http-server && \
+	cargo nextest run --package bunner-http-server --features simd-json
+
+coverage:
+	cargo llvm-cov --workspace

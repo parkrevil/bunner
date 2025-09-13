@@ -27,7 +27,7 @@ fi
 echo "Ensuring Rust toolchains/components ..."
 rustup toolchain install stable
 rustup default stable
-rustup component add --toolchain stable clippy rustfmt cargo-edit
+rustup component add --toolchain stable clippy rustfmt llvm-tools-preview
 # Install nightly only for tools that require it (e.g., cargo-udeps)
 rustup toolchain install nightly
 
@@ -46,10 +46,9 @@ ensure_cargo_tool cargo-nextest cargo-nextest
 ensure_cargo_tool cargo-criterion cargo-criterion
 # cargo-udeps often requires nightly at runtime
 ensure_cargo_tool cargo-udeps cargo-udeps
-ensure_cargo_tool cargo-udeps cargo-udeps
-ensure_cargo_tool cargo-edit cargo-edit
 ensure_cargo_tool cargo-edit cargo-edit
 ensure_cargo_tool cargo-tarpaulin cargo-tarpaulin
+ensure_cargo_tool cargo-llvm-cov cargo-llvm-cov
 
 # Install Bun dependencies
 bun i

@@ -4,7 +4,6 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::enums::HttpMethod;
-use crate::errors::HttpServerErrorCode;
 use crate::helpers::callback_handle_request;
 use crate::middleware::body_parser::BodyParser;
 use crate::middleware::chain::Chain;
@@ -14,22 +13,10 @@ use crate::middleware::url_parser::UrlParser;
 use crate::router;
 use crate::structure::HttpServerError;
 use crate::structure::{BunnerRequest, BunnerResponse, HandleRequestOutput, HandleRequestPayload};
-use serde_json::Value as JsonValue;
+use crate::utils::json_utils as json;
+use crate::errors::HttpServerErrorCode;
 
-#[inline]
-fn parse_payload(payload_str: &str) -> Result<HandleRequestPayload, HttpServerErrorCode> {
-    #[cfg(feature = "simd-json")]
-    {
-        let mut bytes = payload_str.as_bytes().to_vec();
-        simd_json::serde::from_slice::<HandleRequestPayload>(&mut bytes)
-            .map_err(|_| HttpServerErrorCode::InvalidJsonString)
-    }
-    #[cfg(not(feature = "simd-json"))]
-    {
-        serde_json::from_str::<HandleRequestPayload>(payload_str)
-            .map_err(|_| HttpServerErrorCode::InvalidJsonString)
-    }
-}
+use serde_json::Value as JsonValue;
 
 #[tracing::instrument(skip(cb, payload_owned_for_job, ro), fields(request_id=%request_id_owned))]
 pub fn process_job(
@@ -44,12 +31,13 @@ pub fn process_job(
             return;
         }
     }
-    let payload = match parse_payload(&payload_owned_for_job) {
+
+    let payload = match json::deserialize(&payload_owned_for_job) {
         Ok(p) => p,
-        Err(e) => {
+        Err(_) => {
             let preview: String = payload_owned_for_job.chars().take(200).collect();
             let bunner_error = HttpServerError::new(
-                e,
+                HttpServerErrorCode::InvalidPayload,
                 "http_server",
                 "parse_payload",
                 "parsing",
