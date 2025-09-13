@@ -40,6 +40,7 @@ pub struct BunnerRequest {
     pub url: String,
     pub path: String,
     #[serde(default)]
+    #[serde(skip_serializing)]
     pub headers: HashMap<String, String>,
     pub cookies: serde_json::Value,
     #[serde(rename = "contentType")]

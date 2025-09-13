@@ -2,10 +2,7 @@
 #![allow(clippy::field_reassign_with_default)]
 
 use bunner_http_server::enums::HttpMethod;
-use bunner_http_server::router::radix_tree::node::MAX_SEGMENT_LENGTH;
-use bunner_http_server::router::{
-    self as rapi, Router, RouterError, RouterErrorCode, RouterOptions,
-};
+use bunner_http_server::router::Router;
 use std::time::{Duration, Instant};
 
 #[test]

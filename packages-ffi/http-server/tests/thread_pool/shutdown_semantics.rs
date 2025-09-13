@@ -11,7 +11,7 @@ fn shutdown_without_prior_init_is_noop() {
         let _ = tx.send(1);
     })
     .unwrap();
-    assert_eq!(rx.recv_timeout(Duration::from_secs(1)).unwrap(), 1);
+    assert_eq!(rx.recv().unwrap(), 1);
     pool::shutdown();
 }
 
@@ -22,7 +22,7 @@ fn should_be_idempotent_and_stop_accepting_jobs() {
         let _ = tx.send(());
     })
     .unwrap();
-    rx.recv_timeout(Duration::from_secs(1)).unwrap();
+    rx.recv().unwrap();
     pool::shutdown();
     pool::shutdown();
     let res = pool::submit(|| {});

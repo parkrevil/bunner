@@ -1,7 +1,6 @@
 use bunner_http_server::thread_pool_test_support as pool;
 use std::env;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+
 
 #[test]
 fn should_respect_bunner_http_workers_env_var() {

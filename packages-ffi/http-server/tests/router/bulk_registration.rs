@@ -3,7 +3,7 @@
 
 use bunner_http_server::enums::HttpMethod;
 use bunner_http_server::router::{
-    self as rapi, Router, RouterError, RouterErrorCode, RouterOptions,
+    self as rapi, Router, RouterErrorCode, RouterOptions,
 };
 use bunner_http_server::router::radix_tree::node::MAX_SEGMENT_LENGTH;
 

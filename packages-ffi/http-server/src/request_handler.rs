@@ -145,6 +145,7 @@ pub fn run_with_parsed_payload(
             request.params = params_json;
 
             let output = HandleRequestOutput { request, response };
+            // let wire = HandleRequestOutputWire::from(&output);
             tracing::event!(
                 tracing::Level::TRACE,
                 step = "route_match",

@@ -1,52 +1,161 @@
-use bunner_http_server::enums::{HttpMethod, HttpStatusCode};
-use bunner_http_server::middleware::{
-    body_parser::BodyParser, chain::Chain, cookie_parser::CookieParser,
-    header_parser::HeaderParser, url_parser::UrlParser,
-};
-use bunner_http_server::structure::{BunnerRequest, BunnerResponse, HandleRequestPayload};
-use serde_json::json;
-use std::collections::HashMap;
-
-fn make_payload(
-    url: &str,
-    headers: HashMap<String, String>,
-    body: Option<&str>,
-) -> HandleRequestPayload {
-    HandleRequestPayload {
-        http_method: 0,
-        url: url.to_string(),
+#[test]
+fn parses_valid_json_body_with_content_type() {
+    let mut headers = HashMap::new();
+    headers.insert("content-type".to_string(), "application/json; charset=utf-8".to_string());
+    let payload = make_payload("http://localhost/a", headers, Some("{\"k\":1}"));
+    let (req, _res) = run_chain(&payload);
+    assert_eq!(req.body.unwrap().get("k").unwrap(), 1);
+    assert_eq!(req.charset.as_deref(), Some("utf-8"));
+    // 추가: 중첩 구조 테스트
+    let mut headers = HashMap::new();
+    headers.insert("content-type".to_string(), "application/json".to_string());
+    let payload = make_payload(
+        "https://example.com/users/42",
         headers,
-        body: body.map(|s| s.to_string()),
+        Some("{\"value\": true, \"nested\": {\"key\": 123}}"),
+    );
+    let (req, _res) = run_chain(&payload);
+    let body = req.body.unwrap();
+    assert_eq!(body.get("value").unwrap(), true);
+    assert_eq!(body.get("nested").unwrap().get("key").unwrap(), 123);
+}
+
+#[test]
+fn rejects_invalid_json_body_with_json_content_type() {
+    let mut headers = HashMap::new();
+    headers.insert("content-type".to_string(), "application/json".to_string());
+    let payload = make_payload(
+        "http://a.com/users/1",
+        headers,
+        Some("{invalid}"),
+    );
+    let (_req, res) = run_chain(&payload);
+    assert_eq!(res.http_status, bunner_http_server::enums::HttpStatusCode::UnsupportedMediaType);
+    assert_eq!(res.body, serde_json::json!(bunner_http_server::enums::HttpStatusCode::UnsupportedMediaType.reason_phrase()));
+}
+
+#[test]
+fn rejects_non_json_body_without_content_type() {
+    let headers = HashMap::new();
+    let payload = make_payload(
+        "http://a.com/users/1",
+        headers,
+        Some("this is plain text"),
+    );
+    let (_req, res) = run_chain(&payload);
+    assert_eq!(res.http_status, bunner_http_server::enums::HttpStatusCode::UnsupportedMediaType);
+    assert_eq!(res.body, serde_json::json!(bunner_http_server::enums::HttpStatusCode::UnsupportedMediaType.reason_phrase()));
+}
+
+#[test]
+fn handles_deeply_nested_json_structure() {
+    let mut headers = HashMap::new();
+    headers.insert("content-type".to_string(), "application/json".to_string());
+    let mut nested_json = String::from("\"deep_value\"");
+    for _i in 0..100 {
+        nested_json = format!("{{\"level\": {}}}", nested_json);
+    }
+    let payload = make_payload(
+        "http://example.com/users/1",
+        headers,
+        Some(&nested_json),
+    );
+    let (req, res) = run_chain(&payload);
+    if res.http_status == bunner_http_server::enums::HttpStatusCode::OK {
+        assert!(req.body.is_some());
+    } else {
+        assert_eq!(res.http_status, bunner_http_server::enums::HttpStatusCode::UnsupportedMediaType);
     }
 }
 
-fn run_chain(payload: &HandleRequestPayload) -> (BunnerRequest, BunnerResponse) {
-    let mut req = BunnerRequest {
-        url: String::new(),
-        http_method: HttpMethod::Get,
-        path: String::new(),
-        headers: HashMap::new(),
-        cookies: serde_json::Value::Object(serde_json::Map::new()),
-        content_type: None,
-        content_length: None,
-        charset: None,
-        params: None,
-        query_params: None,
-        body: None,
-    };
-    let mut res = BunnerResponse {
-        http_status: HttpStatusCode::OK,
-        headers: None,
-        body: serde_json::Value::Null,
-    };
-    let chain = Chain::new()
-        .with(HeaderParser)
-        .with(UrlParser)
-        .with(CookieParser)
-        .with(BodyParser);
-    let _ = chain.execute(&mut req, &mut res, payload);
-    (req, res)
+#[test]
+fn handles_extreme_numeric_values_in_json() {
+    let mut headers = HashMap::new();
+    headers.insert("content-type".to_string(), "application/json".to_string());
+    let extreme_numbers = r#"{
+        "very_large": 999999999999999999999999999999,
+        "very_small": -999999999999999999999999999999,
+        "scientific": 1.23e308,
+        "tiny": 1.23e-308,
+        "zero": 0,
+        "negative_zero": -0
+    }"#;
+    let payload = make_payload(
+        "http://example.com/users/1",
+        headers,
+        Some(extreme_numbers),
+    );
+    let (req, res) = run_chain(&payload);
+    if res.http_status == bunner_http_server::enums::HttpStatusCode::OK {
+        let body = req.body.unwrap();
+        assert!(body.get("zero").is_some());
+    }
 }
+
+#[test]
+fn handles_unicode_characters_in_json() {
+    let mut headers = HashMap::new();
+    headers.insert("content-type".to_string(), "application/json".to_string());
+    let unicode_json = r#"{
+        "emoji": "🚀🌍👨‍💻",
+        "chinese": "你好세계",
+        "arabic": "مرحبا بالعالم",
+        "mixed": "Hello 세계 🌍",
+        "special_chars": "\u0000\u0001\u0002",
+        "escaped": "\"quotes\" and \\backslashes\\"
+    }"#;
+    let payload = make_payload(
+        "http://example.com/users/1",
+        headers,
+        Some(unicode_json),
+    );
+    let (req, res) = run_chain(&payload);
+    if res.http_status == bunner_http_server::enums::HttpStatusCode::OK {
+        let body = req.body.unwrap();
+        assert_eq!(body.get("emoji").unwrap(), "🚀🌍👨‍💻");
+        assert_eq!(body.get("chinese").unwrap(), "你好세계");
+    }
+}
+
+#[test]
+fn handles_various_content_type_formats() {
+    let content_types = vec![
+        "application/json",
+        "application/json; charset=utf-8",
+        "application/json; charset=UTF-8; boundary=something",
+        "APPLICATION/JSON",
+        "application/JSON",
+        "text/json",
+        "application/vnd.api+json",
+    ];
+    for content_type in content_types {
+        let mut headers = HashMap::new();
+        headers.insert("content-type".to_string(), content_type.to_string());
+        let payload = make_payload(
+            "http://example.com/users/1",
+            headers,
+            Some("{\"test\": true}"),
+        );
+        let (req, res) = run_chain(&payload);
+        if content_type
+            .split(';')
+            .next()
+            .unwrap()
+            .trim()
+            .eq_ignore_ascii_case("application/json")
+        {
+            if res.http_status == bunner_http_server::enums::HttpStatusCode::OK {
+                assert!(req.body.is_some());
+            }
+        }
+    }
+}
+use bunner_http_server::enums::HttpStatusCode;
+use serde_json::json;
+use std::collections::HashMap;
+
+// Import common helper functions
+use crate::helper::{make_payload, run_chain};
 
 #[test]
 fn parses_json_body_when_content_type_is_json() {

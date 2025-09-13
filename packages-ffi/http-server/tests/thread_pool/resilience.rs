@@ -16,7 +16,7 @@ fn should_continue_after_a_panicking_job() {
         let _ = tx2.send(7);
     })
     .unwrap();
-    let got = rx.recv_timeout(Duration::from_secs(2)).unwrap();
+    let got = rx.recv().unwrap();
     assert_eq!(got, 7);
     pool::shutdown();
 }
@@ -36,7 +36,7 @@ fn nested_submission_should_schedule_child_job() {
         }
     })
     .unwrap();
-    let got = rx.recv_timeout(Duration::from_secs(2)).unwrap();
+    let got = rx.recv().unwrap();
     assert_eq!(got, 9);
     pool::shutdown();
 }

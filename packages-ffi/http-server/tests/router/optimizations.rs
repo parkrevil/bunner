@@ -3,7 +3,7 @@
 
 use bunner_http_server::enums::HttpMethod;
 use bunner_http_server::router::{
-    self as rapi, Router, RouterError, RouterErrorCode, RouterOptions,
+    Router, RouterOptions,
 };
 
 #[test]

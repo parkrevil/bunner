@@ -1,5 +1,3 @@
-use crate::ffi::common;
-use crate::ffi::common::*;
 use bunner_http_server as srv;
 use std::ffi::{CStr, c_char, CString};
 use std::sync::{Mutex, OnceLock, mpsc};
@@ -36,7 +34,7 @@ where
         *lock.lock().unwrap() = Some(tx);
     }
     f(global_callback);
-    let out = rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap_or_else(|_| "timeout".to_string());
+    let out = rx.recv().unwrap();
     {
         let lock = GLOBAL_TX.get_or_init(|| Mutex::new(None));
         *lock.lock().unwrap() = None;

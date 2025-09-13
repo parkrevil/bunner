@@ -1,10 +1,19 @@
+#[test]
+fn parses_multiple_cookies_from_header() {
+    let mut headers = HashMap::new();
+    headers.insert("cookie".to_string(), "a=1; b=2; c=3".to_string());
+    let payload = make_payload("http://localhost/a", headers, None);
+    let (req, _res) = run_chain(&payload);
+    assert_eq!(req.cookies.get("a").unwrap(), "1");
+    assert_eq!(req.cookies.get("b").unwrap(), "2");
+    assert_eq!(req.cookies.get("c").unwrap(), "3");
+}
 use bunner_http_server::enums::{HttpMethod, HttpStatusCode};
 use bunner_http_server::middleware::{
     body_parser::BodyParser, chain::Chain, cookie_parser::CookieParser,
     header_parser::HeaderParser, url_parser::UrlParser,
 };
 use bunner_http_server::structure::{BunnerRequest, BunnerResponse, HandleRequestPayload};
-use serde_json::json;
 use std::collections::HashMap;
 
 fn make_payload(

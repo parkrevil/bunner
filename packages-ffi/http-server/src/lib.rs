@@ -426,6 +426,7 @@ pub unsafe extern "C" fn handle_request(
     };
 
     let payload_owned: String = payload_str.to_owned();
+    let payload_len_for_log: usize = payload_owned.len();
     let http_server = unsafe { &*handle };
     let ro_opt = http_server.router_readonly.get().map(Arc::clone);
 
@@ -469,7 +470,12 @@ pub unsafe extern "C" fn handle_request(
             tracing::event!(tracing::Level::DEBUG, "request enqueued");
         }
         Err(_e) => {
-            tracing::event!(tracing::Level::WARN, reason="queue_full", request_id=%request_id_str);
+            tracing::event!(
+                tracing::Level::WARN,
+                reason = "queue_full",
+                request_id = %request_id_str,
+                payload_len = payload_len_for_log as u64
+            );
             let http_error = HttpServerError::new(
                 HttpServerErrorCode::QueueFull,
                 "thread_pool",

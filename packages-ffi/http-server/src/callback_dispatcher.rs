@@ -31,6 +31,12 @@ fn init() -> xchan::Sender<CallbackJob> {
         .spawn(|| loop {
             match RX.get().unwrap().recv() {
                 Ok(job) => {
+                    tracing::event!(
+                        tracing::Level::TRACE,
+                        stage = "dispatcher_recv",
+                        has_req_id = job.req_id.is_some(),
+                        route_key = job.route_key as u64
+                    );
                     // Create a temporary C string for req_id valid only during the call
                     let req_id_c: Option<CString> = job
                         .req_id
@@ -51,6 +57,11 @@ fn init() -> xchan::Sender<CallbackJob> {
                         unsafe { crate::free_string(job.res_ptr) };
                         tracing::event!(tracing::Level::ERROR, reason = "callback_panic_caught");
                     }
+                    tracing::event!(
+                        tracing::Level::TRACE,
+                        stage = "dispatcher_done",
+                        cleaned = job.owned_ptr.is_some()
+                    );
                     if let (Some(optr), Some(clean)) = (job.owned_ptr, job.cleanup) {
                         unsafe { clean(optr) };
                     }
@@ -65,6 +76,12 @@ fn init() -> xchan::Sender<CallbackJob> {
 
 pub fn enqueue(cb: FfiCallback, req_id: Option<&str>, route_key: u16, res_ptr: *mut c_char) {
     let tx = TX.get_or_init(init);
+    tracing::event!(
+        tracing::Level::TRACE,
+        stage = "dispatcher_enqueue",
+        has_req_id = req_id.is_some(),
+        route_key = route_key as u64
+    );
     let _ = tx.send(CallbackJob {
         cb,
         req_id: req_id.map(|s| s.to_owned()),
@@ -72,24 +89,5 @@ pub fn enqueue(cb: FfiCallback, req_id: Option<&str>, route_key: u16, res_ptr: *
         res_ptr,
         owned_ptr: None,
         cleanup: None,
-    });
-}
-
-pub fn enqueue_with_cleanup(
-    cb: FfiCallback,
-    req_id: Option<&str>,
-    route_key: u16,
-    res_ptr: *mut c_char,
-    owned_ptr: *mut c_void,
-    cleanup: unsafe fn(*mut c_void),
-) {
-    let tx = TX.get_or_init(init);
-    let _ = tx.send(CallbackJob {
-        cb,
-        req_id: req_id.map(|s| s.to_owned()),
-        route_key,
-        res_ptr,
-        owned_ptr: Some(owned_ptr),
-        cleanup: Some(cleanup),
     });
 }

@@ -1,52 +1,7 @@
-use bunner_http_server::enums::{HttpMethod, HttpStatusCode};
-use bunner_http_server::middleware::{
-    body_parser::BodyParser, chain::Chain, cookie_parser::CookieParser,
-    header_parser::HeaderParser, url_parser::UrlParser,
-};
-use bunner_http_server::structure::{BunnerRequest, BunnerResponse, HandleRequestPayload};
-use serde_json::json;
 use std::collections::HashMap;
 
-fn make_payload(
-    url: &str,
-    headers: HashMap<String, String>,
-    body: Option<&str>,
-) -> HandleRequestPayload {
-    HandleRequestPayload {
-        http_method: 0,
-        url: url.to_string(),
-        headers,
-        body: body.map(|s| s.to_string()),
-    }
-}
-
-fn run_chain(payload: &HandleRequestPayload) -> (BunnerRequest, BunnerResponse) {
-    let mut req = BunnerRequest {
-        url: String::new(),
-        http_method: HttpMethod::Get,
-        path: String::new(),
-        headers: HashMap::new(),
-        cookies: serde_json::Value::Object(serde_json::Map::new()),
-        content_type: None,
-        content_length: None,
-        charset: None,
-        params: None,
-        query_params: None,
-        body: None,
-    };
-    let mut res = BunnerResponse {
-        http_status: HttpStatusCode::OK,
-        headers: None,
-        body: serde_json::Value::Null,
-    };
-    let chain = Chain::new()
-        .with(HeaderParser)
-        .with(UrlParser)
-        .with(CookieParser)
-        .with(BodyParser);
-    let _ = chain.execute(&mut req, &mut res, payload);
-    (req, res)
-}
+// Import common helper functions
+use crate::helper::{make_payload, run_chain};
 
 #[test]
 fn parses_content_type_and_charset() {

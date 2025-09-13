@@ -68,8 +68,8 @@ impl Middleware for BodyParser {
                     return false;
                 }
             }
-        } else if content_type.is_some() {
-            // Reject non-JSON content types when there's a body
+        } else {
+            // Reject any body without explicit application/json
             res.http_status = HttpStatusCode::UnsupportedMediaType;
             res.body = serde_json::Value::String(
                 HttpStatusCode::UnsupportedMediaType
@@ -79,7 +79,7 @@ impl Middleware for BodyParser {
             tracing::event!(
                 tracing::Level::TRACE,
                 operation = "body_parser_reject",
-                reason = "non_json_content_type"
+                reason = if content_type.is_some() { "non_json_content_type" } else { "missing_content_type" }
             );
             return false;
         }

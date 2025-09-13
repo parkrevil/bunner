@@ -1,11 +1,11 @@
-use crate::ffi::common;
 use crate::ffi::common::*;
 use bunner_http_server::*;
 use bunner_http_server::structure::{AddRouteResult, HttpServerError};
 use bunner_http_server::util::from_ptr;
 use serde_json::json;
 use std::ptr::null_mut;
-use std::sync::{mpsc, Arc, Barrier};
+use std::sync::{Arc, Barrier};
+use crossbeam_channel as mpsc;
 
 // Memory management and resource cleanup tests
 
@@ -25,26 +25,19 @@ fn handles_memory_pressure_gracefully() {
         "body": "x".repeat(50_000_000) // 50MB payload
     });
 
-    let (tx, rx) = mpsc::channel::<String>();
+    let (tx, rx) = mpsc::unbounded::<String>();
     unsafe {
-        let tx_ptr_val = &tx as *const _ as usize;
+        let req_id = make_req_id(&tx);
         handle_request(
             handle,
-            to_cstr(&tx_ptr_val.to_string()).as_ptr(),
+            to_cstr(&req_id).as_ptr(),
             to_cstr(&large_payload.to_string()).as_ptr(),
             test_callback,
         );
     }
 
     // Should either succeed or fail gracefully without crashing
-    match rx.recv_timeout(std::time::Duration::from_millis(100)) {
-        Ok(_) => {
-            // Request completed successfully
-        }
-        Err(_) => {
-            // Request timed out or failed - this is acceptable for large payloads
-        }
-    }
+    let _ = rx.recv();
 
     unsafe { destroy(handle) };
 }
@@ -59,7 +52,7 @@ fn cleans_up_resources_after_many_requests() {
 
     // Send many requests to test resource cleanup, but with better pacing
     for i in 0..100 {
-        let (tx, rx) = mpsc::channel::<String>();
+        let (tx, rx) = mpsc::unbounded::<String>();
         let payload = json!({
             "httpMethod": 0,
             "url": "http://localhost/cleanup_test",
@@ -68,23 +61,17 @@ fn cleans_up_resources_after_many_requests() {
         });
 
         unsafe {
-            let tx_ptr_val = &tx as *const _ as usize;
+            let req_id = make_req_id(&tx);
             handle_request(
                 handle,
-                to_cstr(&tx_ptr_val.to_string()).as_ptr(),
+                to_cstr(&req_id).as_ptr(),
                 to_cstr(&payload.to_string()).as_ptr(),
                 test_callback,
             );
         }
 
-        // Wait for response with timeout
-        match rx.recv_timeout(std::time::Duration::from_millis(50)) {
-            Ok(_) => {} // Success
-            Err(_) => {} // Timeout - acceptable for stress test
-        }
-
-        // Small delay between requests to avoid overwhelming the system
-        std::thread::sleep(std::time::Duration::from_millis(1));
+        // Wait for response
+        let _ = rx.recv();
     }
 
     unsafe { destroy(handle) };
@@ -112,28 +99,16 @@ fn handles_null_pointers_in_ffi_calls() {
         }
 
         // Test with null payload in handle_request
-        let (tx, rx) = mpsc::channel::<String>();
-        let tx_ptr_val = &tx as *const _ as usize;
+    let (tx, rx) = mpsc::unbounded::<String>();
+    let req_id = make_req_id(&tx);
 
         // Call handle_request with null payload
-        handle_request(
-            handle,
-            to_cstr(&tx_ptr_val.to_string()).as_ptr(),
-            null_mut(),
-            test_callback,
-        );
+            handle_request(handle, to_cstr(&req_id).as_ptr(), null_mut(), test_callback);
 
-        // Check for response with timeout
-        match rx.recv_timeout(std::time::Duration::from_millis(100)) {
-            Ok(response) => {
-                // Try to parse as error
-                if let Ok(ffi_error) = serde_json::from_str::<HttpServerError>(&response) {
-                    // Should be InvalidPayload error
-                    assert_eq!(ffi_error.code, bunner_http_server::errors::HttpServerErrorCode::InvalidPayload.code());
-                }
-            }
-            Err(_) => {
-                // Timeout - acceptable for null payload
+        // Check for response
+        if let Ok(response) = rx.recv() {
+            if let Ok(ffi_error) = serde_json::from_str::<HttpServerError>(&response) {
+                assert_eq!(ffi_error.code, bunner_http_server::errors::HttpServerErrorCode::InvalidPayload.code());
             }
         }
     }
@@ -183,7 +158,7 @@ fn handles_extreme_concurrency_load() {
             barrier_clone.wait();
 
             for req_id in 0..requests_per_thread {
-                let (tx, _rx) = mpsc::channel::<String>();
+                let (tx, _rx) = mpsc::unbounded::<String>();
                 let payload = json!({
                     "httpMethod": 0,
                     "url": "http://localhost/concurrency_test",
@@ -240,22 +215,19 @@ fn handles_system_resource_limits() {
         "body": deep_json
     });
 
-    let (tx, rx) = mpsc::channel::<String>();
+    let (tx, rx) = mpsc::unbounded::<String>();
     unsafe {
-        let tx_ptr_val = &tx as *const _ as usize;
+        let req_id = make_req_id(&tx);
         handle_request(
             handle,
-            to_cstr(&tx_ptr_val.to_string()).as_ptr(),
+            to_cstr(&req_id).as_ptr(),
             to_cstr(&payload.to_string()).as_ptr(),
             test_callback,
         );
     }
 
     // Should either succeed or fail gracefully
-    match rx.recv_timeout(std::time::Duration::from_millis(200)) {
-        Ok(_) => {} // Success
-        Err(_) => {} // Timeout or failure - acceptable
-    }
+    let _ = rx.recv();
 
     unsafe { destroy(handle) };
 }

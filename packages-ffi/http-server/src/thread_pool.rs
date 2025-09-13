@@ -19,7 +19,9 @@ static WORKER_COUNT: OnceLock<usize> = OnceLock::new();
 static JUST_SHUTDOWN: AtomicBool = AtomicBool::new(false);
 static WORKER_HANDLES: OnceLock<std::sync::Mutex<Vec<JoinHandle<()>>>> = OnceLock::new();
 #[cfg(feature = "test")]
-static FORCE_QUEUE_FULL: AtomicBool = AtomicBool::new(false);
+thread_local! {
+    static FORCE_QUEUE_FULL: std::cell::Cell<bool> = std::cell::Cell::new(false);
+}
 
 fn env_usize(key: &str, default: usize, min: usize, max: usize) -> usize {
     std::env::var(key)
@@ -81,7 +83,7 @@ fn init() -> xchan::Sender<Task> {
 #[tracing::instrument(level = "trace", skip(job))]
 pub fn submit_job(job: Job) -> Result<(), xchan::TrySendError<Task>> {
     #[cfg(feature = "test")]
-    if FORCE_QUEUE_FULL.load(Ordering::SeqCst) {
+    if FORCE_QUEUE_FULL.with(|c| c.get()) {
         return Err(xchan::TrySendError::Full(Task::Job(job)));
     }
 
@@ -126,5 +128,5 @@ pub fn shutdown_pool() {
 
 #[cfg(feature = "test")]
 pub(crate) fn set_force_full(value: bool) {
-    FORCE_QUEUE_FULL.store(value, Ordering::SeqCst);
+    FORCE_QUEUE_FULL.with(|c| c.set(value));
 }

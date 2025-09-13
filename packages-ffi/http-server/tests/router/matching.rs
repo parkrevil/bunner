@@ -3,9 +3,7 @@
 
 use bunner_http_server::enums::HttpMethod;
 use bunner_http_server::router::radix_tree::node::MAX_SEGMENT_LENGTH;
-use bunner_http_server::router::{
-    self as rapi, Router, RouterError, RouterErrorCode, RouterOptions,
-};
+use bunner_http_server::router::{Router, RouterErrorCode};
 
 #[test]
 fn finds_static_route() {
@@ -20,7 +18,7 @@ fn finds_static_route() {
 
 #[test]
 fn finds_parametric_route_and_captures_values() {
-    let mut r = rapi::Router::new(None);
+    let mut r = Router::new(None);
     r.add(HttpMethod::Get, "/users/:id/posts/:post_id").unwrap();
     r.finalize();
     let ro = r.build_readonly();
@@ -35,7 +33,7 @@ fn finds_parametric_route_and_captures_values() {
 
 #[test]
 fn finds_wildcard_route_and_captures_value() {
-    let mut r = rapi::Router::new(None);
+    let mut r = Router::new(None);
     r.add(HttpMethod::Get, "/files/*").unwrap();
     r.finalize();
     let ro = r.build_readonly();
@@ -68,7 +66,7 @@ fn finds_wildcard_route_with_empty_value() {
 
 #[test]
 fn when_path_is_empty() {
-    let r = rapi::Router::new(None);
+    let r = Router::new(None);
     assert_eq!(
         r.build_readonly()
             .find(HttpMethod::Get, "")
@@ -79,7 +77,7 @@ fn when_path_is_empty() {
 
 #[test]
 fn when_path_is_not_ascii() {
-    let r = rapi::Router::new(None);
+    let r = Router::new(None);
     assert_eq!(
         r.build_readonly()
             .find(HttpMethod::Get, "/café")
@@ -90,7 +88,7 @@ fn when_path_is_not_ascii() {
 
 #[test]
 fn when_path_has_disallowed_chars() {
-    let r = rapi::Router::new(None);
+    let r = Router::new(None);
     for p in ["/a b", "/a?b", "/a#b", "/a%b"].iter() {
         assert_eq!(
             r.build_readonly()
@@ -103,7 +101,7 @@ fn when_path_has_disallowed_chars() {
 
 #[test]
 fn when_no_route_is_found() {
-    let mut r = rapi::Router::new(None);
+    let mut r = Router::new(None);
     r.add(HttpMethod::Get, "/ok").unwrap();
     r.finalize();
     let ro = r.build_readonly();
@@ -115,7 +113,7 @@ fn when_no_route_is_found() {
 
 #[test]
 fn when_method_is_wrong() {
-    let mut r = rapi::Router::new(None);
+    let mut r = Router::new(None);
     r.add(HttpMethod::Get, "/only-get").unwrap();
     r.finalize();
     let ro = r.build_readonly();
@@ -138,7 +136,7 @@ fn when_parameter_value_is_too_long() {
 
 #[test]
 fn static_wins_over_parametric() {
-    let mut r = rapi::Router::new(None);
+    let mut r = Router::new(None);
     r.add(HttpMethod::Get, "/users/:id").unwrap();
     let k_static = r.add(HttpMethod::Get, "/users/me").unwrap();
     r.finalize();
@@ -150,7 +148,7 @@ fn static_wins_over_parametric() {
 
 #[test]
 fn static_wins_over_wildcard() {
-    let mut r = rapi::Router::new(None);
+    let mut r = Router::new(None);
     r.add(HttpMethod::Get, "/f/*").unwrap();
     let k_static = r.add(HttpMethod::Get, "/f/static").unwrap();
     r.finalize();
@@ -163,7 +161,7 @@ fn static_wins_over_wildcard() {
 // 파라미터가 항상 이기지만, 이를 명시적으로 보장하는 테스트도 추가.
 #[test]
 fn parametric_wins_over_wildcard() {
-    let mut r = rapi::Router::new(None);
+    let mut r = Router::new(None);
     let k_wildcard = r.add(HttpMethod::Get, "/search/*").unwrap();
     let k_param = r.add(HttpMethod::Get, "/search/:query").unwrap();
     r.finalize();

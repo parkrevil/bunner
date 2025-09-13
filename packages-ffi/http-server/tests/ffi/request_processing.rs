@@ -6,7 +6,7 @@ use bunner_http_server::structure::{HandleRequestOutput, HttpServerError};
 use bunner_http_server::*;
 use crossbeam_channel as mpsc;
 use serde_json::json;
-use std::ffi::{c_char, CStr};
+
 use std::ptr::null_mut;
 use std::sync::{Arc, Barrier};
 
@@ -29,7 +29,7 @@ fn handles_valid_request_successfully() {
         let payload = json!({
             "httpMethod": 0,
             "url": "http://localhost/users/123?q=test",
-            "headers": { "x-forwarded-for": "1.2.3.4" },
+            "headers": { "x-forwarded-for": "1.2.3.4", "content-type": "application/json" },
             "body": "{\"key\":\"val\"}"
         })
         .to_string();
@@ -41,8 +41,7 @@ fn handles_valid_request_successfully() {
             test_callback,
         );
 
-        let res_str = rx.recv_timeout(std::time::Duration::from_secs(5))
-            .unwrap_or_else(|_| panic!("Timeout waiting for response in handles_valid_request_successfully"));
+        let res_str = rx.recv().unwrap();
         println!("DEBUG: Response received: {}", res_str); // Debug output
         let out: HandleRequestOutput = serde_json::from_str(&res_str).unwrap();
         let res = out.request;
@@ -149,8 +148,7 @@ fn fails_if_router_is_not_sealed() {
             to_cstr(&payload).as_ptr(),
             test_callback,
         );
-        let res: HttpServerError = serde_json::from_str(&rx.recv_timeout(std::time::Duration::from_secs(5))
-            .unwrap_or_else(|_| panic!("Timeout waiting for response in fails_if_router_is_not_sealed"))).unwrap();
+        let res: HttpServerError = serde_json::from_str(&rx.recv().unwrap()).unwrap();
         assert_eq!(
             res.code,
             HttpServerErrorCode::RouteNotSealed.code(),
@@ -176,8 +174,7 @@ fn fails_if_no_route_matches() {
             to_cstr(&payload).as_ptr(),
             test_callback,
         );
-        let res: HttpServerError = serde_json::from_str(&rx.recv_timeout(std::time::Duration::from_secs(5))
-            .unwrap_or_else(|_| panic!("Timeout waiting for response in fails_if_no_route_matches"))).unwrap();
+        let res: HttpServerError = serde_json::from_str(&rx.recv().unwrap()).unwrap();
         assert_eq!(
             res.code,
             RouterErrorCode::MatchNotFound.code(),
@@ -200,8 +197,7 @@ fn fails_gracefully_on_null_payload() {
             null_mut(), // Pass null pointer for payload
             test_callback,
         );
-        let res: HttpServerError = serde_json::from_str(&rx.recv_timeout(std::time::Duration::from_secs(5))
-            .unwrap_or_else(|_| panic!("Timeout waiting for response in fails_gracefully_on_null_payload"))).unwrap();
+        let res: HttpServerError = serde_json::from_str(&rx.recv().unwrap()).unwrap();
         assert_eq!(
             res.code,
             HttpServerErrorCode::InvalidPayload.code(),
@@ -252,8 +248,7 @@ fn handles_malformed_json_payload_gracefully() {
                 test_callback,
             );
 
-            let res_str = rx.recv_timeout(std::time::Duration::from_secs(5))
-                .unwrap_or_else(|_| panic!("Timeout waiting for response in handles_malformed_json_payload_gracefully"));
+            let res_str = rx.recv().unwrap();
             let error: HttpServerError = serde_json::from_str(&res_str).unwrap();
             // All should result in InvalidJsonString or InvalidPayload
             assert!(
@@ -294,8 +289,7 @@ fn handles_extremely_large_payload() {
         );
 
         // Should either succeed or fail gracefully
-        let res_str = rx.recv_timeout(std::time::Duration::from_secs(10))
-            .unwrap_or_else(|_| panic!("Timeout waiting for response in handles_extremely_large_payload"));
+        let res_str = rx.recv().unwrap();
         let _parsed_result = serde_json::from_str::<serde_json::Value>(&res_str);
         // Test passes if no crash occurs
     }
@@ -342,7 +336,7 @@ fn handles_concurrent_invalid_requests() {
                     }
 
                     // Should receive error response without crash
-                    if let Ok(res_str) = rx.recv_timeout(std::time::Duration::from_secs(1)) {
+                    if let Ok(res_str) = rx.recv() {
                         let _error: Result<HttpServerError, _> = serde_json::from_str(&res_str);
                         // Test passes if we get a response (even if parsing fails)
                     }

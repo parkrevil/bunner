@@ -2,7 +2,7 @@ use bunner_http_server::thread_pool_test_support as pool;
 use crossbeam_channel as mpsc;
 use std::sync::{Arc, Barrier};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::{Duration};
 
 #[test]
 fn should_execute_a_single_job() {
@@ -12,7 +12,7 @@ fn should_execute_a_single_job() {
     })
     .expect("submit should succeed");
 
-    let got = rx.recv_timeout(Duration::from_secs(1)).unwrap();
+    let got = rx.recv().unwrap();
     assert_eq!(got, 1);
     pool::shutdown();
 }
@@ -35,7 +35,7 @@ fn should_execute_many_jobs_concurrently() {
 
     let mut seen = std::collections::HashSet::new();
     for _ in 0..num_jobs {
-        let v = rx.recv_timeout(Duration::from_secs(2)).unwrap();
+    let v = rx.recv().unwrap();
         seen.insert(v);
     }
     assert_eq!(seen.len(), num_jobs);
@@ -65,7 +65,7 @@ fn order_is_not_strictly_guaranteed_under_mixed_workloads() {
         .unwrap();
     }
 
-    let first = rx.recv_timeout(Duration::from_secs(1)).unwrap();
+    let first = rx.recv().unwrap();
     assert!(first == "short" || first == "long");
     pool::shutdown();
 }

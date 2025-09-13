@@ -1,6 +1,5 @@
 use crate::util::serialize_to_cstring;
 use crate::callback_dispatcher;
-use std::ffi::c_void;
 use serde::Serialize;
 use std::os::raw::c_char;
 
@@ -17,28 +16,8 @@ pub fn callback_handle_request<T: Serialize>(
     // 이 경우, 포인터 생명주기를 안정화하려면 복제해 힙에 올리고 콜백 후 해제합니다.
     // 표준 경로(일반 req_id)는 enqueue를 사용하고, 포인터 패턴은 enqueue_with_cleanup을 사용합니다.
     if let Some(id) = req_id {
-        let id_trimmed = id.strip_prefix("req_").unwrap_or(id);
-        if usize::from_str_radix(id_trimmed, 10).is_ok() {
-            unsafe fn free_boxed_sender(ptr: *mut c_void) {
-                // SAFETY: ptr must have been produced by Box::into_raw for a Box<usize>
-                unsafe {
-                    let _boxed: Box<usize> = Box::from_raw(ptr as *mut usize);
-                    let _ = _boxed; // drop at end of scope
-                }
-            }
-            let addr = id_trimmed.parse::<usize>().unwrap_or_default();
-            let boxed = Box::new(addr);
-            let raw: *mut c_void = Box::into_raw(boxed) as *mut c_void;
-            callback_dispatcher::enqueue_with_cleanup(
-                callback,
-                req_id,
-                route_key,
-                res_cstr,
-                raw,
-                free_boxed_sender,
-            );
-            return;
-        }
+        tracing::event!(tracing::Level::TRACE, path="callback_handle_request", req_id=%id, route_key=route_key as u64);
     }
+    tracing::event!(tracing::Level::TRACE, path="callback_handle_request", subpath="enqueue", req_id=?req_id, route_key=route_key as u64);
     callback_dispatcher::enqueue(callback, req_id, route_key, res_cstr);
 }

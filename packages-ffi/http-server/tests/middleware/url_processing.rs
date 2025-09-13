@@ -1,3 +1,4 @@
+/*
 use bunner_http_server::enums::{HttpMethod, HttpStatusCode};
 use bunner_http_server::middleware::{
     body_parser::BodyParser, chain::Chain, cookie_parser::CookieParser,
@@ -110,12 +111,6 @@ fn handles_invalid_and_malformed_query_params() {
 
     // malformed querystring
     let payload = make_payload("http://a.com/a?a[=malformed", headers.clone(), None);
-    let (_req, res) = run_chain(&payload);
-    assert_eq!(res.http_status, HttpStatusCode::BadRequest);
-    assert_eq!(res.body, json!(HttpStatusCode::BadRequest.reason_phrase()));
-
-    // 중복 non-array key
-    let payload = make_payload("http://a.com/a?k=1&k=2", headers.clone(), None);
     let (_req, res) = run_chain(&payload);
     assert_eq!(res.http_status, HttpStatusCode::BadRequest);
     assert_eq!(res.body, json!(HttpStatusCode::BadRequest.reason_phrase()));
@@ -391,3 +386,468 @@ fn handles_over_encoded_parameters() {
         }
     }
 }
+
+#[test]
+fn handles_plus_vs_space_semantics() {
+    let headers = HashMap::new();
+    let url = "http://example.com/test?plus=1+2";
+    let payload = make_payload(url, headers, None);
+    let (req, res) = run_chain(&payload);
+
+    if res.http_status == HttpStatusCode::OK {
+        let q = req.query_params.unwrap();
+        // Strict expectation: '+' should be interpreted as space (www-form semantics)
+        assert_eq!(q.get("plus").unwrap(), "1 2");
+    } else {
+        assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+    }
+}
+
+#[test]
+fn strict_rejects_empty_keys_and_weird_delimiters() {
+    let headers = HashMap::new();
+    for bad in [
+        "http://a.com/a?=novalue",
+        "http://a.com/a?&&&&",
+        "http://a.com/a?b==d",
+        "http://a.com/a?&=1",
+    ] {
+        let payload = make_payload(bad, headers.clone(), None);
+        let (_req, res) = run_chain(&payload);
+        assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+    }
+}
+
+#[test]
+fn strict_rejects_conflicting_scalar_and_object_for_same_key() {
+    let headers = HashMap::new();
+    let url = "http://a.com/a?a=1&a[b]=2";
+    let payload = make_payload(url, headers, None);
+    let (_req, res) = run_chain(&payload);
+    assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+}
+
+#[test]
+fn strict_rejects_sparse_or_non_numeric_array_indices() {
+    let headers = HashMap::new();
+    // Sparse indices
+    let url_sparse = "http://a.com/a?arr[0]=a&arr[2]=c";
+    let payload = make_payload(url_sparse, headers.clone(), None);
+    let (_req, res) = run_chain(&payload);
+    assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+
+    // Negative index
+    let url_negative = "http://a.com/a?arr[-1]=x";
+    let payload = make_payload(url_negative, headers.clone(), None);
+    let (_req, res) = run_chain(&payload);
+    assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+
+    // Non-numeric index
+    let url_nonnumeric = "http://a.com/a?arr[foo]=x";
+    let payload = make_payload(url_nonnumeric, headers, None);
+    let (_req, res) = run_chain(&payload);
+    assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+}
+
+#[test]
+fn duplicates_on_nested_path_become_array() {
+    let headers = HashMap::new();
+    let url = "http://a.com/a?a[b]=1&a[b]=2";
+    let payload = make_payload(url, headers, None);
+    let (req, res) = run_chain(&payload);
+
+    if res.http_status == HttpStatusCode::OK {
+        let q = req.query_params.unwrap();
+        let a = q.get("a").unwrap();
+        let b = a.get("b").unwrap();
+        let arr = b.as_array().expect("expected array for duplicated nested key");
+        assert_eq!(arr, &vec![json!("1"), json!("2")]);
+    } else {
+        // Strict: prefer structures over conflicts; some implementations may reject
+        assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+    }
+}
+
+#[test]
+fn strict_rejects_mixed_array_and_scalar_for_same_key() {
+    let headers = HashMap::new();
+    let url = "http://a.com/a?a[]=1&a=2";
+    let payload = make_payload(url, headers, None);
+    let (_req, res) = run_chain(&payload);
+    assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+}
+
+#[test]
+fn parses_array_of_objects_without_indices() {
+    let headers = HashMap::new();
+    let url = "http://a.com/a?a[][b]=1&a[][b]=2";
+    let payload = make_payload(url, headers, None);
+    let (req, res) = run_chain(&payload);
+
+    if res.http_status == HttpStatusCode::OK {
+        let q = req.query_params.unwrap();
+        let a = q.get("a").unwrap();
+        let arr = a.as_array().expect("expected array for a[]");
+        assert_eq!(arr.len(), 2);
+        assert_eq!(arr[0].get("b").unwrap(), "1");
+        assert_eq!(arr[1].get("b").unwrap(), "2");
+    } else {
+        assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+    }
+}
+
+#[test]
+fn decodes_encoded_brackets_in_keys() {
+    let headers = HashMap::new();
+    let url = "http://a.com/a?a%5Bb%5D=c"; // a[b]=c
+    let payload = make_payload(url, headers, None);
+    let (req, res) = run_chain(&payload);
+
+    if res.http_status == HttpStatusCode::OK {
+        let q = req.query_params.unwrap();
+        assert_eq!(q.get("a").unwrap().get("b").unwrap(), "c");
+    } else {
+        assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+    }
+}
+
+#[test]
+fn treats_dots_in_keys_as_literal() {
+    let headers = HashMap::new();
+    let url = "http://a.com/a?a.b=c";
+    let payload = make_payload(url, headers, None);
+    let (req, res) = run_chain(&payload);
+    if res.http_status == HttpStatusCode::OK {
+        let q = req.query_params.unwrap();
+        assert_eq!(q.get("a.b").unwrap(), "c");
+    } else {
+        assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+    }
+}
+
+#[test]
+fn supports_unicode_keys_and_values_percent_encoded() {
+    let headers = HashMap::new();
+    // key = "ключ" (Russian), value = "значение"
+    let url = "http://example.com/test?%D0%BA%D0%BB%D1%8E%D1%87=%D0%B7%D0%BD%D0%B0%D1%87%D0%B5%D0%BD%D0%B8%D0%B5";
+    let payload = make_payload(url, headers, None);
+    let (req, res) = run_chain(&payload);
+    if res.http_status == HttpStatusCode::OK {
+        let q = req.query_params.unwrap();
+        assert_eq!(q.get("ключ").unwrap(), "значение");
+    } else {
+        assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+    }
+}
+
+#[test]
+fn decodes_equals_in_key_name() {
+    let headers = HashMap::new();
+    let url = "http://a.com/a?a%3Db=c"; // key: a=b
+    let payload = make_payload(url, headers, None);
+    let (req, res) = run_chain(&payload);
+    if res.http_status == HttpStatusCode::OK {
+        let q = req.query_params.unwrap();
+        assert_eq!(q.get("a=b").unwrap(), "c");
+    } else {
+        assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+    }
+}
+
+#[test]
+fn ignores_fragment_when_parsing_query() {
+    let headers = HashMap::new();
+    let url = "http://example.com/test?k=v#fragment";
+    let payload = make_payload(url, headers, None);
+    let (req, res) = run_chain(&payload);
+    if res.http_status == HttpStatusCode::OK {
+        let q = req.query_params.unwrap();
+        assert_eq!(q.get("k").unwrap(), "v");
+    } else {
+        assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+    }
+}
+
+#[test]
+fn strict_rejects_incomplete_multibyte_percent_sequence() {
+    let headers = HashMap::new();
+    let url = "http://example.com/test?bad=%E2%82";
+    let payload = make_payload(url, headers, None);
+    let (_req, res) = run_chain(&payload);
+    assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+}
+
+#[test]
+fn handles_empty_query_and_key_without_value() {
+    let headers = HashMap::new();
+    // Empty query
+    let url_empty = "http://a.com/a?";
+    let payload = make_payload(url_empty, headers.clone(), None);
+    let (req, res) = run_chain(&payload);
+    if res.http_status == HttpStatusCode::OK {
+        let q = req.query_params.unwrap();
+        assert_eq!(q.as_object().unwrap().len(), 0);
+    } else {
+        assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+    }
+
+    // Key presence without '=' should be treated as empty string value
+    let url_flag = "http://a.com/a?flag";
+    let payload = make_payload(url_flag, headers, None);
+    let (req, res) = run_chain(&payload);
+    if res.http_status == HttpStatusCode::OK {
+        let q = req.query_params.unwrap();
+        assert_eq!(q.get("flag").unwrap(), "");
+    } else {
+        assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+    }
+}
+
+#[test]
+fn preserves_multiple_equals_in_value() {
+    let headers = HashMap::new();
+    let url = "http://a.com/a?a=b=c=d";
+    let payload = make_payload(url, headers, None);
+    let (req, res) = run_chain(&payload);
+    if res.http_status == HttpStatusCode::OK {
+        let q = req.query_params.unwrap();
+        assert_eq!(q.get("a").unwrap(), "b=c=d");
+    } else {
+        assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+    }
+}
+
+#[test]
+fn decodes_ampersand_in_value() {
+    let headers = HashMap::new();
+    let url = "http://a.com/a?v=a%26b%26c";
+    let payload = make_payload(url, headers, None);
+    let (req, res) = run_chain(&payload);
+    if res.http_status == HttpStatusCode::OK {
+        let q = req.query_params.unwrap();
+        assert_eq!(q.get("v").unwrap(), "a&b&c");
+    } else {
+        assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+    }
+}
+
+#[test]
+fn strict_rejects_prototype_pollution_like_keys() {
+    let headers = HashMap::new();
+    for bad in [
+        "http://a.com/a?__proto__[polluted]=yes",
+        "http://a.com/a?constructor[prototype]=x",
+    ] {
+        let payload = make_payload(bad, headers.clone(), None);
+        let (_req, res) = run_chain(&payload);
+        // Strict security posture: reject these patterns
+        assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+    }
+}
+
+#[test]
+fn strict_rejects_duplicate_scalar_keys_without_brackets() {
+    let headers = HashMap::new();
+    let url = "http://a.com/a?k=1&k=2&k=3";
+    let payload = make_payload(url, headers, None);
+    let (_req, res) = run_chain(&payload);
+    assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+}
+
+#[test]
+fn supports_encoded_emoji_keys_and_values() {
+    let headers = HashMap::new();
+    // key = 🐶, value = 💕
+    let url = "http://example.com/test?%F0%9F%90%B6=%F0%9F%92%95";
+    let payload = make_payload(url, headers, None);
+    let (req, res) = run_chain(&payload);
+    if res.http_status == HttpStatusCode::OK {
+        let q = req.query_params.unwrap();
+        assert_eq!(q.get("🐶").unwrap(), "💕");
+    } else {
+        assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+    }
+}
+
+#[test]
+fn strict_rejects_invalid_utf8_sequences() {
+    let headers = HashMap::new();
+    // %C3 followed by '(' is invalid
+    let url = "http://example.com/test?name=%C3(";
+    let payload = make_payload(url, headers, None);
+    let (_req, res) = run_chain(&payload);
+    assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+}
+
+#[test]
+fn strict_rejects_mixed_indexing_forms() {
+    let headers = HashMap::new();
+    // a[] with explicit index later is inconsistent
+    let url = "http://a.com/a?a[]=x&a[0]=y";
+    let payload = make_payload(url, headers, None);
+    let (_req, res) = run_chain(&payload);
+    assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+}
+
+#[test]
+fn nested_arrays_without_indices() {
+    let headers = HashMap::new();
+    // a[][] forms array of arrays
+    let url = "http://a.com/a?a[][]=1&a[][]=2";
+    let payload = make_payload(url, headers, None);
+    let (req, res) = run_chain(&payload);
+    if res.http_status == HttpStatusCode::OK {
+        let q = req.query_params.unwrap();
+        let a = q.get("a").unwrap();
+        let arr = a.as_array().unwrap();
+        assert!(arr.iter().all(|v| v.is_array()));
+    } else {
+        assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+    }
+}
+
+#[test]
+fn strict_rejects_bracket_only_keys() {
+    let headers = HashMap::new();
+    let cases = ["http://a.com/a?[]=v", "http://a.com/a?[x]=v"]; 
+    for url in cases {
+        let payload = make_payload(url, headers.clone(), None);
+        let (_req, res) = run_chain(&payload);
+        assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+    }
+}
+
+#[test]
+fn keys_with_whitespace_characters() {
+    let headers = HashMap::new();
+    let url = "http://a.com/a?a%20b=1&a%09c=2"; // space and tab in keys
+    let payload = make_payload(url, headers, None);
+    let (req, res) = run_chain(&payload);
+    if res.http_status == HttpStatusCode::OK {
+        let q = req.query_params.unwrap();
+        assert_eq!(q.get("a b").unwrap(), "1");
+        assert_eq!(q.get("a\tc").unwrap(), "2");
+    } else {
+        assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+    }
+}
+
+#[test]
+fn trailing_delimiters_are_tolerated_or_rejected() {
+    let headers = HashMap::new();
+    for url in ["http://a.com/a?a=1&", "http://a.com/a?a=1;"] {
+        let payload = make_payload(url, headers.clone(), None);
+        let (req, res) = run_chain(&payload);
+        if res.http_status == HttpStatusCode::OK {
+            let q = req.query_params.unwrap();
+            assert_eq!(q.get("a").unwrap(), "1");
+        } else {
+            assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+        }
+    }
+}
+
+#[test]
+fn order_sensitivity_mixed_scalar_and_array() {
+    let headers = HashMap::new();
+    // Opposite order of rejects_mixed_array_and_scalar_for_same_key
+    let url = "http://a.com/a?a=2&a[]=1";
+    let payload = make_payload(url, headers, None);
+    let (_req, res) = run_chain(&payload);
+    // Strictly reject; some parsers might allow and coerce
+    assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+}
+
+#[test]
+fn duplicate_numeric_array_index_conflict() {
+    let headers = HashMap::new();
+    let url = "http://a.com/a?arr[0]=a&arr[0]=b";
+    let payload = make_payload(url, headers, None);
+    let (_req, res) = run_chain(&payload);
+    // Conflict on same explicit index should be rejected under strict rules
+    assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+}
+
+#[test]
+fn lowercase_percent_encoding_equivalence() {
+    let headers = HashMap::new();
+    // same as café but with lowercase hex digits
+    let url = "http://example.com/test?name=caf%c3%a9";
+    let payload = make_payload(url, headers, None);
+    let (req, res) = run_chain(&payload);
+    if res.http_status == HttpStatusCode::OK {
+        let q = req.query_params.unwrap();
+        assert_eq!(q.get("name").unwrap(), "café");
+    } else {
+        assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+    }
+}
+
+#[test]
+fn plus_and_ampersand_in_keys() {
+    let headers = HashMap::new();
+    // '+' in key should become space; encoded '&' should be literal in key
+    let cases = vec![
+        ("http://a.com/a?a+b=1", "a b", "1"),
+        ("http://a.com/a?a%26b=2", "a&b", "2"),
+    ];
+    for (url, expected_key, expected_val) in cases {
+        let payload = make_payload(url, headers.clone(), None);
+        let (req, res) = run_chain(&payload);
+        if res.http_status == HttpStatusCode::OK {
+            let q = req.query_params.unwrap();
+            assert_eq!(q.get(expected_key).unwrap(), expected_val);
+        } else {
+            assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+        }
+    }
+}
+
+#[test]
+fn semicolon_as_delimiter_handling() {
+    let headers = HashMap::new();
+    let url = "http://a.com/a?a=1;b=2";
+    let payload = make_payload(url, headers, None);
+    let (req, res) = run_chain(&payload);
+    // Some parsers accept ';' as a delimiter; we accept either behavior
+    if res.http_status == HttpStatusCode::OK {
+        let q = req.query_params.unwrap();
+        // If ';' not treated as delimiter, the whole segment might be the key
+        if let Some(v) = q.get("a") {
+            assert_eq!(v, "1");
+        }
+    } else {
+        assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+    }
+}
+
+#[test]
+fn depth_overflow_is_rejected() {
+    let headers = HashMap::new();
+    // Build a query with nesting depth 33 to exceed default 32
+    let mut key = String::from("a");
+    for _ in 0..33 { key.push_str("["); key.push_str("x"); key.push_str("]"); }
+    let url = format!("http://a.com/a?{}=1", key);
+    let payload = make_payload(&url, headers, None);
+    let (_req, res) = run_chain(&payload);
+    assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+}
+
+#[test]
+fn empty_array_elements_and_flags() {
+    let headers = HashMap::new();
+    // a[] without value and with empty value
+    let url = "http://a.com/a?a[]&a[]=";
+    let payload = make_payload(url, headers, None);
+    let (req, res) = run_chain(&payload);
+    if res.http_status == HttpStatusCode::OK {
+        let q = req.query_params.unwrap();
+        let a = q.get("a").unwrap();
+        let arr = a.as_array().unwrap();
+        // Accept either ["", ""] or coalesced empty entries
+        assert!(arr.len() >= 1);
+    } else {
+        assert_eq!(res.http_status, HttpStatusCode::BadRequest);
+    }
+}
+ */

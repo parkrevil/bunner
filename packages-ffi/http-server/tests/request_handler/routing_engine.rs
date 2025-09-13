@@ -3,7 +3,6 @@ use bunner_http_server::router::{Router, RouterErrorCode, RouterOptions, RouterR
 use bunner_http_server::structure::HandleRequestOutput;
 use crossbeam_channel as mpsc;
 use serde_json::json;
-use std::ffi::{c_char, CStr};
 use std::sync::Arc;
 
 use crate::ffi::common::{make_req_id, test_callback};
@@ -37,7 +36,9 @@ fn run_test_and_get_error_code(payload: serde_json::Value) -> u16 {
     let (tx, rx) = mpsc::unbounded::<String>();
     let req_id = make_req_id(&tx);
     request_handler::process_job(test_callback, req_id, payload.to_string(), ro, None);
-    rx.recv().unwrap().parse::<u16>().unwrap()
+    let msg = rx.recv().unwrap();
+    let res: serde_json::Value = serde_json::from_str(&msg).unwrap();
+    res.get("code").and_then(|v| v.as_u64()).unwrap() as u16
 }
 
 #[test]

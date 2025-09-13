@@ -1,9 +1,7 @@
 use bunner_http_server::request_handler;
 use bunner_http_server::router::{Router, RouterOptions, RouterReadOnly};
 use serde_json::json;
-use std::ffi::{c_char, CStr};
 use std::sync::{Arc, Barrier};
-use std::time::Duration;
 use crossbeam_channel as mpsc;
 
 use crate::ffi::common::{make_req_id, test_callback};
@@ -58,7 +56,7 @@ fn processes_concurrent_requests_with_varying_payload_sizes() {
                     None,
                 );
 
-                rx.recv_timeout(Duration::from_secs(1)).is_ok()
+                rx.recv().is_ok()
             })
         })
         .collect();
@@ -87,8 +85,8 @@ fn handles_concurrent_malformed_requests_gracefully() {
 
     let handles: Vec<_> = malformed_payloads
         .into_iter()
-        .enumerate()
-        .map(|(i, payload)| {
+    .enumerate()
+    .map(|(_i, payload)| {
             let ro_clone = ro.clone();
             let barrier_clone = barrier.clone();
             let payload_owned = payload.to_string();
@@ -96,8 +94,8 @@ fn handles_concurrent_malformed_requests_gracefully() {
             std::thread::spawn(move || {
                 barrier_clone.wait();
 
-                let (_tx, rx) = mpsc::unbounded::<String>();
-                let req_id = format!("malformed_{}", i);
+                let (tx, rx) = mpsc::unbounded::<String>();
+                let req_id = make_req_id(&tx);
 
                 request_handler::process_job(
                     test_callback,
@@ -108,7 +106,7 @@ fn handles_concurrent_malformed_requests_gracefully() {
                 );
 
                 // Should get an error response
-                rx.recv_timeout(Duration::from_millis(500)).is_ok()
+                rx.recv().is_ok()
             })
         })
         .collect();

@@ -2,9 +2,7 @@
 #![allow(clippy::field_reassign_with_default)]
 
 use bunner_http_server::enums::HttpMethod;
-use bunner_http_server::router::{
-    self as rapi, Router, RouterError, RouterErrorCode, RouterOptions,
-};
+use bunner_http_server::router::Router;
 
 #[test]
 fn ignores_trailing_slashes() {
