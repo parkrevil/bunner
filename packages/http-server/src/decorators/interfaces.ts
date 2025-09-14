@@ -1,4 +1,4 @@
-import type { HttpMethodValue } from '../types';
+import type { HttpMethod } from '../enums';
 
 /**
  * Controller Decorator Options
@@ -30,7 +30,7 @@ export interface HttpMethodDecoratorOptions {
  * @description The metadata for the http method decorator
  */
 export interface RestRouteHandlerMetadata {
-  httpMethod: HttpMethodValue;
+  httpMethod: HttpMethod;
   path?: string;
   options?: HttpMethodDecoratorOptions;
 }

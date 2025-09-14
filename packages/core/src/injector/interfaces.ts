@@ -1,4 +1,4 @@
-import type { Class } from '../types';
+import type { Class } from '../common/types';
 
 import type {
   ModuleMetadata,

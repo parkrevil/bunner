@@ -1,6 +1,6 @@
-import { isClass } from '../helpers';
-import type { BunnerRootModule } from '../interfaces';
-import type { Class } from '../types';
+import type { BaseModule } from '../application';
+import { isClass } from '../common/helpers';
+import type { Class } from '../common/types';
 
 import { MetadataKey, ReflectMetadataKey } from './enums';
 import {
@@ -31,13 +31,13 @@ import type {
  * @description Dependency injection container for each application
  */
 export class Container {
-  private readonly rootModuleCls: Class<BunnerRootModule>;
+  private readonly rootModuleCls: Class<BaseModule>;
   private readonly graph: Map<Class | ProviderToken, DependencyGraphNode>;
   private readonly modules: Map<Class, InstanceType<any>>;
   private readonly providers: Map<ProviderToken, InstanceType<any>>;
   private controllers: Map<Class, InstanceType<any>>;
 
-  constructor(rootModuleCls: Class<BunnerRootModule>) {
+  constructor(rootModuleCls: Class<BaseModule>) {
     this.rootModuleCls = rootModuleCls;
     this.graph = new Map<Class, DependencyGraphNode>();
     this.modules = new Map<Class, InstanceType<any>>();

@@ -2,7 +2,7 @@ import {
   MetadataKey,
   type InjectableMetadata,
   type ModuleMetadata,
-} from '../injector';
+} from '../../injector';
 
 import type {
   InjectableDecoratorOptions,

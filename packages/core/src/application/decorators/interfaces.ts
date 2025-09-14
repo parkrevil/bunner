@@ -1,5 +1,5 @@
-import type { ProviderScope, Provider } from '../injector';
-import type { Class } from '../types';
+import type { Class } from '../../common';
+import type { ProviderScope, Provider } from '../../injector';
 
 /**
  * Module decorator options

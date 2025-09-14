@@ -1,5 +1,4 @@
-import { EmitDecoratorMetadataError } from '../errors';
-import { isClass } from '../helpers';
+import { isClass } from '../../common';
 import {
   MetadataKey,
   ReflectMetadataKey,
@@ -7,7 +6,9 @@ import {
   type ForwardRef,
   isForwardRef,
   type ProviderToken,
-} from '../injector';
+} from '../../injector';
+
+import { EmitDecoratorMetadataError } from './errors';
 
 /**
  * Inject Decorator

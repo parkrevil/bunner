@@ -1,12 +1,13 @@
-import { Container } from './injector';
-import type { BunnerRootModule } from './interfaces';
-import type { Class } from './types';
+import type { Class } from '../common/types';
+import { Container } from '../injector';
 
-export abstract class BunnerApplication {
-  protected rootModule: BunnerRootModule;
+import type { BaseModule } from './interfaces';
+
+export abstract class BaseApplication {
+  protected rootModule: BaseModule;
   protected container: Container;
 
-  constructor(rootModule: Class<BunnerRootModule>) {
+  constructor(rootModule: Class<BaseModule>) {
     this.rootModule = new rootModule();
     this.container = new Container(rootModule);
   }

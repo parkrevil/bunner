@@ -1,8 +1,4 @@
-import {
-  BunnerApplication,
-  type BunnerRootModule,
-  type Class,
-} from '@bunner/core';
+import { BaseApplication, type BaseModule, type Class } from '@bunner/core';
 import { Logger } from '@bunner/core-logger';
 import type { Server } from 'bun';
 
@@ -10,13 +6,13 @@ import { HttpError } from './errors';
 import { RouteHandler } from './route-handler';
 import { RustCore } from './rust-core';
 
-export class BunnerHttpServer extends BunnerApplication {
+export class BunnerHttpServer extends BaseApplication {
   private readonly logger = new Logger();
   private server: Server | undefined;
   private rustCore: RustCore;
   private routeHandler: RouteHandler;
 
-  constructor(rootModule: Class<BunnerRootModule>) {
+  constructor(rootModule: Class<BaseModule>) {
     super(rootModule);
 
     this.server = undefined;

@@ -1,11 +1,11 @@
 import {
   BaseRustCore,
   BunnerError,
-  BunnerRustError,
   encodeCString,
   pointerToString,
   resolveRustLibPath,
   type JSCallbackEntry,
+  RustError,
 } from '@bunner/core';
 import type { JSCallbackMap } from '@bunner/core/src/rust-core/types';
 import { FFIType, JSCallback, type FFIFunction, type Pointer } from 'bun:ffi';
@@ -213,7 +213,7 @@ export class RustCore extends BaseRustCore<HttpServerSymbols> {
    * Gracefully destroy and reject all pending callbacks
    */
   override destroy() {
-    const err = new BunnerRustError('Core destroyed');
+    const err = new RustError('Core destroyed');
 
     for (const [id, entry] of this.pendingHandleRequests) {
       entry.reject?.(err);

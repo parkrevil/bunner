@@ -1,7 +1,7 @@
 import { CString, suffix, type Pointer } from 'bun:ffi';
 import { packageDirectorySync } from 'package-directory';
 
-import { textEncoder } from '../instances';
+import { textEncoder } from '../common/instances';
 
 /**
  * Encode a string to a C string

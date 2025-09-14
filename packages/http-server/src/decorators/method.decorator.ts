@@ -1,5 +1,4 @@
 import { HttpMethod } from '../enums';
-import type { HttpMethodValue } from '../types';
 
 import { MetadataKey } from './enums';
 import type {
@@ -13,7 +12,7 @@ import type {
  * @param httpMethod
  * @returns
  */
-function createHttpMethodDecorator(httpMethod: HttpMethodValue) {
+function createHttpMethodDecorator(httpMethod: HttpMethod) {
   return function (
     path?: string,
     options?: HttpMethodDecoratorOptions,

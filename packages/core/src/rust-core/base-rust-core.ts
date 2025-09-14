@@ -1,8 +1,7 @@
 import { dlopen, type FFIFunction, type Pointer } from 'bun:ffi';
 
-import { BunnerRustError } from '../errors';
-
-import type { RustError, BaseRustSymbols } from './interfaces';
+import { RustError } from './errors';
+import { type BaseRustSymbols, type FfiError } from './interfaces';
 import { pointerToJson } from './utils';
 
 export abstract class BaseRustCore<T extends BaseRustSymbols> {
@@ -18,7 +17,7 @@ export abstract class BaseRustCore<T extends BaseRustSymbols> {
     const lib = dlopen(libPath, api);
 
     if (!lib.symbols) {
-      throw new BunnerRustError('Failed to load Rust core');
+      throw new RustError('Failed to load Rust core');
     }
 
     this.symbols = lib.symbols as T;
@@ -27,7 +26,7 @@ export abstract class BaseRustCore<T extends BaseRustSymbols> {
     const handle = this.symbols.init();
 
     if (!handle) {
-      throw new BunnerRustError('Failed to initialize Rust core');
+      throw new RustError('Failed to initialize Rust core');
     }
 
     this.handle = handle;
@@ -59,7 +58,7 @@ export abstract class BaseRustCore<T extends BaseRustSymbols> {
   protected ensure<T>(ptr: Pointer | null, length?: number): T {
     try {
       if (!ptr) {
-        throw new BunnerRustError('Rust result is null');
+        throw new RustError('Rust result is null');
       }
 
       const result = pointerToJson<T>(ptr, length);
@@ -70,11 +69,11 @@ export abstract class BaseRustCore<T extends BaseRustSymbols> {
 
       return result;
     } catch (error) {
-      if (error instanceof BunnerRustError) {
+      if (error instanceof RustError) {
         throw error;
       }
 
-      throw new BunnerRustError('Failed to parse Rust result', error);
+      throw new RustError('Failed to parse Rust result', error);
     } finally {
       if (ptr) {
         this.symbols.free_string(ptr);
@@ -88,7 +87,7 @@ export abstract class BaseRustCore<T extends BaseRustSymbols> {
    * @param error
    * @returns
    */
-  protected isError(error: any): error is RustError {
+  protected isError(error: any): error is FfiError {
     return Object.hasOwn(error, 'code') && Object.hasOwn(error, 'error');
   }
 
@@ -98,11 +97,11 @@ export abstract class BaseRustCore<T extends BaseRustSymbols> {
    * @param error
    * @returns
    */
-  protected makeError(error: RustError) {
+  protected makeError(error: FfiError) {
     if (!error.code) {
-      return new BunnerRustError('UnknownError');
+      return new RustError('UnknownError');
     }
 
-    return new BunnerRustError(error.description, error);
+    return new RustError(error.description, error);
   }
 }

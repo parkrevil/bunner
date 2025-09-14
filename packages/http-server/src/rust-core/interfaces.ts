@@ -2,7 +2,7 @@ import type { BaseRustSymbols } from '@bunner/core';
 import type { FFIType, Pointer } from 'bun:ffi';
 import type { StatusCodes } from 'http-status-codes';
 
-import type { HttpMethodValue } from '../types';
+import type { HttpMethod } from '../enums';
 
 export interface HttpServerSymbols extends BaseRustSymbols {
   add_route: (
@@ -33,7 +33,7 @@ export interface AddRouteResult {
  * @description The result interface for Find Route
  */
 export interface HandleRequestParams {
-  httpMethod: HttpMethodValue;
+  httpMethod: HttpMethod;
   url: string;
   headers: Record<string, any>;
   body: string | null;
@@ -63,7 +63,7 @@ export interface HandleRequestResult {
  * @description The request interface for Rust Bunner
  */
 export interface RustBunnerRequest {
-  httpMethod: HttpMethodValue;
+  httpMethod: HttpMethod;
   path: string;
   cookies: Record<string, any>;
   contentType: string | null;

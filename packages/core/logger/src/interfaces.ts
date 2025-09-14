@@ -1,4 +1,4 @@
-import type { LogLevel } from './types';
+import type { LogLevel } from './enums';
 
 export interface FfiSymbols {
   init: () => void;

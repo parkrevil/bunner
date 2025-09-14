@@ -1,8 +1,8 @@
 import type {
   InjectableDecoratorOptions,
   ModuleDecoratorOptions,
-} from '../decorators';
-import type { Class } from '../types';
+} from '../application/decorators';
+import type { Class } from '../common/types';
 
 import type {
   ProviderUseValue,

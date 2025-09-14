@@ -27,6 +27,7 @@
     "examples"
   ],
   "scripts": {
+    "tsc": "tsc --noEmit",
     "lint": "eslint . --fix",
     "format": "prettier --write .",
     "bench": "./scripts/bench.sh",

@@ -1,4 +1,4 @@
-import { Module, type BunnerRootModule } from '@bunner/core';
+import { Module, type BaseModule } from '@bunner/core';
 
 import { PostsModule } from './posts';
 import { UsersModule } from './users';
@@ -6,7 +6,7 @@ import { UsersModule } from './users';
 @Module({
   imports: [UsersModule, PostsModule],
 })
-export class RootModule implements BunnerRootModule {
+export class RootModule implements BaseModule {
   constructor() {}
 
   configure() {}

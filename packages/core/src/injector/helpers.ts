@@ -1,4 +1,4 @@
-import { isClass } from '../helpers';
+import { isClass } from '../common/helpers';
 
 import type {
   ForwardRef,

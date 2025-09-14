@@ -3,7 +3,6 @@ import { dlopen } from 'bun:ffi';
 
 import { LogLevel } from './enums';
 import type { FfiSymbols } from './interfaces';
-import type { LogLevel } from './types';
 
 export class Logger {
   private static instance: Logger;

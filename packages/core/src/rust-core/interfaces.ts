@@ -14,7 +14,7 @@ export interface BaseRustSymbols {
  * Rust Error
  * @description The error interface for Rust
  */
-export interface RustError {
+export interface FfiError {
   code: number;
   error: string;
   subsystem: string;

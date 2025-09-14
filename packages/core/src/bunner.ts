@@ -1,15 +1,15 @@
-import { type BunnerApplication } from './bunner-application';
-import type {
-  CreateBunnerApplicationOptions,
-  BunnerRootModule,
-} from './interfaces';
-import type { Class } from './types';
+import {
+  type BaseApplication,
+  type BaseModule,
+  type CreateApplicationOptions,
+} from './application';
+import type { Class } from './common';
 
 /**
  * Bunner class
  */
 export class Bunner {
-  static apps: Map<string, BunnerApplication> = new Map();
+  static apps: Map<string, BaseApplication> = new Map();
   private static isShuttingDown = false;
   private static signalsInitialized = false;
 
@@ -18,10 +18,10 @@ export class Bunner {
    * @param type - The type of the application
    * @returns The Bunner application
    */
-  static async create<T extends BunnerApplication>(
+  static async create<T extends BaseApplication>(
     appConstructor: Class<T>,
-    rootModule: Class<BunnerRootModule>,
-    options?: CreateBunnerApplicationOptions,
+    rootModule: Class<BaseModule>,
+    options?: CreateApplicationOptions,
   ) {
     this.setupSignalHandlers();
 
