@@ -35,7 +35,7 @@ pub mod node;
 mod static_map;
 pub mod traversal;
 
-use alloc::{NodeBox, create_node_box_from_arena_pointer};
+use alloc::{create_node_box_from_arena_pointer, NodeBox};
 pub use node::RadixTreeNode;
 #[cfg(feature = "test")]
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -308,7 +308,7 @@ impl RadixTree {
         let mut out = vec![0u16; n];
         for (idx, method, segs, _h, _l, _s, _lits) in pre.into_iter() {
             let assigned = base + (idx as u16) + 1; // stored keys are +1 encoded
-            // pass decoded value to helper (helper will re-encode)
+                                                    // pass decoded value to helper (helper will re-encode)
             out[idx] = self.insert_parsed_preassigned(method, segs, assigned - 1)?;
         }
         Ok(out)

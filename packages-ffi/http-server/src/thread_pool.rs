@@ -1,7 +1,7 @@
 use crossbeam_channel as xchan;
 use std::sync::{
-    OnceLock,
     atomic::{AtomicBool, Ordering},
+    OnceLock,
 };
 use std::thread;
 use std::thread::JoinHandle;
@@ -56,19 +56,16 @@ fn init() -> xchan::Sender<Task> {
             let rx = TASK_RECEIVER.get().unwrap().clone();
             if let Ok(handle) = thread::Builder::new()
                 .name("bunner-http-worker".to_string())
-                .spawn(move || {
-                    loop {
-                        match rx.recv() {
-                            Ok(Task::Job(job)) => {
-                                let res =
-                                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(job));
-                                if res.is_err() {
-                                    tracing::event!(tracing::Level::ERROR, reason = "job_panic");
-                                }
+                .spawn(move || loop {
+                    match rx.recv() {
+                        Ok(Task::Job(job)) => {
+                            let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(job));
+                            if res.is_err() {
+                                tracing::event!(tracing::Level::ERROR, reason = "job_panic");
                             }
-                            Ok(Task::Shutdown) => break,
-                            Err(_) => break,
                         }
+                        Ok(Task::Shutdown) => break,
+                        Err(_) => break,
                     }
                 })
             {

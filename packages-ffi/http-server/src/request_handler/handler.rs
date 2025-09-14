@@ -1,7 +1,7 @@
 use percent_encoding::percent_decode_str;
 use serde_json::Value as JsonValue;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use crate::enums::HttpMethod;
 use crate::errors::{HttpServerError, HttpServerErrorCode};
@@ -10,7 +10,10 @@ use crate::router;
 use crate::utils::json;
 
 use super::structures::HandleRequestOutput;
-use super::{BunnerRequest, BunnerResponse, HandleRequestPayload, callback_handle_request, HandleRequestCallback};
+use super::{
+    callback_handle_request, BunnerRequest, BunnerResponse, HandleRequestCallback,
+    HandleRequestPayload,
+};
 
 #[tracing::instrument(skip(cb, payload_str, ro), fields(request_id=%request_id))]
 pub fn handle(
@@ -139,12 +142,7 @@ pub fn handle(
                 request_id=%request_id
             );
 
-            callback_handle_request(
-                cb,
-                Some(request_id.as_str()),
-                Some(route_key),
-                &output,
-            );
+            callback_handle_request(cb, Some(request_id.as_str()), Some(route_key), &output);
         }
         Err(router_error) => {
             let mut be = HttpServerError::from(router_error);
