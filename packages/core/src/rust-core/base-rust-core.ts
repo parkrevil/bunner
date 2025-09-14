@@ -18,7 +18,7 @@ export abstract class BaseRustCore<T extends BaseRustSymbols> {
     const lib = dlopen(libPath, api);
 
     if (!lib.symbols) {
-      throw new Error('Failed to initialize RustCore');
+      throw new BunnerRustError('Failed to load Rust core');
     }
 
     this.symbols = lib.symbols as T;
@@ -27,7 +27,7 @@ export abstract class BaseRustCore<T extends BaseRustSymbols> {
     const handle = this.symbols.init();
 
     if (!handle) {
-      throw new Error('Failed to initialize Rust core');
+      throw new BunnerRustError('Failed to initialize Rust core');
     }
 
     this.handle = handle;
@@ -39,7 +39,7 @@ export abstract class BaseRustCore<T extends BaseRustSymbols> {
    */
   destroy() {
     if (!this.handle) {
-      throw new Error('Rust core not initialized');
+      return;
     }
 
     this.symbols.destroy(this.handle);

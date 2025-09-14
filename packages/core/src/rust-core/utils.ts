@@ -35,7 +35,7 @@ export function encodeCString(
  * @param ptr
  * @returns
  */
-export function pointerToJson<T>(ptr: Pointer, length?: number): T {
+export function pointerToJson<T>(ptr: Pointer, length?: number) {
   const json = new CString(ptr, 0, length);
 
   return JSON.parse(json.toString()) as T;
@@ -47,7 +47,7 @@ export function pointerToJson<T>(ptr: Pointer, length?: number): T {
  * @param length
  * @returns
  */
-export function pointerToString(ptr: Pointer, length?: number): string {
+export function pointerToString(ptr: Pointer, length?: number) {
   return new CString(ptr, 0, length).toString();
 }
 

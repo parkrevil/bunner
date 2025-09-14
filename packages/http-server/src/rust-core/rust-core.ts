@@ -1,6 +1,7 @@
 import {
   BaseRustCore,
   BunnerError,
+  BunnerRustError,
   encodeCString,
   pointerToString,
   resolveRustLibPath,
@@ -89,6 +90,8 @@ export class RustCore extends BaseRustCore<HttpServerSymbols> {
 
           requestId = pointerToString(requestIdPtr, requestIdLength);
 
+          this.symbols.free_string(requestIdPtr);
+
           if (!requestId) {
             throw new BunnerError('Request ID is null');
           }
@@ -120,6 +123,10 @@ export class RustCore extends BaseRustCore<HttpServerSymbols> {
         } finally {
           if (requestIdPtr) {
             this.symbols.free_string(requestIdPtr);
+          }
+
+          if (resultPtr) {
+            this.symbols.free_string(resultPtr);
           }
 
           if (requestId) {
@@ -206,12 +213,14 @@ export class RustCore extends BaseRustCore<HttpServerSymbols> {
    * Gracefully destroy and reject all pending callbacks
    */
   override destroy() {
-    // Reject all pending before closing the handle to avoid dangling callbacks
-    const err = new Error('Core destroyed');
+    const err = new BunnerRustError('Core destroyed');
+
     for (const [id, entry] of this.pendingHandleRequests) {
       entry.reject?.(err);
+
       this.pendingHandleRequests.delete(id);
     }
+
     super.destroy();
   }
 }

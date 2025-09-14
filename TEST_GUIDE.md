@@ -38,9 +38,9 @@
 
 ### 🏠 **Root Modules**
 
-Each root test module is created per target function or feature, with the module name matching the function/feature name.
+Each root test module must be created per target function, with the module name matching the function name. In other words, create one root module for each function under test (e.g., 5 functions → 5 root modules).
 
-> **Example:** `mod serialize`
+> **Example:** For a function named `serialize`, the root test module should be `mod serialize`.
 
 ### 📂 **File Placement**
 
@@ -55,8 +55,13 @@ Use only for separating specific scenarios or cases.
 > **Examples:** `mod large_inputs`, `mod invalid_length`
 
 - Submodule names must clearly describe the behavior/condition
-- Avoid ambiguous names like `edge_cases`
-- Nesting is limited to root → sub (maximum 2 levels)
+- Submodule names must clearly describe the behavior/condition (prefer function/feature/action-based names)
+  - Use names that reference the specific function/feature under test or the precise scenario being exercised.
+    Examples: `mod large_inputs`, `mod invalid_length`, `mod parse_errors`, `mod serialization_failure`.
+  - Avoid vague or generic names that don't convey intent, such as `edge_cases`, `cases`, `misc`, `success`, or `failure`.
+    These names make it hard to understand what the tests cover and hamper navigation and maintenance.
+  - Prefer descriptive nouns or verb-oriented action names that map to behavior: e.g. `mod handles_overflow`, `mod returns_error_on_missing_field`.
+  - Keep submodule nesting shallow: root → sub (maximum 2 levels).
 
 ### 🔧 **Common Helpers**
 

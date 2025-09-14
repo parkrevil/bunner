@@ -72,7 +72,7 @@ pub fn deserialize_with_simd_json<T: DeserializeOwned>(
 
 pub fn to_c_string(value: &str) -> *mut c_char {
     match CString::new(value) {
-        Ok(cstr) => cstr.into_raw(),
+        Ok(cstr) => crate::pointer_registry::register_cstring_and_into_raw(cstr),
         Err(e) => {
             tracing::trace!(
                 "Failed to create CString, value contains null bytes: {:?}",

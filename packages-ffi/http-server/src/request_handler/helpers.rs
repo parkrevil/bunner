@@ -1,4 +1,4 @@
-use super::{HandleRequestCallback, callback_dispatcher};
+use super::{callback_dispatcher, HandleRequestCallback};
 use crate::utils::json;
 use serde::Serialize;
 use std::ffi::CString;
@@ -14,7 +14,7 @@ pub fn callback_handle_request<T: Serialize>(
     let result_cstr = json::serialize_and_to_c_string(result);
 
     if let Some(cstr) = request_id.and_then(|rid| CString::new(rid).ok()) {
-        request_id_ptr = cstr.into_raw();
+        request_id_ptr = crate::pointer_registry::register_cstring_and_into_raw(cstr);
     }
 
     tracing::event!(

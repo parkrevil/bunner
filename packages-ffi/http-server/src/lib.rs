@@ -11,11 +11,15 @@ pub mod constants;
 pub mod enums;
 pub mod errors;
 pub mod middleware;
+pub mod pointer_registry;
 pub mod request_handler;
 pub mod router;
 pub mod structure;
 mod thread_pool;
 pub mod utils;
+
+#[cfg(test)]
+mod pointer_registry_test;
 
 use std::{
     ffi::CStr,
@@ -26,7 +30,9 @@ use tracing_subscriber::{fmt, EnvFilter};
 
 use crate::enums::HttpMethod;
 use crate::errors::{HttpServerError, HttpServerErrorCode};
-use crate::request_handler::{callback_handle_request, handle as process_request, HandleRequestCallback};
+use crate::request_handler::{
+    callback_handle_request, handle as process_request, HandleRequestCallback,
+};
 use crate::router::errors::RouterErrorCode;
 use crate::router::structures::RouterError;
 use crate::structure::AddRouteResult;
@@ -111,17 +117,17 @@ fn make_router_sealed_error(
 #[unsafe(no_mangle)]
 #[tracing::instrument(skip_all, fields(operation = "init"))]
 pub extern "C" fn init() -> HttpServerHandle {
-        let filter = if let Ok(level) = std::env::var("BUNNER_LOG_LEVEL") {
-            EnvFilter::try_new(level).unwrap_or_else(|_| EnvFilter::new("info"))
-        } else {
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"))
-        };
+    let filter = if let Ok(level) = std::env::var("BUNNER_LOG_LEVEL") {
+        EnvFilter::try_new(level).unwrap_or_else(|_| EnvFilter::new("info"))
+    } else {
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"))
+    };
 
-        let subscriber = fmt().with_env_filter(filter).finish();
+    let subscriber = fmt().with_env_filter(filter).finish();
 
-        tracing::subscriber::set_global_default(subscriber).expect("Failed to set global logger");
+    tracing::subscriber::set_global_default(subscriber).expect("Failed to set global logger");
 
-        tracing::info!("Bunner Rust Http Server initialized.");
+    tracing::info!("Bunner Rust Http Server initialized.");
 
     let server = Box::new(HttpServer {
         router: parking_lot::RwLock::new(router::Router::new(None)),
@@ -567,7 +573,7 @@ pub unsafe extern "C" fn seal_routes(handle: HttpServerHandle) {
 /// After calling this function, the pointer is dangling and must not be used again.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn free_string(ptr: *mut c_char) {
-    unsafe { string::free_string(ptr) };
+    unsafe { pointer_registry::free(ptr) };
 }
 
 /// Cancels an in-flight request by id (no callback will be sent if not already).

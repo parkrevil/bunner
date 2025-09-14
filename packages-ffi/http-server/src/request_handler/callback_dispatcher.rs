@@ -4,7 +4,7 @@ use std::os::raw::c_char;
 use std::sync::OnceLock;
 
 use super::HandleRequestCallback;
-use crate::utils::string;
+use crate::pointer_registry;
 
 struct CallbackJob {
     callback: HandleRequestCallback,
@@ -47,7 +47,11 @@ fn init() -> xchan::Sender<CallbackJob> {
                 let request_id_len: u8 = if request_id_ptr.is_null() {
                     0u8
                 } else {
-                    unsafe { CStr::from_ptr(request_id_ptr as *const c_char).to_bytes().len() as u8 }
+                    unsafe {
+                        CStr::from_ptr(request_id_ptr as *const c_char)
+                            .to_bytes()
+                            .len() as u8
+                    }
                 };
 
                 // SAFETY: res_ptr is expected to be a valid pointer allocated by Rust.
@@ -71,10 +75,10 @@ fn init() -> xchan::Sender<CallbackJob> {
                 if res.is_err() {
                     // Callback panicked: reclaim and free any ownership that was transferred
                     if !request_id_ptr.is_null() {
-                        unsafe { string::free_string(request_id_ptr) };
+                        unsafe { pointer_registry::free(request_id_ptr) };
                     }
                     if !job.result_ptr.is_null() {
-                        unsafe { string::free_string(job.result_ptr) };
+                        unsafe { pointer_registry::free(job.result_ptr) };
                     }
 
                     tracing::event!(tracing::Level::ERROR, reason = "callback_panic_caught");
@@ -129,9 +133,9 @@ pub fn enqueue(
         // as the dispatcher thread will never receive it.
         // Free both pointers as enqueue failed; request_id may be a raw ptr transferred by caller
         if let Some(rptr) = request_id {
-            unsafe { string::free_string(rptr) };
+            unsafe { pointer_registry::free(rptr) };
         }
 
-        unsafe { string::free_string(res_ptr) };
+        unsafe { pointer_registry::free(res_ptr) };
     }
 }
