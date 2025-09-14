@@ -15,8 +15,16 @@ export interface BaseRustSymbols {
  * @description The error interface for Rust
  */
 export interface RustError {
-  code: number | null;
-  message: string | null;
+  code: number;
+  error: string;
+  subsystem: string;
+  stage: string;
+  cause: string;
+  ts: number;
+  thread: string;
+  version: string;
+  description: string;
+  extra: any;
 }
 
 /**

@@ -6,12 +6,12 @@ import {
 import { Logger } from '@bunner/core-logger';
 import type { Server } from 'bun';
 
-import { HttpError, NotFoundError } from './errors';
+import { HttpError } from './errors';
 import { RouteHandler } from './route-handler';
 import { RustCore } from './rust-core';
 
 export class BunnerHttpServer extends BunnerApplication {
-  private logger: Logger;
+  private readonly logger = new Logger();
   private server: Server | undefined;
   private rustCore: RustCore;
   private routeHandler: RouteHandler;
@@ -76,10 +76,6 @@ export class BunnerHttpServer extends BunnerApplication {
         response: res,
       } = await this.routeHandler.findHandler(rawReq, server);
 
-      if (!handler) {
-        throw new NotFoundError('Handler not found');
-      }
-
       // want to GC
       rawReq = null as any;
 
@@ -101,8 +97,8 @@ return res.getResponse();
       //          const result = await handler();
 
       return new Response(result, { status: 200 });
-    } catch (e) {
-      this.logger.debug(e as string);
+    } catch (e: any) {
+      this.logger.error(e);
 
       if (e instanceof HttpError) {
         return new Response(e.message, { status: e.statusCode });

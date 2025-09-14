@@ -9,6 +9,20 @@ export class BunnerError extends Error {
 }
 
 /**
+ * Bunner Rust Error
+ * @description The error thrown when a Rust FFI call fails
+ */
+export class BunnerRustError extends Error {
+  readonly detail: any;
+
+  constructor(message: string, detail?: any) {
+    super(message);
+
+    this.detail = detail;
+  }
+}
+
+/**
  * Emit Decorator Metadata Error
  * @description The error thrown when 'emitDecoratorMetadata' is not enabled in tsconfig.json
  */

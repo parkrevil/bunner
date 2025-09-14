@@ -1,6 +1,7 @@
 use super::{HandleRequestCallback, callback_dispatcher};
 use crate::utils::json;
 use serde::Serialize;
+use std::ffi::CString;
 
 #[inline(always)]
 pub fn callback_handle_request<T: Serialize>(
@@ -9,7 +10,12 @@ pub fn callback_handle_request<T: Serialize>(
     route_key: Option<u16>,
     result: &T,
 ) {
+    let mut request_id_ptr: *mut std::os::raw::c_char = std::ptr::null_mut();
     let result_cstr = json::serialize_and_to_c_string(result);
+
+    if let Some(cstr) = request_id.and_then(|rid| CString::new(rid).ok()) {
+        request_id_ptr = cstr.into_raw();
+    }
 
     tracing::event!(
         tracing::Level::TRACE,
@@ -19,5 +25,5 @@ pub fn callback_handle_request<T: Serialize>(
         route_key = route_key,
     );
 
-    callback_dispatcher::enqueue(callback, request_id, route_key, result_cstr);
+    callback_dispatcher::enqueue(callback, Some(request_id_ptr), route_key, result_cstr);
 }

@@ -1,4 +1,4 @@
-import { type Container } from '@bunner/core';
+import { capitalize, type Container } from '@bunner/core';
 import type { Server } from 'bun';
 
 import { BunnerRequest } from './bunner-request';
@@ -59,15 +59,13 @@ export class RouteHandler {
             controllerPrototype,
             handlerName,
           );
-          const fullPath =
-            '/' +
-            [
-              routeOptions?.version ?? controllerOptions?.version ?? '',
-              controllerPath ?? '',
-              routePath ?? '',
-            ]
-              .filter(Boolean)
-              .join('/');
+          const fullPath = [
+            routeOptions?.version ?? controllerOptions?.version ?? '',
+            controllerPath ?? '',
+            routePath ?? '',
+          ]
+            .filter(Boolean)
+            .join('/');
 
           handlers.push(
             controllerInstance[handlerName].bind(controllerInstance),
@@ -88,16 +86,17 @@ export class RouteHandler {
    * @param rawReq - The raw request object
    * @returns
    */
-  async findHandler(
-    rawReq: Request,
-    server: Server,
-  ): Promise<FindHandlerResult> {
-    if (!Object.hasOwn(HttpMethod, rawReq.method)) {
+  async findHandler(rawReq: Request, server: Server) {
+    const httpMethod =
+      HttpMethod[
+        capitalize(rawReq.method.toUpperCase()) as keyof typeof HttpMethod
+      ];
+
+    if (httpMethod === undefined) {
       throw new MethodNotAllowedError();
     }
 
     let body: string | null;
-    const httpMethod = HttpMethod[rawReq.method as keyof typeof HttpMethod];
 
     if (
       httpMethod === HttpMethod.Get ||

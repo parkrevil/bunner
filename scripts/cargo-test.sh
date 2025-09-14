@@ -4,7 +4,9 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 # Run all tests once for the entire workspace to avoid duplicate executions
-BACKTRACE=1 cargo nextest run --workspace --target-dir "$ROOT_DIR/target" --features test,simd-json
+export RUST_LOG=trace RUST_BACKTRACE=0 && \
+cargo nextest run --package bunner-http-server && \
+cargo nextest run --package bunner-http-server --features simd-json
 
 # After tests, copy built dynamic libraries to each package's bin directory
 for manifest in $(find "$ROOT_DIR/packages-ffi" -type f -name Cargo.toml); do
@@ -36,7 +38,7 @@ for manifest in $(find "$ROOT_DIR/packages-ffi" -type f -name Cargo.toml); do
            || $lib_basename == ${expected_lib_name}-*.dll ]]; then
           name_no_ext="${lib_basename%.*}"
           ext="${lib_basename##*.}"
-          dest="$bin_dir/${name_no_ext}-dev.${ext}"
+          dest="$bin_dir/${name_no_ext}.${ext}"
           cp "$lib" "$dest"
         fi
       done

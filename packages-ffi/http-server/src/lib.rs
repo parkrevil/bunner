@@ -17,19 +17,21 @@ pub mod structure;
 mod thread_pool;
 pub mod utils;
 
-use crate::enums::HttpMethod;
-use crate::errors::{HttpServerError, HttpServerErrorCode};
-use crate::request_handler::{callback_handle_request, handle as process_request};
-use crate::router::errors::RouterErrorCode;
-use crate::router::structures::RouterError;
-use crate::structure::AddRouteResult;
-use crate::thread_pool::{shutdown_pool, submit_job};
-use crate::utils::{json, string};
 use std::{
     ffi::CStr,
     os::raw::c_char,
     sync::{Arc, OnceLock},
 };
+use tracing_subscriber::{fmt, EnvFilter};
+
+use crate::enums::HttpMethod;
+use crate::errors::{HttpServerError, HttpServerErrorCode};
+use crate::request_handler::{callback_handle_request, handle as process_request, HandleRequestCallback};
+use crate::router::errors::RouterErrorCode;
+use crate::router::structures::RouterError;
+use crate::structure::AddRouteResult;
+use crate::thread_pool::{shutdown_pool, submit_job};
+use crate::utils::{json, string};
 
 // Helper function to reduce code duplication
 fn handle_null_handle_error(operation: &str) -> *mut c_char {
@@ -109,7 +111,17 @@ fn make_router_sealed_error(
 #[unsafe(no_mangle)]
 #[tracing::instrument(skip_all, fields(operation = "init"))]
 pub extern "C" fn init() -> HttpServerHandle {
-    tracing::event!(tracing::Level::INFO, "http_server init");
+        let filter = if let Ok(level) = std::env::var("BUNNER_LOG_LEVEL") {
+            EnvFilter::try_new(level).unwrap_or_else(|_| EnvFilter::new("info"))
+        } else {
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"))
+        };
+
+        let subscriber = fmt().with_env_filter(filter).finish();
+
+        tracing::subscriber::set_global_default(subscriber).expect("Failed to set global logger");
+
+        tracing::info!("Bunner Rust Http Server initialized.");
 
     let server = Box::new(HttpServer {
         router: parking_lot::RwLock::new(router::Router::new(None)),
@@ -364,7 +376,7 @@ pub unsafe extern "C" fn handle_request(
     handle: HttpServerHandle,
     request_id_ptr: *const c_char,
     payload_ptr: *const c_char,
-    cb: extern "C" fn(*const c_char, u16, *mut c_char),
+    cb: HandleRequestCallback,
 ) {
     if handle.is_null() {
         let err = HttpServerError::new(

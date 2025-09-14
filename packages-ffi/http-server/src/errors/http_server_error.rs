@@ -52,7 +52,6 @@ pub struct HttpServerError {
     pub thread: String,
     pub version: String,
     pub description: String,
-    #[serde(rename = "extra")]
     pub extra: Option<serde_json::Value>,
 }
 

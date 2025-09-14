@@ -1,22 +1,14 @@
 import { dlopen, type FFIFunction, type Pointer } from 'bun:ffi';
 
-import { pointerToJson } from '../helpers';
+import { BunnerRustError } from '../errors';
 
 import type { RustError, BaseRustSymbols } from './interfaces';
-import type { RustErrorCodes } from './types';
+import { pointerToJson } from './utils';
 
-export abstract class BaseRustCore<
-  T extends BaseRustSymbols,
-  E extends RustErrorCodes,
-> {
+export abstract class BaseRustCore<T extends BaseRustSymbols> {
   protected symbols: T;
   protected close: () => void;
   protected handle: Pointer;
-  protected errorCodes: E;
-
-  constructor(errorCodes: E) {
-    this.errorCodes = errorCodes;
-  }
 
   /**
    * Initialize the Rust core
@@ -60,32 +52,32 @@ export abstract class BaseRustCore<
   /**
    * Ensure a value is not null
    * @description Ensure a value is not null
-   * @param value
-   * @param canBeNull
+   * @param ptr
+   * @param length
    * @returns
    */
-  protected ensure<T>(value: Pointer | null, canBeNull: true): T | undefined;
-  protected ensure<T>(value: Pointer | null, canBeNull?: false): T;
-  protected ensure<T>(value: Pointer | null, canBeNull = false): T | undefined {
+  protected ensure<T>(ptr: Pointer | null, length?: number): T {
     try {
-      if (value === null && !canBeNull) {
-        throw new Error('Value is null');
+      if (!ptr) {
+        throw new BunnerRustError('Rust result is null');
       }
 
-      if (value === null) {
-        return undefined as T;
-      }
-
-      const result = pointerToJson<T>(value);
+      const result = pointerToJson<T>(ptr, length);
 
       if (this.isError(result)) {
         throw this.makeError(result);
       }
 
       return result;
+    } catch (error) {
+      if (error instanceof BunnerRustError) {
+        throw error;
+      }
+
+      throw new BunnerRustError('Failed to parse Rust result', error);
     } finally {
-      if (value) {
-        this.symbols.free_string(value);
+      if (ptr) {
+        this.symbols.free_string(ptr);
       }
     }
   }
@@ -97,7 +89,7 @@ export abstract class BaseRustCore<
    * @returns
    */
   protected isError(error: any): error is RustError {
-    return Object.hasOwn(error, 'code') && Object.hasOwn(error, 'message');
+    return Object.hasOwn(error, 'code') && Object.hasOwn(error, 'error');
   }
 
   /**
@@ -107,10 +99,10 @@ export abstract class BaseRustCore<
    * @returns
    */
   protected makeError(error: RustError) {
-    if (!error.code || !this.errorCodes[error.code]) {
-      return new Error('UnknownError');
+    if (!error.code) {
+      return new BunnerRustError('UnknownError');
     }
 
-    return new Error(this.errorCodes[error.code]);
+    return new BunnerRustError(error.description, error);
   }
 }

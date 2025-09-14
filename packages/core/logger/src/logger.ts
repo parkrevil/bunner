@@ -53,11 +53,16 @@ export class Logger {
     this.log(LogLevel.warn, message);
   }
 
-  error(message: string) {
-    this.log(LogLevel.error, message);
+  error(e: any) {
+    this.log(LogLevel.error, {
+      name: e.name,
+      message: e.message,
+      stack: e.stack,
+      detail: e?.detail,
+    });
   }
 
-  private log(level: LogLevel, message: string) {
+  private log(level: LogLevel, message: any) {
     this.symbols.log(level, encodeCString(message));
   }
 }

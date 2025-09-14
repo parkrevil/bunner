@@ -1,5 +1,6 @@
 import {
   BaseRustCore,
+  BunnerError,
   encodeCString,
   pointerToString,
   resolveRustLibPath,
@@ -10,7 +11,6 @@ import { FFIType, JSCallback, type FFIFunction, type Pointer } from 'bun:ffi';
 
 import type { HttpMethod } from '../enums';
 
-import { HttpServerErrorCodes } from './constants';
 import type {
   AddRouteResult,
   HandleRequestOutput,
@@ -19,10 +19,7 @@ import type {
   HttpServerSymbols,
 } from './interfaces';
 
-export class RustCore extends BaseRustCore<
-  HttpServerSymbols,
-  typeof HttpServerErrorCodes
-> {
+export class RustCore extends BaseRustCore<HttpServerSymbols> {
   private handleRequestCb: JSCallback;
   private pendingHandleRequests: JSCallbackMap<HandleRequestResult>;
 
@@ -32,7 +29,7 @@ export class RustCore extends BaseRustCore<
    * @returns
    */
   constructor() {
-    super(HttpServerErrorCodes);
+    super();
 
     this.pendingHandleRequests = new Map<
       string,
@@ -71,44 +68,46 @@ export class RustCore extends BaseRustCore<
     super.init(resolveRustLibPath('bunner_http_server', import.meta.dir), api);
 
     this.handleRequestCb = new JSCallback(
-      (requestIdPtr: Pointer, routeKey: FFIType.u16, resultPtr: Pointer) => {
+      (
+        requestIdPtr: Pointer,
+        requestIdLength: number,
+        routeKey: number,
+        resultPtr: Pointer,
+        resultLength: number,
+      ) => {
         let requestId: string | undefined;
         let entry: JSCallbackEntry<HandleRequestResult> | undefined;
 
         try {
           if (!requestIdPtr) {
-            throw new Error('Request ID pointer is null');
+            throw new BunnerError('Request ID pointer is null');
           }
 
           if (!resultPtr) {
-            throw new Error('Result pointer is null');
+            throw new BunnerError('Result pointer is null');
           }
 
-          requestId = pointerToString(requestIdPtr);
-
-          if (requestIdPtr) {
-            this.symbols.free_string(requestIdPtr);
-          }
+          requestId = pointerToString(requestIdPtr, requestIdLength);
 
           if (!requestId) {
-            throw new Error('Request ID is null');
+            throw new BunnerError('Request ID is null');
           }
 
           entry = this.pendingHandleRequests.get(requestId);
 
           if (!entry) {
             queueMicrotask(() => {
-              throw new Error(`No pending promise for requestId=${requestId}`);
+              throw new BunnerError(
+                `No pending promise for requestId=${requestId}`,
+              );
             });
 
             return;
           }
 
-          const result = this.ensure<HandleRequestOutput>(resultPtr);
-
           entry.resolve({
             routeKey,
-            ...result,
+            ...this.ensure<HandleRequestOutput>(resultPtr, resultLength),
           });
         } catch (e) {
           if (entry?.reject) {
@@ -119,13 +118,23 @@ export class RustCore extends BaseRustCore<
             });
           }
         } finally {
+          if (requestIdPtr) {
+            this.symbols.free_string(requestIdPtr);
+          }
+
           if (requestId) {
             this.pendingHandleRequests.delete(requestId);
           }
         }
       },
       {
-        args: [FFIType.pointer, FFIType.u16, FFIType.pointer],
+        args: [
+          FFIType.pointer,
+          FFIType.u32,
+          FFIType.u16,
+          FFIType.pointer,
+          FFIType.u32,
+        ],
         returns: FFIType.void,
         threadsafe: true,
       },

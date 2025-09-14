@@ -21,9 +21,7 @@ format:
 	cargo fmt --all
 
 test:
-	@export RUST_LOG=trace RUST_BACKTRACE=0 && \
-	cargo nextest run --package bunner-http-server && \
-	cargo nextest run --package bunner-http-server --features simd-json
+	bash ./scripts/cargo-test.sh
 
 coverage:
 	cargo llvm-cov --workspace

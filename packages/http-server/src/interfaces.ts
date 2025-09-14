@@ -7,7 +7,7 @@ import type { HandlerFunction } from './types';
  * @description The result of finding a handler
  */
 export interface FindHandlerResult {
-  handler: HandlerFunction | undefined;
+  handler: HandlerFunction;
   request: BunnerRequest;
   response: BunnerResponse;
 }
