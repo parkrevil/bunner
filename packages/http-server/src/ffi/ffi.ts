@@ -1,5 +1,5 @@
 import {
-  BaseFfiCore,
+  BaseFfi,
   BunnerError,
   encodeCString,
   resolveRustLibPath,
@@ -7,9 +7,9 @@ import {
   BunnerFfiError,
   FfiReleasable,
   FfiCallback,
+  FfiPointer,
+  JSCallbackMap,
 } from '@bunner/core';
-import type { FfiPointer } from '@bunner/core/src/rust-core/ffi-pointer';
-import type { JSCallbackMap } from '@bunner/core/src/rust-core/types';
 import { FFIType, JSCallback, type FFIFunction } from 'bun:ffi';
 
 import type { HttpMethod } from '../enums';
@@ -19,10 +19,10 @@ import type {
   HandleRequestOutput,
   HandleRequestParams,
   HandleRequestResult,
-  HttpServerSymbols,
+  FfiSymbols,
 } from './interfaces';
 
-export class RustCore extends BaseFfiCore<HttpServerSymbols> {
+export class Ffi extends BaseFfi<FfiSymbols> {
   private handleRequestCb: JSCallback;
   private pendingHandleRequests: JSCallbackMap<HandleRequestResult>;
 
@@ -41,7 +41,7 @@ export class RustCore extends BaseFfiCore<HttpServerSymbols> {
   }
 
   override init() {
-    const api: Record<keyof HttpServerSymbols, FFIFunction> = {
+    const api: Record<keyof FfiSymbols, FFIFunction> = {
       // BaseRustSymbols
       free_string: { args: [FFIType.pointer], returns: FFIType.void },
       init: { args: [], returns: FFIType.pointer },
@@ -70,20 +70,17 @@ export class RustCore extends BaseFfiCore<HttpServerSymbols> {
 
     super.init(resolveRustLibPath('bunner_http_server', import.meta.dir), api);
 
-    this.handleRequestCb = this.createJsCallback(
-      this.handleRequestCallback.bind(this),
-      {
-        args: [
-          FFIType.pointer,
-          FFIType.u32,
-          FFIType.u16,
-          FFIType.pointer,
-          FFIType.u32,
-        ],
-        returns: FFIType.void,
-        threadsafe: true,
-      },
-    );
+    this.handleRequestCb = this.createJsCallback(this.handleRequestCallback, {
+      args: [
+        FFIType.pointer,
+        FFIType.u32,
+        FFIType.u16,
+        FFIType.pointer,
+        FFIType.u32,
+      ],
+      returns: FFIType.void,
+      threadsafe: true,
+    });
   }
 
   /**

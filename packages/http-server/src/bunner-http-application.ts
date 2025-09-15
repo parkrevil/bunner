@@ -3,21 +3,21 @@ import { Logger } from '@bunner/core-logger';
 import type { Server } from 'bun';
 
 import { HttpError } from './errors';
+import { Ffi } from './ffi';
 import { RouteHandler } from './route-handler';
-import { RustCore } from './rust-core';
 
 export class BunnerHttpServer extends BaseApplication {
   private readonly logger = new Logger();
   private server: Server | undefined;
-  private rustCore: RustCore;
+  private ffi: Ffi;
   private routeHandler: RouteHandler;
 
   constructor(rootModule: Class<BaseModule>) {
     super(rootModule);
 
     this.server = undefined;
-    this.rustCore = new RustCore();
-    this.routeHandler = new RouteHandler(this.container, this.rustCore);
+    this.ffi = new Ffi();
+    this.routeHandler = new RouteHandler(this.container, this.ffi);
   }
 
   /**
@@ -26,7 +26,7 @@ export class BunnerHttpServer extends BaseApplication {
   override async init() {
     await super.init();
 
-    this.rustCore.init();
+    this.ffi.init();
     this.routeHandler.register();
   }
 
@@ -34,7 +34,7 @@ export class BunnerHttpServer extends BaseApplication {
    * Start the server
    */
   start() {
-    this.rustCore.buildRoutes();
+    this.ffi.buildRoutes();
 
     this.server = Bun.serve({
       port: 5000,
@@ -53,7 +53,7 @@ export class BunnerHttpServer extends BaseApplication {
     }
 
     await this.server.stop(force);
-    this.rustCore.destroy();
+    this.ffi.destroy();
 
     this.server = undefined;
   }

@@ -5,4 +5,4 @@ export * from './src/application';
 export * from './src/common';
 export * from './src/injector';
 export * from './src/errors';
-export * from './src/rust-core';
+export * from './src/ffi';

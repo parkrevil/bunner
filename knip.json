@@ -5,7 +5,7 @@
     "**/dist/**",
     "**/build/**",
     "**/target/**",
-    "**/packages-ffi/**",
+    "**/rust-packages/**",
     "benchmarks/**",
     ".husky/**",
     ".lintstagedrc.json"

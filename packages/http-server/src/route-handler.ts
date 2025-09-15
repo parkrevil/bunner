@@ -10,18 +10,18 @@ import {
 } from './decorators';
 import { HttpMethod } from './enums';
 import { MethodNotAllowedError, NotFoundError } from './errors';
+import { Ffi } from './ffi';
 import type { FindHandlerResult } from './interfaces';
-import { RustCore } from './rust-core';
 import type { HandlerFunction } from './types';
 
 export class RouteHandler {
   private container: Container;
-  private rustCore: RustCore;
+  private ffi: Ffi;
   private handlers: Map<number, HandlerFunction>;
 
-  constructor(container: Container, rustCore: RustCore) {
+  constructor(container: Container, ffi: Ffi) {
     this.container = container;
-    this.rustCore = rustCore;
+    this.ffi = ffi;
     this.handlers = new Map<number, HandlerFunction>();
   }
 
@@ -76,7 +76,7 @@ export class RouteHandler {
         });
       });
 
-    const addRoutesResult = this.rustCore.addRoutes(addRoutesParams);
+    const addRoutesResult = this.ffi.addRoutes(addRoutesParams);
 
     this.handlers = new Map<number, HandlerFunction>(
       addRoutesResult.map((routeKey, index) => [routeKey, handlers[index]!]),
@@ -110,7 +110,7 @@ export class RouteHandler {
       body = await rawReq.text();
     }
 
-    const handleResult = await this.rustCore.handleRequest({
+    const handleResult = await this.ffi.handleRequest({
       httpMethod,
       url: rawReq.url,
       headers: rawReq.headers.toJSON(),

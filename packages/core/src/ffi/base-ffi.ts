@@ -8,7 +8,7 @@ import { type BaseFfiSymbols } from './interfaces';
 import type { FfiFunctionMetadata } from './types';
 import { isPointer, pointerToJson } from './utils';
 
-export abstract class BaseFfiCore<T extends BaseFfiSymbols> {
+export abstract class BaseFfi<T extends BaseFfiSymbols> {
   protected symbols: T;
   protected close: () => void;
   protected handle: Pointer;

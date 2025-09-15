@@ -9,9 +9,9 @@ cargo nextest run --package bunner-http-server && \
 cargo nextest run --package bunner-http-server --features simd-json
 
 # After tests, copy built dynamic libraries to each package's bin directory
-for manifest in $(find "$ROOT_DIR/packages-ffi" -type f -name Cargo.toml); do
+for manifest in $(find "$ROOT_DIR/rust-packages" -type f -name Cargo.toml); do
   pkg_dir=$(dirname "$manifest")
-  dest_pkg_dir=$(echo "$pkg_dir" | sed "s/packages-ffi/packages/")
+  dest_pkg_dir=$(echo "$pkg_dir" | sed "s/rust-packages/packages/")
   bin_dir="$dest_pkg_dir/bin"
 
   pkg_name=$(grep "^name = " "$manifest" | head -1 | sed 's/name = "\([^"]*\)"/\1/')

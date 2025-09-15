@@ -4,7 +4,7 @@ import type { StatusCodes } from 'http-status-codes';
 
 import type { HttpMethod } from '../enums';
 
-export interface HttpServerSymbols extends BaseFfiSymbols {
+export interface FfiSymbols extends BaseFfiSymbols {
   add_route: (
     handle: Pointer,
     method: FFIType.u8,
@@ -44,8 +44,8 @@ export interface HandleRequestParams {
  * @description The output interface for Handle Request
  */
 export interface HandleRequestOutput {
-  request: RustBunnerRequest;
-  response: RustBunnerResponse;
+  request: FfiBunnerRequest;
+  response: FfiBunnerResponse;
 }
 
 /**
@@ -54,15 +54,15 @@ export interface HandleRequestOutput {
  */
 export interface HandleRequestResult {
   routeKey: number;
-  request: RustBunnerRequest;
-  response: RustBunnerResponse;
+  request: FfiBunnerRequest;
+  response: FfiBunnerResponse;
 }
 
 /**
  * Rust Bunner Request
  * @description The request interface for Rust Bunner
  */
-export interface RustBunnerRequest {
+export interface FfiBunnerRequest {
   httpMethod: HttpMethod;
   path: string;
   cookies: Record<string, any>;
@@ -78,7 +78,7 @@ export interface RustBunnerRequest {
  * Rust Bunner Response
  * @description The response interface for Rust Bunner
  */
-export interface RustBunnerResponse {
+export interface FfiBunnerResponse {
   httpStatus: StatusCodes;
   headers: Record<string, any>;
   body: string | Record<string, any>;

@@ -50,15 +50,17 @@ pub extern "C" fn init() {
 /// The caller must ensure that `message` points to a valid null-terminated C string.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn log(level: LogLevel, message: *const c_char) {
-    let rust_str = {
+    let message_str = {
         if message.is_null() {
             error!("Received null pointer for log message.");
+
             return;
         }
+
         unsafe { CStr::from_ptr(message) }
     };
 
-    if let Ok(str_slice) = rust_str.to_str() {
+    if let Ok(str_slice) = message_str.to_str() {
         match level {
             LogLevel::trace => trace!("{}", str_slice),
             LogLevel::debug => debug!("{}", str_slice),

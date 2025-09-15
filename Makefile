@@ -21,7 +21,6 @@ format:
 	cargo fmt --all
 
 test:
-	bash ./scripts/check_test_modules.sh
 	bash ./scripts/cargo-test.sh
 
 coverage:

@@ -2,7 +2,7 @@ import { CookieMap, type Server } from 'bun';
 
 import { HeaderField } from './enums';
 import type { HttpMethod } from './enums';
-import type { RustBunnerRequest } from './rust-core';
+import type { FfiBunnerRequest } from './ffi';
 
 export class BunnerRequest {
   readonly httpMethod: HttpMethod;
@@ -18,22 +18,22 @@ export class BunnerRequest {
   readonly body: Record<string, any> | undefined;
   readonly ip: string | undefined;
 
-  constructor(rustReq: RustBunnerRequest, rawReq: Request, server: Server) {
-    this.httpMethod = rustReq.httpMethod;
+  constructor(ffiReq: FfiBunnerRequest, rawReq: Request, server: Server) {
+    this.httpMethod = ffiReq.httpMethod;
     this.url = rawReq.url;
-    this.path = rustReq.path;
+    this.path = ffiReq.path;
     this.headers = new Headers(rawReq.headers);
-    this.contentType = rustReq.contentType ?? undefined;
-    this.contentLength = rustReq.contentLength ?? undefined;
-    this.charset = rustReq.charset ?? undefined;
-    this.params = rustReq.params ?? undefined;
-    this.queryParams = rustReq.queryParams ?? undefined;
-    this.body = rustReq.body ?? undefined;
+    this.contentType = ffiReq.contentType ?? undefined;
+    this.contentLength = ffiReq.contentLength ?? undefined;
+    this.charset = ffiReq.charset ?? undefined;
+    this.params = ffiReq.params ?? undefined;
+    this.queryParams = ffiReq.queryParams ?? undefined;
+    this.body = ffiReq.body ?? undefined;
 
     // Initialize the cookies
     this.cookies = new CookieMap();
 
-    Object.entries(rustReq.cookies).forEach(([key, value]) => {
+    Object.entries(ffiReq.cookies).forEach(([key, value]) => {
       this.cookies.set(key, value);
     });
 

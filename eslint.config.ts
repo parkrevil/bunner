@@ -20,8 +20,7 @@ export default defineConfig([
       '**/*.d.ts',
       'bin',
       '**/bin/**',
-      'rust',
-      '**/rust/**',
+      'rust-packages',
     ],
   },
   {
@@ -170,6 +169,7 @@ export default defineConfig([
       '@typescript-eslint/no-unsafe-call': 'off',
       '@typescript-eslint/only-throw-error': 'off',
       '@typescript-eslint/restrict-template-expressions': 'off',
+      '@typescript-eslint/unbound-method': 'off',
     },
   },
   {

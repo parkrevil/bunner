@@ -1,2 +1,2 @@
-export * from './rust-core';
+export * from './ffi';
 export * from './interfaces';

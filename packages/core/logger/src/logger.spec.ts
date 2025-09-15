@@ -22,7 +22,7 @@ const encodeCStringSpy = mock((message: string) => {
 });
 
 const resolveRustLibPathSpy = mock((libName: string, dir: string) => {
-  return `${dir}/rust/target/debug/lib${libName}.so`;
+  return `${dir}/lib${libName}.so`;
 });
 
 await mock.module('bun:ffi', () => ({
