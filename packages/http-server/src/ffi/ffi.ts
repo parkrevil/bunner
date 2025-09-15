@@ -8,7 +8,7 @@ import {
   FfiReleasable,
   FfiCallback,
   FfiPointer,
-  JSCallbackMap,
+  type JSCallbackMap,
 } from '@bunner/core';
 import { FFIType, JSCallback, type FFIFunction } from 'bun:ffi';
 

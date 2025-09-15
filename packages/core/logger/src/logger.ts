@@ -53,12 +53,20 @@ export class Logger {
   }
 
   error(e: any) {
-    this.log(LogLevel.error, {
-      name: e.name,
-      message: e.message,
-      stack: e.stack,
+    if (typeof e === 'string') {
+      this.log(LogLevel.error, e);
+      return;
+    }
+
+    // If an Error-like object is provided, serialize select fields.
+    const payload = {
+      name: e?.name,
+      message: e?.message,
+      stack: e?.stack,
       detail: e?.detail,
-    });
+    };
+
+    this.log(LogLevel.error, payload);
   }
 
   private log(level: LogLevel, message: any) {
