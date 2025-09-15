@@ -1,10 +1,10 @@
 import { BunnerError } from '../errors';
 
 /**
- * Bunner Rust Error
- * @description The error thrown when a Rust FFI call fails
+ * Bunner FFI Error
+ * @description The error class for FFI errors
  */
-export class RustError extends BunnerError {
+export class BunnerFfiError extends BunnerError {
   readonly detail: any;
 
   constructor(message: string, detail?: any) {

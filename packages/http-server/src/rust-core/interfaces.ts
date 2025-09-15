@@ -1,10 +1,10 @@
-import type { BaseRustSymbols } from '@bunner/core';
+import type { BaseFfiSymbols } from '@bunner/core';
 import type { FFIType, Pointer } from 'bun:ffi';
 import type { StatusCodes } from 'http-status-codes';
 
 import type { HttpMethod } from '../enums';
 
-export interface HttpServerSymbols extends BaseRustSymbols {
+export interface HttpServerSymbols extends BaseFfiSymbols {
   add_route: (
     handle: Pointer,
     method: FFIType.u8,

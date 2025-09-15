@@ -1,20 +1,22 @@
 import type { Pointer } from 'bun:ffi';
 
+import type { FfiPointerValueType, FreePointerFn } from './types';
+
 /**
- * Base Rust Symbols
+ * Base FFI Symbols
  * @description The base symbols for a Rust core
  */
-export interface BaseRustSymbols {
+export interface BaseFfiSymbols {
   init: (...args: any[]) => Pointer | null;
   destroy: (handle: Pointer) => void;
-  free_string: (ptr: Pointer) => void;
+  free_string: FreePointerFn;
 }
 
 /**
- * Rust Error
- * @description The error interface for Rust
+ * FFI Error Report
+ * @description The structure of an error report from FFI
  */
-export interface FfiError {
+export interface FfiErrorReport {
   code: number;
   error: string;
   subsystem: string;
@@ -35,4 +37,15 @@ export interface FfiError {
 export interface JSCallbackEntry<T> {
   resolve: (v: T) => void;
   reject?: (e: unknown) => void;
+}
+
+/**
+ * Ffi Pointer Constructor Params
+ * @description The parameters for constructing an FfiPointer
+ */
+export interface FfiPointerConstructorParams {
+  type: FfiPointerValueType;
+  pointer: Pointer | null;
+  length: number;
+  freeFn: FreePointerFn;
 }

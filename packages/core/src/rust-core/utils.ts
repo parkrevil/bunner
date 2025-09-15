@@ -63,3 +63,12 @@ export function resolveRustLibPath(libName: string, cwd: string) {
 
   return `${packageDirectorySync({ cwd })}/bin/${fileName}`;
 }
+
+/**
+ * Check if a value is a valid pointer
+ * @param val - The value to check
+ * @returns True if the value is a valid pointer, false otherwise
+ */
+export function isPointer(val: any): val is Pointer {
+  return val !== null && val !== 0;
+}

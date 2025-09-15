@@ -1,4 +1,5 @@
-export * from './base-rust-core';
+export * from './base-ffi-core';
 export * from './interfaces';
 export * from './utils';
 export * from './errors';
+export * from './decorators';

@@ -40,12 +40,12 @@ export class RouteHandler {
           path: controllerPath,
           options: controllerOptions,
         } = controller;
-        const controllerPrototype = Object.getPrototypeOf(controllerInstance);
+        const controllerProto = Object.getPrototypeOf(controllerInstance);
 
-        Object.getOwnPropertyNames(controllerPrototype).forEach(handlerName => {
+        Object.getOwnPropertyNames(controllerProto).forEach(handlerName => {
           if (
             handlerName === 'constructor' ||
-            typeof controllerPrototype[handlerName] !== 'function'
+            typeof controllerProto[handlerName] !== 'function'
           ) {
             return;
           }
@@ -56,16 +56,18 @@ export class RouteHandler {
             options: routeOptions,
           }: RestRouteHandlerMetadata = Reflect.getMetadata(
             MetadataKey.RouteHandler,
-            controllerPrototype,
+            controllerProto,
             handlerName,
           );
-          const fullPath = [
-            routeOptions?.version ?? controllerOptions?.version ?? '',
-            controllerPath ?? '',
-            routePath ?? '',
-          ]
-            .filter(Boolean)
-            .join('/');
+          const fullPath =
+            '/' +
+            [
+              routeOptions?.version ?? controllerOptions?.version ?? '',
+              controllerPath ?? '',
+              routePath ?? '',
+            ]
+              .filter(Boolean)
+              .join('/');
 
           handlers.push(
             controllerInstance[handlerName].bind(controllerInstance),
