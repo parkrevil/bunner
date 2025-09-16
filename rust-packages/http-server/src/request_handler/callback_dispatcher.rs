@@ -76,11 +76,15 @@ fn init() -> xchan::Sender<CallbackJob> {
                     // Callback panicked: reclaim and free any ownership that was transferred
                     if !request_id_ptr.is_null() {
                         // Reclaim and drop CString to free allocation
-                        unsafe { let _ = CString::from_raw(request_id_ptr); };
+                        unsafe {
+                            let _ = CString::from_raw(request_id_ptr);
+                        };
                     }
                     if !job.result_ptr.is_null() {
                         // Reclaim and drop CString to free allocation
-                        unsafe { let _ = CString::from_raw(job.result_ptr); };
+                        unsafe {
+                            let _ = CString::from_raw(job.result_ptr);
+                        };
                     }
 
                     tracing::event!(tracing::Level::ERROR, reason = "callback_panic_caught");
@@ -135,9 +139,13 @@ pub fn enqueue(
         // as the dispatcher thread will never receive it.
         // Free both pointers as enqueue failed; request_id may be a raw ptr transferred by caller
         if let Some(rptr) = request_id {
-            unsafe { let _ = CString::from_raw(rptr); };
+            unsafe {
+                let _ = CString::from_raw(rptr);
+            };
         }
 
-        unsafe { let _ = CString::from_raw(res_ptr); };
+        unsafe {
+            let _ = CString::from_raw(res_ptr);
+        };
     }
 }

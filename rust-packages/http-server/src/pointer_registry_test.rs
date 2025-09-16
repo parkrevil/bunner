@@ -9,7 +9,9 @@ mod register {
         assert!(!p.is_null());
 
         // cleanup
-        unsafe { registry::free(p); }
+        unsafe {
+            registry::free(p);
+        }
     }
 
     #[test]
@@ -20,8 +22,12 @@ mod register {
         assert!(registry::has(p1));
         assert!(registry::has(p2));
 
-        unsafe { registry::free(p1); }
-        unsafe { registry::free(p2); }
+        unsafe {
+            registry::free(p1);
+        }
+        unsafe {
+            registry::free(p2);
+        }
     }
 
     // Submodule for large / boundary input cases related to `register`
@@ -36,7 +42,9 @@ mod register {
 
             // read back presence and free
             assert!(registry::has(p));
-            unsafe { registry::free(p); }
+            unsafe {
+                registry::free(p);
+            }
             assert!(!registry::has(p));
         }
 
@@ -47,7 +55,9 @@ mod register {
             let p = registry::register(v);
             assert!(!p.is_null());
             assert!(registry::has(p));
-            unsafe { registry::free(p); }
+            unsafe {
+                registry::free(p);
+            }
             assert!(!registry::has(p));
         }
     }
@@ -67,9 +77,13 @@ mod register {
                     let data = vec![i as u8; 1024];
                     let p = crate::pointer_registry::register(data);
                     // brief work
-                    for _ in 0..10 { std::hint::black_box(()); }
+                    for _ in 0..10 {
+                        std::hint::black_box(());
+                    }
                     assert!(crate::pointer_registry::has(p));
-                    unsafe { crate::pointer_registry::free(p); }
+                    unsafe {
+                        crate::pointer_registry::free(p);
+                    }
                     assert!(!crate::pointer_registry::has(p));
                 }));
             }
@@ -95,7 +109,9 @@ mod has {
     fn reflects_registration_state_after_free() {
         let p = registry::register(b"has_state".to_vec());
         assert!(registry::has(p));
-        unsafe { registry::free(p); }
+        unsafe {
+            registry::free(p);
+        }
         assert!(!registry::has(p));
     }
 }
@@ -108,9 +124,13 @@ mod free {
     fn free_frees_and_subsequent_free_is_noop() {
         let p = registry::register(b"single_free".to_vec());
 
-        unsafe { registry::free(p); }
+        unsafe {
+            registry::free(p);
+        }
         // second free should be a no-op and not panic
-        unsafe { registry::free(p); }
+        unsafe {
+            registry::free(p);
+        }
 
         assert!(!registry::has(p));
     }
@@ -118,16 +138,18 @@ mod free {
     #[test]
     fn free_ignores_null_pointer() {
         let p: *mut u8 = std::ptr::null_mut();
-        unsafe { registry::free(p); }
+        unsafe {
+            registry::free(p);
+        }
         assert!(!registry::has(p));
     }
 
     #[test]
     fn free_unknown_pointer_noop() {
         let fake = 0x543210usize as *mut u8;
-        unsafe { registry::free(fake); }
+        unsafe {
+            registry::free(fake);
+        }
         assert!(!registry::has(fake));
     }
 }
-
-
