@@ -26,18 +26,18 @@ use std::{
     os::raw::c_char,
     sync::{Arc, OnceLock},
 };
-use tracing_subscriber::{EnvFilter, fmt};
+use tracing_subscriber::{fmt, EnvFilter};
 
 use crate::enums::HttpMethod;
 use crate::errors::{HttpServerError, HttpServerErrorCode};
 use crate::request_handler::{
-    HandleRequestCallback, callback_handle_request, handle as process_request,
+    callback_handle_request, handle as process_request, HandleRequestCallback,
 };
 use crate::router::errors::RouterErrorCode;
 use crate::router::structures::RouterError;
 use crate::structure::AddRouteResult;
 use crate::thread_pool::{shutdown_pool, submit_job};
-use crate::utils::string::serialize_and_to_len_prefixed_buffer;
+use crate::utils::ffi::{make_result, parse_json_pointer};
 use crate::utils::string;
 
 pub type HttpServerHandle = *mut HttpServer;
@@ -143,7 +143,7 @@ pub unsafe extern "C" fn add_route(
             Some(serde_json::json!(null)),
         );
 
-        return serialize_and_to_len_prefixed_buffer(&http_error);
+        return make_result(&http_error);
     }
 
     // Check if path pointer is null
@@ -159,7 +159,7 @@ pub unsafe extern "C" fn add_route(
             })),
         );
 
-        return serialize_and_to_len_prefixed_buffer(&err);
+        return make_result(&err);
     }
 
     let http_method = match HttpMethod::from_u8(http_method) {
@@ -177,7 +177,7 @@ pub unsafe extern "C" fn add_route(
                 })),
             );
 
-            return serialize_and_to_len_prefixed_buffer(&err);
+            return make_result(&err);
         }
     };
 
@@ -196,15 +196,11 @@ pub unsafe extern "C" fn add_route(
         );
         let he = HttpServerError::from(e);
 
-        return serialize_and_to_len_prefixed_buffer(&he);
+        return make_result(&he);
     }
 
     match router_mut.add(http_method, &path_str) {
-        Ok(k) => {
-            tracing::event!(tracing::Level::DEBUG, method=?http_method, path=%path_str, key=k, "route added");
-
-            serialize_and_to_len_prefixed_buffer(&AddRouteResult { key: k })
-        }
+        Ok(k) => make_result(&AddRouteResult { key: k }),
         Err(e) => {
             tracing::event!(tracing::Level::ERROR, code=?e.code, path=%path_str, "add_route error");
 
@@ -213,7 +209,7 @@ pub unsafe extern "C" fn add_route(
 
             bunner_error.merge_extra(detail);
 
-            serialize_and_to_len_prefixed_buffer(&bunner_error)
+            make_result(&bunner_error)
         }
     }
 }
@@ -232,8 +228,6 @@ pub unsafe extern "C" fn add_route(
 #[unsafe(no_mangle)]
 #[tracing::instrument(skip_all, fields(operation = "add_routes"))]
 pub unsafe extern "C" fn add_routes(handle: HttpServerHandle, routes_ptr: *const u8) -> *mut u8 {
-    tracing::info!(routes_ptr=?routes_ptr, "add_routes called1");
-
     if handle.is_null() {
         let http_error = HttpServerError::new(
             HttpServerErrorCode::HandleIsNull,
@@ -244,10 +238,8 @@ pub unsafe extern "C" fn add_routes(handle: HttpServerHandle, routes_ptr: *const
             Some(serde_json::json!(null)),
         );
 
-        return serialize_and_to_len_prefixed_buffer(&http_error);
+        return make_result(&http_error);
     }
-
-    tracing::info!(routes_ptr=?routes_ptr, "add_routes called2");
 
     if routes_ptr.is_null() {
         let http_error = HttpServerError::new(
@@ -259,16 +251,13 @@ pub unsafe extern "C" fn add_routes(handle: HttpServerHandle, routes_ptr: *const
             Some(serde_json::json!(null)),
         );
 
-        return serialize_and_to_len_prefixed_buffer(&http_error);
+        return make_result(&http_error);
     }
 
-    tracing::info!(routes_ptr=?routes_ptr, "add_routes called13");
-
-    // Deserialize length-prefixed buffer directly into Vec<(u8, String)>
-    let routes_u8: Vec<(u8, String)> =
-        match unsafe { string::len_prefixed_ptr_deserialize::<Vec<(u8, String)>>(routes_ptr) } {
-            Ok(r) => r,
-            Err(_e) => {
+    let routes: Vec<(HttpMethod, String)> =
+        match parse_json_pointer::<Vec<(HttpMethod, String)>>(routes_ptr) {
+            Ok(v) => v,
+            Err(_) => {
                 let http_error = HttpServerError::new(
                     HttpServerErrorCode::InvalidRoutes,
                     "http_server",
@@ -278,29 +267,9 @@ pub unsafe extern "C" fn add_routes(handle: HttpServerHandle, routes_ptr: *const
                     Some(serde_json::json!({"routesPtr": format!("{:p}", routes_ptr)})),
                 );
 
-                return serialize_and_to_len_prefixed_buffer(&http_error);
+                return make_result(&http_error);
             }
         };
-
-    let mut routes: Vec<(HttpMethod, String)> = Vec::with_capacity(routes_u8.len());
-
-    for (m, p) in routes_u8.into_iter() {
-        match HttpMethod::from_u8(m) {
-            Ok(hm) => routes.push((hm, p)),
-            Err(_) => {
-                let http_error = HttpServerError::new(
-                    HttpServerErrorCode::InvalidHttpMethod,
-                    "http_server",
-                    "add_routes",
-                    "validation",
-                    "Invalid HTTP method in routes payload".to_string(),
-                    Some(serde_json::json!({"invalidMethod": m})),
-                );
-
-                return serialize_and_to_len_prefixed_buffer(&http_error);
-            }
-        }
-    }
 
     let http_server = unsafe { &*handle };
     let mut guard = http_server.router.write();
@@ -312,7 +281,7 @@ pub unsafe extern "C" fn add_routes(handle: HttpServerHandle, routes_ptr: *const
         let be = make_router_sealed_error("add_routes", detail, true);
         let he = HttpServerError::from(be);
 
-        return serialize_and_to_len_prefixed_buffer(&he);
+        return make_result(&he);
     }
 
     match router_mut.add_bulk(routes) {
@@ -321,7 +290,7 @@ pub unsafe extern "C" fn add_routes(handle: HttpServerHandle, routes_ptr: *const
 
             tracing::event!(tracing::Level::DEBUG, count = cnt as u64, "routes added");
 
-            serialize_and_to_len_prefixed_buffer(&r)
+            make_result(&r)
         }
         Err(e) => {
             tracing::event!(tracing::Level::ERROR, code=?e.code, count=routes_count as u64, "add_routes error");
@@ -332,7 +301,7 @@ pub unsafe extern "C" fn add_routes(handle: HttpServerHandle, routes_ptr: *const
                 "count": routes_count
             }));
 
-            serialize_and_to_len_prefixed_buffer(&bunner_error)
+            make_result(&bunner_error)
         }
     }
 }
