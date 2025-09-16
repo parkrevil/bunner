@@ -24,9 +24,11 @@ mod pointer_registry_test;
 use std::{
     ffi::CStr,
     os::raw::c_char,
-    sync::{Arc, OnceLock},
+    sync::{Arc, OnceLock, mpsc},
+    time::Duration,
 };
 use tracing_subscriber::{fmt, EnvFilter};
+use std::io;
 
 use crate::enums::HttpMethod;
 use crate::errors::{HttpServerError, HttpServerErrorCode};
@@ -81,9 +83,15 @@ fn make_router_sealed_error(
 #[unsafe(no_mangle)]
 #[tracing::instrument(skip_all, fields(operation = "init"))]
 pub extern "C" fn init() -> HttpServerHandle {
-    let subscriber = fmt().with_env_filter(EnvFilter::new("trace")).finish();
+    // Force logger to write to stderr so embedding runtimes (like Bun) capture logs reliably.
+    let subscriber = fmt()
+        .with_env_filter(EnvFilter::new("debug"))
+        .with_writer(io::stderr)
+        .with_ansi(false)
+        .finish();
 
-    tracing::subscriber::set_global_default(subscriber).expect("Failed to set global logger");
+    tracing::subscriber::set_global_default(subscriber)
+        .expect("Failed to set global logger");
 
     tracing::info!("Bunner Rust Http Server initialized.");
 
@@ -317,8 +325,6 @@ pub unsafe extern "C" fn handle_request(
     payload_ptr: *const u8,
     cb: HandleRequestCallback,
 ) {
-    // Sleep for 5 seconds before handling the request
-    std::thread::sleep(std::time::Duration::from_secs(5));
 
     if handle.is_null() {
         let err = HttpServerError::new(
@@ -386,12 +392,13 @@ pub unsafe extern "C" fn handle_request(
     let ro = ro_opt.unwrap();
     let request_id_ptr_usize = request_id_ptr as usize;
     let payload_ptr_usize = payload_ptr as usize;
+    let (ack_tx, ack_rx) = mpsc::channel::<()>();
 
     match submit_job(Box::new(move || {
         let payload_ptr = payload_ptr_usize as *const u8;
         let request_id_ptr = request_id_ptr_usize as *const c_char;
 
-        unsafe { process_request(cb, request_id_ptr, payload_ptr, ro) };
+        unsafe { process_request(cb, request_id_ptr, payload_ptr, ro, ack_tx) };
     })) {
         Ok(()) => {
             tracing::event!(tracing::Level::DEBUG, "request enqueued");
@@ -409,6 +416,36 @@ pub unsafe extern "C" fn handle_request(
                 "enqueue",
                 "backpressure",
                 "Request queue is full".to_string(),
+                None,
+            );
+
+            callback_handle_request(cb, None, None, &http_error);
+        }
+    }
+
+    let parsing_timeout = Duration::from_millis(1000);
+
+    match ack_rx.recv_timeout(parsing_timeout) {
+        Ok(()) => {}
+        Err(mpsc::RecvTimeoutError::Timeout) => {
+            let http_error = HttpServerError::new(
+                HttpServerErrorCode::RequestAckTimeout,
+                "http_server",
+                "handle_request",
+                "timeout",
+                "Worker did not ack request parsing within timeout".to_string(),
+                None,
+            );
+
+            callback_handle_request(cb, None, None, &http_error);
+        }
+        Err(_) => {
+            let http_error = HttpServerError::new(
+                HttpServerErrorCode::RequestAckTimeout,
+                "http_server",
+                "handle_request",
+                "channel",
+                "Failed to receive ack from worker".to_string(),
                 None,
             );
 

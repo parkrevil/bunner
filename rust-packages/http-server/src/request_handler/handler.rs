@@ -1,6 +1,6 @@
 use percent_encoding::percent_decode_str;
 use serde_json::Value as JsonValue;
-use std::{ffi::CStr, os::raw::c_char, sync::Arc};
+use std::{ffi::CStr, os::raw::c_char, sync::{Arc, mpsc}};
 
 use crate::enums::HttpMethod;
 use crate::errors::{HttpServerError, HttpServerErrorCode};
@@ -20,12 +20,13 @@ use super::{
 /// - `payload_ptr` must be a valid pointer to a 4-byte little-endian length-prefixed buffer
 ///   and remain valid for the duration of the call.
 /// - The caller must ensure both pointers remain valid while this function executes.
-#[tracing::instrument(skip(cb, payload_ptr, ro), fields(request_id=?request_id_ptr))]
+#[tracing::instrument(skip(cb, payload_ptr, ro, parsing_ack), fields(request_id=?request_id_ptr))]
 pub unsafe fn handle(
     cb: HandleRequestCallback,
     request_id_ptr: *const c_char,
     payload_ptr: *const u8,
     ro: Arc<router::RouterReadOnly>,
+    parsing_ack: mpsc::Sender<()>,
 ) {
     // Convert request_id_ptr to &str for error messages and callbacks
     let request_id = match unsafe { CStr::from_ptr(request_id_ptr).to_str() } {
@@ -65,6 +66,9 @@ pub unsafe fn handle(
             return;
         }
     };
+
+    let _ = parsing_ack.send(());
+
     let http_method = match HttpMethod::from_u8(payload.http_method) {
         Ok(m) => m,
         Err(e) => {

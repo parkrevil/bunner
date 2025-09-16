@@ -12,6 +12,7 @@ pub enum HttpServerErrorCode {
     QueueFull,
     InvalidPayload,
     InvalidRoutes,
+    RequestAckTimeout,
 }
 
 impl HttpServerErrorCode {
@@ -37,6 +38,7 @@ impl HttpServerErrorCode {
             HttpServerErrorCode::QueueFull => "QueueFull",
             HttpServerErrorCode::InvalidPayload => "InvalidPayload",
             HttpServerErrorCode::InvalidRoutes => "InvalidRoutes",
+            HttpServerErrorCode::RequestAckTimeout => "RequestAckTimeout",
         }
     }
 }

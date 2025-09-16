@@ -160,35 +160,15 @@ export class Ffi extends BaseFfi<FfiSymbols> {
    * @param resultLength - The result length
    */
   private handleRequestCallback(
-    requestId: string | null,
-    routeKey: number | null,
+    requestId: string,
+    routeKey: number,
     resultPtr: FfiPointer,
   ) {
     let entry: JSCallbackEntry<HandleRequestResult> | undefined;
 
     try {
-      if (!requestId) {
-        throw new BunnerError('Request ID is null');
-      }
-
-      if (!routeKey) {
-        throw new BunnerError('Route key is null');
-      }
-
       if (!resultPtr.isValid()) {
         throw new BunnerError('Result pointer is null');
-      }
-
-      entry = this.pendingHandleRequests.get(requestId);
-
-      if (!entry) {
-        queueMicrotask(() => {
-          throw new BunnerError(
-            `No pending promise for requestId=${requestId}`,
-          );
-        });
-
-        return;
       }
 
       const result = resultPtr.toResult<HandleRequestOutput>();
@@ -197,13 +177,27 @@ export class Ffi extends BaseFfi<FfiSymbols> {
         throw new BunnerError('Result is null');
       }
 
+      console.log('dddddddddddddd', requestId, result);
+
+      entry = this.pendingHandleRequests.get(requestId);
+
+      if (!entry) {
+        queueMicrotask(() => {
+          console.error(
+            new BunnerError(`No pending promise for requestId=${requestId}`),
+          );
+        });
+
+        return;
+      }
+
       entry.resolve({ routeKey, ...result });
     } catch (e) {
       if (entry?.reject) {
         entry.reject(e);
       } else {
         queueMicrotask(() => {
-          throw e;
+          console.error(e);
         });
       }
     } finally {

@@ -74,6 +74,16 @@ export function pointerToJson<T>(ptr: Pointer) {
 }
 
 /**
+ * Convert a pointer to a JSON object
+ * @param ptr
+ * @param length
+ * @returns
+ */
+export function cstringToString(ptr: Pointer) {
+  return new CString(ptr).toString();
+}
+
+/**
  * Resolve the path to a Rust library
  * @param libName - The name of the library
  * @param cwd - The current working directory

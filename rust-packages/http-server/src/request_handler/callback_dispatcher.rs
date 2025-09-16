@@ -1,5 +1,5 @@
 use crossbeam_channel as xchan;
-use std::ffi::{c_void, CStr, CString};
+use std::ffi::{c_void, CString};
 use std::os::raw::c_char;
 use std::sync::OnceLock;
 
@@ -15,10 +15,6 @@ struct CallbackJob {
     cleanup: Option<unsafe fn(*mut c_void)>,
 }
 
-// It is safe to send CallbackJob across threads because:
-// - `cb` is a function pointer (Send + Sync)
-// - `req_id` is owned String
-// - `res_ptr` points to heap memory allocated in Rust and will be freed by the callback; ownership is transferred to the dispatcher thread.
 unsafe impl Send for CallbackJob {}
 
 static TX: OnceLock<xchan::Sender<CallbackJob>> = OnceLock::new();
@@ -41,59 +37,28 @@ fn init() -> xchan::Sender<CallbackJob> {
                     route_key = job.route_key
                 );
 
-                // request_id is provided as a raw pointer; ownership already transferred by caller/helper.
                 let request_id_ptr: *mut c_char = job.request_id.unwrap_or(std::ptr::null_mut());
-
-                let request_id_len: u8 = if request_id_ptr.is_null() {
-                    0u8
-                } else {
-                    unsafe {
-                        CStr::from_ptr(request_id_ptr as *const c_char)
-                            .to_bytes()
-                            .len() as u8
-                    }
-                };
-
-                // SAFETY: res_ptr is expected to be a valid pointer to a len-prefixed buffer allocated by Rust.
-                // The callback should free it; however, if the callback panics, we catch and free here.
-                let result_len: u32 = if job.result_ptr.is_null() {
-                    0u32
-                } else {
-                    unsafe {
-                        let header = std::slice::from_raw_parts(job.result_ptr as *const u8, 4);
-                        u32::from_le_bytes([header[0], header[1], header[2], header[3]])
-                    }
-                };
-
                 let res = std::panic::catch_unwind(|| {
                     (job.callback)(
                         request_id_ptr as *const c_char,
-                        request_id_len,
                         job.route_key.unwrap_or_default(),
                         job.result_ptr,
-                        result_len,
                     )
                 });
 
                 if res.is_err() {
-                    // Callback panicked: reclaim and free any ownership that was transferred
                     if !request_id_ptr.is_null() {
-                        // Reclaim and drop CString to free allocation
                         unsafe {
                             let _ = CString::from_raw(request_id_ptr);
                         };
                     }
+
                     if !job.result_ptr.is_null() {
-                        // Free len-prefixed buffer via pointer_registry
                         unsafe { crate::pointer_registry::free(job.result_ptr as *mut u8) };
                     }
 
                     tracing::event!(tracing::Level::ERROR, reason = "callback_panic_caught");
                 } else {
-                    // Successful callback: per FFI contract, JS will free the `result_ptr`,
-                    // but JS will NOT free the `request_id` string. If we created a CString
-                    // and transferred ownership to the dispatcher, we must free it here to
-                    // avoid leaking the request id allocation.
                     if !request_id_ptr.is_null() {
                         unsafe {
                             let _ = CString::from_raw(request_id_ptr);
@@ -146,9 +111,6 @@ pub fn enqueue(
             e
         );
 
-        // If sending fails, we must free the result pointer to prevent a memory leak,
-        // as the dispatcher thread will never receive it.
-        // Free both pointers as enqueue failed; request_id may be a raw ptr transferred by caller
         if let Some(rptr) = request_id {
             unsafe {
                 let _ = CString::from_raw(rptr);
