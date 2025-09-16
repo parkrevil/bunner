@@ -1,3 +1,1 @@
-use std::os::raw::c_char;
-
-pub type HandleRequestCallback = extern "C" fn(*const c_char, u16, *mut c_char);
+pub type HandleRequestCallback = extern "C" fn(*mut u8, u16, *mut u8);

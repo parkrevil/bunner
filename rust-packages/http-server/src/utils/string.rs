@@ -1,5 +1,4 @@
 use crate::errors::internal_error::InternalErrorCode;
-use crate::pointer_registry;
 use std::{ffi::CStr, os::raw::c_char, str::Utf8Error};
 
 /// # Safety
@@ -37,7 +36,7 @@ pub unsafe fn len_prefixed_pointer_to_string(ptr: *const u8) -> Result<String, I
     Ok(s)
 }
 
-pub fn string_to_len_prefixed_buffer(s: &str) -> *mut u8 {
+pub fn string_to_len_prefixed_buffer(s: &str) -> Vec<u8> {
     let bytes = s.as_bytes();
     let len = bytes.len();
     let mut v: Vec<u8> = Vec::with_capacity(4 + len);
@@ -45,5 +44,5 @@ pub fn string_to_len_prefixed_buffer(s: &str) -> *mut u8 {
     v.extend_from_slice(&(len as u32).to_le_bytes());
     v.extend_from_slice(bytes);
 
-    pointer_registry::register(v)
+    v
 }

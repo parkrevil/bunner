@@ -59,6 +59,7 @@ export function toString(val: FfiStringable) {
   } else if (val instanceof Map) {
     return JSON.stringify(Array.from(val.entries()));
   }
+
   return JSON.stringify(val);
 }
 
@@ -79,8 +80,10 @@ export function pointerToJson<T>(ptr: Pointer) {
  * @param length
  * @returns
  */
-export function cstringToString(ptr: Pointer) {
-  return new CString(ptr).toString();
+export function pointerToString(ptr: Pointer) {
+  const length = read.u32(ptr, 0);
+
+  return new CString(ptr, 4, length).toString();
 }
 
 /**

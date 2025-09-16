@@ -1,11 +1,6 @@
 use super::{callback_dispatcher, HandleRequestCallback};
-use crate::utils::ffi::make_result;
+use crate::utils::ffi::{make_result, make_string_pointer};
 use serde::Serialize;
-use std::{
-  ffi::CString,
-  os::raw::c_char,
-  ptr::null_mut,
-};
 
 #[inline(always)]
 pub fn callback_handle_request<T: Serialize>(
@@ -14,18 +9,12 @@ pub fn callback_handle_request<T: Serialize>(
     route_key: Option<u16>,
     result: &T,
 ) {
-  let mut request_id_ptr: *mut c_char = null_mut();
-
-    if let Some(cstr) = request_id.and_then(|rid| CString::new(rid).ok()) {
-        request_id_ptr = cstr.into_raw();
-    }
-
+    let mut request_id_ptr: Option<*mut u8> = None;
     let res_ptr = make_result(result);
 
-    callback_dispatcher::enqueue(
-        callback,
-        Some(request_id_ptr),
-        route_key,
-        res_ptr as *mut c_char,
-    );
+    if let Some(rid) = request_id {
+        request_id_ptr = Some(make_string_pointer(rid));
+    }
+
+    callback_dispatcher::enqueue(callback, request_id_ptr, route_key, res_ptr);
 }

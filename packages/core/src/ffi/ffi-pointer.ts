@@ -3,7 +3,7 @@ import type { Pointer } from 'bun:ffi';
 import { BunnerFfiError } from './errors';
 import { isFfiErrorReport, makeFfiError } from './helpers';
 import type { FreePointerFn } from './types';
-import { pointerToJson, isPointer } from './utils';
+import { pointerToJson, isPointer, pointerToString } from './utils';
 
 export class FfiPointer {
   private readonly freeFn: FreePointerFn;
@@ -22,6 +22,20 @@ export class FfiPointer {
     }
 
     return isPointer(val);
+  }
+
+  toString(): string | undefined {
+    try {
+      if (!this.isValid(this.pointer)) {
+        return undefined;
+      }
+
+      return pointerToString(this.pointer);
+    } catch (e) {
+      throw new BunnerFfiError('Failed to parse FFI result', e);
+    } finally {
+      this.free();
+    }
   }
 
   toObject<T>(): T | undefined {

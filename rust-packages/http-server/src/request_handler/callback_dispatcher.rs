@@ -1,6 +1,4 @@
 use crossbeam_channel as xchan;
-use std::ffi::{c_void, CString};
-use std::os::raw::c_char;
 use std::sync::OnceLock;
 
 use super::HandleRequestCallback;
@@ -8,11 +6,9 @@ use super::HandleRequestCallback;
 
 struct CallbackJob {
     callback: HandleRequestCallback,
-    request_id: Option<*mut c_char>,
+    request_id: Option<*mut u8>,
     route_key: Option<u16>,
-    result_ptr: *mut c_char,
-    owned_ptr: Option<*mut c_void>,
-    cleanup: Option<unsafe fn(*mut c_void)>,
+    result_ptr: *mut u8,
 }
 
 unsafe impl Send for CallbackJob {}
@@ -37,42 +33,20 @@ fn init() -> xchan::Sender<CallbackJob> {
                     route_key = job.route_key
                 );
 
-                let request_id_ptr: *mut c_char = job.request_id.unwrap_or(std::ptr::null_mut());
+                let request_id_ptr: *mut u8 = job.request_id.unwrap_or(std::ptr::null_mut());
                 let res = std::panic::catch_unwind(|| {
                     (job.callback)(
-                        request_id_ptr as *const c_char,
+                        request_id_ptr,
                         job.route_key.unwrap_or_default(),
                         job.result_ptr,
                     )
                 });
 
                 if res.is_err() {
-                    if !request_id_ptr.is_null() {
-                        unsafe {
-                            let _ = CString::from_raw(request_id_ptr);
-                        };
-                    }
-
-                    if !job.result_ptr.is_null() {
-                        unsafe { crate::pointer_registry::free(job.result_ptr as *mut u8) };
-                    }
-
                     tracing::event!(tracing::Level::ERROR, reason = "callback_panic_caught");
-                } else if !request_id_ptr.is_null() {
-                    unsafe {
-                        let _ = CString::from_raw(request_id_ptr);
-                    }
                 }
 
-                tracing::event!(
-                    tracing::Level::TRACE,
-                    stage = "dispatcher_done",
-                    cleaned = job.owned_ptr.is_some()
-                );
-
-                if let (Some(optr), Some(clean)) = (job.owned_ptr, job.cleanup) {
-                    unsafe { clean(optr) };
-                }
+                tracing::event!(tracing::Level::TRACE, stage = "dispatcher_done");
             }
         })
         .ok();
@@ -81,9 +55,9 @@ fn init() -> xchan::Sender<CallbackJob> {
 
 pub fn enqueue(
     callback: HandleRequestCallback,
-    request_id: Option<*mut c_char>,
+    request_id: Option<*mut u8>,
     route_key: Option<u16>,
-    res_ptr: *mut c_char,
+    res_ptr: *mut u8,
 ) {
     let tx = TX.get_or_init(init);
 
@@ -99,8 +73,6 @@ pub fn enqueue(
         request_id,
         route_key,
         result_ptr: res_ptr,
-        owned_ptr: None,
-        cleanup: None,
     });
 
     if let Err(e) = send_result {
@@ -110,13 +82,11 @@ pub fn enqueue(
         );
 
         if let Some(rptr) = request_id {
-            unsafe {
-                let _ = CString::from_raw(rptr);
-            };
+            unsafe { crate::pointer_registry::free(rptr) };
         }
 
         if !res_ptr.is_null() {
-            unsafe { crate::pointer_registry::free(res_ptr as *mut u8) };
+            unsafe { crate::pointer_registry::free(res_ptr) };
         }
     }
 }

@@ -13,7 +13,7 @@ import {
   type BaseFfiSymbols,
   type CreateJsCallbackOptions,
 } from './interfaces';
-import { isPointer, pointerToJson, cstringToString } from './utils';
+import { isPointer, pointerToJson } from './utils';
 
 export abstract class BaseFfi<T extends BaseFfiSymbols> {
   protected symbols: T;
@@ -102,37 +102,28 @@ export abstract class BaseFfi<T extends BaseFfiSymbols> {
     options: CreateJsCallbackOptions,
   ) {
     const { callOnce = false, ...ffiOptions } = options;
-    const cstringArgIndexes: number[] = [];
     const freeArgIndexes: number[] = [];
 
     options.args?.forEach((arg, index) => {
       if (arg === FFIType.pointer) {
         freeArgIndexes.push(index);
-      } else if (arg === FFIType.cstring) {
-        cstringArgIndexes.push(index);
       }
     });
 
-    const wrapperFn = async (...args: any[]) => {
+    const wrapperFn = (...args: any[]) => {
       const pointers: FfiPointer[] = [];
 
       try {
-        args?.forEach((arg, index) => {
-          if (freeArgIndexes.includes(index)) {
-            args[index] = new FfiPointer(
-              args[index],
-              this.symbols.free.bind(this.symbols),
-            );
+        freeArgIndexes.forEach(index => {
+          args[index] = new FfiPointer(
+            args[index],
+            this.symbols.free.bind(this.symbols),
+          );
 
-            pointers.push(args[index]);
-          } else if (cstringArgIndexes.includes(index)) {
-            args[index] = cstringToString(arg);
-          }
+          pointers.push(args[index]);
         });
 
-        console.log(args);
-
-        const result = await handler.bind(this)(...args);
+        const result = handler.bind(this)(...args);
 
         return result;
       } finally {

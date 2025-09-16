@@ -1,6 +1,7 @@
 use super::json::{deserialize, serialize};
 use super::string::{len_prefixed_pointer_to_string, string_to_len_prefixed_buffer};
 use crate::errors::internal_error::InternalErrorCode;
+use crate::pointer_registry;
 use serde::{de::DeserializeOwned, Serialize};
 
 /// Parse a len-prefixed pointer into a JSON string, then deserialize into `serde_json::Value`.
@@ -23,7 +24,19 @@ pub unsafe fn parse_json_pointer<T: DeserializeOwned>(
 /// Serialize `value` to JSON string and return a len-prefixed raw pointer allocated/registered by Rust.
 pub fn make_result<T: Serialize>(value: &T) -> *mut u8 {
     match serialize::<T>(value) {
-        Ok(s) => string_to_len_prefixed_buffer(&s),
+        Ok(s) => {
+            let v = string_to_len_prefixed_buffer(&s);
+
+            pointer_registry::register(v)
+        }
         Err(_) => std::ptr::null_mut(),
     }
+}
+
+/// Create a registered length-prefixed buffer from a Rust string and return the raw pointer.
+pub fn make_string_pointer(s: &str) -> *mut u8 {
+    let v = string_to_len_prefixed_buffer(s);
+    let p = pointer_registry::register(v);
+
+    p
 }

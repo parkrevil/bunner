@@ -21,14 +21,14 @@ pub mod utils;
 #[cfg(test)]
 mod pointer_registry_test;
 
+use std::io;
 use std::{
     ffi::CStr,
     os::raw::c_char,
-    sync::{Arc, OnceLock, mpsc},
+    sync::{mpsc, Arc, OnceLock},
     time::Duration,
 };
 use tracing_subscriber::{fmt, EnvFilter};
-use std::io;
 
 use crate::enums::HttpMethod;
 use crate::errors::{HttpServerError, HttpServerErrorCode};
@@ -85,13 +85,12 @@ fn make_router_sealed_error(
 pub extern "C" fn init() -> HttpServerHandle {
     // Force logger to write to stderr so embedding runtimes (like Bun) capture logs reliably.
     let subscriber = fmt()
-        .with_env_filter(EnvFilter::new("debug"))
+        .with_env_filter(EnvFilter::new("trace"))
         .with_writer(io::stderr)
         .with_ansi(false)
         .finish();
 
-    tracing::subscriber::set_global_default(subscriber)
-        .expect("Failed to set global logger");
+    tracing::subscriber::set_global_default(subscriber).expect("Failed to set global logger");
 
     tracing::info!("Bunner Rust Http Server initialized.");
 
@@ -325,7 +324,6 @@ pub unsafe extern "C" fn handle_request(
     payload_ptr: *const u8,
     cb: HandleRequestCallback,
 ) {
-
     if handle.is_null() {
         let err = HttpServerError::new(
             HttpServerErrorCode::HandleIsNull,

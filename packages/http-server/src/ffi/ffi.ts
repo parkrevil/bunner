@@ -73,7 +73,7 @@ export class Ffi extends BaseFfi<FfiSymbols> {
     super.init(resolveRustLibPath('bunner_http_server', import.meta.dir), api);
 
     this.handleRequestCb = this.createJsCallback(this.handleRequestCallback, {
-      args: [FFIType.cstring, FFIType.u16, FFIType.pointer],
+      args: [FFIType.pointer, FFIType.u16, FFIType.pointer],
       returns: FFIType.void,
       threadsafe: true,
     });
@@ -160,10 +160,11 @@ export class Ffi extends BaseFfi<FfiSymbols> {
    * @param resultLength - The result length
    */
   private handleRequestCallback(
-    requestId: string,
+    requestIdPtr: FfiPointer,
     routeKey: number,
     resultPtr: FfiPointer,
   ) {
+    let requestId: string | undefined;
     let entry: JSCallbackEntry<HandleRequestResult> | undefined;
 
     try {
@@ -177,7 +178,15 @@ export class Ffi extends BaseFfi<FfiSymbols> {
         throw new BunnerError('Result is null');
       }
 
-      console.log('dddddddddddddd', requestId, result);
+      if (!requestIdPtr.isValid()) {
+        throw new BunnerError('Request ID pointer is null');
+      }
+
+      const requestId = requestIdPtr.toString();
+
+      if (!requestId) {
+        throw new BunnerError('Request ID is null');
+      }
 
       entry = this.pendingHandleRequests.get(requestId);
 
