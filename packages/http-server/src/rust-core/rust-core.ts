@@ -5,9 +5,10 @@ import {
   resolveRustLibPath,
   type JSCallbackEntry,
   BunnerFfiError,
+  FfiReleasable,
+  FfiCallback,
   FfiPointer,
-  type JSCallbackMap,
-  toBuffer,
+  JSCallbackMap,
 } from '@bunner/core';
 import { FFIType, JSCallback, type FFIFunction } from 'bun:ffi';
 
@@ -18,10 +19,10 @@ import type {
   HandleRequestOutput,
   HandleRequestParams,
   HandleRequestResult,
-  FfiSymbols,
+  HttpServerSymbols,
 } from './interfaces';
 
-export class Ffi extends BaseFfi<FfiSymbols> {
+export class RustCore extends BaseFfi<HttpServerSymbols> {
   private handleRequestCb: JSCallback;
   private pendingHandleRequests: JSCallbackMap<HandleRequestResult>;
 
@@ -40,7 +41,7 @@ export class Ffi extends BaseFfi<FfiSymbols> {
   }
 
   override init() {
-    const api: Record<keyof FfiSymbols, FFIFunction> = {
+    const api: Record<keyof HttpServerSymbols, FFIFunction> = {
       // BaseRustSymbols
       free_string: { args: [FFIType.pointer], returns: FFIType.void },
       init: { args: [], returns: FFIType.pointer },
@@ -52,31 +53,37 @@ export class Ffi extends BaseFfi<FfiSymbols> {
         returns: FFIType.pointer,
       },
       add_routes: {
-        args: [FFIType.pointer, FFIType.pointer],
+        args: [FFIType.pointer, FFIType.cstring],
         returns: FFIType.pointer,
       },
       handle_request: {
         args: [
           FFIType.pointer,
           FFIType.cstring,
-          FFIType.pointer,
+          FFIType.cstring,
           FFIType.function,
         ],
         returns: FFIType.void,
       },
-      seal_routes: {
-        args: [FFIType.pointer],
-        returns: FFIType.void,
-      },
+      seal_routes: { args: [FFIType.pointer], returns: FFIType.void },
     };
 
     super.init(resolveRustLibPath('bunner_http_server', import.meta.dir), api);
 
-    this.handleRequestCb = this.createJsCallback(this.handleRequestCallback, {
-      args: [FFIType.cstring, FFIType.u16, FFIType.pointer],
-      returns: FFIType.void,
-      threadsafe: true,
-    });
+    this.handleRequestCb = this.createJsCallback(
+      this.handleRequestCallback.bind(this),
+      {
+        args: [
+          FFIType.pointer,
+          FFIType.u32,
+          FFIType.u16,
+          FFIType.pointer,
+          FFIType.u32,
+        ],
+        returns: FFIType.void,
+        threadsafe: true,
+      },
+    );
   }
 
   /**
@@ -88,7 +95,11 @@ export class Ffi extends BaseFfi<FfiSymbols> {
    */
   addRoute(httpMethod: HttpMethod, path: string) {
     return this.ensure<AddRouteResult>(
-      this.symbols.add_route(this.handle, httpMethod, toCString(path)),
+      this.symbols.add_route(
+        this.handle,
+        httpMethod as unknown as FFIType.u8,
+        toCString(path),
+      ),
     );
   }
 
@@ -100,7 +111,7 @@ export class Ffi extends BaseFfi<FfiSymbols> {
    */
   addRoutes(params: [HttpMethod, string][]) {
     return this.ensure<number[]>(
-      this.symbols.add_routes(this.handle, toBuffer(params)),
+      this.symbols.add_routes(this.handle, toCString(params)),
     );
   }
 
@@ -120,7 +131,7 @@ export class Ffi extends BaseFfi<FfiSymbols> {
     this.symbols.handle_request(
       this.handle,
       toCString(requestId),
-      toBuffer(params),
+      toCString(params),
       this.handleRequestCb.ptr!,
     );
 
@@ -159,24 +170,29 @@ export class Ffi extends BaseFfi<FfiSymbols> {
    * @param resultPtr - The result pointer
    * @param resultLength - The result length
    */
+  @FfiCallback()
   private handleRequestCallback(
-    requestId: string | null,
-    routeKey: number | null,
-    resultPtr: FfiPointer,
+    @FfiReleasable('string') requestIdPtr: FfiPointer<string>,
+    _: number,
+    routeKey: number,
+    @FfiReleasable('result') resultPtr: FfiPointer<HandleRequestOutput>,
   ) {
+    let requestId: string | undefined;
     let entry: JSCallbackEntry<HandleRequestResult> | undefined;
 
     try {
-      if (!requestId) {
-        throw new BunnerError('Request ID is null');
-      }
-
-      if (!routeKey) {
-        throw new BunnerError('Route key is null');
+      if (!requestIdPtr.isValid()) {
+        throw new BunnerError('Request ID pointer is null');
       }
 
       if (!resultPtr.isValid()) {
         throw new BunnerError('Result pointer is null');
+      }
+
+      requestId = requestIdPtr.ensure();
+
+      if (!requestId) {
+        throw new BunnerError('Request ID is null');
       }
 
       entry = this.pendingHandleRequests.get(requestId);
@@ -191,7 +207,7 @@ export class Ffi extends BaseFfi<FfiSymbols> {
         return;
       }
 
-      const result = resultPtr.toResult<HandleRequestOutput>();
+      const result = resultPtr.ensure();
 
       if (!result) {
         throw new BunnerError('Result is null');

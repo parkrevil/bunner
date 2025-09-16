@@ -3,31 +3,63 @@ import { packageDirectorySync } from 'package-directory';
 
 import { textEncoder } from '../common/instances';
 
+import type { FfiStringable } from './types';
+
 /**
- * Encode a string to a C string
- * @param message - The message to encode
- * @returns The encoded message
+ * Convert a value to a C string(for short values)
+ * @param val - The value to convert
+ * @returns The C string representation of the value
  */
-export function encodeCString(
-  message: string | object | Map<any, any> | any[],
-) {
-  let json: string;
+export function toCString(val: FfiStringable) {
+  const str = toString(val);
+  const estimated = str.length * 4;
+  const out = new Uint8Array(estimated + 1);
+  const res = textEncoder.encodeInto(str, out.subarray(0));
 
-  if (typeof message === 'string') {
-    json = message;
-  } else if (message instanceof Map) {
-    json = JSON.stringify(Array.from(message.entries()));
-  } else {
-    json = JSON.stringify(message);
+  out[res.written] = 0;
+
+  return out.subarray(0, res.written + 1);
+}
+
+/**
+ * Convert a value to a buffer(for long values)
+ * @param val - The value to convert
+ * @returns The buffer prefixed with a 4-byte little-endian length
+ */
+export function toBuffer(val: FfiStringable) {
+  const s = toString(val);
+  const estimated = s.length * 4;
+  const out = new Uint8Array(4 + estimated);
+
+  // placeholder for length (little-endian)
+  out[0] = 0;
+  out[1] = 0;
+  out[2] = 0;
+  out[3] = 0;
+
+  const res = textEncoder.encodeInto(s, out.subarray(4));
+  const len = res.written;
+
+  out[0] = len & 0xff;
+  out[1] = (len >>> 8) & 0xff;
+  out[2] = (len >>> 16) & 0xff;
+  out[3] = (len >>> 24) & 0xff;
+
+  return out.subarray(0, 4 + len);
+}
+
+/**
+ * Convert a value to a string
+ * @param val - The value to convert
+ * @returns The string representation of the value
+ */
+export function toString(val: FfiStringable) {
+  if (typeof val === 'string') {
+    return val;
+  } else if (val instanceof Map) {
+    return JSON.stringify(Array.from(val.entries()));
   }
-
-  const bytes = textEncoder.encode(json);
-  const buf = new Uint8Array(bytes.length + 1);
-
-  buf.set(bytes);
-  buf[bytes.length] = 0;
-
-  return buf;
+  return JSON.stringify(val);
 }
 
 /**
@@ -70,5 +102,8 @@ export function resolveRustLibPath(libName: string, cwd: string) {
  * @returns True if the value is a valid pointer, false otherwise
  */
 export function isPointer(val: any): val is Pointer {
-  return val !== null && val !== 0;
+  return (
+    (typeof val === 'number' && isFinite(val) && val !== 0) ||
+    (typeof val === 'bigint' && val !== BigInt(0))
+  );
 }

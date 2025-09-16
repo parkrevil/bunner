@@ -105,11 +105,7 @@ export abstract class BaseFfi<T extends BaseFfiSymbols> {
     const freeArgIndexes: number[] = [];
 
     options.args?.forEach((arg, index) => {
-      if (
-        arg === FFIType.pointer ||
-        arg === FFIType.cstring ||
-        arg === FFIType.buffer
-      ) {
+      if (arg === FFIType.pointer || arg === FFIType.buffer) {
         freeArgIndexes.push(index);
       }
     });

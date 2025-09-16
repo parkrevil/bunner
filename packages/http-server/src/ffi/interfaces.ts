@@ -1,5 +1,5 @@
 import type { BaseFfiSymbols } from '@bunner/core';
-import type { FFIType, Pointer } from 'bun:ffi';
+import type { Pointer } from 'bun:ffi';
 import type { StatusCodes } from 'http-status-codes';
 
 import type { HttpMethod } from '../enums';
@@ -7,7 +7,7 @@ import type { HttpMethod } from '../enums';
 export interface FfiSymbols extends BaseFfiSymbols {
   add_route: (
     handle: Pointer,
-    method: FFIType.u8,
+    method: number,
     path: Uint8Array,
   ) => Pointer | null;
   add_routes: (handle: Pointer, routes: Uint8Array) => Pointer | null;

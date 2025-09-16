@@ -15,3 +15,9 @@ export type JSCallbackMap<T> = Map<string, JSCallbackEntry<T>>;
  * @param ptr - The pointer to free
  */
 export type FreePointerFn = (ptr: Pointer) => void;
+
+/**
+ * Ffi Stringable
+ * @description The types that can be converted to a string for FFI
+ */
+export type FfiStringable = string | object | Map<any, any> | Array<any>;

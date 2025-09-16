@@ -1,4 +1,4 @@
-import { encodeCString, resolveRustLibPath } from '@bunner/core';
+import { toCString, resolveRustLibPath } from '@bunner/core';
 import { dlopen } from 'bun:ffi';
 
 import { LogLevel } from './enums';
@@ -70,6 +70,6 @@ export class Logger {
   }
 
   private log(level: LogLevel, message: any) {
-    this.symbols.log(level, encodeCString(message));
+    this.symbols.log(level, toCString(message));
   }
 }
