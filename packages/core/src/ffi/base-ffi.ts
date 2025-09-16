@@ -1,11 +1,18 @@
-import { dlopen, type FFIFunction, type Pointer, JSCallback } from 'bun:ffi';
+import {
+  dlopen,
+  type FFIFunction,
+  type Pointer,
+  JSCallback,
+  FFIType,
+} from 'bun:ffi';
 
-import { MetadataKey } from './enums';
 import { BunnerFfiError } from './errors';
 import { FfiPointer } from './ffi-pointer';
 import { isFfiErrorReport, makeFfiError } from './helpers';
-import { type BaseFfiSymbols } from './interfaces';
-import type { FfiFunctionMetadata } from './types';
+import {
+  type BaseFfiSymbols,
+  type CreateJsCallbackOptions,
+} from './interfaces';
 import { isPointer, pointerToJson } from './utils';
 
 export abstract class BaseFfi<T extends BaseFfiSymbols> {
@@ -90,78 +97,61 @@ export abstract class BaseFfi<T extends BaseFfiSymbols> {
    * @param options The FFIFunction options for the JSCallback
    * @returns A JSCallback instance wrapping the handler
    */
-  protected createJsCallback(handler: Function, options: FFIFunction) {
-    const thisProto = Object.getPrototypeOf(this);
-    const methodName = Object.getOwnPropertyNames(thisProto).filter(
-      r => thisProto[r] === handler,
-    )?.[0];
+  protected createJsCallback(
+    handler: Function,
+    options: CreateJsCallbackOptions,
+  ) {
+    const { callOnce = false, ...ffiOptions } = options;
+    const freeArgIndexes: number[] = [];
 
-    if (!methodName) {
-      throw new BunnerFfiError(
-        'Failed to find method name for JSCallback handler',
-      );
-    }
+    options.args?.forEach((arg, index) => {
+      if (
+        arg === FFIType.pointer ||
+        arg === FFIType.cstring ||
+        arg === FFIType.buffer
+      ) {
+        freeArgIndexes.push(index);
+      }
+    });
 
-    const callbackMetadata: FfiFunctionMetadata = Reflect.getOwnMetadata(
-      MetadataKey.FfiCallback,
-      thisProto,
-      methodName,
-    );
-
-    if (!callbackMetadata) {
-      throw new BunnerFfiError('Failed to find FFI callback metadata');
-    }
-
-    const wrapperFn = (...ffiArgs: any[]) => {
-      const pointers: FfiPointer<any>[] = [];
+    const wrapperFn = async (...args: any[]) => {
+      const pointers: FfiPointer[] = [];
 
       try {
-        const clonedArgs = ffiArgs.slice();
-        const args: any[] = [];
-
-        let i = -1;
-
-        while (clonedArgs.length) {
-          ++i;
-
-          const arg = clonedArgs.shift();
-          const type = callbackMetadata.get(i);
-
-          if (type === undefined) {
-            args.push(arg);
-
-            continue;
-          }
-
-          const length = clonedArgs.shift();
+        freeArgIndexes.forEach(index => {
+          const length = args[index + 1];
 
           if (typeof length !== 'number') {
             throw new BunnerFfiError(
-              `Expected length argument at index ${i + 1} for FFI callback`,
+              `Expected length argument at index ${index + 1} for FFI callback`,
             );
           }
 
-          ++i;
-
-          const pointer = new FfiPointer({
-            type,
-            pointer: arg,
-            length: Number(length),
+          args[index] = new FfiPointer({
+            pointer: args[index],
+            length,
             freeFn: this.symbols.free_string.bind(this.symbols),
           });
 
-          args.push(pointer, length);
-          pointers.push(pointer);
-        }
+          pointers.push(args[index]);
+        });
 
-        return handler.bind(this)(...args);
+        const result = await handler.bind(this)(...args);
+
+        return result;
       } finally {
         for (const pointer of pointers) {
           pointer.free();
         }
+
+        if (callOnce && jsCallback) {
+          jsCallback.close();
+        }
       }
     };
 
-    return new JSCallback(wrapperFn, options as any);
+    const jsCallback = new JSCallback(wrapperFn, ffiOptions);
+
+    return jsCallback;
   }
 }

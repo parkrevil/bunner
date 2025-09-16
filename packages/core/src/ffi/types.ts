@@ -15,15 +15,3 @@ export type JSCallbackMap<T> = Map<string, JSCallbackEntry<T>>;
  * @param ptr - The pointer to free
  */
 export type FreePointerFn = (ptr: Pointer) => void;
-
-/**
- * Ffi Function Metadata
- * @description The metadata for an FFI function
- */
-export type FfiFunctionMetadata = Map<number, FfiPointerValueType>;
-
-/**
- * Ffi Pointer Value Type
- * @description The type of value stored in an FFI pointer
- */
-export type FfiPointerValueType = 'string' | 'object' | 'result';

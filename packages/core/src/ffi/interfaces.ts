@@ -1,6 +1,6 @@
-import type { Pointer } from 'bun:ffi';
+import type { FFIFunction, Pointer } from 'bun:ffi';
 
-import type { FfiPointerValueType, FreePointerFn } from './types';
+import type { FreePointerFn } from './types';
 
 /**
  * Base FFI Symbols
@@ -44,8 +44,11 @@ export interface JSCallbackEntry<T> {
  * @description The parameters for constructing an FfiPointer
  */
 export interface FfiPointerConstructorParams {
-  type: FfiPointerValueType;
   pointer: Pointer | null;
   length: number;
   freeFn: FreePointerFn;
+}
+
+export interface CreateJsCallbackOptions extends FFIFunction {
+  callOnce?: boolean;
 }

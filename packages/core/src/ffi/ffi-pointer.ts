@@ -3,18 +3,16 @@ import type { Pointer } from 'bun:ffi';
 import { BunnerFfiError } from './errors';
 import { isFfiErrorReport, makeFfiError } from './helpers';
 import type { FfiPointerConstructorParams } from './interfaces';
-import type { FfiPointerValueType, FreePointerFn } from './types';
+import type { FreePointerFn } from './types';
 import { pointerToString, pointerToJson, isPointer } from './utils';
 
-export class FfiPointer<T> {
+export class FfiPointer {
   private readonly freeFn: FreePointerFn;
   private readonly length: number;
-  private type: FfiPointerValueType;
   private pointer: Pointer | null;
   private freed: boolean;
 
   constructor(params: FfiPointerConstructorParams) {
-    this.type = params.type;
     this.pointer = params.pointer;
     this.length = params.length;
     this.freeFn = params.freeFn;
@@ -30,27 +28,45 @@ export class FfiPointer<T> {
     return isPointer(val);
   }
 
-  ensure(): T | undefined {
+  toString(): string | undefined {
     try {
       if (!this.isValid(this.pointer)) {
         return undefined;
       }
 
-      if (this.type === 'string') {
-        return pointerToString(this.pointer, this.length) as unknown as T;
-      } else if (this.type === 'object') {
-        return pointerToJson<T>(this.pointer, this.length);
-      } else if (this.type === 'result') {
-        const result = pointerToJson<T>(this.pointer, this.length);
+      return pointerToString(this.pointer, this.length);
+    } finally {
+      this.free();
+    }
+  }
 
-        if (isFfiErrorReport(result)) {
-          throw makeFfiError(result);
-        }
-
-        return result;
+  toObject<T>(): T | undefined {
+    try {
+      if (!this.isValid(this.pointer)) {
+        return undefined;
       }
 
-      return undefined;
+      return pointerToJson<T>(this.pointer, this.length);
+    } catch (e) {
+      throw new BunnerFfiError('Failed to parse FFI result', e);
+    } finally {
+      this.free();
+    }
+  }
+
+  toResult<T>(): T | undefined {
+    try {
+      if (!this.isValid(this.pointer)) {
+        return undefined;
+      }
+
+      const result = pointerToJson<T>(this.pointer, this.length);
+
+      if (isFfiErrorReport(result)) {
+        throw makeFfiError(result);
+      }
+
+      return result;
     } catch (e) {
       if (e instanceof BunnerFfiError) {
         throw e;

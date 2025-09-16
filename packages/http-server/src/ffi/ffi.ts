@@ -5,8 +5,6 @@ import {
   resolveRustLibPath,
   type JSCallbackEntry,
   BunnerFfiError,
-  FfiReleasable,
-  FfiCallback,
   FfiPointer,
   type JSCallbackMap,
 } from '@bunner/core';
@@ -167,12 +165,11 @@ export class Ffi extends BaseFfi<FfiSymbols> {
    * @param resultPtr - The result pointer
    * @param resultLength - The result length
    */
-  @FfiCallback()
   private handleRequestCallback(
-    @FfiReleasable('string') requestIdPtr: FfiPointer<string>,
-    _: number,
+    requestIdPtr: FfiPointer,
+    _requestIdLength: number,
     routeKey: number,
-    @FfiReleasable('result') resultPtr: FfiPointer<HandleRequestOutput>,
+    resultPtr: FfiPointer,
   ) {
     let requestId: string | undefined;
     let entry: JSCallbackEntry<HandleRequestResult> | undefined;
@@ -186,7 +183,7 @@ export class Ffi extends BaseFfi<FfiSymbols> {
         throw new BunnerError('Result pointer is null');
       }
 
-      requestId = requestIdPtr.ensure();
+      requestId = requestIdPtr.toString();
 
       if (!requestId) {
         throw new BunnerError('Request ID is null');
@@ -204,7 +201,7 @@ export class Ffi extends BaseFfi<FfiSymbols> {
         return;
       }
 
-      const result = resultPtr.ensure();
+      const result = resultPtr.toResult<HandleRequestOutput>();
 
       if (!result) {
         throw new BunnerError('Result is null');
