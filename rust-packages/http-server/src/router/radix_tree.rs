@@ -26,7 +26,6 @@ const STATIC_MAP_THRESHOLD: usize = 50;
 mod alloc;
 mod builder;
 mod compression;
-// find module removed; runtime lookups use RouterReadOnly
 mod indices;
 mod insert;
 mod mask;
@@ -37,15 +36,6 @@ pub mod traversal;
 
 use alloc::{create_node_box_from_arena_pointer, NodeBox};
 pub use node::RadixTreeNode;
-#[cfg(feature = "test")]
-use std::sync::atomic::{AtomicUsize, Ordering};
-
-#[cfg(feature = "test")]
-static WORKERS_USED: AtomicUsize = AtomicUsize::new(0);
-#[cfg(feature = "test")]
-static ACTIVE_WORKERS: AtomicUsize = AtomicUsize::new(0);
-#[cfg(feature = "test")]
-static MAX_ACTIVE_WORKERS: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Debug, Default)]
 pub struct RadixTree {
@@ -123,68 +113,20 @@ impl RadixTree {
             use std::sync::mpsc;
             use std::thread;
 
-            #[cfg(feature = "test")]
-            use std::sync::{Arc, Barrier};
-
             let (tx, rx) = mpsc::channel();
             let workers = thread::available_parallelism()
                 .map(|n| n.get())
                 .unwrap_or(1)
                 .min(total);
-
-            #[cfg(feature = "test")]
-            {
-                WORKERS_USED.store(workers, Ordering::Relaxed);
-                ACTIVE_WORKERS.store(0, Ordering::Relaxed);
-                MAX_ACTIVE_WORKERS.store(0, Ordering::Relaxed);
-            }
-
             let chunk_size = total.div_ceil(workers);
             let chunk_refs: Vec<&[IndexedEntry]> = indexed.chunks(chunk_size).collect();
             let mut handles = Vec::with_capacity(chunk_refs.len());
-
-            #[cfg(feature = "test")]
-            let start_barrier = Arc::new(Barrier::new(chunk_refs.len()));
-            #[cfg(feature = "test")]
-            {
-                WORKERS_USED.store(chunk_refs.len(), Ordering::Relaxed);
-                ACTIVE_WORKERS.store(0, Ordering::Relaxed);
-                MAX_ACTIVE_WORKERS.store(0, Ordering::Relaxed);
-            }
 
             for chunk in chunk_refs.into_iter() {
                 let txc = tx.clone();
                 let local: Vec<IndexedEntry> = chunk.to_vec();
 
-                #[cfg(feature = "test")]
-                let barrier_clone = start_barrier.clone();
-
                 handles.push(thread::spawn(move || {
-                    #[cfg(feature = "test")]
-                    {
-                        // synchronize thread start to guarantee overlap
-                        barrier_clone.wait();
-                        let current = ACTIVE_WORKERS.fetch_add(1, Ordering::Relaxed) + 1;
-                        // update max active
-                        loop {
-                            let prev = MAX_ACTIVE_WORKERS.load(Ordering::Relaxed);
-                            if current <= prev {
-                                break;
-                            }
-                            if MAX_ACTIVE_WORKERS
-                                .compare_exchange(
-                                    prev,
-                                    current,
-                                    Ordering::Relaxed,
-                                    Ordering::Relaxed,
-                                )
-                                .is_ok()
-                            {
-                                break;
-                            }
-                        }
-                    }
-
                     for (idx, method, path, head, plen, is_static) in local.into_iter() {
                         let parsed =
                             super::radix_tree::insert::prepare_path_segments_standalone(&path);
@@ -208,11 +150,6 @@ impl RadixTree {
                                 let _ = txc.send(Err((idx, e)));
                             }
                         }
-                    }
-
-                    #[cfg(feature = "test")]
-                    {
-                        let _ = ACTIVE_WORKERS.fetch_sub(1, Ordering::Relaxed);
                     }
                 }));
             }
@@ -251,13 +188,6 @@ impl RadixTree {
                     }
                 }
                 pre.push((idx, method, segs, head, plen, is_static, lits));
-            }
-
-            #[cfg(feature = "test")]
-            {
-                WORKERS_USED.store(1, Ordering::Relaxed);
-                ACTIVE_WORKERS.store(0, Ordering::Relaxed);
-                MAX_ACTIVE_WORKERS.store(1, Ordering::Relaxed);
             }
         }
 
@@ -312,20 +242,5 @@ impl RadixTree {
             out[idx] = self.insert_parsed_preassigned(method, segs, assigned - 1)?;
         }
         Ok(out)
-    }
-
-    #[cfg(feature = "test")]
-    pub fn reset_bulk_metrics(&self) {
-        WORKERS_USED.store(0, Ordering::Relaxed);
-        ACTIVE_WORKERS.store(0, Ordering::Relaxed);
-        MAX_ACTIVE_WORKERS.store(0, Ordering::Relaxed);
-    }
-
-    #[cfg(feature = "test")]
-    pub fn bulk_metrics(&self) -> (usize, usize) {
-        (
-            WORKERS_USED.load(Ordering::Relaxed),
-            MAX_ACTIVE_WORKERS.load(Ordering::Relaxed),
-        )
     }
 }

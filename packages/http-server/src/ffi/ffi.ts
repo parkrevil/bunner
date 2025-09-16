@@ -42,7 +42,7 @@ export class Ffi extends BaseFfi<FfiSymbols> {
   override init() {
     const api: Record<keyof FfiSymbols, FFIFunction> = {
       // BaseRustSymbols
-      free_string: { args: [FFIType.pointer], returns: FFIType.void },
+      free: { args: [FFIType.pointer], returns: FFIType.void },
       init: { args: [], returns: FFIType.pointer },
       destroy: { args: [FFIType.pointer], returns: FFIType.void },
 

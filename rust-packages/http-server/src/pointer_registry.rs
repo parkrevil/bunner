@@ -1,155 +1,108 @@
-//! Pointer registry for C strings allocated by this crate and passed over FFI.
-//!
-//! Thread-safe map of pointer address -> caller-site tag. Call `register`
-//! after `CString::into_raw()`; use `free` or `unregister` to free/remove.
-//! The registry logs failures but does not return errors.
-
 use std::collections::HashMap;
-use std::ffi::CString;
-use std::os::raw::c_char;
 use std::sync::{Mutex, OnceLock};
 
-/// Global registry (Mutex-protected map of pointer addr -> caller tag).
-static PTR_REGISTRY: OnceLock<Mutex<HashMap<usize, String>>> = OnceLock::new();
+type RawMap = HashMap<usize, (usize, usize, String)>;
 
-fn registry() -> &'static Mutex<HashMap<usize, String>> {
-    PTR_REGISTRY.get_or_init(|| Mutex::new(HashMap::new()))
+static REGISTRY: OnceLock<Mutex<RawMap>> = OnceLock::new();
+
+fn registry() -> &'static Mutex<RawMap> {
+    REGISTRY.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-/// Register a raw pointer returned from `CString::into_raw()`.
-///
-/// Null pointers are ignored. Records the caller site (file:line:col)
-/// so frees/unregisters can be traced back to the creation site.
-#[track_caller]
-pub fn register(ptr: *mut c_char) {
-    if ptr.is_null() {
-        return;
-    }
-
-    let addr = ptr as usize;
-
-    let caller = std::panic::Location::caller();
-    let tag = format!("{}:{}:{}", caller.file(), caller.line(), caller.column());
-
-    let map = registry();
-    let mut guard = map.lock().unwrap();
-    let before = guard.len();
-    guard.insert(addr, tag.clone());
-    tracing::trace!(
-        "pointer_registry: register ptr={:p} addr=0x{:x} tag={} before={} after={}",
-        ptr,
-        addr,
-        tag,
-        before,
-        guard.len()
-    );
-}
-
-/// Unregister a pointer.
-/// If the pointer was not registered, a warning is logged.
-/// Null pointers are ignored.
-pub fn unregister(ptr: *mut c_char) {
-    if ptr.is_null() {
-        tracing::warn!("pointer_registry: unregister called with null pointer");
-        return;
-    }
-
-    let addr = ptr as usize;
-
-    let map = registry();
-    let mut guard = map.lock().unwrap();
-    let before = guard.len();
-    let removed = guard.remove(&addr);
-    if let Some(created_at) = removed {
-        tracing::trace!("pointer_registry: unregister ptr={:p} addr=0x{:x} removed=true tag={} before={} after={}", ptr, addr, created_at, before, guard.len());
-    } else {
-        let caller = std::panic::Location::caller();
-        let called_from = format!("{}:{}:{}", caller.file(), caller.line(), caller.column());
-        let bt = std::backtrace::Backtrace::capture();
-        tracing::warn!("pointer_registry: unregister failed for ptr={:p} addr=0x{:x} called_from={} backtrace={:?}", ptr, addr, called_from, bt);
-    }
-}
-
-/// Check whether a pointer is registered.
-pub fn has(ptr: *mut c_char) -> bool {
+/// Check whether a raw buffer pointer is registered.
+pub fn has(ptr: *mut u8) -> bool {
     if ptr.is_null() {
         return false;
     }
 
     let addr = ptr as usize;
-
     let map = registry();
     let guard = map.lock().unwrap();
     let contains = guard.contains_key(&addr);
     let tag = guard.get(&addr);
+
     tracing::trace!(
-        "pointer_registry: has ptr={:p} addr=0x{:x} contains={} tag={:?}",
+        "pointer_registry: has_raw ptr={:p} addr=0x{:x} contains={} tag={:?}",
         ptr,
         addr,
         contains,
         tag
     );
+
     contains
 }
 
-/// Free a registered `CString` raw pointer.
-///
-/// If `ptr` was registered the registry removes it and calls
-/// `CString::from_raw(ptr)` to free the allocation. If `ptr` is null or not
-/// registered, a warning is logged and the function returns.
+/// Frees a previously-registered raw buffer.
 ///
 /// # Safety
-/// - `ptr` must be a pointer previously returned from this crate.
-pub unsafe fn free(ptr: *mut c_char) {
+/// - `ptr` must be a pointer previously returned by `register` for a `Vec<u8>` that
+///   was leaked into a raw pointer via `std::mem::forget` (the registry's `register`).
+/// - The caller must ensure `ptr` has not already been freed; double-free is undefined
+///   behavior (the registry will log and ignore unknown pointers, but callers should
+///   not rely on this for correctness).
+/// - Passing a null pointer is allowed and will be treated as a no-op.
+pub unsafe fn free(ptr: *mut u8) {
     if ptr.is_null() {
-        tracing::warn!("pointer_registry: free called with null pointer");
+        tracing::warn!("pointer_registry: free_raw called with null pointer");
         return;
     }
 
-    let removed_tag = {
+    let removed = {
         let map = registry();
         let mut guard = map.lock().unwrap();
         let before = guard.len();
         let removed = guard.remove(&(ptr as usize));
+
         tracing::trace!(
-            "pointer_registry: free requested ptr={:p} addr=0x{:x} removed={} before={}",
+            "pointer_registry: free_raw requested ptr={:p} addr=0x{:x} removed={} before={}",
             ptr,
             ptr as usize,
             removed.is_some(),
             before
         );
+
         removed
     };
 
-    if let Some(tag) = removed_tag {
-        // Reconstruct CString to drop and free the allocation.
+    if let Some((len, cap, tag)) = removed {
         unsafe {
-            let _ = CString::from_raw(ptr);
+            // Reconstruct Vec<u8> and drop it to free allocation.
+            let _ = Vec::from_raw_parts(ptr, len, cap);
         }
-        tracing::trace!("pointer_registry: freed ptr={:p} tag={}", ptr, tag);
+        tracing::trace!("pointer_registry: freed raw ptr={:p} tag={}", ptr, tag);
     } else {
-        let caller = std::panic::Location::caller();
-        let called_from = format!("{}:{}:{}", caller.file(), caller.line(), caller.column());
-        let bt = std::backtrace::Backtrace::capture();
         tracing::warn!(
-            "pointer_registry: free failed for ptr={:p} addr=0x{:x} called_from={} backtrace={:?}",
+            "pointer_registry: free failed for ptr={:p} addr=0x{:x} (not registered)",
             ptr,
             ptr as usize,
-            called_from,
-            bt
         );
     }
 }
 
-/// Consume a `CString`, register the raw pointer, and return it.
+/// Consume a `Vec<u8>`, register the raw pointer and metadata, and return it.
 #[track_caller]
-pub fn register_cstring_and_into_raw(cstr: CString) -> *mut c_char {
-    let ptr = cstr.into_raw();
-    register(ptr);
+pub fn register(mut v: Vec<u8>) -> *mut u8 {
+    let ptr = v.as_mut_ptr();
+    let len = v.len();
+    let cap = v.capacity();
+    let addr = ptr as usize;
+    let caller = std::panic::Location::caller();
+    let tag = format!("{}:{}:{}", caller.file(), caller.line(), caller.column());
+    let map = registry();
+    let mut guard = map.lock().unwrap();
+
+    guard.insert(addr, (len, cap, tag.clone()));
+
+    std::mem::forget(v);
+
     tracing::trace!(
-        "pointer_registry: cstring -> raw ptr={:p} addr=0x{:x}",
+        "pointer_registry: raw_vec -> raw ptr={:p} addr=0x{:x} len={} cap={} tag={}",
         ptr,
-        ptr as usize
+        addr,
+        len,
+        cap,
+        tag
     );
+
     ptr
 }

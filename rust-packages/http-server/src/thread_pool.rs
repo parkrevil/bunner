@@ -18,10 +18,6 @@ static TASK_RECEIVER: OnceLock<xchan::Receiver<Task>> = OnceLock::new();
 static WORKER_COUNT: OnceLock<usize> = OnceLock::new();
 static JUST_SHUTDOWN: AtomicBool = AtomicBool::new(false);
 static WORKER_HANDLES: OnceLock<std::sync::Mutex<Vec<JoinHandle<()>>>> = OnceLock::new();
-#[cfg(feature = "test")]
-thread_local! {
-    static FORCE_QUEUE_FULL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-}
 
 fn env_usize(key: &str, default: usize, min: usize, max: usize) -> usize {
     std::env::var(key)
@@ -79,11 +75,6 @@ fn init() -> xchan::Sender<Task> {
 
 #[tracing::instrument(level = "trace", skip(job))]
 pub fn submit_job(job: Job) -> Result<(), xchan::TrySendError<Task>> {
-    #[cfg(feature = "test")]
-    if FORCE_QUEUE_FULL.with(|c| c.get()) {
-        return Err(xchan::TrySendError::Full(Task::Job(job)));
-    }
-
     let tx = TASK_SENDER.get_or_init(init);
     match tx.try_send(Task::Job(job)) {
         Ok(()) => Ok(()),
@@ -121,9 +112,4 @@ pub fn shutdown_pool() {
             }
         }
     }
-}
-
-#[cfg(feature = "test")]
-pub(crate) fn set_force_full(value: bool) {
-    FORCE_QUEUE_FULL.with(|c| c.set(value));
 }

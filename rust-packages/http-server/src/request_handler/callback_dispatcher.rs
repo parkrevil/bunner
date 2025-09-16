@@ -1,10 +1,10 @@
 use crossbeam_channel as xchan;
-use std::ffi::{c_void, CStr};
+use std::ffi::{c_void, CStr, CString};
 use std::os::raw::c_char;
 use std::sync::OnceLock;
 
 use super::HandleRequestCallback;
-use crate::pointer_registry;
+// pointer_registry::free removed; callers free CString directly
 
 struct CallbackJob {
     callback: HandleRequestCallback,
@@ -75,10 +75,12 @@ fn init() -> xchan::Sender<CallbackJob> {
                 if res.is_err() {
                     // Callback panicked: reclaim and free any ownership that was transferred
                     if !request_id_ptr.is_null() {
-                        unsafe { pointer_registry::free(request_id_ptr) };
+                        // Reclaim and drop CString to free allocation
+                        unsafe { let _ = CString::from_raw(request_id_ptr); };
                     }
                     if !job.result_ptr.is_null() {
-                        unsafe { pointer_registry::free(job.result_ptr) };
+                        // Reclaim and drop CString to free allocation
+                        unsafe { let _ = CString::from_raw(job.result_ptr); };
                     }
 
                     tracing::event!(tracing::Level::ERROR, reason = "callback_panic_caught");
@@ -133,9 +135,9 @@ pub fn enqueue(
         // as the dispatcher thread will never receive it.
         // Free both pointers as enqueue failed; request_id may be a raw ptr transferred by caller
         if let Some(rptr) = request_id {
-            unsafe { pointer_registry::free(rptr) };
+            unsafe { let _ = CString::from_raw(rptr); };
         }
 
-        unsafe { pointer_registry::free(res_ptr) };
+        unsafe { let _ = CString::from_raw(res_ptr); };
     }
 }

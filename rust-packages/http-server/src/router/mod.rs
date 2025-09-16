@@ -49,21 +49,6 @@ impl Router {
     pub fn build_readonly(&self) -> RouterReadOnly {
         RouterReadOnly::from_router(self)
     }
-
-    #[cfg(feature = "test")]
-    pub fn get_internal_radix_router(&self) -> &radix_tree::RadixTree {
-        &self.radix_tree
-    }
-
-    #[cfg(feature = "test")]
-    pub fn reset_bulk_metrics(&self) {
-        self.radix_tree.reset_bulk_metrics();
-    }
-
-    #[cfg(feature = "test")]
-    pub fn bulk_metrics(&self) -> (usize, usize) {
-        self.radix_tree.bulk_metrics()
-    }
 }
 
 // snapshot removed in favor of RouterReadOnly

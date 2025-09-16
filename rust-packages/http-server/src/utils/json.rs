@@ -38,11 +38,11 @@ pub fn serialize_with_simd_json<T: Serialize>(value: &T) -> Result<String, Inter
 pub fn deserialize<T: DeserializeOwned>(json_str: &str) -> Result<T, InternalErrorCode> {
     #[cfg(feature = "simd-json")]
     {
-        deserialize_with_simd_json(json_str)
+        deserialize_with_simd_json::<T>(json_str)
     }
     #[cfg(not(feature = "simd-json"))]
     {
-        deserialize_with_serde_json(json_str)
+        deserialize_with_serde_json::<T>(json_str)
     }
 }
 
@@ -50,7 +50,7 @@ pub fn deserialize<T: DeserializeOwned>(json_str: &str) -> Result<T, InternalErr
 pub fn deserialize_with_serde_json<T: DeserializeOwned>(
     json_str: &str,
 ) -> Result<T, InternalErrorCode> {
-    serde_json::from_str(json_str).map_err(|err| {
+    serde_json::from_str::<T>(json_str).map_err(|err| {
         tracing::error!("serde_json deserialization error: {:?}", err);
 
         InternalErrorCode::InvalidJsonString
@@ -63,7 +63,7 @@ pub fn deserialize_with_simd_json<T: DeserializeOwned>(
 ) -> Result<T, InternalErrorCode> {
     let mut bytes = json_str.as_bytes().to_vec();
 
-    simd_json::from_slice(&mut bytes).map_err(|err| {
+    simd_json::from_slice::<T>(&mut bytes).map_err(|err| {
         tracing::error!("simd-json deserialization error: {:?}", err);
 
         InternalErrorCode::InvalidJsonString
@@ -72,7 +72,7 @@ pub fn deserialize_with_simd_json<T: DeserializeOwned>(
 
 pub fn to_c_string(value: &str) -> *mut c_char {
     match CString::new(value) {
-        Ok(cstr) => crate::pointer_registry::register_cstring_and_into_raw(cstr),
+        Ok(cstr) => cstr.into_raw(),
         Err(e) => {
             tracing::trace!(
                 "Failed to create CString, value contains null bytes: {:?}",

@@ -2,21 +2,17 @@ import type { Pointer } from 'bun:ffi';
 
 import { BunnerFfiError } from './errors';
 import { isFfiErrorReport, makeFfiError } from './helpers';
-import type { FfiPointerConstructorParams } from './interfaces';
 import type { FreePointerFn } from './types';
-import { pointerToString, pointerToJson, isPointer } from './utils';
+import { pointerToJson, isPointer } from './utils';
 
 export class FfiPointer {
   private readonly freeFn: FreePointerFn;
-  private readonly length: number;
   private pointer: Pointer | null;
   private freed: boolean;
 
-  constructor(params: FfiPointerConstructorParams) {
-    this.pointer = params.pointer;
-    this.length = params.length;
-    this.freeFn = params.freeFn;
-
+  constructor(pointer: Pointer | null, freeFn: FreePointerFn) {
+    this.pointer = pointer;
+    this.freeFn = freeFn;
     this.freed = false;
   }
 
@@ -28,25 +24,13 @@ export class FfiPointer {
     return isPointer(val);
   }
 
-  toString(): string | undefined {
-    try {
-      if (!this.isValid(this.pointer)) {
-        return undefined;
-      }
-
-      return pointerToString(this.pointer, this.length);
-    } finally {
-      this.free();
-    }
-  }
-
   toObject<T>(): T | undefined {
     try {
       if (!this.isValid(this.pointer)) {
         return undefined;
       }
 
-      return pointerToJson<T>(this.pointer, this.length);
+      return pointerToJson<T>(this.pointer);
     } catch (e) {
       throw new BunnerFfiError('Failed to parse FFI result', e);
     } finally {
@@ -60,7 +44,7 @@ export class FfiPointer {
         return undefined;
       }
 
-      const result = pointerToJson<T>(this.pointer, this.length);
+      const result = pointerToJson<T>(this.pointer);
 
       if (isFfiErrorReport(result)) {
         throw makeFfiError(result);

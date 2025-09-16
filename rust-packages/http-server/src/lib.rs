@@ -26,54 +26,19 @@ use std::{
     os::raw::c_char,
     sync::{Arc, OnceLock},
 };
-use tracing_subscriber::{fmt, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt};
 
 use crate::enums::HttpMethod;
 use crate::errors::{HttpServerError, HttpServerErrorCode};
 use crate::request_handler::{
-    callback_handle_request, handle as process_request, HandleRequestCallback,
+    HandleRequestCallback, callback_handle_request, handle as process_request,
 };
 use crate::router::errors::RouterErrorCode;
 use crate::router::structures::RouterError;
 use crate::structure::AddRouteResult;
 use crate::thread_pool::{shutdown_pool, submit_job};
-use crate::utils::{json, string};
-
-// Helper function to reduce code duplication
-fn handle_null_handle_error(operation: &str) -> *mut c_char {
-    let http_error = HttpServerError::new(
-        HttpServerErrorCode::HandleIsNull,
-        "http_server",
-        operation,
-        "validation",
-        format!("Null handle passed to {}", operation),
-        Some(serde_json::json!(null)),
-    );
-
-    json::serialize_and_to_c_string(&http_error)
-}
-
-#[cfg(feature = "test")]
-pub mod thread_pool_test_support {
-    pub fn submit<F>(job: F) -> Result<(), &'static str>
-    where
-        F: FnOnce() + Send + 'static,
-    {
-        match crate::thread_pool::submit_job(Box::new(job)) {
-            Ok(()) => Ok(()),
-            Err(crossbeam_channel::TrySendError::Full(_)) => Err("full"),
-            Err(crossbeam_channel::TrySendError::Disconnected(_)) => Err("disconnected"),
-        }
-    }
-
-    pub fn shutdown() {
-        crate::thread_pool::shutdown_pool();
-    }
-
-    pub fn set_force_full(value: bool) {
-        crate::thread_pool::set_force_full(value);
-    }
-}
+use crate::utils::string::serialize_and_to_len_prefixed_buffer;
+use crate::utils::string;
 
 pub type HttpServerHandle = *mut HttpServer;
 
@@ -117,13 +82,7 @@ fn make_router_sealed_error(
 #[unsafe(no_mangle)]
 #[tracing::instrument(skip_all, fields(operation = "init"))]
 pub extern "C" fn init() -> HttpServerHandle {
-    let filter = if let Ok(level) = std::env::var("BUNNER_LOG_LEVEL") {
-        EnvFilter::try_new(level).unwrap_or_else(|_| EnvFilter::new("info"))
-    } else {
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"))
-    };
-
-    let subscriber = fmt().with_env_filter(filter).finish();
+    let subscriber = fmt().with_env_filter(EnvFilter::new("trace")).finish();
 
     tracing::subscriber::set_global_default(subscriber).expect("Failed to set global logger");
 
@@ -165,15 +124,26 @@ pub unsafe extern "C" fn destroy(handle: HttpServerHandle) {
 /// # Safety
 /// - The `handle` pointer must be a valid pointer returned by `init`.
 /// - The `path` pointer must point to a valid, null-terminated C string.
+/// - The returned pointer is a length-prefixed buffer allocated by Rust and must be freed
+///   by calling `free_buffer`.
 #[unsafe(no_mangle)]
 #[tracing::instrument(skip_all, fields(operation="add_route", http_method=http_method))]
 pub unsafe extern "C" fn add_route(
     handle: HttpServerHandle,
     http_method: u8,
     path: *const c_char,
-) -> *mut c_char {
+) -> *mut u8 {
     if handle.is_null() {
-        return handle_null_handle_error("add_route");
+        let http_error = HttpServerError::new(
+            HttpServerErrorCode::HandleIsNull,
+            "http_server",
+            "add_route",
+            "validation",
+            format!("Null handle passed to {}", "add_route"),
+            Some(serde_json::json!(null)),
+        );
+
+        return serialize_and_to_len_prefixed_buffer(&http_error);
     }
 
     // Check if path pointer is null
@@ -189,7 +159,7 @@ pub unsafe extern "C" fn add_route(
             })),
         );
 
-        return json::serialize_and_to_c_string(&err);
+        return serialize_and_to_len_prefixed_buffer(&err);
     }
 
     let http_method = match HttpMethod::from_u8(http_method) {
@@ -207,7 +177,7 @@ pub unsafe extern "C" fn add_route(
                 })),
             );
 
-            return json::serialize_and_to_c_string(&err);
+            return serialize_and_to_len_prefixed_buffer(&err);
         }
     };
 
@@ -226,14 +196,14 @@ pub unsafe extern "C" fn add_route(
         );
         let he = HttpServerError::from(e);
 
-        return json::serialize_and_to_c_string(&he);
+        return serialize_and_to_len_prefixed_buffer(&he);
     }
 
     match router_mut.add(http_method, &path_str) {
         Ok(k) => {
             tracing::event!(tracing::Level::DEBUG, method=?http_method, path=%path_str, key=k, "route added");
 
-            json::serialize_and_to_c_string(&AddRouteResult { key: k })
+            serialize_and_to_len_prefixed_buffer(&AddRouteResult { key: k })
         }
         Err(e) => {
             tracing::event!(tracing::Level::ERROR, code=?e.code, path=%path_str, "add_route error");
@@ -243,28 +213,41 @@ pub unsafe extern "C" fn add_route(
 
             bunner_error.merge_extra(detail);
 
-            json::serialize_and_to_c_string(&bunner_error)
+            serialize_and_to_len_prefixed_buffer(&bunner_error)
         }
     }
 }
 
-/// Adds multiple routes to the router from a JSON-encoded pointer.
+/// Adds multiple routes to the router from a length-prefixed JSON buffer pointer.
 ///
 /// # Safety
 /// - `handle` must be a valid pointer returned by `init`.
-/// - `routes_ptr` must be a valid, null-terminated C string that remains valid for the
-///   duration of this call. This function does not take ownership of the input buffer.
-/// - The returned pointer is allocated by Rust and must be freed by calling `free_string`.
+/// - `routes_ptr` must be a valid pointer to a 4-byte little-endian length-prefixed
+///   buffer (4-byte LE length header followed by UTF-8 JSON payload). The function does
+///   not take ownership of the input buffer; the caller is responsible for its lifetime
+///   during this call.
+/// - The returned pointer is a length-prefixed buffer allocated by Rust and must be freed
+///   by calling `free_buffer`.
 /// - Passing invalid pointers or non-UTF8 data is undefined behavior.
 #[unsafe(no_mangle)]
 #[tracing::instrument(skip_all, fields(operation = "add_routes"))]
-pub unsafe extern "C" fn add_routes(
-    handle: HttpServerHandle,
-    routes_ptr: *const c_char,
-) -> *mut c_char {
+pub unsafe extern "C" fn add_routes(handle: HttpServerHandle, routes_ptr: *const u8) -> *mut u8 {
+    tracing::info!(routes_ptr=?routes_ptr, "add_routes called1");
+
     if handle.is_null() {
-        return handle_null_handle_error("add_routes");
+        let http_error = HttpServerError::new(
+            HttpServerErrorCode::HandleIsNull,
+            "http_server",
+            "add_routes",
+            "validation",
+            format!("Null handle passed to {}", "add_routes"),
+            Some(serde_json::json!(null)),
+        );
+
+        return serialize_and_to_len_prefixed_buffer(&http_error);
     }
+
+    tracing::info!(routes_ptr=?routes_ptr, "add_routes called2");
 
     if routes_ptr.is_null() {
         let http_error = HttpServerError::new(
@@ -276,45 +259,28 @@ pub unsafe extern "C" fn add_routes(
             Some(serde_json::json!(null)),
         );
 
-        return json::serialize_and_to_c_string(&http_error);
+        return serialize_and_to_len_prefixed_buffer(&http_error);
     }
 
-    let routes_str = match unsafe { CStr::from_ptr(routes_ptr).to_str() } {
-        Ok(s) => s,
-        Err(_) => {
-            let http_error = HttpServerError::new(
-                HttpServerErrorCode::InvalidRoutes,
-                "http_server",
-                "add_routes",
-                "parsing",
-                "Invalid UTF-8 JSON string passed to add_routes".to_string(),
-                Some(serde_json::json!({
-                    "reason": "non_utf8",
-                    "routesPtr": format!("{:p}", routes_ptr)
-                })),
-            );
+    tracing::info!(routes_ptr=?routes_ptr, "add_routes called13");
 
-            return json::serialize_and_to_c_string(&http_error);
-        }
-    };
+    // Deserialize length-prefixed buffer directly into Vec<(u8, String)>
+    let routes_u8: Vec<(u8, String)> =
+        match unsafe { string::len_prefixed_ptr_deserialize::<Vec<(u8, String)>>(routes_ptr) } {
+            Ok(r) => r,
+            Err(_e) => {
+                let http_error = HttpServerError::new(
+                    HttpServerErrorCode::InvalidRoutes,
+                    "http_server",
+                    "add_routes",
+                    "parsing",
+                    "Invalid JSON string for routes list".to_string(),
+                    Some(serde_json::json!({"routesPtr": format!("{:p}", routes_ptr)})),
+                );
 
-    let routes_u8: Vec<(u8, String)> = match serde_json::from_str::<Vec<(u8, String)>>(routes_str) {
-        Ok(r) => r,
-        Err(e) => {
-            let http_error = HttpServerError::new(
-                HttpServerErrorCode::InvalidRoutes,
-                "http_server",
-                "add_routes",
-                "parsing",
-                "Invalid JSON string for routes list".to_string(),
-                Some(
-                    serde_json::json!({"routesLength": routes_str.len(), "routesPreview": routes_str.chars().take(200).collect::<String>(), "serdeError": e.to_string()}),
-                ),
-            );
-
-            return json::serialize_and_to_c_string(&http_error);
-        }
-    };
+                return serialize_and_to_len_prefixed_buffer(&http_error);
+            }
+        };
 
     let mut routes: Vec<(HttpMethod, String)> = Vec::with_capacity(routes_u8.len());
 
@@ -331,7 +297,7 @@ pub unsafe extern "C" fn add_routes(
                     Some(serde_json::json!({"invalidMethod": m})),
                 );
 
-                return json::serialize_and_to_c_string(&http_error);
+                return serialize_and_to_len_prefixed_buffer(&http_error);
             }
         }
     }
@@ -346,7 +312,7 @@ pub unsafe extern "C" fn add_routes(
         let be = make_router_sealed_error("add_routes", detail, true);
         let he = HttpServerError::from(be);
 
-        return json::serialize_and_to_c_string(&he);
+        return serialize_and_to_len_prefixed_buffer(&he);
     }
 
     match router_mut.add_bulk(routes) {
@@ -355,7 +321,7 @@ pub unsafe extern "C" fn add_routes(
 
             tracing::event!(tracing::Level::DEBUG, count = cnt as u64, "routes added");
 
-            json::serialize_and_to_c_string(&r)
+            serialize_and_to_len_prefixed_buffer(&r)
         }
         Err(e) => {
             tracing::event!(tracing::Level::ERROR, code=?e.code, count=routes_count as u64, "add_routes error");
@@ -366,7 +332,7 @@ pub unsafe extern "C" fn add_routes(
                 "count": routes_count
             }));
 
-            json::serialize_and_to_c_string(&bunner_error)
+            serialize_and_to_len_prefixed_buffer(&bunner_error)
         }
     }
 }
@@ -565,14 +531,13 @@ pub unsafe extern "C" fn seal_routes(handle: HttpServerHandle) {
     tracing::event!(tracing::Level::INFO, "routes sealed");
 }
 
-/// Frees the memory for a C string that was allocated by Rust.
+/// Frees a raw buffer previously returned by `serialize_and_to_len_prefixed_buffer`.
 ///
 /// # Safety
-/// The `ptr` must be a non-null pointer returned by a Rust function from this crate
-/// (e.g., `router_add` or `handle_request`).
-/// After calling this function, the pointer is dangling and must not be used again.
+/// - `ptr` must be a pointer previously returned by a Rust function in this crate
+///   that registered the buffer via `pointer_registry::register_raw_vec_and_into_raw`.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn free_string(ptr: *mut c_char) {
+pub unsafe extern "C" fn free(ptr: *mut u8) {
     unsafe { pointer_registry::free(ptr) };
 }
 

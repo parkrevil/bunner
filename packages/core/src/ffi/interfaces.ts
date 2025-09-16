@@ -9,7 +9,7 @@ import type { FreePointerFn } from './types';
 export interface BaseFfiSymbols {
   init: (...args: any[]) => Pointer | null;
   destroy: (handle: Pointer) => void;
-  free_string: FreePointerFn;
+  free: FreePointerFn;
 }
 
 /**
@@ -37,16 +37,6 @@ export interface FfiErrorReport {
 export interface JSCallbackEntry<T> {
   resolve: (v: T) => void;
   reject?: (e: unknown) => void;
-}
-
-/**
- * Ffi Pointer Constructor Params
- * @description The parameters for constructing an FfiPointer
- */
-export interface FfiPointerConstructorParams {
-  pointer: Pointer | null;
-  length: number;
-  freeFn: FreePointerFn;
 }
 
 export interface CreateJsCallbackOptions extends FFIFunction {

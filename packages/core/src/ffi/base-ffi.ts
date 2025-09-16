@@ -66,13 +66,13 @@ export abstract class BaseFfi<T extends BaseFfiSymbols> {
    * @param length
    * @returns
    */
-  protected ensure<T>(ptr: Pointer | null, length?: number): T {
+  protected ensure<T>(ptr: Pointer | null): T {
     if (!isPointer(ptr)) {
       throw new BunnerFfiError('Invalid pointer');
     }
 
     try {
-      const result = pointerToJson<T>(ptr, length);
+      const result = pointerToJson<T>(ptr);
 
       if (isFfiErrorReport(result)) {
         throw makeFfiError(result);
@@ -86,7 +86,7 @@ export abstract class BaseFfi<T extends BaseFfiSymbols> {
 
       throw new BunnerFfiError('Failed to parse FFI result', e);
     } finally {
-      this.symbols.free_string(ptr);
+      this.symbols.free(ptr);
     }
   }
 
@@ -123,11 +123,10 @@ export abstract class BaseFfi<T extends BaseFfiSymbols> {
             );
           }
 
-          args[index] = new FfiPointer({
-            pointer: args[index],
-            length,
-            freeFn: this.symbols.free_string.bind(this.symbols),
-          });
+          args[index] = new FfiPointer(
+            args[index],
+            this.symbols.free.bind(this.symbols),
+          );
 
           pointers.push(args[index]);
         });

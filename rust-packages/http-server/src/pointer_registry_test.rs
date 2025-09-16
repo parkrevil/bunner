@@ -1,101 +1,101 @@
 #[cfg(test)]
 mod register {
     use crate::pointer_registry as registry;
-    use std::ffi::CString;
-    use std::os::raw::c_char;
 
     #[test]
-    fn registers_pointer_and_reports_presence() {
-        let c = CString::new("presence").unwrap();
-        let p = registry::register_cstring_and_into_raw(c);
+    fn registers_vec_and_returns_non_null() {
+        let v = b"presence".to_vec();
+        let p = registry::register(v);
         assert!(!p.is_null());
-        assert!(registry::has(p));
 
-        // cleanup by using the public free (registry owns this allocation)
-        unsafe {
-            registry::free(p);
+        // cleanup
+        unsafe { registry::free(p); }
+    }
+
+    #[test]
+    fn registers_multiple_independent_ptrs() {
+        let p1 = registry::register(b"one".to_vec());
+        let p2 = registry::register(b"one".to_vec());
+
+        assert!(registry::has(p1));
+        assert!(registry::has(p2));
+
+        unsafe { registry::free(p1); }
+        unsafe { registry::free(p2); }
+    }
+
+    // Submodule for large / boundary input cases related to `register`
+    mod large_inputs {
+        use crate::pointer_registry as registry;
+
+        #[test]
+        fn register_zero_length_vec() {
+            let v: Vec<u8> = Vec::new();
+            let p = registry::register(v);
+            assert!(!p.is_null());
+
+            // read back presence and free
+            assert!(registry::has(p));
+            unsafe { registry::free(p); }
+            assert!(!registry::has(p));
         }
-        assert!(!registry::has(p));
-    }
 
-    #[test]
-    fn register_ignores_null_pointer() {
-        let p: *mut c_char = std::ptr::null_mut();
-        // should be a no-op and remain unregistered
-        registry::register(p);
-        assert!(!registry::has(p));
-    }
-
-    #[test]
-    fn double_register_updates_tag_no_panic() {
-        let c = CString::new("double_register").unwrap();
-        let p = registry::register_cstring_and_into_raw(c);
-        // registering a raw pointer again should not panic and should leave it present
-        registry::register(p);
-        assert!(registry::has(p));
-
-        unsafe {
-            registry::free(p);
-        }
-    }
-}
-
-#[cfg(test)]
-mod unregister {
-    use crate::pointer_registry as registry;
-    use std::ffi::CString;
-    use std::os::raw::c_char;
-
-    #[test]
-    fn unregisters_pointer_and_reports_absence() {
-        let c = CString::new("unregister").unwrap();
-        let p = registry::register_cstring_and_into_raw(c);
-        assert!(registry::has(p));
-        registry::unregister(p);
-        assert!(!registry::has(p));
-
-        // since unregister does not free the allocation, free it manually to avoid leak
-        unsafe {
-            let _ = CString::from_raw(p);
+        #[test]
+        fn register_large_vec() {
+            // 10MB buffer to exercise large allocations without being too slow
+            let v = vec![0u8; 10 * 1024 * 1024];
+            let p = registry::register(v);
+            assert!(!p.is_null());
+            assert!(registry::has(p));
+            unsafe { registry::free(p); }
+            assert!(!registry::has(p));
         }
     }
 
-    #[test]
-    fn unregister_ignores_null_pointer() {
-        let p: *mut c_char = std::ptr::null_mut();
-        registry::unregister(p);
-        assert!(!registry::has(p));
-    }
+    // Submodule for concurrency-related tests targeting `register`/`free`
+    mod concurrent_register {
+        use std::thread;
 
-    #[test]
-    fn unregister_unknown_pointer_noop() {
-        let fake = 0x12345usize as *mut c_char;
-        // should be safe: unregister will log but not panic or alter unrelated state
-        registry::unregister(fake);
-        assert!(!registry::has(fake));
+        #[test]
+        fn concurrent_register_and_free() {
+            // Deterministic threads count
+            let threads: usize = 8;
+            let mut handles = Vec::new();
+
+            for i in 0..threads {
+                handles.push(thread::spawn(move || {
+                    let data = vec![i as u8; 1024];
+                    let p = crate::pointer_registry::register(data);
+                    // brief work
+                    for _ in 0..10 { std::hint::black_box(()); }
+                    assert!(crate::pointer_registry::has(p));
+                    unsafe { crate::pointer_registry::free(p); }
+                    assert!(!crate::pointer_registry::has(p));
+                }));
+            }
+
+            for h in handles {
+                let _ = h.join();
+            }
+        }
     }
 }
 
 #[cfg(test)]
 mod has {
     use crate::pointer_registry as registry;
-    use std::ffi::CString;
-    use std::os::raw::c_char;
 
     #[test]
-    fn reports_false_for_null_pointer() {
-        let p: *mut c_char = std::ptr::null_mut();
+    fn returns_false_for_null_pointer() {
+        let p: *mut u8 = std::ptr::null_mut();
         assert!(!registry::has(p));
     }
 
     #[test]
-    fn has_reflects_registration_state() {
-        let c = CString::new("has_state").unwrap();
-        let p = registry::register_cstring_and_into_raw(c);
+    fn reflects_registration_state_after_free() {
+        let p = registry::register(b"has_state".to_vec());
         assert!(registry::has(p));
-        unsafe {
-            registry::free(p);
-        }
+        unsafe { registry::free(p); }
         assert!(!registry::has(p));
     }
 }
@@ -103,59 +103,31 @@ mod has {
 #[cfg(test)]
 mod free {
     use crate::pointer_registry as registry;
-    use std::ffi::CString;
-    use std::os::raw::c_char;
 
     #[test]
-    fn frees_pointer_once_and_no_double_free() {
-        let c = CString::new("single_free").unwrap();
-        let p = registry::register_cstring_and_into_raw(c);
+    fn free_frees_and_subsequent_free_is_noop() {
+        let p = registry::register(b"single_free".to_vec());
 
-        unsafe {
-            registry::free(p);
-        }
-        // second free should be a no-op and not panic (registry will log warning)
-        unsafe {
-            registry::free(p);
-        }
+        unsafe { registry::free(p); }
+        // second free should be a no-op and not panic
+        unsafe { registry::free(p); }
 
         assert!(!registry::has(p));
     }
 
     #[test]
     fn free_ignores_null_pointer() {
-        let p: *mut c_char = std::ptr::null_mut();
-        unsafe {
-            registry::free(p);
-        }
+        let p: *mut u8 = std::ptr::null_mut();
+        unsafe { registry::free(p); }
         assert!(!registry::has(p));
     }
 
     #[test]
     fn free_unknown_pointer_noop() {
-        let fake = 0x543210usize as *mut c_char;
-        // calling free on an unknown/non-registered pointer should not call from_raw
-        // and therefore is safe (only logs). It must not panic.
-        unsafe {
-            registry::free(fake);
-        }
+        let fake = 0x543210usize as *mut u8;
+        unsafe { registry::free(fake); }
         assert!(!registry::has(fake));
     }
 }
 
-#[cfg(test)]
-mod register_cstring_and_into_raw {
-    use crate::pointer_registry as registry;
-    use std::ffi::CString;
 
-    #[test]
-    fn register_and_cleanup_roundtrip() {
-        let c = CString::new("roundtrip").unwrap();
-        let p = registry::register_cstring_and_into_raw(c);
-        assert!(registry::has(p));
-        unsafe {
-            registry::free(p);
-        }
-        assert!(!registry::has(p));
-    }
-}

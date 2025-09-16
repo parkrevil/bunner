@@ -1,4 +1,4 @@
-import { CString, suffix, type Pointer } from 'bun:ffi';
+import { CString, read, suffix, type Pointer } from 'bun:ffi';
 import { packageDirectorySync } from 'package-directory';
 
 import { textEncoder } from '../common/instances';
@@ -67,20 +67,10 @@ export function toString(val: FfiStringable) {
  * @param ptr
  * @returns
  */
-export function pointerToJson<T>(ptr: Pointer, length?: number) {
-  const json = new CString(ptr, 0, length);
+export function pointerToJson<T>(ptr: Pointer) {
+  const length = read.u32(ptr, 0);
 
-  return JSON.parse(json.toString()) as T;
-}
-
-/**
- * Convert a pointer to a JSON object
- * @param ptr
- * @param length
- * @returns
- */
-export function pointerToString(ptr: Pointer, length?: number) {
-  return new CString(ptr, 0, length).toString();
+  return JSON.parse(new CString(ptr, 4, length).toString()) as T;
 }
 
 /**
