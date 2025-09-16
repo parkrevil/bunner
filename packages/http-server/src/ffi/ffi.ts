@@ -182,7 +182,7 @@ export class Ffi extends BaseFfi<FfiSymbols> {
         throw new BunnerError('Request ID pointer is null');
       }
 
-      const requestId = requestIdPtr.toString();
+      requestId = requestIdPtr.toString();
 
       if (!requestId) {
         throw new BunnerError('Request ID is null');
