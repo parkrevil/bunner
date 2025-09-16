@@ -36,7 +36,6 @@ pub fn make_result<T: Serialize>(value: &T) -> *mut u8 {
 /// Create a registered length-prefixed buffer from a Rust string and return the raw pointer.
 pub fn make_string_pointer(s: &str) -> *mut u8 {
     let v = string_to_len_prefixed_buffer(s);
-    let p = pointer_registry::register(v);
 
-    p
+    pointer_registry::register(v)
 }
