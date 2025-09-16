@@ -54,12 +54,15 @@ fn init() -> xchan::Sender<CallbackJob> {
                     }
                 };
 
-                // SAFETY: res_ptr is expected to be a valid pointer allocated by Rust.
+                // SAFETY: res_ptr is expected to be a valid pointer to a len-prefixed buffer allocated by Rust.
                 // The callback should free it; however, if the callback panics, we catch and free here.
                 let result_len: u32 = if job.result_ptr.is_null() {
                     0u32
                 } else {
-                    unsafe { CStr::from_ptr(job.result_ptr).to_bytes().len() as u32 }
+                    unsafe {
+                        let header = std::slice::from_raw_parts(job.result_ptr as *const u8, 4);
+                        u32::from_le_bytes([header[0], header[1], header[2], header[3]])
+                    }
                 };
 
                 let res = std::panic::catch_unwind(|| {
@@ -81,13 +84,21 @@ fn init() -> xchan::Sender<CallbackJob> {
                         };
                     }
                     if !job.result_ptr.is_null() {
-                        // Reclaim and drop CString to free allocation
-                        unsafe {
-                            let _ = CString::from_raw(job.result_ptr);
-                        };
+                        // Free len-prefixed buffer via pointer_registry
+                        unsafe { crate::pointer_registry::free(job.result_ptr as *mut u8) };
                     }
 
                     tracing::event!(tracing::Level::ERROR, reason = "callback_panic_caught");
+                } else {
+                    // Successful callback: per FFI contract, JS will free the `result_ptr`,
+                    // but JS will NOT free the `request_id` string. If we created a CString
+                    // and transferred ownership to the dispatcher, we must free it here to
+                    // avoid leaking the request id allocation.
+                    if !request_id_ptr.is_null() {
+                        unsafe {
+                            let _ = CString::from_raw(request_id_ptr);
+                        }
+                    }
                 }
 
                 tracing::event!(
@@ -144,8 +155,8 @@ pub fn enqueue(
             };
         }
 
-        unsafe {
-            let _ = CString::from_raw(res_ptr);
-        };
+        if !res_ptr.is_null() {
+            unsafe { crate::pointer_registry::free(res_ptr as *mut u8) };
+        }
     }
 }

@@ -38,7 +38,7 @@ use crate::router::structures::RouterError;
 use crate::structure::AddRouteResult;
 use crate::thread_pool::{shutdown_pool, submit_job};
 use crate::utils::ffi::{make_result, parse_json_pointer};
-use crate::utils::string;
+// `string` utilities not needed in this function anymore
 
 pub type HttpServerHandle = *mut HttpServer;
 
@@ -46,7 +46,6 @@ pub type HttpServerHandle = *mut HttpServer;
 pub struct HttpServer {
     router: parking_lot::RwLock<router::Router>,
     router_readonly: OnceLock<Arc<router::RouterReadOnly>>,
-    cancel_map: parking_lot::RwLock<hashbrown::HashMap<String, Arc<std::sync::atomic::AtomicBool>>>,
 }
 
 fn make_router_sealed_error(
@@ -91,7 +90,6 @@ pub extern "C" fn init() -> HttpServerHandle {
     let server = Box::new(HttpServer {
         router: parking_lot::RwLock::new(router::Router::new(None)),
         router_readonly: OnceLock::new(),
-        cancel_map: parking_lot::RwLock::new(hashbrown::HashMap::new()),
     });
 
     Box::into_raw(server)
@@ -255,7 +253,7 @@ pub unsafe extern "C" fn add_routes(handle: HttpServerHandle, routes_ptr: *const
     }
 
     let routes: Vec<(HttpMethod, String)> =
-        match parse_json_pointer::<Vec<(HttpMethod, String)>>(routes_ptr) {
+        match unsafe { parse_json_pointer::<Vec<(HttpMethod, String)>>(routes_ptr) } {
             Ok(v) => v,
             Err(_) => {
                 let http_error = HttpServerError::new(
@@ -316,9 +314,12 @@ pub unsafe extern "C" fn add_routes(handle: HttpServerHandle, routes_ptr: *const
 pub unsafe extern "C" fn handle_request(
     handle: HttpServerHandle,
     request_id_ptr: *const c_char,
-    payload_ptr: *const c_char,
+    payload_ptr: *const u8,
     cb: HandleRequestCallback,
 ) {
+    // Sleep for 5 seconds before handling the request
+    std::thread::sleep(std::time::Duration::from_secs(5));
+
     if handle.is_null() {
         let err = HttpServerError::new(
             HttpServerErrorCode::HandleIsNull,
@@ -349,26 +350,6 @@ pub unsafe extern "C" fn handle_request(
         return;
     }
 
-    let request_id_str = {
-        match unsafe { CStr::from_ptr(request_id_ptr).to_str() } {
-            Ok(s) => s,
-            Err(_) => {
-                let http_error = HttpServerError::new(
-                    HttpServerErrorCode::InvalidRequestId,
-                    "http_server",
-                    "handle_request",
-                    "parsing",
-                    "Request id is not valid UTF-8".to_string(),
-                    Some(serde_json::json!({"requestIdPtr": format!("{:p}", request_id_ptr)})),
-                );
-
-                callback_handle_request(cb, None, None, &http_error);
-
-                return;
-            }
-        }
-    };
-
     if payload_ptr.is_null() {
         let err = HttpServerError::new(
             HttpServerErrorCode::InvalidPayload,
@@ -376,36 +357,14 @@ pub unsafe extern "C" fn handle_request(
             "handle_request",
             "validation",
             "Payload pointer is null".to_string(),
-            Some(serde_json::json!({"requestId": request_id_str})),
+            Some(serde_json::json!(null)),
         );
 
-        callback_handle_request(cb, Some(request_id_str), None, &err);
+        callback_handle_request(cb, None, None, &err);
 
         return;
     }
 
-    let payload_str = match unsafe { string::cstr_to_str(payload_ptr) } {
-        Ok(s) => s,
-        Err(_) => {
-            let err = HttpServerError::new(
-                HttpServerErrorCode::InvalidPayload,
-                "http_server",
-                "handle_request",
-                "parsing",
-                "Payload is not valid UTF-8 JSON".to_string(),
-                Some(
-                    serde_json::json!({"requestId": request_id_str, "payloadPtr": format!("{:p}", payload_ptr)}),
-                ),
-            );
-
-            callback_handle_request(cb, Some(request_id_str), None, &err);
-
-            return;
-        }
-    };
-
-    let payload_owned: String = payload_str.to_owned();
-    let payload_len_for_log: usize = payload_owned.len();
     let http_server = unsafe { &*handle };
     let ro_opt = http_server.router_readonly.get().map(Arc::clone);
 
@@ -416,37 +375,23 @@ pub unsafe extern "C" fn handle_request(
             "seal",
             "validation",
             "Routes not sealed; call seal_routes before handling requests".to_string(),
-            Some(serde_json::json!({"requestId": request_id_str})),
+            None,
         );
 
-        callback_handle_request(cb, Some(request_id_str), None, &http_error);
+        callback_handle_request(cb, None, None, &http_error);
 
         return;
     }
 
-    let request_id_owned = request_id_str.to_owned();
     let ro = ro_opt.unwrap();
-    let cancel_flag = {
-        let mut map = http_server.cancel_map.write();
-        let f = Arc::new(std::sync::atomic::AtomicBool::new(false));
-
-        map.insert(request_id_owned.clone(), Arc::clone(&f));
-
-        f
-    };
+    let request_id_ptr_usize = request_id_ptr as usize;
+    let payload_ptr_usize = payload_ptr as usize;
 
     match submit_job(Box::new(move || {
-        // Worker will always perform the callback; main thread only observes enqueue success/failure
-        process_request(
-            cb,
-            request_id_owned.clone(),
-            payload_owned,
-            ro,
-            Some(cancel_flag),
-        );
+        let payload_ptr = payload_ptr_usize as *const u8;
+        let request_id_ptr = request_id_ptr_usize as *const c_char;
 
-        // cleanup cancel map entry best-effort (can't access server here; leave for timeout GC or future hook)
-        let _ = request_id_owned;
+        unsafe { process_request(cb, request_id_ptr, payload_ptr, ro) };
     })) {
         Ok(()) => {
             tracing::event!(tracing::Level::DEBUG, "request enqueued");
@@ -455,8 +400,7 @@ pub unsafe extern "C" fn handle_request(
             tracing::event!(
                 tracing::Level::WARN,
                 reason = "queue_full",
-                request_id = %request_id_str,
-                payload_len = payload_len_for_log as u64
+                "Failed to enqueue request; queue may be full"
             );
 
             let http_error = HttpServerError::new(
@@ -465,10 +409,10 @@ pub unsafe extern "C" fn handle_request(
                 "enqueue",
                 "backpressure",
                 "Request queue is full".to_string(),
-                Some(serde_json::json!({"requestId": request_id_str})),
+                None,
             );
 
-            callback_handle_request(cb, Some(request_id_str), None, &http_error);
+            callback_handle_request(cb, None, None, &http_error);
         }
     }
 }
@@ -508,24 +452,4 @@ pub unsafe extern "C" fn seal_routes(handle: HttpServerHandle) {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn free(ptr: *mut u8) {
     unsafe { pointer_registry::free(ptr) };
-}
-
-/// Cancels an in-flight request by id (no callback will be sent if not already).
-///
-/// # Safety
-/// - `handle` must be a valid pointer returned by `init`.
-/// - `request_id_ptr` must be a valid, non-null, null-terminated C string pointer to the request id.
-/// - The pointer must remain valid for the duration of the call.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cancel_request(handle: HttpServerHandle, request_id_ptr: *const c_char) {
-    if handle.is_null() || request_id_ptr.is_null() {
-        return;
-    }
-    let http_server = unsafe { &*handle };
-    if let Ok(s) = unsafe { CStr::from_ptr(request_id_ptr) }.to_str() {
-        let map = http_server.cancel_map.write();
-        if let Some(flag) = map.get(s) {
-            flag.store(true, std::sync::atomic::Ordering::SeqCst);
-        }
-    }
 }

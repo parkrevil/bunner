@@ -11,12 +11,14 @@ pub unsafe fn cstr_to_str<'a>(value: *const c_char) -> Result<&'a str, Utf8Error
     unsafe { CStr::from_ptr(value).to_str() }
 }
 
-/// # Safety
-/// `ptr` must be a valid pointer to at least 4 bytes (the length header). The memory for
-/// length+payload must be valid for reads of `4 + len` bytes and the payload must be
-/// valid UTF-8.
 /// Read a 4-byte little-endian length-prefixed buffer and deserialize JSON into T.
-pub fn len_prefixed_pointer_to_string(ptr: *const u8) -> Result<String, InternalErrorCode> {
+/// # Safety
+/// - `ptr` must be a valid pointer to at least 4 bytes (the length header).
+/// - The memory for length+payload must be valid for reads of `4 + len` bytes and the payload
+///   must be valid UTF-8.
+///
+/// This function dereferences raw pointers and therefore is `unsafe`.
+pub unsafe fn len_prefixed_pointer_to_string(ptr: *const u8) -> Result<String, InternalErrorCode> {
     if ptr.is_null() {
         tracing::error!("len_prefixed_ptr_deserialize: ptr is null");
 

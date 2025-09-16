@@ -1,13 +1,12 @@
 use percent_encoding::percent_decode_str;
 use serde_json::Value as JsonValue;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::{ffi::CStr, os::raw::c_char, sync::Arc};
 
 use crate::enums::HttpMethod;
 use crate::errors::{HttpServerError, HttpServerErrorCode};
 use crate::middleware::{BodyParser, Chain, CookieParser, HeaderParser, UrlParser};
 use crate::router;
-use crate::utils::json;
+use crate::utils::ffi::parse_json_pointer;
 
 use super::structures::HandleRequestOutput;
 use super::{
@@ -15,33 +14,48 @@ use super::{
     HandleRequestPayload,
 };
 
-#[tracing::instrument(skip(cb, payload_str, ro), fields(request_id=%request_id))]
-pub fn handle(
+/// # Safety
+/// - `request_id_ptr` must be a valid, non-null, null-terminated C string pointer until this
+///   function has converted it to a Rust-owned `String`.
+/// - `payload_ptr` must be a valid pointer to a 4-byte little-endian length-prefixed buffer
+///   and remain valid for the duration of the call.
+/// - The caller must ensure both pointers remain valid while this function executes.
+#[tracing::instrument(skip(cb, payload_ptr, ro), fields(request_id=?request_id_ptr))]
+pub unsafe fn handle(
     cb: HandleRequestCallback,
-    request_id: String,
-    payload_str: String,
+    request_id_ptr: *const c_char,
+    payload_ptr: *const u8,
     ro: Arc<router::RouterReadOnly>,
-    cancel: Option<Arc<AtomicBool>>,
 ) {
-    if let Some(ref c) = cancel
-        && c.load(Ordering::SeqCst)
-    {
-        return;
-    }
+    // Convert request_id_ptr to &str for error messages and callbacks
+    let request_id = match unsafe { CStr::from_ptr(request_id_ptr).to_str() } {
+        Ok(s) => s.to_string(),
+        Err(_) => {
+            let http_error = HttpServerError::new(
+                HttpServerErrorCode::InvalidRequestId,
+                "request_handler",
+                "handle",
+                "parsing",
+                "Request id is not valid UTF-8".to_string(),
+                Some(serde_json::json!({"requestIdPtr": format!("{:p}", request_id_ptr)})),
+            );
 
-    let payload = match json::deserialize::<HandleRequestPayload>(&payload_str) {
+            callback_handle_request(cb, None, None, &http_error);
+
+            return;
+        }
+    };
+    let payload = match unsafe { parse_json_pointer::<HandleRequestPayload>(payload_ptr) } {
         Ok(p) => p,
         Err(_) => {
-            let preview: String = payload_str.chars().take(200).collect();
+            // We cannot easily construct a preview without reading the pointer here; keep error concise.
             let err = HttpServerError::new(
                 HttpServerErrorCode::InvalidPayload,
                 "request_handler",
                 "parse_payload",
                 "parsing",
                 "Failed to parse request payload JSON".to_string(),
-                Some(
-                    serde_json::json!({"requestId": request_id, "payloadPreview": preview, "payloadLength": payload_str.len()}),
-                ),
+                Some(serde_json::json!({"requestId": request_id})),
             );
 
             tracing::event!(tracing::Level::ERROR, reason="parse_payload_error", request_id=%request_id);
@@ -51,7 +65,6 @@ pub fn handle(
             return;
         }
     };
-
     let http_method = match HttpMethod::from_u8(payload.http_method) {
         Ok(m) => m,
         Err(e) => {
@@ -71,7 +84,6 @@ pub fn handle(
             return;
         }
     };
-
     let mut request = BunnerRequest {
         url: payload.url.clone(),
         http_method,
@@ -95,12 +107,6 @@ pub fn handle(
         .with(UrlParser)
         .with(CookieParser)
         .with(BodyParser);
-
-    if let Some(ref c) = cancel
-        && c.load(Ordering::SeqCst)
-    {
-        return;
-    }
 
     if !chain.execute(&mut request, &mut response, &payload) {
         let output = HandleRequestOutput { request, response };

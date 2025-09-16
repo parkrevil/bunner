@@ -105,7 +105,7 @@ export abstract class BaseFfi<T extends BaseFfiSymbols> {
     const freeArgIndexes: number[] = [];
 
     options.args?.forEach((arg, index) => {
-      if (arg === FFIType.pointer || arg === FFIType.buffer) {
+      if (arg === FFIType.pointer) {
         freeArgIndexes.push(index);
       }
     });
@@ -115,14 +115,6 @@ export abstract class BaseFfi<T extends BaseFfiSymbols> {
 
       try {
         freeArgIndexes.forEach(index => {
-          const length = args[index + 1];
-
-          if (typeof length !== 'number') {
-            throw new BunnerFfiError(
-              `Expected length argument at index ${index + 1} for FFI callback`,
-            );
-          }
-
           args[index] = new FfiPointer(
             args[index],
             this.symbols.free.bind(this.symbols),

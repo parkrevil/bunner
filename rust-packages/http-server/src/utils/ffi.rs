@@ -4,17 +4,20 @@ use crate::errors::internal_error::InternalErrorCode;
 use serde::{de::DeserializeOwned, Serialize};
 
 /// Parse a len-prefixed pointer into a JSON string, then deserialize into `serde_json::Value`.
-pub fn parse_json_pointer<T: DeserializeOwned>(ptr: *const u8) -> Result<T, InternalErrorCode> {
+///
+/// # Safety
+/// - `ptr` must be a valid pointer to a 4-byte little-endian length-prefixed buffer.
+/// - The memory behind `ptr` must remain valid for the duration of the call.
+pub unsafe fn parse_json_pointer<T: DeserializeOwned>(
+    ptr: *const u8,
+) -> Result<T, InternalErrorCode> {
     if ptr.is_null() {
         return Err(InternalErrorCode::PointerIsNull);
     }
 
     let s = unsafe { len_prefixed_pointer_to_string(ptr)? };
 
-    match deserialize::<T>(&s) {
-        Ok(v) => Ok(v),
-        Err(e) => Err(e),
-    }
+    deserialize::<T>(&s)
 }
 
 /// Serialize `value` to JSON string and return a len-prefixed raw pointer allocated/registered by Rust.
