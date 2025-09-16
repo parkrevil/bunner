@@ -58,11 +58,9 @@ fn init() -> xchan::Sender<CallbackJob> {
                     }
 
                     tracing::event!(tracing::Level::ERROR, reason = "callback_panic_caught");
-                } else {
-                    if !request_id_ptr.is_null() {
-                        unsafe {
-                            let _ = CString::from_raw(request_id_ptr);
-                        }
+                } else if !request_id_ptr.is_null() {
+                    unsafe {
+                        let _ = CString::from_raw(request_id_ptr);
                     }
                 }
 
