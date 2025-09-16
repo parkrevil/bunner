@@ -1,6 +1,10 @@
 use percent_encoding::percent_decode_str;
 use serde_json::Value as JsonValue;
-use std::{ffi::CStr, os::raw::c_char, sync::{Arc, mpsc}};
+use std::{
+    ffi::CStr,
+    os::raw::c_char,
+    sync::{mpsc, Arc},
+};
 
 use crate::enums::HttpMethod;
 use crate::errors::{HttpServerError, HttpServerErrorCode};
