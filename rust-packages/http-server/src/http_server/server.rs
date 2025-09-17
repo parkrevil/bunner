@@ -1,16 +1,18 @@
 use crate::enums::HttpMethod;
+use crate::request_handler::RequestHandler;
 use crate::router::Router;
-use std::{ffi::CStr, os::raw::c_char};
 
 #[repr(C)]
 pub struct HttpServer {
     router: Router,
+    handler: RequestHandler,
 }
 
 impl HttpServer {
     pub fn new() -> Self {
         HttpServer {
             router: Router::new(None),
+            handler: RequestHandler::new(),
         }
     }
 
