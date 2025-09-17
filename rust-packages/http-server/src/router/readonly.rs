@@ -27,13 +27,29 @@ impl RouterReadOnly {
     /// - No interior mutability
     /// - Safe to share across threads (`Send + Sync` by construction)
     pub fn from_router(router: &Router) -> Self {
+        let guard = router.inner.read();
+
         let mut maps: [FastHashMap<Box<str>, u16>; HTTP_METHOD_COUNT] = Default::default();
         for (i, out_map) in maps.iter_mut().enumerate().take(HTTP_METHOD_COUNT) {
-            // 직접 clone하는 것이 더 명확하고 효율적
-            *out_map = router.radix_tree.static_route_full_mapping[i].clone();
+            *out_map = guard.radix_tree.static_route_full_mapping[i].clone();
         }
 
-        let root = ReadOnlyNode::from_node(&router.radix_tree.root_node);
+        let root = ReadOnlyNode::from_node(&guard.radix_tree.root_node);
+
+        RouterReadOnly {
+            static_maps: maps,
+            root,
+        }
+    }
+
+    /// Build a read-only snapshot directly from a radix tree reference.
+    pub fn from_radix_tree(tree: &crate::router::radix_tree::RadixTree) -> Self {
+        let mut maps: [FastHashMap<Box<str>, u16>; HTTP_METHOD_COUNT] = Default::default();
+        for (i, out_map) in maps.iter_mut().enumerate().take(HTTP_METHOD_COUNT) {
+            *out_map = tree.static_route_full_mapping[i].clone();
+        }
+
+        let root = ReadOnlyNode::from_node(&tree.root_node);
 
         RouterReadOnly {
             static_maps: maps,

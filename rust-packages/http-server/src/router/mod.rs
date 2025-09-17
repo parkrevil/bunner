@@ -12,6 +12,7 @@ pub use errors::RouterErrorCode;
 pub use readonly::RouterReadOnly;
 pub use structures::RouterError;
 use structures::RouterResult;
+use parking_lot::RwLock;
 
 #[derive(Debug, Default)]
 pub struct RouteMatchResult {
@@ -19,47 +20,56 @@ pub struct RouteMatchResult {
     pub parameter_offsets: Vec<(String, (usize, usize))>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
+struct RouterInner {
+    pub radix_tree: radix_tree::RadixTree,
+    pub ro: std::sync::OnceLock<std::sync::Arc<RouterReadOnly>>,
+}
+
+#[derive(Debug)]
 pub struct Router {
-    radix_tree: radix_tree::RadixTree,
-    read_only: std::sync::OnceLock<std::sync::Arc<RouterReadOnly>>,
+    inner: RwLock<RouterInner>,
 }
 
 impl Router {
     pub fn new(options: Option<RouterOptions>) -> Self {
         Self {
-            radix_tree: radix_tree::RadixTree::new(options.unwrap_or_default()),
-            read_only: std::sync::OnceLock::new(),
+            inner: RwLock::new(RouterInner {
+                radix_tree: radix_tree::RadixTree::new(options.unwrap_or_default()),
+                ro: std::sync::OnceLock::new(),
+            }),
         }
     }
 
-    pub fn add(&mut self, method: HttpMethod, path: &str) -> RouterResult<u16> {
-        self.radix_tree.insert(method, path)
+    pub fn add(&self, method: HttpMethod, path: &str) -> RouterResult<u16> {
+        let mut g = self.inner.write();
+        g.radix_tree.insert(method, path)
     }
 
-    pub fn add_bulk<I>(&mut self, entries: I) -> RouterResult<Vec<u16>>
+    pub fn add_bulk<I>(&self, entries: I) -> RouterResult<Vec<u16>>
     where
         I: IntoIterator<Item = (HttpMethod, String)>,
     {
-        self.radix_tree.insert_bulk(entries)
+        let mut g = self.inner.write();
+        g.radix_tree.insert_bulk(entries)
     }
 
     pub fn is_sealed(&self) -> bool {
-        self.read_only.get().is_some()
+        let g = self.inner.read();
+        g.ro.get().is_some()
     }
 
-    pub fn seal(&mut self) {
-        // Finalize radix tree and build read-only snapshot.
-        self.radix_tree.finalize();
-        let ro = RouterReadOnly::from_router(self);
+    pub fn seal(&self) {
+        let mut g = self.inner.write();
 
-        // Create Arc for the snapshot before replacing `self`.
+        // finalize and build readonly snapshot from the radix tree
+        g.radix_tree.finalize();
+        let ro = RouterReadOnly::from_radix_tree(&g.radix_tree);
         let arc = std::sync::Arc::new(ro.clone());
 
-        // Replace builder router with a fresh one in-place, then store the
-        // snapshot into the new router's OnceLock so it persists for readers.
-        let _old = std::mem::replace(self, Router::new(None));
-        let _ = self.read_only.set(arc);
+        // replace radix_tree with a fresh one and set readonly snapshot on the inner
+        g.radix_tree = radix_tree::RadixTree::new(Default::default());
+        let _ = g.ro.set(arc);
     }
 }
 
