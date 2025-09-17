@@ -30,7 +30,7 @@ use std::io;
 use std::{
     ffi::CStr,
     os::raw::c_char,
-    sync::{mpsc, Arc, OnceLock},
+    sync::{mpsc, Arc},
     time::Duration,
 };
 use tracing_subscriber::{fmt, EnvFilter};
@@ -45,15 +45,16 @@ use crate::router::structures::RouterError;
 use crate::structure::AddRouteResult;
 use crate::thread_pool::{shutdown_pool, submit_job};
 use crate::utils::ffi::{make_result, parse_json_pointer};
+mod http_server;
+use http_server::HttpServerId;
+use http_server::server::HttpServer;
+use http_server::{register as register_http_server, unregister as unregister_http_server, lookup as lookup_http_server};
 // `string` utilities not needed in this function anymore
 
-pub type HttpServerHandle = *mut HttpServer;
+// `HttpServerHandle` is re-exported from `http_server::types`.
 
-#[repr(C)]
-pub struct HttpServer {
-    router: parking_lot::RwLock<router::Router>,
-    router_readonly: OnceLock<Arc<router::RouterReadOnly>>,
-}
+// Global registry for instances. ID 0 is reserved as invalid/null.
+// registry implementation lives in `http_server_registry` module
 
 fn make_router_sealed_error(
     operation: &str,
@@ -86,8 +87,8 @@ fn make_router_sealed_error(
 }
 
 #[unsafe(no_mangle)]
-#[tracing::instrument(skip_all, fields(operation = "init"))]
-pub extern "C" fn init() -> HttpServerHandle {
+#[tracing::instrument(skip_all, fields(operation = "construct"))]
+pub extern "C" fn construct(_routes_ptr: *const u8) -> HttpServerId {
     // Force logger to write to stderr so embedding runtimes (like Bun) capture logs reliably.
     let subscriber = fmt()
         .with_env_filter(EnvFilter::new("trace"))
@@ -99,12 +100,8 @@ pub extern "C" fn init() -> HttpServerHandle {
 
     tracing::info!("Bunner Rust Http Server initialized.");
 
-    let server = Box::new(HttpServer {
-        router: parking_lot::RwLock::new(router::Router::new(None)),
-        router_readonly: OnceLock::new(),
-    });
-
-    Box::into_raw(server)
+    let boxed = Box::new(HttpServer::new());
+    register_http_server(boxed)
 }
 
 /// Destroys the HttpServer instance and frees all associated memory.
@@ -114,17 +111,18 @@ pub extern "C" fn init() -> HttpServerHandle {
 /// After calling this function, the handle is dangling and must not be used again.
 #[unsafe(no_mangle)]
 #[tracing::instrument(skip_all, fields(operation="destroy", handle=?handle))]
-pub unsafe extern "C" fn destroy(handle: HttpServerHandle) {
+pub unsafe extern "C" fn destroy(handle: HttpServerId) {
     tracing::event!(tracing::Level::INFO, "http_server destroy called");
-
-    if handle.is_null() {
+    if handle == 0 {
         shutdown_pool();
         return;
     }
 
-    let http_server = unsafe { Box::from_raw(handle) };
-
-    drop(http_server);
+    if let Some(ptr) = unregister_http_server(handle) {
+        // reclaim the boxed server
+        let http_server = unsafe { Box::from_raw(ptr) };
+        drop(http_server);
+    }
 
     shutdown_pool();
 }
@@ -139,11 +137,11 @@ pub unsafe extern "C" fn destroy(handle: HttpServerHandle) {
 #[unsafe(no_mangle)]
 #[tracing::instrument(skip_all, fields(operation="add_route", http_method=http_method))]
 pub unsafe extern "C" fn add_route(
-    handle: HttpServerHandle,
+    handle: HttpServerId,
     http_method: u8,
     path: *const c_char,
 ) -> *mut u8 {
-    if handle.is_null() {
+    if handle == 0 {
         let http_error = HttpServerError::new(
             HttpServerErrorCode::HandleIsNull,
             "http_server",
@@ -191,7 +189,23 @@ pub unsafe extern "C" fn add_route(
         }
     };
 
-    let http_server = unsafe { &*handle };
+    let ptr = match lookup_http_server(handle) {
+        Some(p) => p,
+        None => {
+            let http_error = HttpServerError::new(
+                HttpServerErrorCode::HandleIsNull,
+                "http_server",
+                "add_route",
+                "validation",
+                format!("Null handle passed to {}", "add_route"),
+                Some(serde_json::json!(null)),
+            );
+
+            return make_result(&http_error);
+        }
+    };
+
+    let http_server = unsafe { &*ptr };
     let mut guard = http_server.router.write();
     let router_mut = &mut *guard;
     let path_str = unsafe { CStr::from_ptr(path) }.to_string_lossy();
@@ -237,8 +251,8 @@ pub unsafe extern "C" fn add_route(
 /// - Passing invalid pointers or non-UTF8 data is undefined behavior.
 #[unsafe(no_mangle)]
 #[tracing::instrument(skip_all, fields(operation = "add_routes"))]
-pub unsafe extern "C" fn add_routes(handle: HttpServerHandle, routes_ptr: *const u8) -> *mut u8 {
-    if handle.is_null() {
+pub unsafe extern "C" fn add_routes(handle: HttpServerId, routes_ptr: *const u8) -> *mut u8 {
+    if handle == 0 {
         let http_error = HttpServerError::new(
             HttpServerErrorCode::HandleIsNull,
             "http_server",
@@ -281,7 +295,23 @@ pub unsafe extern "C" fn add_routes(handle: HttpServerHandle, routes_ptr: *const
             }
         };
 
-    let http_server = unsafe { &*handle };
+    let ptr = match lookup_http_server(handle) {
+        Some(p) => p,
+        None => {
+            let http_error = HttpServerError::new(
+                HttpServerErrorCode::HandleIsNull,
+                "http_server",
+                "add_routes",
+                "validation",
+                format!("Null handle passed to {}", "add_routes"),
+                Some(serde_json::json!(null)),
+            );
+
+            return make_result(&http_error);
+        }
+    };
+
+    let http_server = unsafe { &*ptr };
     let mut guard = http_server.router.write();
     let router_mut = &mut *guard;
     let routes_count = routes.len();
@@ -324,12 +354,12 @@ pub unsafe extern "C" fn add_routes(handle: HttpServerHandle, routes_ptr: *const
 #[unsafe(no_mangle)]
 #[tracing::instrument(skip_all, fields(operation = "handle_request"))]
 pub unsafe extern "C" fn handle_request(
-    handle: HttpServerHandle,
+    handle: HttpServerId,
     request_id_ptr: *const c_char,
     payload_ptr: *const u8,
     cb: HandleRequestCallback,
 ) {
-    if handle.is_null() {
+    if handle == 0 {
         let err = HttpServerError::new(
             HttpServerErrorCode::HandleIsNull,
             "http_server",
@@ -374,7 +404,25 @@ pub unsafe extern "C" fn handle_request(
         return;
     }
 
-    let http_server = unsafe { &*handle };
+    let ptr = match lookup_http_server(handle) {
+        Some(p) => p,
+        None => {
+            let err = HttpServerError::new(
+                HttpServerErrorCode::HandleIsNull,
+                "http_server",
+                "handle_request",
+                "system",
+                "Null handle passed to handle_request".to_string(),
+                Some(serde_json::json!(null)),
+            );
+
+            callback_handle_request(cb, None, None, &err);
+
+            return;
+        }
+    };
+
+    let http_server = unsafe { &*ptr };
     let ro_opt = http_server.router_readonly.get().map(Arc::clone);
 
     if ro_opt.is_none() {
@@ -463,8 +511,13 @@ pub unsafe extern "C" fn handle_request(
 /// The `handle` pointer must be a valid pointer returned by `init`.
 #[unsafe(no_mangle)]
 #[tracing::instrument(skip_all, fields(operation = "seal_routes"))]
-pub unsafe extern "C" fn seal_routes(handle: HttpServerHandle) {
-    let http_server = unsafe { &*handle };
+pub unsafe extern "C" fn seal_routes(handle: HttpServerId) {
+    let ptr = match lookup_http_server(handle) {
+        Some(p) => p,
+        None => return,
+    };
+
+    let http_server = unsafe { &*ptr };
 
     {
         let mut guard = http_server.router.write();
