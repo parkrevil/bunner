@@ -43,6 +43,20 @@ impl Router {
 
     pub fn add(&self, method: HttpMethod, path: &str) -> RouterResult<u16> {
         let mut g = self.inner.write();
+
+        if self.is_sealed() {
+            let detail = serde_json::json!({ "path": path });
+
+            return Err(Box::new(RouterError::new(
+                RouterErrorCode::RouterSealedCannotInsert,
+                "router",
+                "add",
+                "validation",
+                "Router is sealed; cannot insert routes".to_string(),
+                Some(detail),
+            )));
+        }
+
         g.radix_tree.insert(method, path)
     }
 
@@ -51,6 +65,23 @@ impl Router {
         I: IntoIterator<Item = (HttpMethod, String)>,
     {
         let mut g = self.inner.write();
+
+        if self.is_sealed() {
+            // we can't know the exact count without consuming the iterator; collect temporarily
+            let entries_vec: Vec<(HttpMethod, String)> = entries.into_iter().collect();
+            let cnt = entries_vec.len();
+            let detail = serde_json::json!({ "count": cnt });
+
+            return Err(Box::new(RouterError::new(
+                RouterErrorCode::RouterSealedCannotInsert,
+                "router",
+                "add_bulk",
+                "validation",
+                "Router is sealed; cannot insert bulk routes".to_string(),
+                Some(detail),
+            )));
+        }
+
         g.radix_tree.insert_bulk(entries)
     }
 

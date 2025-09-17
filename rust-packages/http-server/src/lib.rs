@@ -18,7 +18,6 @@ pub mod structure;
 mod thread_pool;
 pub mod utils;
 
-// Re-export test helpers located in ../tests_tools for use in unit tests.
 #[cfg(test)]
 #[path = "../tests/utils/mod.rs"]
 pub mod test_utils;
@@ -127,14 +126,14 @@ pub unsafe extern "C" fn destroy(handle: HttpServerId) {
 pub unsafe extern "C" fn add_route(
     handle: HttpServerId,
     http_method: u8,
-    path: *const c_char,
+    path_ptr: *const c_char,
 ) -> *mut u8 {
     let http_server_ptr = match lookup_http_server(handle) {
         Some(p) => p,
         None => {
             let http_error = HttpServerError::new(
                 HttpServerErrorCode::HandleIsNull,
-                "http_server",
+                "ffi",
                 "add_route",
                 "validation",
                 "Invalid handle id passed to add_route".to_string(),
@@ -145,10 +144,10 @@ pub unsafe extern "C" fn add_route(
         }
     };
 
-    if path.is_null() {
+    if path_ptr.is_null() {
         let err = HttpServerError::new(
             HttpServerErrorCode::InvalidPayload,
-            "http_server",
+            "ffi",
             "add_route",
             "validation",
             "Path pointer is null".to_string(),
@@ -165,13 +164,13 @@ pub unsafe extern "C" fn add_route(
         Err(e) => {
             let err = HttpServerError::new(
                 e,
-                "http_server",
+                "ffi",
                 "add_route",
                 "validation",
                 "Invalid httpMethod value when adding route".to_string(),
                 Some(serde_json::json!({
                     "httpMethod": http_method,
-                    "pathPtr": format!("{:p}", path)
+                    "pathPtr": format!("{:p}", path_ptr)
                 })),
             );
 
@@ -179,34 +178,12 @@ pub unsafe extern "C" fn add_route(
         }
     };
     let http_server = unsafe { &*http_server_ptr };
-    let path_str = unsafe { CStr::from_ptr(path) }.to_string_lossy();
+    let path_str = unsafe { CStr::from_ptr(path_ptr) }.to_string_lossy();
 
-    if http_server.is_routes_sealed() {
-        let e = make_router_sealed_error(
-            "add_route",
-            serde_json::json!({
-              "path": path_str,
-            }),
-            false,
-        );
-
-        return make_result(&HttpServerError::from(e));
-    }
-
-    let mut guard = http_server.router.write();
-    let router_mut = &mut *guard;
-
-    match router_mut.add(http_method, &path_str) {
+    match http_server.add_route(http_method, &path_str) {
         Ok(k) => make_result(&AddRouteResult { key: k }),
         Err(e) => {
-            tracing::event!(tracing::Level::ERROR, code=?e.code, path=%path_str, "add_route error");
-
-            let mut bunner_error = HttpServerError::from(e);
-            let detail = serde_json::json!({"path": path_str});
-
-            bunner_error.merge_extra(detail);
-
-            make_result(&bunner_error)
+            make_result(&HttpServerError::from(e))
         }
     }
 }
@@ -230,7 +207,7 @@ pub unsafe extern "C" fn add_routes(handle: HttpServerId, routes_ptr: *const u8)
         None => {
             let http_error = HttpServerError::new(
                 HttpServerErrorCode::HandleIsNull,
-                "http_server",
+                "ffi",
                 "add_routes",
                 "validation",
                 "Invalid handle id passed to add_routes".to_string(),
@@ -244,7 +221,7 @@ pub unsafe extern "C" fn add_routes(handle: HttpServerId, routes_ptr: *const u8)
     if routes_ptr.is_null() {
         let http_error = HttpServerError::new(
             HttpServerErrorCode::InvalidRoutes,
-            "http_server",
+            "ffi",
             "add_routes",
             "validation",
             "Routes pointer is null".to_string(),
@@ -260,7 +237,7 @@ pub unsafe extern "C" fn add_routes(handle: HttpServerId, routes_ptr: *const u8)
             Err(_) => {
                 let http_error = HttpServerError::new(
                     HttpServerErrorCode::InvalidRoutes,
-                    "http_server",
+                    "ffi",
                     "add_routes",
                     "parsing",
                     "Invalid JSON string for routes list".to_string(),
@@ -272,22 +249,9 @@ pub unsafe extern "C" fn add_routes(handle: HttpServerId, routes_ptr: *const u8)
         };
 
     let http_server = unsafe { &*http_server_ptr };
-    let routes_count = routes.len();
+    let routes_len = routes.len();
 
-    if http_server.is_routes_sealed() {
-        let be = make_router_sealed_error(
-            "add_routes",
-            serde_json::json!({ "count": routes_count }),
-            true,
-        );
-
-        return make_result(&HttpServerError::from(be));
-    }
-
-    let mut guard = http_server.router.write();
-    let router_mut = &mut *guard;
-
-    match router_mut.add_bulk(routes) {
+    match http_server.add_routes(routes) {
         Ok(r) => {
             let cnt = r.len();
 
@@ -296,15 +260,9 @@ pub unsafe extern "C" fn add_routes(handle: HttpServerId, routes_ptr: *const u8)
             make_result(&r)
         }
         Err(e) => {
-            tracing::event!(tracing::Level::ERROR, code=?e.code, count=routes_count as u64, "add_routes error");
+            tracing::event!(tracing::Level::ERROR, code=?e.code, count=routes_len as u64, "add_routes error");
 
-            let mut bunner_error = HttpServerError::from(e);
-
-            bunner_error.merge_extra(serde_json::json!({
-                "count": routes_count
-            }));
-
-            make_result(&bunner_error)
+            make_result(&HttpServerError::from(e))
         }
     }
 }
@@ -327,7 +285,7 @@ pub unsafe extern "C" fn handle_request(
         None => {
             let err = HttpServerError::new(
                 HttpServerErrorCode::HandleIsNull,
-                "http_server",
+                "ffi",
                 "handle_request",
                 "system",
                 "Invalid handle id passed to handle_request".to_string(),
@@ -343,7 +301,7 @@ pub unsafe extern "C" fn handle_request(
     if request_id_ptr.is_null() {
         let http_error = HttpServerError::new(
             HttpServerErrorCode::InvalidRequestId,
-            "http_server",
+            "ffi",
             "handle_request",
             "validation",
             "Request id pointer is null".to_string(),
@@ -358,7 +316,7 @@ pub unsafe extern "C" fn handle_request(
     if payload_ptr.is_null() {
         let err = HttpServerError::new(
             HttpServerErrorCode::InvalidPayload,
-            "http_server",
+            "ffi",
             "handle_request",
             "validation",
             "Payload pointer is null".to_string(),
@@ -371,11 +329,8 @@ pub unsafe extern "C" fn handle_request(
     }
 
     let http_server = unsafe { &*http_server_ptr };
-    // Acquire a short-lived read lock to obtain the read-only snapshot
-    let ro_opt = {
-        let rguard = http_server.router.read();
-        rguard.get_readonly()
-    };
+    // Acquire read-only snapshot from http_server
+    let ro_opt = http_server.snapshot();
 
     if ro_opt.is_none() {
         let http_error = HttpServerError::new(
@@ -392,7 +347,7 @@ pub unsafe extern "C" fn handle_request(
         return;
     }
 
-    let ro = ro_opt.unwrap();
+    let ro: std::sync::Arc<router::RouterReadOnly> = ro_opt.unwrap();
     let request_id_ptr_usize = request_id_ptr as usize;
     let payload_ptr_usize = payload_ptr as usize;
     let (ack_tx, ack_rx) = mpsc::channel::<()>();
@@ -433,7 +388,7 @@ pub unsafe extern "C" fn handle_request(
         Err(mpsc::RecvTimeoutError::Timeout) => {
             let http_error = HttpServerError::new(
                 HttpServerErrorCode::RequestAckTimeout,
-                "http_server",
+                "ffi",
                 "handle_request",
                 "timeout",
                 "Worker did not ack request parsing within timeout".to_string(),
@@ -445,7 +400,7 @@ pub unsafe extern "C" fn handle_request(
         Err(_) => {
             let http_error = HttpServerError::new(
                 HttpServerErrorCode::RequestAckTimeout,
-                "http_server",
+                "ffi",
                 "handle_request",
                 "channel",
                 "Failed to receive ack from worker".to_string(),
@@ -469,7 +424,7 @@ pub unsafe extern "C" fn seal_routes(handle: HttpServerId) -> *mut u8 {
         None => {
             let err = HttpServerError::new(
                 HttpServerErrorCode::HandleIsNull,
-                "http_server",
+                "ffi",
                 "seal_routes",
                 "system",
                 "Invalid handle id passed to seal_routes".to_string(),
@@ -495,11 +450,9 @@ pub unsafe extern "C" fn seal_routes(handle: HttpServerId) -> *mut u8 {
 ///   that registered the buffer via `pointer_registry::register_raw_vec_and_into_raw`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn free(handle: HttpServerId, ptr: *mut u8) {
-    let http_server_ptr = match lookup_http_server(handle) {
-        Some(p) => p,
-        None => {
-            return;
-        }
-    };
+    if lookup_http_server(handle).is_none() {
+        return;
+    }
+
     unsafe { pointer_registry::free(ptr) };
 }

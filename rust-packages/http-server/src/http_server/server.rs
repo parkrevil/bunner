@@ -1,9 +1,10 @@
+use crate::enums::HttpMethod;
 use crate::router::Router;
+use std::{ffi::CStr, os::raw::c_char};
 
 #[repr(C)]
 pub struct HttpServer {
     router: Router,
-    // read-only snapshot moved into `router` itself
 }
 
 impl HttpServer {
@@ -13,7 +14,20 @@ impl HttpServer {
         }
     }
 
-    pub fn add_route() {}
+    pub fn add_route(
+        &self,
+        method: HttpMethod,
+        path: &str,
+    ) -> crate::router::structures::RouterResult<u16> {
+        self.router.add(method, &path)
+    }
+
+    pub fn add_routes(
+        &self,
+        routes: Vec<(HttpMethod, String)>,
+    ) -> crate::router::structures::RouterResult<Vec<u16>> {
+        self.router.add_bulk(routes)
+    }
 
     pub fn seal_routes(&self) {
         self.router.seal();
