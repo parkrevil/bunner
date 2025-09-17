@@ -65,7 +65,34 @@ Use only for separating specific scenarios or cases.
 
 ### 🔧 **Common Helpers**
 
-Extract and reuse repetitive setup/assertion code in `tests/helpers.rs` or module-internal helpers.
+Extract and reuse repetitive setup/assertion code in test-only helper modules under `tests/common/`.
+
+Project convention:
+
+- Place reusable test utilities in `rust-packages/http-server/tests/common/`.
+- Organize by domain/category and name files as `<category>_util.rs` (for example `string_util.rs`, `pointer_util.rs`, `registry_util.rs`).
+- Re-export helpers from `tests/common/mod.rs` for convenient use in unit tests: `use crate::tests::common::string_util::*;`.
+- Keep helpers behind `#[cfg(test)]` semantics (test-only code) and document `unsafe` preconditions where applicable.
+
+Guidelines for writing common helpers:
+
+- **Category-based files:** Group helpers logically (문자열, 포인터, 레지스트리, IO, 동시성 등).
+- **Single responsibility:** Each helper should do one small task and be well-documented.
+- **Safety docs:** For helpers that expose raw pointers or leak memory intentionally for tests, add clear docs explaining ownership and cleanup responsibilities.
+- **Prefer safe wrappers:** Provide safe helper wrappers (e.g., `with_raw_ptr`) that avoid leaking memory when possible.
+- **Use in tests:** When writing unit tests, prefer these helpers to reduce duplication and keep tests concise and consistent.
+
+Example usage in a test module:
+
+```rust
+use crate::tests::common::string_util::make_len_prefixed_buf;
+
+#[test]
+fn example() {
+    let buf = make_len_prefixed_buf("hello");
+    // ... call target function with buf.as_ptr() ...
+}
+```
 
 ---
 
