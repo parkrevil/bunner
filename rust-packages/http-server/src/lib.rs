@@ -30,7 +30,7 @@ use std::io;
 use std::{
     ffi::CStr,
     os::raw::c_char,
-    sync::{mpsc, Arc},
+    sync::{mpsc},
     time::Duration,
 };
 use tracing_subscriber::{fmt, EnvFilter};
@@ -191,11 +191,10 @@ pub unsafe extern "C" fn add_route(
     };
 
     let http_server = unsafe { &*http_server_ptr };
-    let mut guard = http_server.router.write();
-    let router_mut = &mut *guard;
     let path_str = unsafe { CStr::from_ptr(path) }.to_string_lossy();
 
-    if http_server.router_readonly.get().is_some() {
+    // Check sealed state with a short-lived read lock before acquiring write
+    if http_server.router.read().is_sealed() {
         let e = make_router_sealed_error(
             "add_route",
             serde_json::json!({
@@ -204,9 +203,11 @@ pub unsafe extern "C" fn add_route(
             false,
         );
         let he = HttpServerError::from(e);
-
         return make_result(&he);
     }
+
+    let mut guard = http_server.router.write();
+    let router_mut = &mut *guard;
 
     match router_mut.add(http_method, &path_str) {
         Ok(k) => make_result(&AddRouteResult { key: k }),
@@ -284,17 +285,19 @@ pub unsafe extern "C" fn add_routes(handle: HttpServerId, routes_ptr: *const u8)
         };
 
     let http_server = unsafe { &*http_server_ptr };
-    let mut guard = http_server.router.write();
-    let router_mut = &mut *guard;
     let routes_count = routes.len();
 
-    if http_server.router_readonly.get().is_some() {
+    // Check sealed state with a short-lived read lock before acquiring write
+    if http_server.router.read().is_sealed() {
         let detail = serde_json::json!({ "count": routes_count });
         let be = make_router_sealed_error("add_routes", detail, true);
         let he = HttpServerError::from(be);
 
         return make_result(&he);
     }
+
+    let mut guard = http_server.router.write();
+    let router_mut = &mut *guard;
 
     match router_mut.add_bulk(routes) {
         Ok(r) => {
@@ -380,7 +383,11 @@ pub unsafe extern "C" fn handle_request(
     }
 
     let http_server = unsafe { &*http_server_ptr };
-    let ro_opt = http_server.router_readonly.get().map(Arc::clone);
+    // Acquire a short-lived read lock to obtain the read-only snapshot
+    let ro_opt = {
+        let rguard = http_server.router.read();
+        rguard.get_readonly()
+    };
 
     if ro_opt.is_none() {
         let http_error = HttpServerError::new(
@@ -485,18 +492,8 @@ pub unsafe extern "C" fn seal_routes(handle: HttpServerId) -> *mut u8 {
         }
     };
     let http_server = unsafe { &*http_server_ptr };
-    let mut guard = http_server.router.write();
 
-    guard.finalize();
-
-    // Build read-only after finalize
-    let ro = guard.build_readonly();
-    let _ = http_server.router_readonly.set(Arc::new(ro));
-
-    // Drop the builder router by replacing with a minimal empty sealed router
-    *guard = router::Router::new(None);
-
-    guard.finalize();
+    http_server.seal_routes();
 
     tracing::event!(tracing::Level::INFO, "routes sealed");
 

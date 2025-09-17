@@ -18,5 +18,6 @@
     "*.md": "markdown"
   },
   "rust-analyzer.cargo.features": "all",
-  "rust-analyzer.check.command": "clippy"
+  "rust-analyzer.check.command": "clippy",
+  "remote.autoForwardPortsFallback": 0
 }
