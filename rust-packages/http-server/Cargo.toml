@@ -1,5 +1,5 @@
 [package]
-name = "bunner-http-server"
+name = "bunner_http_server"
 version = "0.1.0"
 edition = "2024"
 
@@ -31,4 +31,3 @@ rstest.workspace = true
 
 [features]
 default = []
-test = ["simd-json"]

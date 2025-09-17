@@ -18,6 +18,11 @@ pub mod structure;
 mod thread_pool;
 pub mod utils;
 
+// Re-export test helpers located in ../tests_tools for use in unit tests.
+#[cfg(test)]
+#[path = "../tests/utils/mod.rs"]
+pub mod test_utils;
+
 #[cfg(test)]
 mod pointer_registry_test;
 

@@ -5,8 +5,8 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 # Run all tests once for the entire workspace to avoid duplicate executions
 export RUST_LOG=trace RUST_BACKTRACE=0 && \
-cargo nextest run --package bunner-http-server && \
-cargo nextest run --package bunner-http-server --features simd-json
+cargo nextest run --package bunner_http_server && \
+cargo nextest run --package bunner_http_server --features simd-json
 
 # After tests, copy built dynamic libraries to each package's bin directory
 for manifest in $(find "$ROOT_DIR/rust-packages" -type f -name Cargo.toml); do

@@ -1,7 +1,6 @@
 use crate::errors::internal_error::InternalErrorCode;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use std::ffi::{c_char, CString};
 
 #[cfg(feature = "simd-json")]
 use simd_json;

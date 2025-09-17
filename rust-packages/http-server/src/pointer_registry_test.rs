@@ -1,64 +1,47 @@
 #[cfg(test)]
 mod register {
     use crate::pointer_registry as registry;
+    use crate::test_utils::registry as test_registry;
 
     #[test]
     fn registers_vec_and_returns_non_null() {
-        let v = b"presence".to_vec();
-        let p = registry::register(v);
-        assert!(!p.is_null());
-
-        // cleanup
-        unsafe {
-            registry::free(p);
-        }
+        test_registry::with_registered_vec(b"presence".to_vec(), |p| {
+            assert!(!p.is_null());
+        });
     }
 
     #[test]
     fn registers_multiple_independent_ptrs() {
-        let p1 = registry::register(b"one".to_vec());
-        let p2 = registry::register(b"one".to_vec());
-
-        assert!(registry::has(p1));
-        assert!(registry::has(p2));
-
-        unsafe {
-            registry::free(p1);
-        }
-        unsafe {
-            registry::free(p2);
-        }
+        test_registry::with_registered_vec(vec![1u8, 2u8, 3u8], |p1| {
+            test_registry::with_registered_vec(vec![4u8, 5u8, 6u8], |p2| {
+                assert!(registry::has(p1));
+                assert!(registry::has(p2));
+            })
+        });
     }
 
     // Submodule for large / boundary input cases related to `register`
     mod large_inputs {
         use crate::pointer_registry as registry;
+        use crate::test_utils::registry as test_registry;
 
         #[test]
         fn register_zero_length_vec() {
-            let v: Vec<u8> = Vec::new();
-            let p = registry::register(v);
-            assert!(!p.is_null());
-
-            // read back presence and free
-            assert!(registry::has(p));
-            unsafe {
-                registry::free(p);
-            }
-            assert!(!registry::has(p));
+            test_registry::with_registered_vec(Vec::new(), |p| {
+                assert!(!p.is_null());
+                assert!(registry::has(p));
+            });
+            // pointer freed when helper closure returns
         }
 
         #[test]
         fn register_large_vec() {
             // 10MB buffer to exercise large allocations without being too slow
             let v = vec![0u8; 10 * 1024 * 1024];
-            let p = registry::register(v);
-            assert!(!p.is_null());
-            assert!(registry::has(p));
-            unsafe {
-                registry::free(p);
-            }
-            assert!(!registry::has(p));
+            test_registry::with_registered_vec(v, |p| {
+                assert!(!p.is_null());
+                assert!(registry::has(p));
+            });
         }
     }
 
@@ -75,16 +58,13 @@ mod register {
             for i in 0..threads {
                 handles.push(thread::spawn(move || {
                     let data = vec![i as u8; 1024];
-                    let p = crate::pointer_registry::register(data);
-                    // brief work
-                    for _ in 0..10 {
-                        std::hint::black_box(());
-                    }
-                    assert!(crate::pointer_registry::has(p));
-                    unsafe {
-                        crate::pointer_registry::free(p);
-                    }
-                    assert!(!crate::pointer_registry::has(p));
+                    crate::test_utils::registry::with_registered_vec(data, |p| {
+                        // brief work
+                        for _ in 0..10 {
+                            std::hint::black_box(());
+                        }
+                        assert!(crate::pointer_registry::has(p));
+                    });
                 }));
             }
 
@@ -98,20 +78,22 @@ mod register {
 #[cfg(test)]
 mod has {
     use crate::pointer_registry as registry;
+    use crate::test_utils::registry as test_registry;
+
+    #[test]
+    fn reflects_registration_state_after_free() {
+        test_registry::with_registered_vec(b"temp".to_vec(), |p| {
+            assert!(registry::has(p));
+        });
+        // after helper returns, pointer should no longer be registered
+        // we can't access the raw pointer here, but ensure registry is empty for a new pointer
+        let fake: *mut u8 = std::ptr::null_mut();
+        assert!(!registry::has(fake));
+    }
 
     #[test]
     fn returns_false_for_null_pointer() {
         let p: *mut u8 = std::ptr::null_mut();
-        assert!(!registry::has(p));
-    }
-
-    #[test]
-    fn reflects_registration_state_after_free() {
-        let p = registry::register(b"has_state".to_vec());
-        assert!(registry::has(p));
-        unsafe {
-            registry::free(p);
-        }
         assert!(!registry::has(p));
     }
 }

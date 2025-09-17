@@ -63,18 +63,18 @@ Use only for separating specific scenarios or cases.
   - Prefer descriptive nouns or verb-oriented action names that map to behavior: e.g. `mod handles_overflow`, `mod returns_error_on_missing_field`.
   - Keep submodule nesting shallow: root → sub (maximum 2 levels).
 
-### 🔧 **Common Helpers**
+### 🔧 **Common Utilities**
 
-Extract and reuse repetitive setup/assertion code in test-only helper modules under `tests/common/`.
+Extract and reuse repetitive setup/assertion code in test-only helper modules under `tests/utils/`.
 
 Project convention:
 
-- Place reusable test utilities in `rust-packages/http-server/tests/common/`.
-- Organize by domain/category and name files as `<category>_util.rs` (for example `string_util.rs`, `pointer_util.rs`, `registry_util.rs`).
-- Re-export helpers from `tests/common/mod.rs` for convenient use in unit tests: `use crate::tests::common::string_util::*;`.
+- Place reusable test utilities in `rust-packages/http-server/tests/utils/`.
+- Organize by domain/category and name files as `<category>.rs` (for example `string.rs`, `pointer.rs`, `registry.rs`).
+- Re-export helpers from `tests/utils/mod.rs` for convenient use in unit tests: `use crate::test_utils::string::*;`.
 - Keep helpers behind `#[cfg(test)]` semantics (test-only code) and document `unsafe` preconditions where applicable.
 
-Guidelines for writing common helpers:
+Guidelines for writing utilities:
 
 - **Category-based files:** Group helpers logically (문자열, 포인터, 레지스트리, IO, 동시성 등).
 - **Single responsibility:** Each helper should do one small task and be well-documented.
@@ -85,7 +85,7 @@ Guidelines for writing common helpers:
 Example usage in a test module:
 
 ```rust
-use crate::tests::common::string_util::make_len_prefixed_buf;
+use crate::test_utils::string::make_len_prefixed_buf;
 
 #[test]
 fn example() {

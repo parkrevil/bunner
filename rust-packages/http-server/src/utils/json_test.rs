@@ -29,16 +29,7 @@ mod serialize {
 
     #[test]
     fn returns_error_on_serialization_failure() {
-        // Custom type that always fails serialization
-        struct FailingType;
-        impl serde::ser::Serialize for FailingType {
-            fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
-            where
-                S: serde::ser::Serializer,
-            {
-                Err(serde::ser::Error::custom("Serialization failed"))
-            }
-        }
+        use crate::test_utils::json::FailingType;
 
         let err = serialize(&FailingType).unwrap_err();
         assert!(matches!(err, InternalErrorCode::InvalidJsonValue));
@@ -49,7 +40,6 @@ mod serialize {
 mod serialize_with_serde_json {
     use crate::errors::InternalErrorCode;
     use crate::utils::json::serialize_with_serde_json as serialize;
-    use serde::ser::{Serialize, Serializer};
 
     #[test]
     fn serializes_basic_types() {
@@ -77,15 +67,7 @@ mod serialize_with_serde_json {
 
     #[test]
     fn returns_error_on_serialization_failure() {
-        struct FailingType;
-        impl Serialize for FailingType {
-            fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
-            where
-                S: Serializer,
-            {
-                Err(serde::ser::Error::custom("Serialization failed"))
-            }
-        }
+        use crate::test_utils::json::FailingType;
 
         let err = serialize(&FailingType).unwrap_err();
         assert!(matches!(err, InternalErrorCode::InvalidJsonValue));
@@ -96,7 +78,6 @@ mod serialize_with_serde_json {
 mod serialize_with_simd_json {
     use crate::errors::InternalErrorCode;
     use crate::utils::json::serialize_with_simd_json as serialize;
-    use serde::ser::{Serialize, Serializer};
 
     #[test]
     fn serializes_basic_types() {
@@ -124,15 +105,7 @@ mod serialize_with_simd_json {
 
     #[test]
     fn returns_error_on_serialization_failure() {
-        struct FailingType;
-        impl Serialize for FailingType {
-            fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
-            where
-                S: Serializer,
-            {
-                Err(serde::ser::Error::custom("Serialization failed"))
-            }
-        }
+        use crate::test_utils::json::FailingType;
 
         let err = serialize(&FailingType).unwrap_err();
         assert!(matches!(err, InternalErrorCode::InvalidJsonValue));
