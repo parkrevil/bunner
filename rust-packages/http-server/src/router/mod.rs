@@ -44,46 +44,22 @@ impl Router {
         self.radix_tree.insert_bulk(entries)
     }
 
-    pub fn finalize(&mut self) {
-        self.radix_tree.finalize();
-    }
-
-    pub fn build_readonly(&self) -> RouterReadOnly {
-        RouterReadOnly::from_router(self)
-    }
-
-    /// Return a clone of the read-only snapshot if set.
-    pub fn get_readonly(&self) -> Option<std::sync::Arc<RouterReadOnly>> {
-        self.read_only.get().map(std::sync::Arc::clone)
-    }
-
-    /// Whether the router has been sealed (read-only snapshot present).
     pub fn is_sealed(&self) -> bool {
         self.read_only.get().is_some()
     }
 
-    /// Finalize the builder router, build a read-only snapshot and return it.
-    /// This encapsulates the common sealing steps used by the HTTP server.
-    pub fn seal(&mut self) -> RouterReadOnly {
-        self.finalize();
-        self.build_readonly()
-    }
+    pub fn seal(&mut self) {
+        // Finalize radix tree and build read-only snapshot.
+        self.radix_tree.finalize();
+        let ro = RouterReadOnly::from_router(self);
 
-    /// Finalize this builder router, build a read-only snapshot and set it into
-    /// the provided `OnceLock`. Returns the RouterReadOnly for convenience.
-    pub fn seal_into(&mut self) -> RouterReadOnly {
-        let ro = self.seal();
-        let _ = self.read_only.set(std::sync::Arc::new(ro.clone()));
-        ro
-    }
+        // Create Arc for the snapshot before replacing `self`.
+        let arc = std::sync::Arc::new(ro.clone());
 
-    /// Finalize this builder router, build a read-only snapshot, set it into
-    /// this router's `read_only` OnceLock, and replace the builder router with
-    /// an empty sealed router in-place.
-    pub fn seal_and_reset(&mut self) -> RouterReadOnly {
-        let ro = self.seal_into();
+        // Replace builder router with a fresh one in-place, then store the
+        // snapshot into the new router's OnceLock so it persists for readers.
         let _old = std::mem::replace(self, Router::new(None));
-        ro
+        let _ = self.read_only.set(arc);
     }
 }
 

@@ -27,18 +27,13 @@ pub mod test_utils;
 mod pointer_registry_test;
 
 use std::io;
-use std::{
-    ffi::CStr,
-    os::raw::c_char,
-    sync::{mpsc},
-    time::Duration,
-};
-use tracing_subscriber::{fmt, EnvFilter};
+use std::{ffi::CStr, os::raw::c_char, sync::mpsc, time::Duration};
+use tracing_subscriber::{EnvFilter, fmt};
 
 use crate::enums::HttpMethod;
 use crate::errors::{HttpServerError, HttpServerErrorCode};
 use crate::request_handler::{
-    callback_handle_request, handle as process_request, HandleRequestCallback,
+    HandleRequestCallback, callback_handle_request, handle as process_request,
 };
 use crate::router::errors::RouterErrorCode;
 use crate::router::structures::RouterError;
@@ -46,18 +41,12 @@ use crate::structure::AddRouteResult;
 use crate::thread_pool::{shutdown_pool, submit_job};
 use crate::utils::ffi::{make_result, parse_json_pointer};
 mod http_server;
-use http_server::server::HttpServer;
 use http_server::HttpServerId;
+use http_server::server::HttpServer;
 use http_server::{
     lookup as lookup_http_server, register as register_http_server,
     unregister as unregister_http_server,
 };
-// `string` utilities not needed in this function anymore
-
-// `HttpServerHandle` is re-exported from `http_server::types`.
-
-// Global registry for instances. ID 0 is reserved as invalid/null.
-// registry implementation lives in `http_server_registry` module
 
 fn make_router_sealed_error(
     operation: &str,
@@ -189,12 +178,10 @@ pub unsafe extern "C" fn add_route(
             return make_result(&err);
         }
     };
-
     let http_server = unsafe { &*http_server_ptr };
     let path_str = unsafe { CStr::from_ptr(path) }.to_string_lossy();
 
-    // Check sealed state with a short-lived read lock before acquiring write
-    if http_server.router.read().is_sealed() {
+    if http_server.is_routes_sealed() {
         let e = make_router_sealed_error(
             "add_route",
             serde_json::json!({
@@ -202,8 +189,8 @@ pub unsafe extern "C" fn add_route(
             }),
             false,
         );
-        let he = HttpServerError::from(e);
-        return make_result(&he);
+
+        return make_result(&HttpServerError::from(e));
     }
 
     let mut guard = http_server.router.write();
@@ -287,13 +274,14 @@ pub unsafe extern "C" fn add_routes(handle: HttpServerId, routes_ptr: *const u8)
     let http_server = unsafe { &*http_server_ptr };
     let routes_count = routes.len();
 
-    // Check sealed state with a short-lived read lock before acquiring write
-    if http_server.router.read().is_sealed() {
-        let detail = serde_json::json!({ "count": routes_count });
-        let be = make_router_sealed_error("add_routes", detail, true);
-        let he = HttpServerError::from(be);
+    if http_server.is_routes_sealed() {
+        let be = make_router_sealed_error(
+            "add_routes",
+            serde_json::json!({ "count": routes_count }),
+            true,
+        );
 
-        return make_result(&he);
+        return make_result(&HttpServerError::from(be));
     }
 
     let mut guard = http_server.router.write();

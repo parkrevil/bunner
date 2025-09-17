@@ -2,7 +2,7 @@
 
 #[repr(C)]
 pub struct HttpServer {
-    pub router: parking_lot::RwLock<crate::router::Router>,
+    router: parking_lot::RwLock<crate::router::Router>,
     // read-only snapshot moved into `router` itself
 }
 
@@ -15,6 +15,12 @@ impl HttpServer {
 
     pub fn seal_routes(&self) {
         let mut guard = self.router.write();
-        let _ = guard.seal_and_reset();
+        let _ = guard.seal();
+    }
+
+    pub fn is_routes_sealed(&self) -> bool {
+        let guard = self.router.read();
+
+        guard.is_sealed()
     }
 }
