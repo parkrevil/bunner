@@ -16,7 +16,7 @@ pub fn make_invalid_utf8_buf(len: u32) -> Vec<u8> {
     let mut v = Vec::with_capacity(4 + len as usize);
     v.extend_from_slice(&len.to_le_bytes());
     // fill with invalid utf8 bytes (0xff)
-    v.extend(std::iter::repeat(0xffu8).take(len as usize));
+    v.extend(std::iter::repeat_n(0xffu8, len as usize));
     v
 }
 
