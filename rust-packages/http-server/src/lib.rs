@@ -97,11 +97,11 @@ pub unsafe extern "C" fn add_route(
         Some(p) => p,
         None => {
             let http_error = HttpServerError::new(
-                HttpServerErrorCode::HandleIsNull,
+                HttpServerErrorCode::AppNotFound,
                 "ffi",
                 "add_route",
                 "validation",
-                "Invalid handle id passed to add_route".to_string(),
+                "App not found. please check if the app is constructed".to_string(),
                 Some(serde_json::json!(null)),
             );
 
@@ -169,11 +169,11 @@ pub unsafe extern "C" fn add_routes(handle: AppId, routes_ptr: *const u8) -> *mu
         Some(p) => p,
         None => {
             let http_error = HttpServerError::new(
-                HttpServerErrorCode::HandleIsNull,
+                HttpServerErrorCode::AppNotFound,
                 "ffi",
                 "add_routes",
                 "validation",
-                "Invalid handle id passed to add_routes".to_string(),
+                "App not found. please check if the app is constructed".to_string(),
                 Some(serde_json::json!(null)),
             );
 
@@ -247,11 +247,11 @@ pub unsafe extern "C" fn handle_request(
         Some(p) => p,
         None => {
             let err = HttpServerError::new(
-                HttpServerErrorCode::HandleIsNull,
+                HttpServerErrorCode::AppNotFound,
                 "ffi",
                 "handle_request",
                 "system",
-                "Invalid handle id passed to handle_request".to_string(),
+                "App not found. please check if the app is constructed".to_string(),
                 Some(serde_json::json!(null)),
             );
 
@@ -307,11 +307,11 @@ pub unsafe extern "C" fn seal_routes(handle: AppId) -> *mut u8 {
         Some(p) => p,
         None => {
             let err = HttpServerError::new(
-                HttpServerErrorCode::HandleIsNull,
+                HttpServerErrorCode::AppNotFound,
                 "ffi",
                 "seal_routes",
                 "system",
-                "Invalid handle id passed to seal_routes".to_string(),
+                "App not found. please check if the app is constructed".to_string(),
                 Some(serde_json::json!(null)),
             );
 

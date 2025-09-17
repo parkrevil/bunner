@@ -18,7 +18,7 @@ import { isPointer, pointerToJson } from './utils';
 export abstract class BaseFfi<T extends BaseFfiSymbols> {
   protected symbols: T;
   protected close: () => void;
-  protected handle: Pointer;
+  protected appId: bigint;
 
   /**
    * Initialize the Rust core
@@ -34,13 +34,13 @@ export abstract class BaseFfi<T extends BaseFfiSymbols> {
     this.symbols = lib.symbols as T;
     this.close = () => lib.close();
 
-    const handle = this.symbols.init();
+    const appId = this.symbols.construct();
 
-    if (!handle) {
+    if (!appId) {
       throw new BunnerFfiError('Failed to initialize Rust core');
     }
 
-    this.handle = handle;
+    this.appId = appId;
   }
 
   /**
@@ -48,14 +48,14 @@ export abstract class BaseFfi<T extends BaseFfiSymbols> {
    * @description Destroy the Rust core
    */
   destroy() {
-    if (!this.handle) {
+    if (!this.appId) {
       return;
     }
 
-    this.symbols.destroy(this.handle);
+    this.symbols.destroy(this.appId);
     this.close();
 
-    this.handle = undefined as any;
+    this.appId = undefined as any;
     this.close = undefined as any;
   }
 

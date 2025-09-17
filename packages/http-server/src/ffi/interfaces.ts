@@ -6,18 +6,18 @@ import type { HttpMethod } from '../enums';
 
 export interface FfiSymbols extends BaseFfiSymbols {
   add_route: (
-    handle: Pointer,
+    handle: number,
     method: number,
     path: Uint8Array,
   ) => Pointer | null;
-  add_routes: (handle: Pointer, routes: Uint8Array) => Pointer | null;
+  add_routes: (handle: number, routes: Uint8Array) => Pointer | null;
   handle_request: (
-    handle: Pointer,
+    handle: number,
     requestId: Uint8Array,
     payload: Uint8Array,
     callback: Pointer,
   ) => void;
-  seal_routes: (handle: Pointer) => void;
+  seal_routes: (handle: number) => void;
 }
 
 /**

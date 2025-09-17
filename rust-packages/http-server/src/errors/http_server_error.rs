@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 #[repr(u16)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum HttpServerErrorCode {
-    HandleIsNull = 1,
+    AppNotFound = 1,
     InvalidHttpMethod,
     InvalidRequestId,
     RouteNotSealed,
@@ -30,7 +30,7 @@ impl From<HttpServerErrorCode> for u16 {
 impl HttpServerErrorCode {
     pub fn as_str(self) -> &'static str {
         match self {
-            HttpServerErrorCode::HandleIsNull => "HandleIsNull",
+            HttpServerErrorCode::AppNotFound => "AppNotFound",
             HttpServerErrorCode::InvalidHttpMethod => "InvalidHttpMethod",
             HttpServerErrorCode::InvalidRequestId => "InvalidRequestId",
             HttpServerErrorCode::RouteNotSealed => "RouteNotSealed",

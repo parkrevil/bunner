@@ -8,6 +8,7 @@ import {
   FfiPointer,
   type JSCallbackMap,
   toBuffer,
+  FFI_APP_ID_TYPE,
 } from '@bunner/core';
 import { FFIType, JSCallback, type FFIFunction } from 'bun:ffi';
 
@@ -42,22 +43,22 @@ export class Ffi extends BaseFfi<FfiSymbols> {
   override init() {
     const api: Record<keyof FfiSymbols, FFIFunction> = {
       // BaseRustSymbols
-      free: { args: [FFIType.pointer], returns: FFIType.void },
-      init: { args: [], returns: FFIType.pointer },
+      free: { args: [FFI_APP_ID_TYPE], returns: FFIType.void },
+      construct: { args: [], returns: FFIType.u8 },
       destroy: { args: [FFIType.pointer], returns: FFIType.void },
 
       // HttpServerSymbols
       add_route: {
-        args: [FFIType.pointer, FFIType.u8, FFIType.cstring],
+        args: [FFI_APP_ID_TYPE, FFIType.u8, FFIType.cstring],
         returns: FFIType.pointer,
       },
       add_routes: {
-        args: [FFIType.pointer, FFIType.pointer],
+        args: [FFI_APP_ID_TYPE, FFIType.pointer],
         returns: FFIType.pointer,
       },
       handle_request: {
         args: [
-          FFIType.pointer,
+          FFI_APP_ID_TYPE,
           FFIType.cstring,
           FFIType.pointer,
           FFIType.function,
@@ -65,7 +66,7 @@ export class Ffi extends BaseFfi<FfiSymbols> {
         returns: FFIType.void,
       },
       seal_routes: {
-        args: [FFIType.pointer],
+        args: [FFI_APP_ID_TYPE],
         returns: FFIType.void,
       },
     };
@@ -88,7 +89,7 @@ export class Ffi extends BaseFfi<FfiSymbols> {
    */
   addRoute(httpMethod: HttpMethod, path: string) {
     return this.ensure<AddRouteResult>(
-      this.symbols.add_route(this.handle, httpMethod, toCString(path)),
+      this.symbols.add_route(this.appId, httpMethod, toCString(path)),
     );
   }
 
@@ -100,7 +101,7 @@ export class Ffi extends BaseFfi<FfiSymbols> {
    */
   addRoutes(params: [HttpMethod, string][]) {
     return this.ensure<number[]>(
-      this.symbols.add_routes(this.handle, toBuffer(params)),
+      this.symbols.add_routes(this.appId, toBuffer(params)),
     );
   }
 
@@ -118,7 +119,7 @@ export class Ffi extends BaseFfi<FfiSymbols> {
     });
 
     this.symbols.handle_request(
-      this.handle,
+      this.appId,
       toCString(requestId),
       toBuffer(params),
       this.handleRequestCb.ptr!,
@@ -133,7 +134,7 @@ export class Ffi extends BaseFfi<FfiSymbols> {
    * @returns
    */
   buildRoutes() {
-    this.symbols.seal_routes(this.handle);
+    this.symbols.seal_routes(this.appId);
   }
 
   /**

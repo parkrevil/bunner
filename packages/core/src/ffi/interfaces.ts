@@ -7,7 +7,7 @@ import type { FreePointerFn } from './types';
  * @description The base symbols for a Rust core
  */
 export interface BaseFfiSymbols {
-  init: (...args: any[]) => Pointer | null;
+  construct: (...args: any[]) => bigint | null;
   destroy: (handle: Pointer) => void;
   free: FreePointerFn;
 }
