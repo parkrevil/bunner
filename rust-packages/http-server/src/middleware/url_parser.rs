@@ -4,7 +4,7 @@ use url::Url;
 
 use crate::enums::HttpStatusCode;
 use crate::middleware::chain::Middleware;
-use crate::request_handler::{BunnerRequest, BunnerResponse, HandleRequestPayload};
+use crate::structures::{BunnerRequest, BunnerResponse, HandleRequestPayload};
 
 static QS_CONFIG: OnceLock<serde_qs::Config> = OnceLock::new();
 

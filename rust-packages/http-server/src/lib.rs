@@ -30,16 +30,15 @@ pub mod test_utils;
 mod pointer_registry_test;
 
 use std::io;
-use std::{ffi::CStr, os::raw::c_char, sync::mpsc, time::Duration};
+use std::{ffi::CStr, os::raw::c_char};
 use tracing_subscriber::{EnvFilter, fmt};
 
-use crate::app::App;
+
 use crate::app_registry::{find_app, register_app, unregister_app};
 use crate::enums::HttpMethod;
 use crate::errors::{HttpServerError, HttpServerErrorCode};
-use crate::request_handler::{
-    HandleRequestCallback, callback_handle_request
-};
+use crate::types::HandleRequestCallback;
+use crate::helpers::callback_handle_request;
 use crate::structures::AddRouteResult;
 use crate::thread_pool::{shutdown_pool};
 use crate::types::AppId;
@@ -58,7 +57,7 @@ pub extern "C" fn construct() -> AppId {
 
     tracing::info!("Bunner Rust Http Server initialized.");
 
-    register_app(Box::new(App::new()))
+    register_app(Box::default())
 }
 
 /// Destroys the HttpServer instance and frees all associated memory.

@@ -52,7 +52,12 @@ fn init() -> xchan::Sender<CallbackJob> {
     tx
 }
 
-pub fn enqueue(
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers passed from FFI.
+/// The caller must ensure that the `callback`, `request_id`, and `res_ptr`
+/// are valid and point to memory that is safe to access.
+pub unsafe fn enqueue(
     callback: HandleRequestCallback,
     request_id: Option<*mut u8>,
     route_key: Option<u16>,

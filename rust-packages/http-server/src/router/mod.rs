@@ -14,8 +14,9 @@ pub use readonly::RouterReadOnly;
 pub use structures::RouterError;
 pub use types::RouteMatch;
 
-use structures::RouterResult;
 use parking_lot::RwLock;
+use std::sync::Arc;
+use structures::RouterResult;
 
 #[derive(Debug, Default)]
 pub struct RouteMatchResult {
@@ -26,7 +27,7 @@ pub struct RouteMatchResult {
 #[derive(Debug)]
 struct RouterInner {
     pub radix_tree: radix_tree::RadixTree,
-    pub ro: std::sync::OnceLock<std::sync::Arc<RouterReadOnly>>,
+    pub ro: std::sync::OnceLock<Arc<RouterReadOnly>>,
 }
 
 #[derive(Debug)]
@@ -94,7 +95,7 @@ impl Router {
         // finalize and build readonly snapshot from the radix tree
         g.radix_tree.finalize();
         let ro = RouterReadOnly::from_radix_tree(&g.radix_tree);
-        let arc = std::sync::Arc::new(ro.clone());
+        let arc = Arc::new(ro.clone());
 
         // replace radix_tree with a fresh one and set readonly snapshot on the inner
         g.radix_tree = radix_tree::RadixTree::new(Default::default());
@@ -114,6 +115,22 @@ impl Router {
                 "Router is not sealed; cannot perform find".to_string(),
                 None,
             ))),
+        }
+    }
+
+    pub fn get_readonly(&self) -> RouterResult<Arc<RouterReadOnly>> {
+        let g = self.inner.read();
+
+        match g.ro.get() {
+            Some(ro) => Ok(ro.clone()),
+            None => Err(Box::new(RouterError::new(
+                RouterErrorCode::RouterNotSealed,
+                "router",
+                "get_readonly",
+                "validation",
+                "Router is not sealed; cannot get readonly snapshot".to_string(),
+                None,
+            )))
         }
     }
 }

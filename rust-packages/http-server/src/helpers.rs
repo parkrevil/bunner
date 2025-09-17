@@ -17,5 +17,7 @@ pub fn callback_handle_request<T: Serialize>(
         request_id_ptr = Some(make_string_pointer(rid));
     }
 
-    request_callback_dispatcher::enqueue(callback, request_id_ptr, route_key, res_ptr);
+    unsafe {
+        request_callback_dispatcher::enqueue(callback, request_id_ptr, route_key, res_ptr);
+    }
 }

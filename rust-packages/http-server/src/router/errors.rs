@@ -69,6 +69,7 @@ impl RouterErrorCode {
             }
             RouterErrorCode::MatchPathEmpty => "MatchPathEmpty",
             RouterErrorCode::MatchPathNotAscii => "MatchPathNotAscii",
+            RouterErrorCode::RouterNotSealed => "RouterNotSealed",
         }
     }
 }
