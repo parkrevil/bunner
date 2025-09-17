@@ -1,5 +1,5 @@
-use crate::pointer_registry;
 use crate::errors::internal_error::InternalErrorCode;
+use crate::pointer_registry;
 use serde::de::DeserializeOwned;
 
 /// Helper: register a vec, run a closure with the raw pointer, then free it.
@@ -63,10 +63,8 @@ pub fn assert_registered_parse_error<T>(json: &str, expected: InternalErrorCode)
 where
     T: DeserializeOwned,
 {
-    with_registered_parsed::<T, _, _>(json, |res| {
-        match res {
-            Err(e) => assert_eq!(e, expected),
-            Ok(_) => unreachable!("expected Err({:?}) but got Ok", expected),
-        }
+    with_registered_parsed::<T, _, _>(json, |res| match res {
+        Err(e) => assert_eq!(e, expected),
+        Ok(_) => unreachable!("expected Err({:?}) but got Ok", expected),
     });
 }

@@ -4,4 +4,3 @@ pub fn with_raw_ptr<R, F: FnOnce(*const u8) -> R>(v: &[u8], f: F) -> R {
     let ptr = v.as_ptr();
     f(ptr)
 }
-
