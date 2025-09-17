@@ -3,16 +3,16 @@ use crate::request_handler::RequestHandler;
 use crate::router::Router;
 
 #[repr(C)]
-pub struct HttpServer {
+pub struct App {
     router: Router,
-    handler: RequestHandler,
+    request_handler: RequestHandler,
 }
 
-impl HttpServer {
+impl App {
     pub fn new() -> Self {
-        HttpServer {
+        App {
             router: Router::new(None),
-            handler: RequestHandler::new(),
+            request_handler: RequestHandler::new(),
         }
     }
 

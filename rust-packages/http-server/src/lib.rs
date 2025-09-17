@@ -7,6 +7,8 @@
     clippy::print_stderr
 )]
 #![deny(unsafe_op_in_unsafe_fn)]
+pub mod app;
+pub mod app_registry;
 pub mod constants;
 pub mod enums;
 pub mod errors;
@@ -16,6 +18,7 @@ pub mod request_handler;
 pub mod router;
 pub mod structure;
 mod thread_pool;
+pub mod types;
 pub mod utils;
 
 #[cfg(test)]
@@ -29,58 +32,21 @@ use std::io;
 use std::{ffi::CStr, os::raw::c_char, sync::mpsc, time::Duration};
 use tracing_subscriber::{EnvFilter, fmt};
 
+use crate::app::App;
+use crate::app_registry::{find_app, register_app, unregister_app};
 use crate::enums::HttpMethod;
 use crate::errors::{HttpServerError, HttpServerErrorCode};
 use crate::request_handler::{
     HandleRequestCallback, callback_handle_request, handle as process_request,
 };
-use crate::router::errors::RouterErrorCode;
-use crate::router::structures::RouterError;
 use crate::structure::AddRouteResult;
 use crate::thread_pool::{shutdown_pool, submit_job};
+use crate::types::AppId;
 use crate::utils::ffi::{make_result, parse_json_pointer};
-mod http_server;
-use http_server::HttpServerId;
-use http_server::server::HttpServer;
-use http_server::{
-    lookup as lookup_http_server, register as register_http_server,
-    unregister as unregister_http_server,
-};
-
-fn make_router_sealed_error(
-    operation: &str,
-    extra_detail: serde_json::Value,
-    bulk: bool,
-) -> RouterError {
-    let mut detail = serde_json::json!({
-        "operation": operation,
-        "reason": "router_sealed"
-    });
-
-    if let serde_json::Value::Object(ref mut d) = detail
-        && let serde_json::Value::Object(extra) = extra_detail
-    {
-        d.extend(extra);
-    }
-
-    RouterError::new(
-        RouterErrorCode::RouterSealedCannotInsert,
-        "router",
-        "route_registration",
-        "validation",
-        if bulk {
-            "Router is sealed; cannot insert bulk routes".to_string()
-        } else {
-            "Router is sealed; cannot insert routes".to_string()
-        },
-        Some(detail),
-    )
-}
 
 #[unsafe(no_mangle)]
 #[tracing::instrument(skip_all, fields(operation = "construct"))]
-pub extern "C" fn construct(_routes_ptr: *const u8) -> HttpServerId {
-    // Force logger to write to stderr so embedding runtimes (like Bun) capture logs reliably.
+pub extern "C" fn construct() -> AppId {
     let subscriber = fmt()
         .with_env_filter(EnvFilter::new("trace"))
         .with_writer(io::stderr)
@@ -91,8 +57,7 @@ pub extern "C" fn construct(_routes_ptr: *const u8) -> HttpServerId {
 
     tracing::info!("Bunner Rust Http Server initialized.");
 
-    let boxed = Box::new(HttpServer::new());
-    register_http_server(boxed)
+    register_app(Box::new(App::new()))
 }
 
 /// Destroys the HttpServer instance and frees all associated memory.
@@ -101,14 +66,14 @@ pub extern "C" fn construct(_routes_ptr: *const u8) -> HttpServerId {
 /// The `handle` pointer must be a valid pointer returned by `init`.
 /// After calling this function, the handle is dangling and must not be used again.
 #[unsafe(no_mangle)]
-#[tracing::instrument(skip_all, fields(operation="destroy", handle=?handle))]
-pub unsafe extern "C" fn destroy(handle: HttpServerId) {
-    tracing::event!(tracing::Level::INFO, "http_server destroy called");
+#[tracing::instrument(skip_all, fields(operation="destroy", app_id=?app_id))]
+pub unsafe extern "C" fn destroy(app_id: AppId) {
+    tracing::event!(tracing::Level::INFO, "App destroy called");
 
-    if let Some(ptr) = unregister_http_server(handle) {
-        let http_server = unsafe { Box::from_raw(ptr) };
+    if let Some(ptr) = unregister_app(app_id) {
+        let app = unsafe { Box::from_raw(ptr) };
 
-        drop(http_server);
+        drop(app);
     }
 
     shutdown_pool();
@@ -124,11 +89,11 @@ pub unsafe extern "C" fn destroy(handle: HttpServerId) {
 #[unsafe(no_mangle)]
 #[tracing::instrument(skip_all, fields(operation="add_route", http_method=http_method))]
 pub unsafe extern "C" fn add_route(
-    handle: HttpServerId,
+    app_id: AppId,
     http_method: u8,
     path_ptr: *const c_char,
 ) -> *mut u8 {
-    let http_server_ptr = match lookup_http_server(handle) {
+    let app_ptr = match find_app(app_id) {
         Some(p) => p,
         None => {
             let http_error = HttpServerError::new(
@@ -177,14 +142,12 @@ pub unsafe extern "C" fn add_route(
             return make_result(&err);
         }
     };
-    let http_server = unsafe { &*http_server_ptr };
+    let app = unsafe { &*app_ptr };
     let path_str = unsafe { CStr::from_ptr(path_ptr) }.to_string_lossy();
 
-    match http_server.add_route(http_method, &path_str) {
+    match app.add_route(http_method, &path_str) {
         Ok(k) => make_result(&AddRouteResult { key: k }),
-        Err(e) => {
-            make_result(&HttpServerError::from(e))
-        }
+        Err(e) => make_result(&HttpServerError::from(e)),
     }
 }
 
@@ -201,8 +164,8 @@ pub unsafe extern "C" fn add_route(
 /// - Passing invalid pointers or non-UTF8 data is undefined behavior.
 #[unsafe(no_mangle)]
 #[tracing::instrument(skip_all, fields(operation = "add_routes"))]
-pub unsafe extern "C" fn add_routes(handle: HttpServerId, routes_ptr: *const u8) -> *mut u8 {
-    let http_server_ptr = match lookup_http_server(handle) {
+pub unsafe extern "C" fn add_routes(handle: AppId, routes_ptr: *const u8) -> *mut u8 {
+    let app_ptr = match find_app(handle) {
         Some(p) => p,
         None => {
             let http_error = HttpServerError::new(
@@ -248,10 +211,10 @@ pub unsafe extern "C" fn add_routes(handle: HttpServerId, routes_ptr: *const u8)
             }
         };
 
-    let http_server = unsafe { &*http_server_ptr };
+    let app = unsafe { &*app_ptr };
     let routes_len = routes.len();
 
-    match http_server.add_routes(routes) {
+    match app.add_routes(routes) {
         Ok(r) => {
             let cnt = r.len();
 
@@ -275,12 +238,12 @@ pub unsafe extern "C" fn add_routes(handle: HttpServerId, routes_ptr: *const u8)
 #[unsafe(no_mangle)]
 #[tracing::instrument(skip_all, fields(operation = "handle_request"))]
 pub unsafe extern "C" fn handle_request(
-    handle: HttpServerId,
+    handle: AppId,
     request_id_ptr: *const c_char,
     payload_ptr: *const u8,
     cb: HandleRequestCallback,
 ) {
-    let http_server_ptr = match lookup_http_server(handle) {
+    let app_ptr = match find_app(handle) {
         Some(p) => p,
         None => {
             let err = HttpServerError::new(
@@ -328,9 +291,8 @@ pub unsafe extern "C" fn handle_request(
         return;
     }
 
-    let http_server = unsafe { &*http_server_ptr };
-    // Acquire read-only snapshot from http_server
-    let ro_opt = http_server.snapshot();
+    let app = unsafe { &*app_ptr };
+    let ro_opt = app.snapshot();
 
     if ro_opt.is_none() {
         let http_error = HttpServerError::new(
@@ -418,8 +380,8 @@ pub unsafe extern "C" fn handle_request(
 /// The `handle` pointer must be a valid pointer returned by `init`.
 #[unsafe(no_mangle)]
 #[tracing::instrument(skip_all, fields(operation = "seal_routes"))]
-pub unsafe extern "C" fn seal_routes(handle: HttpServerId) -> *mut u8 {
-    let http_server_ptr = match lookup_http_server(handle) {
+pub unsafe extern "C" fn seal_routes(handle: AppId) -> *mut u8 {
+    let app_ptr = match find_app(handle) {
         Some(p) => p,
         None => {
             let err = HttpServerError::new(
@@ -434,9 +396,9 @@ pub unsafe extern "C" fn seal_routes(handle: HttpServerId) -> *mut u8 {
             return make_result(&err);
         }
     };
-    let http_server = unsafe { &*http_server_ptr };
+    let app = unsafe { &*app_ptr };
 
-    http_server.seal_routes();
+    app.seal_routes();
 
     tracing::event!(tracing::Level::INFO, "routes sealed");
 
@@ -449,8 +411,8 @@ pub unsafe extern "C" fn seal_routes(handle: HttpServerId) -> *mut u8 {
 /// - `ptr` must be a pointer previously returned by a Rust function in this crate
 ///   that registered the buffer via `pointer_registry::register_raw_vec_and_into_raw`.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn free(handle: HttpServerId, ptr: *mut u8) {
-    if lookup_http_server(handle).is_none() {
+pub unsafe extern "C" fn free(handle: AppId, ptr: *mut u8) {
+    if find_app(handle).is_none() {
         return;
     }
 
