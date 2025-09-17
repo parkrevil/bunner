@@ -14,12 +14,13 @@ pub mod enums;
 pub mod errors;
 pub mod middleware;
 pub mod pointer_registry;
-pub mod request_handler;
+pub mod request_callback_dispatcher;
 pub mod router;
-pub mod structure;
+pub mod structures;
 mod thread_pool;
 pub mod types;
 pub mod utils;
+pub mod helpers;
 
 #[cfg(test)]
 #[path = "../tests/utils/mod.rs"]
@@ -37,10 +38,10 @@ use crate::app_registry::{find_app, register_app, unregister_app};
 use crate::enums::HttpMethod;
 use crate::errors::{HttpServerError, HttpServerErrorCode};
 use crate::request_handler::{
-    HandleRequestCallback, callback_handle_request, handle as process_request,
+    HandleRequestCallback, callback_handle_request
 };
-use crate::structure::AddRouteResult;
-use crate::thread_pool::{shutdown_pool, submit_job};
+use crate::structures::AddRouteResult;
+use crate::thread_pool::{shutdown_pool};
 use crate::types::AppId;
 use crate::utils::ffi::{make_result, parse_json_pointer};
 
@@ -292,86 +293,8 @@ pub unsafe extern "C" fn handle_request(
     }
 
     let app = unsafe { &*app_ptr };
-    let ro_opt = app.snapshot();
 
-    if ro_opt.is_none() {
-        let http_error = HttpServerError::new(
-            HttpServerErrorCode::RouteNotSealed,
-            "router",
-            "seal",
-            "validation",
-            "Routes not sealed; call seal_routes before handling requests".to_string(),
-            None,
-        );
-
-        callback_handle_request(cb, None, None, &http_error);
-
-        return;
-    }
-
-    let ro: std::sync::Arc<router::RouterReadOnly> = ro_opt.unwrap();
-    let request_id_ptr_usize = request_id_ptr as usize;
-    let payload_ptr_usize = payload_ptr as usize;
-    let (ack_tx, ack_rx) = mpsc::channel::<()>();
-
-    match submit_job(Box::new(move || {
-        let payload_ptr = payload_ptr_usize as *const u8;
-        let request_id_ptr = request_id_ptr_usize as *const c_char;
-
-        unsafe { process_request(cb, request_id_ptr, payload_ptr, ro, ack_tx) };
-    })) {
-        Ok(()) => {
-            tracing::event!(tracing::Level::DEBUG, "request enqueued");
-        }
-        Err(_e) => {
-            tracing::event!(
-                tracing::Level::WARN,
-                reason = "queue_full",
-                "Failed to enqueue request; queue may be full"
-            );
-
-            let http_error = HttpServerError::new(
-                HttpServerErrorCode::QueueFull,
-                "thread_pool",
-                "enqueue",
-                "backpressure",
-                "Request queue is full".to_string(),
-                None,
-            );
-
-            callback_handle_request(cb, None, None, &http_error);
-        }
-    }
-
-    let parsing_timeout = Duration::from_millis(1000);
-
-    match ack_rx.recv_timeout(parsing_timeout) {
-        Ok(()) => {}
-        Err(mpsc::RecvTimeoutError::Timeout) => {
-            let http_error = HttpServerError::new(
-                HttpServerErrorCode::RequestAckTimeout,
-                "ffi",
-                "handle_request",
-                "timeout",
-                "Worker did not ack request parsing within timeout".to_string(),
-                None,
-            );
-
-            callback_handle_request(cb, None, None, &http_error);
-        }
-        Err(_) => {
-            let http_error = HttpServerError::new(
-                HttpServerErrorCode::RequestAckTimeout,
-                "ffi",
-                "handle_request",
-                "channel",
-                "Failed to receive ack from worker".to_string(),
-                None,
-            );
-
-            callback_handle_request(cb, None, None, &http_error);
-        }
-    }
+    app.handle_request(cb, request_id_ptr, payload_ptr);
 }
 
 /// Seals the router, optimizing it for fast lookups. No routes can be added after sealing.

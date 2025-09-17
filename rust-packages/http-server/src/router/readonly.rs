@@ -2,8 +2,11 @@ use super::errors::RouterErrorCode;
 use super::path::normalize_and_validate_path;
 use super::structures::{RouterError, RouterResult};
 use super::{radix_tree::HTTP_METHOD_COUNT, Router};
+use super::RouteMatch;
+
 use crate::enums::HttpMethod;
 use crate::router::pattern::{self, SegmentPattern};
+
 use hashbrown::HashMap as FastHashMap;
 use std::cell::RefCell;
 
@@ -16,8 +19,6 @@ pub struct RouterReadOnly {
     static_maps: [FastHashMap<Box<str>, u16>; HTTP_METHOD_COUNT],
     root: ReadOnlyNode,
 }
-
-type RouteMatch = (u16, Vec<(String, (usize, usize))>);
 
 impl RouterReadOnly {
     /// Read-only router built for lock-free concurrent lookups.
@@ -66,6 +67,7 @@ impl RouterReadOnly {
     #[tracing::instrument(skip(self, path), fields(method=?method, path=%path))]
     pub fn find(&self, method: HttpMethod, path: &str) -> RouterResult<RouteMatch> {
         tracing::event!(tracing::Level::TRACE, operation="find", method=?method, path=%path);
+
         let normalized = match normalize_and_validate_path(path) {
             Ok(p) => p,
             Err(err_box) => {

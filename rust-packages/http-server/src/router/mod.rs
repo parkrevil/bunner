@@ -5,12 +5,15 @@ mod pattern;
 pub mod radix_tree;
 pub mod readonly;
 pub mod structures;
+pub mod types;
 
 use crate::enums::HttpMethod;
+
 pub use errors::RouterErrorCode;
-// path utils are consumed by readonly module only
 pub use readonly::RouterReadOnly;
 pub use structures::RouterError;
+pub use types::RouteMatch;
+
 use structures::RouterResult;
 use parking_lot::RwLock;
 
@@ -44,7 +47,7 @@ impl Router {
     pub fn add(&self, method: HttpMethod, path: &str) -> RouterResult<u16> {
         let mut g = self.inner.write();
 
-        if self.is_sealed() {
+        if g.ro.get().is_some() {
             let detail = serde_json::json!({ "path": path });
 
             return Err(Box::new(RouterError::new(
@@ -66,7 +69,7 @@ impl Router {
     {
         let mut g = self.inner.write();
 
-        if self.is_sealed() {
+        if g.ro.get().is_some() {
             // we can't know the exact count without consuming the iterator; collect temporarily
             let entries_vec: Vec<(HttpMethod, String)> = entries.into_iter().collect();
             let cnt = entries_vec.len();
@@ -85,11 +88,6 @@ impl Router {
         g.radix_tree.insert_bulk(entries)
     }
 
-    pub fn is_sealed(&self) -> bool {
-        let g = self.inner.read();
-        g.ro.get().is_some()
-    }
-
     pub fn seal(&self) {
         let mut g = self.inner.write();
 
@@ -101,6 +99,22 @@ impl Router {
         // replace radix_tree with a fresh one and set readonly snapshot on the inner
         g.radix_tree = radix_tree::RadixTree::new(Default::default());
         let _ = g.ro.set(arc);
+    }
+
+    pub fn find(&self, method: HttpMethod, path: &str) -> RouterResult<RouteMatch> {
+        let g = self.inner.read();
+
+        match g.ro.get() {
+            Some(ro) => ro.find(method, path),
+            None => Err(Box::new(RouterError::new(
+                RouterErrorCode::RouterNotSealed,
+                "router",
+                "find",
+                "validation",
+                "Router is not sealed; cannot perform find".to_string(),
+                None,
+            ))),
+        }
     }
 }
 

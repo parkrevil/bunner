@@ -2,7 +2,6 @@ use crossbeam_channel as xchan;
 use std::sync::OnceLock;
 
 use super::HandleRequestCallback;
-// pointer_registry::free removed; callers free CString directly
 
 struct CallbackJob {
     callback: HandleRequestCallback,

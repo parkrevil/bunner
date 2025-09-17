@@ -3,6 +3,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct AddRouteResult {
+    pub key: u16,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct BunnerResponse {
     #[serde(rename = "httpStatus")]
     pub http_status: HttpStatusCode,

@@ -1,4 +1,5 @@
-use super::{callback_dispatcher, HandleRequestCallback};
+use crate::request_callback_dispatcher;
+use crate::types::HandleRequestCallback;
 use crate::utils::ffi::{make_result, make_string_pointer};
 use serde::Serialize;
 
@@ -16,5 +17,5 @@ pub fn callback_handle_request<T: Serialize>(
         request_id_ptr = Some(make_string_pointer(rid));
     }
 
-    callback_dispatcher::enqueue(callback, request_id_ptr, route_key, res_ptr);
+    request_callback_dispatcher::enqueue(callback, request_id_ptr, route_key, res_ptr);
 }

@@ -22,6 +22,7 @@ pub enum RouterErrorCode {
     MatchPathContainsDisallowedCharacters,
     MatchPathEmpty,
     MatchPathNotAscii,
+    RouterNotSealed,
 }
 
 impl RouterErrorCode {

@@ -1,4 +1,4 @@
-use crate::request_handler::{BunnerRequest, BunnerResponse, HandleRequestPayload};
+use crate::structures::{BunnerRequest, BunnerResponse, HandleRequestPayload};
 
 pub trait Middleware: Send + Sync {
     // return true to continue, false to stop chain immediately

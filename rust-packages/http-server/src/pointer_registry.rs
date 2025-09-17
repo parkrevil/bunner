@@ -9,7 +9,6 @@ fn registry() -> &'static Mutex<RawMap> {
     REGISTRY.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-/// Check whether a raw buffer pointer is registered.
 pub fn has(ptr: *mut u8) -> bool {
     if ptr.is_null() {
         return false;
