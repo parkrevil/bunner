@@ -1,4 +1,6 @@
 use crate::pointer_registry;
+use crate::errors::internal_error::InternalErrorCode;
+use serde::de::DeserializeOwned;
 
 /// Helper: register a vec, run a closure with the raw pointer, then free it.
 /// This reduces boilerplate in tests that need to operate on the raw pointer.
@@ -14,4 +16,57 @@ where
     unsafe { pointer_registry::free(ptr) };
 
     res
+}
+
+/// Read a len-prefixed string from a registered pointer and free it.
+/// Returns `Err(InternalErrorCode)` if reading fails.
+/// # Safety
+/// - `ptr` must be a valid pointer previously obtained from `pointer_registry::register`
+/// - The pointer must be a len-prefixed buffer as expected by `len_prefixed_pointer_to_string`
+pub unsafe fn read_string_and_free(ptr: *mut u8) -> Result<String, InternalErrorCode> {
+    // Interpret pointer as const for the string reader
+    let s = unsafe { crate::utils::string::len_prefixed_pointer_to_string(ptr as *const u8)? };
+    unsafe { pointer_registry::free(ptr) };
+    Ok(s)
+}
+
+/// Register a JSON string (len-prefixed) and run a closure with the parsed value.
+/// The closure receives `Result<T, InternalErrorCode>` so it can assert on Ok/Err.
+pub fn with_registered_parsed<T, F, R>(json: &str, f: F) -> R
+where
+    T: DeserializeOwned,
+    F: FnOnce(Result<T, InternalErrorCode>) -> R,
+{
+    let buf = crate::test_utils::string::make_len_prefixed_buf(json);
+    with_registered_vec(buf, |p| {
+        let res = unsafe { crate::utils::ffi::parse_json_pointer::<T>(p) };
+        f(res)
+    })
+}
+
+/// Convenience helper: register a len-prefixed JSON string, read it back as a
+/// raw string, and free the pointer. Returns `Result<String, InternalErrorCode>`.
+pub fn with_registered_string<R, F>(s: &str, f: F) -> R
+where
+    F: FnOnce(Result<String, InternalErrorCode>) -> R,
+{
+    let buf = crate::test_utils::string::make_len_prefixed_buf(s);
+    with_registered_vec(buf, |p| {
+        let res = unsafe { read_string_and_free(p) };
+        f(res)
+    })
+}
+
+/// Assert helper: run `with_registered_parsed` and assert that it returns a specific
+/// `InternalErrorCode` variant.
+pub fn assert_registered_parse_error<T>(json: &str, expected: InternalErrorCode)
+where
+    T: DeserializeOwned,
+{
+    with_registered_parsed::<T, _, _>(json, |res| {
+        match res {
+            Err(e) => assert_eq!(e, expected),
+            Ok(_) => unreachable!("expected Err({:?}) but got Ok", expected),
+        }
+    });
 }
