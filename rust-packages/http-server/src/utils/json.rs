@@ -69,27 +69,3 @@ pub fn deserialize_with_simd_json<T: DeserializeOwned>(
         InternalErrorCode::InvalidJsonString
     })
 }
-
-pub fn to_c_string(value: &str) -> *mut c_char {
-    match CString::new(value) {
-        Ok(cstr) => cstr.into_raw(),
-        Err(e) => {
-            tracing::trace!(
-                "Failed to create CString, value contains null bytes: {:?}",
-                e
-            );
-            std::ptr::null_mut()
-        }
-    }
-}
-
-pub fn serialize_and_to_c_string<T: Serialize>(value: &T) -> *mut c_char {
-    match serialize(value) {
-        Ok(json_string) => to_c_string(&json_string),
-        Err(e) => {
-            tracing::trace!("Failed to serialize value for CString conversion: {:?}", e);
-
-            std::ptr::null_mut()
-        }
-    }
-}
