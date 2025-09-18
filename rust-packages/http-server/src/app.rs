@@ -1,5 +1,5 @@
 use crate::enums::{HttpMethod, HttpStatusCode, LenPrefixedString};
-use crate::errors::{HttpServerError, HttpServerErrorCode};
+use crate::errors::{FfiError, FfiErrorCode};
 use crate::helpers::callback_handle_request;
 use crate::middleware::{BodyParser, Chain, CookieParser, HeaderParser, UrlParser};
 use crate::router::structures::RouterResult;
@@ -55,7 +55,7 @@ impl App {
         let ro = match self.router.get_readonly() {
             Ok(r) => r,
             Err(e) => {
-                callback_handle_request(cb, request_key, None, &HttpServerError::from(e));
+                callback_handle_request(cb, request_key, None, &FfiError::from(e));
 
                 return;
             }
@@ -73,8 +73,8 @@ impl App {
                     "Failed to enqueue request; queue may be full"
                 );
 
-                let err = HttpServerError::new(
-                    HttpServerErrorCode::QueueFull,
+                let err = FfiError::new(
+                    FfiErrorCode::QueueFull,
                     "thread_pool",
                     "enqueue",
                     "backpressure",
@@ -103,8 +103,8 @@ fn process_request(
     let payload = match deserialize::<HandleRequestPayload>(payload_str_ref) {
         Ok(p) => p,
         Err(_) => {
-            let err = HttpServerError::new(
-                HttpServerErrorCode::InvalidPayload,
+            let err = FfiError::new(
+                FfiErrorCode::InvalidPayload,
                 "app",
                 "process_request",
                 "parsing",
@@ -122,7 +122,7 @@ fn process_request(
     let http_method = match HttpMethod::from_u8(payload.http_method) {
         Ok(m) => m,
         Err(e) => {
-            let bunner_error = HttpServerError::new(
+            let bunner_error = FfiError::new(
                 e,
                 "app",
                 "process_request",
@@ -219,7 +219,7 @@ fn process_request(
             callback_handle_request(cb, request_key, Some(route_key), &output);
         }
         Err(router_error) => {
-            let mut be = HttpServerError::from(router_error);
+            let mut be = FfiError::from(router_error);
 
             be.merge_extra(serde_json::json!({
                 "operation": "handle_request_find",

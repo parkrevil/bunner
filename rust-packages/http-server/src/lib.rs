@@ -36,7 +36,7 @@ use tracing_subscriber::{EnvFilter, fmt};
 use crate::app_registry::{find_app, register_app, unregister_app};
 use crate::constants::PAYLOAD_ZERO_COPY_THRESHOLD;
 use crate::enums::{HttpMethod, LenPrefixedString};
-use crate::errors::{HttpServerError, HttpServerErrorCode};
+use crate::errors::{FfiError, FfiErrorCode};
 use crate::helpers::callback_handle_request;
 use crate::structures::AddRouteResult;
 use crate::thread_pool::shutdown_pool;
@@ -101,8 +101,8 @@ pub unsafe extern "C" fn add_route(
     let app_ptr = match find_app(app_id) {
         Some(p) => p,
         None => {
-            let http_error = HttpServerError::new(
-                HttpServerErrorCode::AppNotFound,
+            let err = FfiError::new(
+                FfiErrorCode::AppNotFound,
                 "ffi",
                 "add_route",
                 "validation",
@@ -110,13 +110,13 @@ pub unsafe extern "C" fn add_route(
                 Some(serde_json::json!(null)),
             );
 
-            return make_result(&http_error);
+            return make_result(&err);
         }
     };
 
     if path_ptr.is_null() {
-        let err = HttpServerError::new(
-            HttpServerErrorCode::InvalidPayload,
+        let err = FfiError::new(
+            FfiErrorCode::InvalidPayload,
             "ffi",
             "add_route",
             "validation",
@@ -132,7 +132,7 @@ pub unsafe extern "C" fn add_route(
     let http_method = match HttpMethod::from_u8(http_method) {
         Ok(m) => m,
         Err(e) => {
-            let err = HttpServerError::new(
+            let err = FfiError::new(
                 e,
                 "ffi",
                 "add_route",
@@ -152,7 +152,7 @@ pub unsafe extern "C" fn add_route(
 
     match app.add_route(http_method, &path_str) {
         Ok(k) => make_result(&AddRouteResult { key: k }),
-        Err(e) => make_result(&HttpServerError::from(e)),
+        Err(e) => make_result(&FfiError::from(e)),
     }
 }
 
@@ -173,8 +173,8 @@ pub unsafe extern "C" fn add_routes(handle: AppId, routes_ptr: *const u8) -> *mu
     let app_ptr = match find_app(handle) {
         Some(p) => p,
         None => {
-            let err = HttpServerError::new(
-                HttpServerErrorCode::AppNotFound,
+            let err = FfiError::new(
+                FfiErrorCode::AppNotFound,
                 "ffi",
                 "add_routes",
                 "validation",
@@ -188,8 +188,8 @@ pub unsafe extern "C" fn add_routes(handle: AppId, routes_ptr: *const u8) -> *mu
     let routes_str: LenPrefixedString = match unsafe { take_len_prefixed_pointer(routes_ptr, PAYLOAD_ZERO_COPY_THRESHOLD as usize) } {
         Ok(p) => p,
         Err(e) => {
-            let err = HttpServerError::new(
-                HttpServerErrorCode::InvalidPayload,
+            let err = FfiError::new(
+                FfiErrorCode::InvalidPayload,
                 "ffi",
                 "add_routes",
                 "validation",
@@ -209,8 +209,8 @@ pub unsafe extern "C" fn add_routes(handle: AppId, routes_ptr: *const u8) -> *mu
     let routes = match deserialize::<Vec<(HttpMethod, String)>>(routes_str_ref) {
         Ok(p) => p,
         Err(_) => {
-            let err = HttpServerError::new(
-                HttpServerErrorCode::InvalidPayload,
+            let err = FfiError::new(
+                FfiErrorCode::InvalidPayload,
                 "app",
                 "process_request",
                 "parsing",
@@ -237,7 +237,7 @@ pub unsafe extern "C" fn add_routes(handle: AppId, routes_ptr: *const u8) -> *mu
         Err(e) => {
             tracing::event!(tracing::Level::ERROR, code=?e.code, count=routes_len, "add_routes error");
 
-            make_result(&HttpServerError::from(e))
+            make_result(&FfiError::from(e))
         }
     }
 }
@@ -258,8 +258,8 @@ pub unsafe extern "C" fn handle_request(
     let app = match find_app(handle) {
         Some(app_ptr) => unsafe { &*app_ptr },
         None => {
-            let err = HttpServerError::new(
-                HttpServerErrorCode::AppNotFound,
+            let err = FfiError::new(
+                FfiErrorCode::AppNotFound,
                 "ffi",
                 "handle_request",
                 "system",
@@ -275,8 +275,8 @@ pub unsafe extern "C" fn handle_request(
     let payload_str: LenPrefixedString = match unsafe { take_len_prefixed_pointer(payload_ptr, PAYLOAD_ZERO_COPY_THRESHOLD as usize) } {
         Ok(p) => p,
         Err(e) => {
-            let http_error = HttpServerError::new(
-                HttpServerErrorCode::InvalidPayload,
+            let err = FfiError::new(
+                FfiErrorCode::InvalidPayload,
                 "ffi",
                 "handle_request",
                 "validation",
@@ -284,7 +284,7 @@ pub unsafe extern "C" fn handle_request(
                 Some(serde_json::json!({"payload_ptr": format!("{:p}", payload_ptr)})),
             );
 
-            callback_handle_request(cb, request_key, None, &http_error);
+            callback_handle_request(cb, request_key, None, &err);
 
             return;
         }
@@ -303,8 +303,8 @@ pub unsafe extern "C" fn seal_routes(handle: AppId) -> *mut u8 {
     let app_ptr = match find_app(handle) {
         Some(p) => p,
         None => {
-            let err = HttpServerError::new(
-                HttpServerErrorCode::AppNotFound,
+            let err = FfiError::new(
+                FfiErrorCode::AppNotFound,
                 "ffi",
                 "seal_routes",
                 "system",

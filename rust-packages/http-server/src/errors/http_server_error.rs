@@ -4,48 +4,38 @@ use serde::{Deserialize, Serialize};
 
 #[repr(u16)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
-pub enum HttpServerErrorCode {
+pub enum FfiErrorCode {
     AppNotFound = 1,
     InvalidHttpMethod,
-    InvalidRequestId,
-    RouteNotSealed,
-    RouterSealedCannotInsert,
     QueueFull,
     InvalidPayload,
-    InvalidRoutes,
-    RequestAckTimeout,
 }
 
-impl HttpServerErrorCode {
+impl FfiErrorCode {
     pub fn code(self) -> u16 {
         self as u16
     }
 }
 
-impl From<HttpServerErrorCode> for u16 {
-    fn from(error: HttpServerErrorCode) -> u16 {
+impl From<FfiErrorCode> for u16 {
+    fn from(error: FfiErrorCode) -> u16 {
         error as u16
     }
 }
 
-impl HttpServerErrorCode {
+impl FfiErrorCode {
     pub fn as_str(self) -> &'static str {
         match self {
-            HttpServerErrorCode::AppNotFound => "AppNotFound",
-            HttpServerErrorCode::InvalidHttpMethod => "InvalidHttpMethod",
-            HttpServerErrorCode::InvalidRequestId => "InvalidRequestId",
-            HttpServerErrorCode::RouteNotSealed => "RouteNotSealed",
-            HttpServerErrorCode::RouterSealedCannotInsert => "RouterSealedCannotInsert",
-            HttpServerErrorCode::QueueFull => "QueueFull",
-            HttpServerErrorCode::InvalidPayload => "InvalidPayload",
-            HttpServerErrorCode::InvalidRoutes => "InvalidRoutes",
-            HttpServerErrorCode::RequestAckTimeout => "RequestAckTimeout",
+            FfiErrorCode::AppNotFound => "AppNotFound",
+            FfiErrorCode::InvalidHttpMethod => "InvalidHttpMethod",
+            FfiErrorCode::QueueFull => "QueueFull",
+            FfiErrorCode::InvalidPayload => "InvalidPayload",
         }
     }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct HttpServerError {
+pub struct FfiError {
     pub code: u16,
     pub error: String,
     pub subsystem: String,
@@ -58,9 +48,9 @@ pub struct HttpServerError {
     pub extra: Option<serde_json::Value>,
 }
 
-impl From<RouterError> for HttpServerError {
+impl From<RouterError> for FfiError {
     fn from(router_error: RouterError) -> Self {
-        HttpServerError {
+        FfiError {
             code: router_error.code.code(),
             error: router_error.error.clone(),
             subsystem: router_error.subsystem.clone(),
@@ -75,13 +65,13 @@ impl From<RouterError> for HttpServerError {
     }
 }
 
-impl From<Box<RouterError>> for HttpServerError {
+impl From<Box<RouterError>> for FfiError {
     fn from(router_error: Box<RouterError>) -> Self {
-        HttpServerError::from(*router_error)
+        FfiError::from(*router_error)
     }
 }
 
-impl HttpServerError {
+impl FfiError {
     fn generate_metadata() -> (u64, String) {
         let ts = {
             use std::time::{SystemTime, UNIX_EPOCH};
@@ -95,7 +85,7 @@ impl HttpServerError {
     }
 
     pub fn new(
-        code: HttpServerErrorCode,
+        code: FfiErrorCode,
         subsystem: &str,
         stage: &str,
         cause: &str,
@@ -104,7 +94,7 @@ impl HttpServerError {
     ) -> Self {
         let (ts, thread) = Self::generate_metadata();
 
-        HttpServerError {
+        FfiError {
             code: code.code(),
             error: code.as_str().to_string(),
             subsystem: subsystem.to_string(),
@@ -119,7 +109,7 @@ impl HttpServerError {
     }
 }
 
-impl HttpServerError {
+impl FfiError {
     pub fn merge_extra(&mut self, new_extra: serde_json::Value) {
         if let Some(existing) = self.extra.as_mut() {
             if let serde_json::Value::Object(existing_map) = existing
