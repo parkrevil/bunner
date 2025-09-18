@@ -124,3 +124,9 @@ impl HttpStatusCode {
         }
     }
 }
+
+/// A length-prefixed string, either text or binary.
+pub enum LenPrefixedString {
+    Text(String),
+    Bytes(Vec<u8>),
+}

@@ -1,4 +1,3 @@
-use crate::errors::internal_error::InternalErrorCode;
 use crate::test_utils::pointer::with_raw_ptr;
 use crate::test_utils::string::{
     make_invalid_utf8_buf, make_large_string, make_len_prefixed_buf, make_mismatched_len_buf,
@@ -59,10 +58,10 @@ mod len_prefixed_pointer_to_string {
 
         // Assert
         assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            InternalErrorCode::PointerIsNull
-        ));
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Pointer is null".to_string(),
+        );
     }
 
     #[test]
@@ -75,10 +74,10 @@ mod len_prefixed_pointer_to_string {
 
         // Assert
         assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            InternalErrorCode::InvalidJsonString
-        ));
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Pointer is null".to_string(),
+        );
     }
 
     #[test]

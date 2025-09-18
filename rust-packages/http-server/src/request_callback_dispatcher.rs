@@ -1,11 +1,13 @@
 use crossbeam_channel as xchan;
 use std::sync::OnceLock;
 
+use crate::types::RequestKey;
+
 use super::HandleRequestCallback;
 
 struct CallbackJob {
     callback: HandleRequestCallback,
-    request_id: Option<*mut u8>,
+    request_key: RequestKey,
     route_key: Option<u16>,
     result_ptr: *mut u8,
 }
@@ -28,14 +30,13 @@ fn init() -> xchan::Sender<CallbackJob> {
                 tracing::event!(
                     tracing::Level::TRACE,
                     stage = "dispatcher_recv",
-                    has_req_id = job.request_id.is_some(),
+                    request_key = job.request_key,
                     route_key = job.route_key
                 );
 
-                let request_id_ptr: *mut u8 = job.request_id.unwrap_or(std::ptr::null_mut());
                 let res = std::panic::catch_unwind(|| {
                     (job.callback)(
-                        request_id_ptr,
+                        job.request_key,
                         job.route_key.unwrap_or_default(),
                         job.result_ptr,
                     )
@@ -59,24 +60,24 @@ fn init() -> xchan::Sender<CallbackJob> {
 /// are valid and point to memory that is safe to access.
 pub unsafe fn enqueue(
     callback: HandleRequestCallback,
-    request_id: Option<*mut u8>,
+    request_key: RequestKey,
     route_key: Option<u16>,
-    res_ptr: *mut u8,
+    result_ptr: *mut u8,
 ) {
     let tx = TX.get_or_init(init);
 
     tracing::event!(
         tracing::Level::TRACE,
         stage = "dispatcher_enqueue",
-        has_req_id = request_id.is_some(),
+        route_key = route_key,
         route_key = route_key
     );
 
     let send_result = tx.send(CallbackJob {
         callback,
-        request_id,
+        request_key,
         route_key,
-        result_ptr: res_ptr,
+        result_ptr,
     });
 
     if let Err(e) = send_result {
@@ -85,12 +86,8 @@ pub unsafe fn enqueue(
             e
         );
 
-        if let Some(rptr) = request_id {
-            unsafe { crate::pointer_registry::free(rptr) };
-        }
-
-        if !res_ptr.is_null() {
-            unsafe { crate::pointer_registry::free(res_ptr) };
+        if !result_ptr.is_null() {
+            unsafe { crate::pointer_registry::free(result_ptr) };
         }
     }
 }

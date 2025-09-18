@@ -12,6 +12,7 @@ pub mod app_registry;
 pub mod constants;
 pub mod enums;
 pub mod errors;
+pub mod helpers;
 pub mod middleware;
 pub mod pointer_registry;
 pub mod request_callback_dispatcher;
@@ -20,7 +21,6 @@ pub mod structures;
 mod thread_pool;
 pub mod types;
 pub mod utils;
-pub mod helpers;
 
 #[cfg(test)]
 #[path = "../tests/utils/mod.rs"]
@@ -33,16 +33,21 @@ use std::io;
 use std::{ffi::CStr, os::raw::c_char};
 use tracing_subscriber::{EnvFilter, fmt};
 
-
 use crate::app_registry::{find_app, register_app, unregister_app};
-use crate::enums::HttpMethod;
+use crate::constants::PAYLOAD_ZERO_COPY_THRESHOLD;
+use crate::enums::{HttpMethod, LenPrefixedString};
 use crate::errors::{HttpServerError, HttpServerErrorCode};
-use crate::types::HandleRequestCallback;
 use crate::helpers::callback_handle_request;
 use crate::structures::AddRouteResult;
-use crate::thread_pool::{shutdown_pool};
-use crate::types::AppId;
-use crate::utils::ffi::{make_result, parse_json_pointer};
+use crate::thread_pool::shutdown_pool;
+use crate::types::HandleRequestCallback;
+use crate::types::{AppId, RequestKey};
+use crate::utils::{
+  ffi::{
+    make_result, take_len_prefixed_pointer,
+},
+  json::deserialize,
+};
 
 #[unsafe(no_mangle)]
 #[tracing::instrument(skip_all, fields(operation = "construct"))]
@@ -168,7 +173,7 @@ pub unsafe extern "C" fn add_routes(handle: AppId, routes_ptr: *const u8) -> *mu
     let app_ptr = match find_app(handle) {
         Some(p) => p,
         None => {
-            let http_error = HttpServerError::new(
+            let err = HttpServerError::new(
                 HttpServerErrorCode::AppNotFound,
                 "ffi",
                 "add_routes",
@@ -177,40 +182,47 @@ pub unsafe extern "C" fn add_routes(handle: AppId, routes_ptr: *const u8) -> *mu
                 Some(serde_json::json!(null)),
             );
 
-            return make_result(&http_error);
+            return make_result(&err);
         }
     };
+    let routes_str: LenPrefixedString = match unsafe { take_len_prefixed_pointer(routes_ptr, PAYLOAD_ZERO_COPY_THRESHOLD as usize) } {
+        Ok(p) => p,
+        Err(e) => {
+            let err = HttpServerError::new(
+                HttpServerErrorCode::InvalidPayload,
+                "ffi",
+                "add_routes",
+                "validation",
+                e.to_string(),
+                None,
+            );
 
-    if routes_ptr.is_null() {
-        let http_error = HttpServerError::new(
-            HttpServerErrorCode::InvalidRoutes,
-            "ffi",
-            "add_routes",
-            "validation",
-            "Routes pointer is null".to_string(),
-            Some(serde_json::json!(null)),
-        );
+            tracing::event!(tracing::Level::ERROR, reason="take_len_prefixed_pointer_error", routes_ptr=%format!("{:p}", routes_ptr));
 
-        return make_result(&http_error);
-    }
+            return make_result(&err);
+        }
+    };
+    let routes_str_ref = match &routes_str {
+        LenPrefixedString::Text(s) => s.as_str(),
+        LenPrefixedString::Bytes(b) => unsafe { std::str::from_utf8_unchecked(b) },
+    };
+    let routes = match deserialize::<Vec<(HttpMethod, String)>>(routes_str_ref) {
+        Ok(p) => p,
+        Err(_) => {
+            let err = HttpServerError::new(
+                HttpServerErrorCode::InvalidPayload,
+                "app",
+                "process_request",
+                "parsing",
+                "Failed to deserialize request payload JSON".to_string(),
+                None,
+            );
 
-    let routes: Vec<(HttpMethod, String)> =
-        match unsafe { parse_json_pointer::<Vec<(HttpMethod, String)>>(routes_ptr) } {
-            Ok(v) => v,
-            Err(_) => {
-                let http_error = HttpServerError::new(
-                    HttpServerErrorCode::InvalidRoutes,
-                    "ffi",
-                    "add_routes",
-                    "parsing",
-                    "Invalid JSON string for routes list".to_string(),
-                    Some(serde_json::json!({"routesPtr": format!("{:p}", routes_ptr)})),
-                );
+            tracing::event!(tracing::Level::ERROR, reason="deserialize_routes_error");
 
-                return make_result(&http_error);
-            }
-        };
-
+            return make_result(&err);
+        }
+    };
     let app = unsafe { &*app_ptr };
     let routes_len = routes.len();
 
@@ -223,7 +235,7 @@ pub unsafe extern "C" fn add_routes(handle: AppId, routes_ptr: *const u8) -> *mu
             make_result(&r)
         }
         Err(e) => {
-            tracing::event!(tracing::Level::ERROR, code=?e.code, count=routes_len as u64, "add_routes error");
+            tracing::event!(tracing::Level::ERROR, code=?e.code, count=routes_len, "add_routes error");
 
             make_result(&HttpServerError::from(e))
         }
@@ -239,12 +251,12 @@ pub unsafe extern "C" fn add_routes(handle: AppId, routes_ptr: *const u8) -> *mu
 #[tracing::instrument(skip_all, fields(operation = "handle_request"))]
 pub unsafe extern "C" fn handle_request(
     handle: AppId,
-    request_id_ptr: *const c_char,
+    request_key: RequestKey,
     payload_ptr: *const u8,
     cb: HandleRequestCallback,
 ) {
-    let app_ptr = match find_app(handle) {
-        Some(p) => p,
+    let app = match find_app(handle) {
+        Some(app_ptr) => unsafe { &*app_ptr },
         None => {
             let err = HttpServerError::new(
                 HttpServerErrorCode::AppNotFound,
@@ -255,45 +267,30 @@ pub unsafe extern "C" fn handle_request(
                 Some(serde_json::json!(null)),
             );
 
-            callback_handle_request(cb, None, None, &err);
+            callback_handle_request(cb, request_key, None, &err);
+
+            return;
+        }
+    };
+    let payload_str: LenPrefixedString = match unsafe { take_len_prefixed_pointer(payload_ptr, PAYLOAD_ZERO_COPY_THRESHOLD as usize) } {
+        Ok(p) => p,
+        Err(e) => {
+            let http_error = HttpServerError::new(
+                HttpServerErrorCode::InvalidPayload,
+                "ffi",
+                "handle_request",
+                "validation",
+                e.to_string(),
+                Some(serde_json::json!({"payload_ptr": format!("{:p}", payload_ptr)})),
+            );
+
+            callback_handle_request(cb, request_key, None, &http_error);
 
             return;
         }
     };
 
-    if request_id_ptr.is_null() {
-        let http_error = HttpServerError::new(
-            HttpServerErrorCode::InvalidRequestId,
-            "ffi",
-            "handle_request",
-            "validation",
-            "Request id pointer is null".to_string(),
-            Some(serde_json::json!(null)),
-        );
-
-        callback_handle_request(cb, None, None, &http_error);
-
-        return;
-    }
-
-    if payload_ptr.is_null() {
-        let err = HttpServerError::new(
-            HttpServerErrorCode::InvalidPayload,
-            "ffi",
-            "handle_request",
-            "validation",
-            "Payload pointer is null".to_string(),
-            Some(serde_json::json!(null)),
-        );
-
-        callback_handle_request(cb, None, None, &err);
-
-        return;
-    }
-
-    let app = unsafe { &*app_ptr };
-
-    app.handle_request(cb, request_id_ptr, payload_ptr);
+    app.handle_request(cb, request_key, payload_str);
 }
 
 /// Seals the router, optimizing it for fast lookups. No routes can be added after sealing.

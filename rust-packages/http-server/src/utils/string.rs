@@ -1,5 +1,3 @@
-use crate::errors::internal_error::InternalErrorCode;
-
 /// Read a 4-byte little-endian length-prefixed buffer and deserialize JSON into T.
 /// # Safety
 /// - `ptr` must be a valid pointer to at least 4 bytes (the length header).
@@ -7,23 +5,20 @@ use crate::errors::internal_error::InternalErrorCode;
 ///   must be valid UTF-8.
 ///
 /// This function dereferences raw pointers and therefore is `unsafe`.
-pub unsafe fn len_prefixed_pointer_to_string(ptr: *const u8) -> Result<String, InternalErrorCode> {
+pub unsafe fn len_prefixed_pointer_to_string(ptr: *const u8) -> Result<String, &'static str> {
     if ptr.is_null() {
-        tracing::error!("len_prefixed_ptr_deserialize: ptr is null");
+        tracing::error!("len_prefixed_ptr_deserialize: Pointer is null");
 
-        return Err(InternalErrorCode::PointerIsNull);
+        return Err("Pointer is null");
     }
 
     let header = unsafe { std::slice::from_raw_parts(ptr, 4) };
     let len = u32::from_le_bytes([header[0], header[1], header[2], header[3]]) as usize;
     let data_ptr = unsafe { ptr.add(4) };
     let bytes = unsafe { std::slice::from_raw_parts(data_ptr, len) };
-    let s = match std::str::from_utf8(bytes) {
-        Ok(v) => v.to_string(),
-        Err(_) => return Err(InternalErrorCode::InvalidJsonString),
-    };
+    let s = unsafe { std::str::from_utf8_unchecked(bytes) };
 
-    Ok(s)
+    Ok(s.to_string())
 }
 
 pub fn string_to_len_prefixed_buffer(s: &str) -> Vec<u8> {

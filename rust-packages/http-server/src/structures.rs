@@ -48,6 +48,7 @@ pub struct HandleRequestPayload {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct HandleRequestOutput {
+    pub request_id: String,
     pub request: BunnerRequest,
     pub response: BunnerResponse,
 }
