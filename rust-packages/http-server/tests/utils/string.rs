@@ -26,3 +26,10 @@ pub fn make_mismatched_len_buf(header_len: u32, payload: &[u8]) -> Vec<u8> {
     v.extend_from_slice(payload);
     v
 }
+
+/// Extract the length header from a len-prefixed buffer slice.
+pub fn extract_len_header(buf: &[u8]) -> u32 {
+    let mut arr = [0u8; 4];
+    arr.copy_from_slice(&buf[..4]);
+    u32::from_le_bytes(arr)
+}

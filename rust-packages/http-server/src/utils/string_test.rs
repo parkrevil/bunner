@@ -3,6 +3,9 @@
 use crate::test_utils::pointer::with_raw_ptr;
 use crate::test_utils::string::{make_len_prefixed_buf, make_mismatched_len_buf};
 use crate::utils::string::{len_prefixed_pointer_to_string, string_to_len_prefixed_buffer};
+use crate::types::LengthHeaderSize;
+use crate::constants::LENGTH_HEADER_BYTES;
+use crate::test_utils::string::extract_len_header;
 
 #[cfg(test)]
 mod len_prefixed_pointer_to_string_tests {
@@ -60,20 +63,20 @@ mod string_to_len_prefixed_buffer_tests {
         let s = "abc";
         let v = string_to_len_prefixed_buffer(s);
 
-        let header = u32::from_le_bytes([v[0], v[1], v[2], v[3]]);
-        assert_eq!(header, 3);
+    let header = extract_len_header(&v) as LengthHeaderSize;
+    assert_eq!(header, 3);
 
-        let payload = &v[4..];
+    let payload = &v[LENGTH_HEADER_BYTES..];
         assert_eq!(payload, b"abc");
     }
 
     #[test]
     fn empty_string_has_zero_header_and_no_payload() {
         let v = string_to_len_prefixed_buffer("");
-        let header = u32::from_le_bytes([v[0], v[1], v[2], v[3]]);
+    let header = extract_len_header(&v) as LengthHeaderSize;
 
-        assert_eq!(header, 0);
-        assert_eq!(v.len(), 4);
+    assert_eq!(header, 0);
+    assert_eq!(v.len(), LENGTH_HEADER_BYTES);
     }
 
     #[test]
