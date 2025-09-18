@@ -167,6 +167,8 @@ export class Ffi extends BaseFfi<FfiSymbols> {
     routeKey: number,
     resultPtr: FfiPointer,
   ) {
+    requestKey = BigInt(requestKey);
+
     const entry = this.pendingHandleRequests.get(requestKey)!;
 
     if (entry === undefined) {

@@ -6,6 +6,7 @@ use crate::router::{Router, RouterReadOnly};
 use crate::structures::{BunnerRequest, BunnerResponse, HandleRequestOutput, HandleRequestPayload};
 use crate::thread_pool::submit_job;
 use crate::types::RequestKey;
+use crate::utils::json::deserialize;
 
 use super::HandleRequestCallback;
 
@@ -99,7 +100,7 @@ fn process_request(
     payload_str: LenPrefixedString,
     ro: Arc<RouterReadOnly>,
 ) {
-    use crate::utils::json::deserialize;
+    tracing::trace!("processing request");
 
     let payload_str_ref = match &payload_str {
         LenPrefixedString::Text(s) => s.as_str(),
