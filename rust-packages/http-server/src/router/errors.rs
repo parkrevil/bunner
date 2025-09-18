@@ -1,7 +1,9 @@
+use crate::types::{ErrorCode, ErrorString};
+
 #[repr(u16)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum RouterErrorCode {
-    AlreadySealed,
+    AlreadySealed = 10000,
     NotSealed,
 
     EmptyPath,
@@ -22,13 +24,11 @@ pub enum RouterErrorCode {
 }
 
 impl RouterErrorCode {
-    pub fn code(self) -> u16 {
-        self as u16
+    pub fn code(self) -> ErrorCode {
+        self as ErrorCode
     }
-}
 
-impl RouterErrorCode {
-    pub fn as_str(self) -> &'static str {
+    pub fn name(self) -> ErrorString {
         match self {
             RouterErrorCode::AlreadySealed => "AlreadySealed",
             RouterErrorCode::NotSealed => "NotSealed",

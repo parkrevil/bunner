@@ -19,23 +19,6 @@ pub struct FfiError {
     pub extra: Option<serde_json::Value>,
 }
 
-impl From<Box<RouterError>> for FfiError {
-    fn from(router_error: Box<RouterError>) -> Self {
-        FfiError {
-            code: router_error.code.code(),
-            error: router_error.error.clone(),
-            subsystem: router_error.subsystem.clone(),
-            stage: router_error.stage.clone(),
-            cause: router_error.cause.clone(),
-            ts: router_error.ts,
-            thread: router_error.thread.clone(),
-            version: PACKAGE_VERSION.to_string(),
-            description: router_error.description.clone(),
-            extra: router_error.extra.clone(),
-        }
-    }
-}
-
 impl FfiError {
     fn generate_metadata() -> (u64, String) {
         let ts = {
@@ -61,7 +44,7 @@ impl FfiError {
 
         FfiError {
             code: code.code(),
-            error: code.as_str().to_string(),
+            error: code.name().to_string(),
             subsystem: subsystem.to_string(),
             stage: stage.to_string(),
             cause: cause.to_string(),
@@ -82,6 +65,36 @@ impl FfiError {
             }
         } else {
             self.extra = Some(new_extra);
+        }
+    }
+}
+
+impl From<Box<RouterError>> for FfiError {
+    fn from(router_error: Box<RouterError>) -> Self {
+        // We own the Box<RouterError>, so move fields out instead of cloning.
+        let RouterError {
+            code,
+            error,
+            subsystem,
+            stage,
+            cause,
+            ts,
+            thread,
+            description,
+            extra,
+        } = *router_error;
+
+        FfiError {
+            code: code.code(),
+            error,
+            subsystem,
+            stage,
+            cause,
+            ts,
+            thread,
+            version: PACKAGE_VERSION.to_string(),
+            description,
+            extra,
         }
     }
 }

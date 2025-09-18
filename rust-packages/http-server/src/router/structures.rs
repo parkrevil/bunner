@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 
 use crate::router::errors::RouterErrorCode;
-// json helper moved to crate::util::make_error_detail; no direct json import needed here
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RouterError {
@@ -13,7 +12,6 @@ pub struct RouterError {
     pub ts: u64,
     pub thread: String,
     pub description: String,
-    #[serde(rename = "extra")]
     pub extra: Option<serde_json::Value>,
 }
 
@@ -30,7 +28,6 @@ impl RouterError {
         (ts, thread)
     }
 
-    /// Construct a RouterError. The caller must provide a context-specific description.
     pub fn new(
         code: RouterErrorCode,
         subsystem: &str,
@@ -42,7 +39,7 @@ impl RouterError {
         let (ts, thread) = Self::generate_metadata();
 
         RouterError {
-            error: code.as_str().to_string(),
+            error: code.name().to_string(),
             code,
             subsystem: subsystem.to_string(),
             stage: stage.to_string(),
@@ -54,7 +51,6 @@ impl RouterError {
         }
     }
 
-    /// Merge additional context into detail. Initializes detail as object if absent.
     pub fn merge_extra(&mut self, new_extra: serde_json::Value) {
         if let Some(existing_extra) = self.extra.as_mut() {
             if let serde_json::Value::Object(existing_map) = existing_extra
@@ -68,5 +64,4 @@ impl RouterError {
     }
 }
 
-// Use boxed RouterError in Results to avoid large error-variant sizes on the stack.
 pub type RouterResult<T> = Result<T, Box<RouterError>>;

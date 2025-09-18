@@ -1,3 +1,5 @@
+use crate::types::{ErrorCode, ErrorString};
+
 #[repr(u16)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum FfiErrorCode {
@@ -8,11 +10,11 @@ pub enum FfiErrorCode {
 }
 
 impl FfiErrorCode {
-    pub fn code(self) -> u16 {
-        self as u16
+    pub fn code(self) -> ErrorCode {
+        self as ErrorCode
     }
 
-    pub fn as_str(self) -> &'static str {
+    pub fn name(self) -> ErrorString {
         match self {
             FfiErrorCode::AppNotFound => "AppNotFound",
             FfiErrorCode::InvalidHttpMethod => "InvalidHttpMethod",
