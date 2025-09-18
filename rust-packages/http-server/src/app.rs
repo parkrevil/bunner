@@ -98,6 +98,9 @@ fn process_request(
 
     let payload_str_ref = match &payload_str {
         LenPrefixedString::Text(s) => s.as_str(),
+        // SAFETY: The FFI caller (TypeScript side) guarantees that the payload is valid UTF-8.
+        // Therefore we intentionally use `str::from_utf8_unchecked` here to avoid an extra check.
+        // This function is `unsafe` and the caller must uphold the UTF-8 guarantee.
         LenPrefixedString::Bytes(b) => unsafe { std::str::from_utf8_unchecked(b) },
     };
     let payload = match deserialize::<HandleRequestPayload>(payload_str_ref) {

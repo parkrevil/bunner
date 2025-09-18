@@ -43,10 +43,8 @@ use crate::thread_pool::shutdown_pool;
 use crate::types::HandleRequestCallback;
 use crate::types::{AppId, RequestKey};
 use crate::utils::{
-  ffi::{
-    make_result, take_len_prefixed_pointer,
-},
-  json::deserialize,
+    ffi::{make_result, take_len_prefixed_pointer},
+    json::deserialize,
 };
 
 #[unsafe(no_mangle)]
@@ -185,7 +183,9 @@ pub unsafe extern "C" fn add_routes(handle: AppId, routes_ptr: *const u8) -> *mu
             return make_result(&err);
         }
     };
-    let routes_str: LenPrefixedString = match unsafe { take_len_prefixed_pointer(routes_ptr, PAYLOAD_ZERO_COPY_THRESHOLD as usize) } {
+    let routes_str: LenPrefixedString = match unsafe {
+        take_len_prefixed_pointer(routes_ptr, PAYLOAD_ZERO_COPY_THRESHOLD as usize)
+    } {
         Ok(p) => p,
         Err(e) => {
             let err = FfiError::new(
@@ -204,6 +204,9 @@ pub unsafe extern "C" fn add_routes(handle: AppId, routes_ptr: *const u8) -> *mu
     };
     let routes_str_ref = match &routes_str {
         LenPrefixedString::Text(s) => s.as_str(),
+        // SAFETY: The FFI caller (TypeScript side) guarantees that the payload is valid UTF-8.
+        // Therefore we intentionally use `str::from_utf8_unchecked` here to avoid an extra check.
+        // This function is `unsafe` and the caller must uphold the UTF-8 guarantee.
         LenPrefixedString::Bytes(b) => unsafe { std::str::from_utf8_unchecked(b) },
     };
     let routes = match deserialize::<Vec<(HttpMethod, String)>>(routes_str_ref) {
@@ -218,7 +221,7 @@ pub unsafe extern "C" fn add_routes(handle: AppId, routes_ptr: *const u8) -> *mu
                 None,
             );
 
-            tracing::event!(tracing::Level::ERROR, reason="deserialize_routes_error");
+            tracing::event!(tracing::Level::ERROR, reason = "deserialize_routes_error");
 
             return make_result(&err);
         }
@@ -272,7 +275,9 @@ pub unsafe extern "C" fn handle_request(
             return;
         }
     };
-    let payload_str: LenPrefixedString = match unsafe { take_len_prefixed_pointer(payload_ptr, PAYLOAD_ZERO_COPY_THRESHOLD as usize) } {
+    let payload_str: LenPrefixedString = match unsafe {
+        take_len_prefixed_pointer(payload_ptr, PAYLOAD_ZERO_COPY_THRESHOLD as usize)
+    } {
         Ok(p) => p,
         Err(e) => {
             let err = FfiError::new(

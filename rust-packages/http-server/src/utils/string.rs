@@ -15,7 +15,6 @@ use std::{
 /// - The memory for length+payload must be valid for reads of `LENGTH_HEADER_BYTES + len` bytes and the payload
 ///   must be valid UTF-8.
 ///
-/// This function dereferences raw pointers and therefore is `unsafe`.
 pub unsafe fn len_prefixed_pointer_to_string(ptr: *const u8) -> Result<String, ErrorString> {
     if ptr.is_null() {
         return Err("Pointer is null");
@@ -24,6 +23,10 @@ pub unsafe fn len_prefixed_pointer_to_string(ptr: *const u8) -> Result<String, E
     let payload_len = unsafe { read_length_at_pointer(ptr)? as usize };
     let data_ptr = unsafe { ptr.add(LENGTH_HEADER_BYTES) };
     let bytes = unsafe { slice::from_raw_parts(data_ptr, payload_len) };
+
+    // SAFETY: The FFI caller (TypeScript side) guarantees that the payload is valid UTF-8.
+    // Therefore we intentionally use `str::from_utf8_unchecked` here to avoid an extra check.
+    // This function is `unsafe` and the caller must uphold the UTF-8 guarantee.
     let s = unsafe { str::from_utf8_unchecked(bytes) };
 
     Ok(s.to_string())
