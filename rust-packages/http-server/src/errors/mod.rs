@@ -1,2 +1,5 @@
-pub mod http_server_error;
-pub use http_server_error::{FfiError, FfiErrorCode};
+pub mod codes;
+pub use codes::{FfiErrorCode};
+
+pub mod ffi_error;
+pub use ffi_error::{FfiError};

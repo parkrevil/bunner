@@ -1,38 +1,9 @@
 use crate::constants::PACKAGE_VERSION;
 use crate::router::RouterError;
+
+use super::FfiErrorCode;
+
 use serde::{Deserialize, Serialize};
-
-#[repr(u16)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
-pub enum FfiErrorCode {
-    AppNotFound = 1,
-    InvalidHttpMethod,
-    QueueFull,
-    InvalidPayload,
-}
-
-impl FfiErrorCode {
-    pub fn code(self) -> u16 {
-        self as u16
-    }
-}
-
-impl From<FfiErrorCode> for u16 {
-    fn from(error: FfiErrorCode) -> u16 {
-        error as u16
-    }
-}
-
-impl FfiErrorCode {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            FfiErrorCode::AppNotFound => "AppNotFound",
-            FfiErrorCode::InvalidHttpMethod => "InvalidHttpMethod",
-            FfiErrorCode::QueueFull => "QueueFull",
-            FfiErrorCode::InvalidPayload => "InvalidPayload",
-        }
-    }
-}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct FfiError {
@@ -48,8 +19,8 @@ pub struct FfiError {
     pub extra: Option<serde_json::Value>,
 }
 
-impl From<RouterError> for FfiError {
-    fn from(router_error: RouterError) -> Self {
+impl From<Box<RouterError>> for FfiError {
+    fn from(router_error: Box<RouterError>) -> Self {
         FfiError {
             code: router_error.code.code(),
             error: router_error.error.clone(),
@@ -62,12 +33,6 @@ impl From<RouterError> for FfiError {
             description: router_error.description.clone(),
             extra: router_error.extra.clone(),
         }
-    }
-}
-
-impl From<Box<RouterError>> for FfiError {
-    fn from(router_error: Box<RouterError>) -> Self {
-        FfiError::from(*router_error)
     }
 }
 
@@ -107,9 +72,7 @@ impl FfiError {
             version: PACKAGE_VERSION.to_string(),
         }
     }
-}
 
-impl FfiError {
     pub fn merge_extra(&mut self, new_extra: serde_json::Value) {
         if let Some(existing) = self.extra.as_mut() {
             if let serde_json::Value::Object(existing_map) = existing
