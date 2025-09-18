@@ -1,13 +1,10 @@
 import type { Pointer } from 'bun:ffi';
 
-import type { JSCallbackEntry } from './interfaces';
-
 /**
- * JS Callback Map
- * @description The map for JS callbacks
- * @param T - The type for the result
+ * App ID
+ * @description The type for the application ID
  */
-export type JSCallbackMap<T> = Map<string, JSCallbackEntry<T>>;
+export type AppId = bigint;
 
 /**
  * Free Pointer Function

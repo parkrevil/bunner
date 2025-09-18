@@ -1,23 +1,35 @@
-import type { BaseFfiSymbols } from '@bunner/core';
+import type { AppId, BaseFfiSymbols } from '@bunner/core';
 import type { Pointer } from 'bun:ffi';
 import type { StatusCodes } from 'http-status-codes';
 
 import type { HttpMethod } from '../enums';
 
+import type { RequestKey } from './types';
+
 export interface FfiSymbols extends BaseFfiSymbols {
   add_route: (
-    appId: bigint,
-    method: number,
+    appId: AppId,
+    method: HttpMethod,
     path: Uint8Array,
   ) => Pointer | null;
-  add_routes: (appId: bigint, routes: Uint8Array) => Pointer | null;
+  add_routes: (appId: AppId, routes: Uint8Array) => Pointer | null;
   handle_request: (
-    appId: bigint,
-    requestId: Uint8Array,
+    appId: AppId,
+    requestKey: RequestKey,
     payload: Uint8Array,
     callback: Pointer,
   ) => void;
-  seal_routes: (appId: bigint) => void;
+  seal_routes: (appId: AppId) => void;
+}
+
+/**
+ * JS Callback Entry
+ * @description The entry for a JS callback
+ * @param T - The type for the result
+ */
+export interface JSCallbackEntry<T> {
+  resolve: (v: T) => void;
+  reject: (e: unknown) => void;
 }
 
 /**
@@ -44,6 +56,7 @@ export interface HandleRequestParams {
  * @description The output interface for Handle Request
  */
 export interface HandleRequestOutput {
+  requestId: string;
   request: FfiBunnerRequest;
   response: FfiBunnerResponse;
 }
@@ -52,10 +65,8 @@ export interface HandleRequestOutput {
  * Handle Request Result
  * @description The result interface for Handle Request
  */
-export interface HandleRequestResult {
+export interface HandleRequestResult extends HandleRequestOutput {
   routeKey: number;
-  request: FfiBunnerRequest;
-  response: FfiBunnerResponse;
 }
 
 /**

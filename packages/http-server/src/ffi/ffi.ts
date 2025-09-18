@@ -3,10 +3,8 @@ import {
   BunnerError,
   toCString,
   resolveRustLibPath,
-  type JSCallbackEntry,
   BunnerFfiError,
   FfiPointer,
-  type JSCallbackMap,
   toBuffer,
   FFI_APP_ID_TYPE,
 } from '@bunner/core';
@@ -14,17 +12,24 @@ import { FFIType, JSCallback, type FFIFunction } from 'bun:ffi';
 
 import type { HttpMethod } from '../enums';
 
+import { FFI_REQUEST_KEY_TYPE } from './constants';
 import type {
   AddRouteResult,
   HandleRequestOutput,
   HandleRequestParams,
   HandleRequestResult,
   FfiSymbols,
+  JSCallbackEntry,
 } from './interfaces';
+import type { RequestKey } from './types';
 
 export class Ffi extends BaseFfi<FfiSymbols> {
   private handleRequestCb: JSCallback;
-  private pendingHandleRequests: JSCallbackMap<HandleRequestResult>;
+  private pendingHandleRequests: Map<
+    RequestKey,
+    JSCallbackEntry<HandleRequestResult>
+  >;
+  private requestKey = 0n;
 
   /**
    * Constructor
@@ -34,10 +39,7 @@ export class Ffi extends BaseFfi<FfiSymbols> {
   constructor() {
     super();
 
-    this.pendingHandleRequests = new Map<
-      string,
-      JSCallbackEntry<HandleRequestResult>
-    >();
+    this.pendingHandleRequests = new Map();
   }
 
   override init() {
@@ -59,7 +61,7 @@ export class Ffi extends BaseFfi<FfiSymbols> {
       handle_request: {
         args: [
           FFI_APP_ID_TYPE,
-          FFIType.cstring,
+          FFI_REQUEST_KEY_TYPE,
           FFIType.pointer,
           FFIType.function,
         ],
@@ -74,7 +76,7 @@ export class Ffi extends BaseFfi<FfiSymbols> {
     super.init(resolveRustLibPath('bunner_http_server', import.meta.dir), api);
 
     this.handleRequestCb = this.createJsCallback(this.handleRequestCallback, {
-      args: [FFIType.pointer, FFIType.u16, FFIType.pointer],
+      args: [FFI_REQUEST_KEY_TYPE, FFIType.u16, FFIType.pointer],
       returns: FFIType.void,
       threadsafe: true,
     });
@@ -113,14 +115,14 @@ export class Ffi extends BaseFfi<FfiSymbols> {
   async handleRequest(
     params: HandleRequestParams,
   ): Promise<HandleRequestResult> {
-    const requestId = Bun.randomUUIDv7();
+    const requestKey = ++this.requestKey;
     const promise = new Promise<HandleRequestResult>((resolve, reject) => {
-      this.pendingHandleRequests.set(requestId, { resolve, reject });
+      this.pendingHandleRequests.set(requestKey, { resolve, reject });
     });
 
     this.symbols.handle_request(
       this.appId,
-      toCString(requestId),
+      requestKey,
       toBuffer(params),
       this.handleRequestCb.ptr!,
     );
@@ -161,12 +163,17 @@ export class Ffi extends BaseFfi<FfiSymbols> {
    * @param resultLength - The result length
    */
   private handleRequestCallback(
-    requestIdPtr: FfiPointer,
+    requestKey: RequestKey,
     routeKey: number,
     resultPtr: FfiPointer,
   ) {
-    let requestId: string | undefined;
-    let entry: JSCallbackEntry<HandleRequestResult> | undefined;
+    const entry = this.pendingHandleRequests.get(requestKey)!;
+
+    if (entry === undefined) {
+      console.error(`No pending handle request for key ${requestKey}`);
+
+      return;
+    }
 
     try {
       if (!resultPtr.isValid()) {
@@ -179,41 +186,11 @@ export class Ffi extends BaseFfi<FfiSymbols> {
         throw new BunnerError('Result is null');
       }
 
-      if (!requestIdPtr.isValid()) {
-        throw new BunnerError('Request ID pointer is null');
-      }
-
-      requestId = requestIdPtr.toString();
-
-      if (!requestId) {
-        throw new BunnerError('Request ID is null');
-      }
-
-      entry = this.pendingHandleRequests.get(requestId);
-
-      if (!entry) {
-        queueMicrotask(() => {
-          console.error(
-            new BunnerError(`No pending promise for requestId=${requestId}`),
-          );
-        });
-
-        return;
-      }
-
       entry.resolve({ routeKey, ...result });
     } catch (e) {
-      if (entry?.reject) {
-        entry.reject(e);
-      } else {
-        queueMicrotask(() => {
-          console.error(e);
-        });
-      }
+      entry.reject(e);
     } finally {
-      if (requestId) {
-        this.pendingHandleRequests.delete(requestId);
-      }
+      this.pendingHandleRequests.delete(requestKey);
     }
   }
 }

@@ -13,12 +13,13 @@ import {
   type BaseFfiSymbols,
   type CreateJsCallbackOptions,
 } from './interfaces';
+import type { AppId } from './types';
 import { isPointer, pointerToJson } from './utils';
 
 export abstract class BaseFfi<T extends BaseFfiSymbols> {
   protected symbols: T;
   protected close: () => void;
-  protected appId: bigint;
+  protected appId: AppId;
 
   /**
    * Initialize the Rust core

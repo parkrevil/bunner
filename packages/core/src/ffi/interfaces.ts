@@ -1,14 +1,14 @@
-import type { FFIFunction, Pointer } from 'bun:ffi';
+import type { FFIFunction } from 'bun:ffi';
 
-import type { FreePointerFn } from './types';
+import type { AppId, FreePointerFn } from './types';
 
 /**
  * Base FFI Symbols
  * @description The base symbols for a Rust core
  */
 export interface BaseFfiSymbols {
-  construct: (...args: any[]) => bigint | null;
-  destroy: (handle: Pointer) => void;
+  construct: (...args: any[]) => AppId | null;
+  destroy: (appId: AppId) => void;
   free: FreePointerFn;
 }
 
@@ -27,16 +27,6 @@ export interface FfiErrorReport {
   version: string;
   description: string;
   extra: any;
-}
-
-/**
- * JS Callback Entry
- * @description The entry for a JS callback
- * @param T - The type for the result
- */
-export interface JSCallbackEntry<T> {
-  resolve: (v: T) => void;
-  reject?: (e: unknown) => void;
 }
 
 export interface CreateJsCallbackOptions extends FFIFunction {
