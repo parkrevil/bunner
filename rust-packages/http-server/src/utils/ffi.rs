@@ -4,6 +4,7 @@ use crate::enums::LenPrefixedString;
 use crate::pointer_registry;
 use crate::types::LengthHeaderSize;
 use crate::constants::LENGTH_HEADER_BYTES;
+use crate::types::ErrorString;
 
 use serde::Serialize;
 use std::slice;
@@ -27,7 +28,7 @@ pub fn make_result<T: Serialize>(value: &T) -> *mut u8 {
 /// - Calling this function with a null or invalid pointer results in undefined behavior
 ///   in the caller context. The function returns an `Err` for a null pointer to allow
 ///   graceful handling.
-pub unsafe fn read_length_at_pointer(pointer: *const u8) -> Result<LengthHeaderSize, &'static str> {
+pub unsafe fn read_length_at_pointer(pointer: *const u8) -> Result<LengthHeaderSize, ErrorString> {
     if pointer.is_null() {
         return Err("Pointer is null");
     }
@@ -58,7 +59,7 @@ pub unsafe fn read_length_at_pointer(pointer: *const u8) -> Result<LengthHeaderS
 pub unsafe fn take_len_prefixed_pointer(
     ptr: *const u8,
     threshold: usize,
-) -> Result<LenPrefixedString, &'static str> {
+) -> Result<LenPrefixedString, ErrorString> {
     if ptr.is_null() {
         return Err("pointer is null");
     }

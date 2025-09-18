@@ -1,5 +1,6 @@
 use crate::types::LengthHeaderSize;
 use crate::constants::LENGTH_HEADER_BYTES;
+use crate::types::ErrorString;
 
 use super::ffi::read_length_at_pointer;
 
@@ -15,7 +16,7 @@ use std::{
 ///   must be valid UTF-8.
 ///
 /// This function dereferences raw pointers and therefore is `unsafe`.
-pub unsafe fn len_prefixed_pointer_to_string(ptr: *const u8) -> Result<String, &'static str> {
+pub unsafe fn len_prefixed_pointer_to_string(ptr: *const u8) -> Result<String, ErrorString> {
     if ptr.is_null() {
         return Err("Pointer is null");
     }

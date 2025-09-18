@@ -1,6 +1,5 @@
 #[cfg(test)]
 mod serialize {
-    use crate::errors::InternalErrorCode;
     use crate::utils::json::serialize;
 
     #[test]
@@ -32,13 +31,12 @@ mod serialize {
         use crate::test_utils::json::FailingType;
 
         let err = serialize(&FailingType).unwrap_err();
-        assert!(matches!(err, InternalErrorCode::InvalidJsonValue));
+        assert!(!err.is_empty());
     }
 }
 
 #[cfg(all(test, not(feature = "simd-json")))]
 mod serialize_with_serde_json {
-    use crate::errors::InternalErrorCode;
     use crate::utils::json::serialize_with_serde_json as serialize;
 
     #[test]
@@ -70,13 +68,12 @@ mod serialize_with_serde_json {
         use crate::test_utils::json::FailingType;
 
         let err = serialize(&FailingType).unwrap_err();
-        assert!(matches!(err, InternalErrorCode::InvalidJsonValue));
+        assert!(!err.is_empty());
     }
 }
 
 #[cfg(all(test, feature = "simd-json"))]
 mod serialize_with_simd_json {
-    use crate::errors::InternalErrorCode;
     use crate::utils::json::serialize_with_simd_json as serialize;
 
     #[test]
@@ -108,13 +105,12 @@ mod serialize_with_simd_json {
         use crate::test_utils::json::FailingType;
 
         let err = serialize(&FailingType).unwrap_err();
-        assert!(matches!(err, InternalErrorCode::InvalidJsonValue));
+        assert!(!err.is_empty());
     }
 }
 
 #[cfg(test)]
 mod deserialize {
-    use crate::errors::InternalErrorCode;
     use crate::utils::json::deserialize;
 
     #[test]
@@ -129,8 +125,8 @@ mod deserialize {
 
     #[test]
     fn returns_error_on_invalid_json() {
-        let err: InternalErrorCode = deserialize::<Vec<i32>>("{invalid_json}").unwrap_err();
-        assert!(matches!(err, InternalErrorCode::InvalidJsonString));
+        let err = deserialize::<Vec<i32>>("{invalid_json}").unwrap_err();
+        assert!(!err.is_empty());
     }
 
     #[test]
@@ -146,7 +142,7 @@ mod deserialize {
         #[cfg(not(feature = "simd-json"))]
         {
             let err = result.unwrap_err();
-            assert!(matches!(err, InternalErrorCode::InvalidJsonString));
+            assert!(!err.is_empty());
         }
 
         #[cfg(feature = "simd-json")]
@@ -159,7 +155,6 @@ mod deserialize {
 
 #[cfg(all(test, not(feature = "simd-json")))]
 mod deserialize_with_serde_json {
-    use crate::errors::InternalErrorCode;
     use crate::utils::json::deserialize_with_serde_json as deserialize;
 
     #[test]
@@ -174,14 +169,13 @@ mod deserialize_with_serde_json {
 
     #[test]
     fn returns_error_on_invalid_json() {
-        let err: InternalErrorCode = deserialize::<Vec<i32>>("{invalid_json}").unwrap_err();
-        assert!(matches!(err, InternalErrorCode::InvalidJsonString));
+        let err = deserialize::<Vec<i32>>("{invalid_json}").unwrap_err();
+        assert!(!err.is_empty());
     }
 }
 
 #[cfg(all(test, feature = "simd-json"))]
 mod deserialize_with_simd_json {
-    use crate::errors::InternalErrorCode;
     use crate::utils::json::deserialize_with_simd_json as deserialize;
 
     #[test]
@@ -196,7 +190,7 @@ mod deserialize_with_simd_json {
 
     #[test]
     fn returns_error_on_invalid_json() {
-        let err: InternalErrorCode = deserialize::<Vec<i32>>("{invalid_json}").unwrap_err();
-        assert!(matches!(err, InternalErrorCode::InvalidJsonString));
+        let err = deserialize::<Vec<i32>>("{invalid_json}").unwrap_err();
+        assert!(!err.is_empty());
     }
 }
