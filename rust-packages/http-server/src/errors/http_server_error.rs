@@ -1,4 +1,5 @@
 use crate::constants::PACKAGE_VERSION;
+use crate::router::RouterError;
 use serde::{Deserialize, Serialize};
 
 #[repr(u16)]
@@ -57,8 +58,8 @@ pub struct HttpServerError {
     pub extra: Option<serde_json::Value>,
 }
 
-impl From<crate::router::RouterError> for HttpServerError {
-    fn from(router_error: crate::router::RouterError) -> Self {
+impl From<RouterError> for HttpServerError {
+    fn from(router_error: RouterError) -> Self {
         HttpServerError {
             code: router_error.code.code(),
             error: router_error.error.clone(),
@@ -74,8 +75,8 @@ impl From<crate::router::RouterError> for HttpServerError {
     }
 }
 
-impl From<Box<crate::router::RouterError>> for HttpServerError {
-    fn from(router_error: Box<crate::router::RouterError>) -> Self {
+impl From<Box<RouterError>> for HttpServerError {
+    fn from(router_error: Box<RouterError>) -> Self {
         HttpServerError::from(*router_error)
     }
 }

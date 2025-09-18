@@ -1,7 +1,8 @@
-use crate::enums::{HttpMethod, LenPrefixedString};
+use crate::enums::{HttpMethod, HttpStatusCode, LenPrefixedString};
 use crate::errors::{HttpServerError, HttpServerErrorCode};
 use crate::helpers::callback_handle_request;
 use crate::middleware::{BodyParser, Chain, CookieParser, HeaderParser, UrlParser};
+use crate::router::structures::RouterResult;
 use crate::router::{Router, RouterReadOnly};
 use crate::structures::{BunnerRequest, BunnerResponse, HandleRequestOutput, HandleRequestPayload};
 use crate::thread_pool::submit_job;
@@ -33,18 +34,11 @@ impl App {
         }
     }
 
-    pub fn add_route(
-        &self,
-        method: HttpMethod,
-        path: &str,
-    ) -> crate::router::structures::RouterResult<u16> {
+    pub fn add_route(&self, method: HttpMethod, path: &str) -> RouterResult<u16> {
         self.router.add(method, path)
     }
 
-    pub fn add_routes(
-        &self,
-        routes: Vec<(HttpMethod, String)>,
-    ) -> crate::router::structures::RouterResult<Vec<u16>> {
+    pub fn add_routes(&self, routes: Vec<(HttpMethod, String)>) -> RouterResult<Vec<u16>> {
         self.router.add_bulk(routes)
     }
 
@@ -158,7 +152,7 @@ fn process_request(
         body: None,
     };
     let mut response = BunnerResponse {
-        http_status: crate::enums::HttpStatusCode::OK,
+        http_status: HttpStatusCode::OK,
         headers: None,
         body: serde_json::Value::Null,
     };

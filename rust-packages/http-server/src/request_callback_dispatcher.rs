@@ -2,6 +2,7 @@ use crossbeam_channel as xchan;
 use std::sync::OnceLock;
 
 use crate::types::RequestKey;
+use crate::pointer_registry::free;
 
 use super::HandleRequestCallback;
 
@@ -87,7 +88,7 @@ pub unsafe fn enqueue(
         );
 
         if !result_ptr.is_null() {
-            unsafe { crate::pointer_registry::free(result_ptr) };
+            unsafe { free(result_ptr) };
         }
     }
 }

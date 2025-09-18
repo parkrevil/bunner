@@ -2,6 +2,7 @@
 mod make_result {
     use crate::utils::ffi::make_result;
     use crate::utils::string::len_prefixed_pointer_to_string;
+    use crate::test_utils::registry as test_registry;
 
     #[test]
     fn serializes_value_and_registers_pointer() {
@@ -13,7 +14,7 @@ mod make_result {
         let s = unsafe { len_prefixed_pointer_to_string(p) }.unwrap();
         assert!(s.contains("10") && s.contains("20") && s.contains("30"));
 
-        let _ = unsafe { crate::test_utils::registry::read_string_and_free(p) };
+    let _ = unsafe { test_registry::read_string_and_free(p) };
     }
 
     #[test]

@@ -1,4 +1,5 @@
 use super::node::RadixTreeNode;
+use super::traversal::traverse;
 
 pub(super) fn shrink_node(n: &mut RadixTreeNode) {
     n.static_keys.shrink_to_fit();
@@ -21,7 +22,7 @@ pub(super) fn shrink_node(n: &mut RadixTreeNode) {
 }
 
 pub(super) fn warm_node(root: &RadixTreeNode) {
-    crate::router::radix_tree::traversal::traverse(root, |n| {
+    traverse(root, |n| {
         for v in n.static_vals.iter() {
             let _ = v.as_ref().routes[0];
         }

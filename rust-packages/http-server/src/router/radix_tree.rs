@@ -5,12 +5,14 @@ type IndexedEntry = (usize, HttpMethod, String, u8, usize, bool);
 type ParsedEntry = (
     usize,
     HttpMethod,
-    Vec<crate::router::pattern::SegmentPattern>,
+    Vec<SegmentPattern>,
     u8,
     usize,
     bool,
     Vec<String>,
 );
+use crate::router::pattern::SegmentPattern;
+use crate::router::pattern::SegmentPart;
 
 use super::RouterOptions;
 use crate::enums::HttpMethod;
@@ -135,9 +137,7 @@ impl RadixTree {
                                 let mut lits: Vec<String> = Vec::new();
                                 for pat in segs.iter() {
                                     for part in pat.parts.iter() {
-                                        if let crate::router::pattern::SegmentPart::Literal(l) =
-                                            part
-                                        {
+                                        if let SegmentPart::Literal(l) = part {
                                             lits.push(l.clone());
                                         }
                                     }
@@ -182,7 +182,7 @@ impl RadixTree {
                 let mut lits: Vec<String> = Vec::new();
                 for pat in segs.iter() {
                     for part in pat.parts.iter() {
-                        if let crate::router::pattern::SegmentPart::Literal(l) = part {
+                        if let SegmentPart::Literal(l) = part {
                             lits.push(l.clone());
                         }
                     }

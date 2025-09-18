@@ -6,6 +6,7 @@ use super::RouteMatch;
 
 use crate::enums::HttpMethod;
 use crate::router::pattern::{self, SegmentPattern};
+use crate::router::radix_tree::RadixTree;
 
 use hashbrown::HashMap as FastHashMap;
 use std::cell::RefCell;
@@ -44,7 +45,7 @@ impl RouterReadOnly {
     }
 
     /// Build a read-only snapshot directly from a radix tree reference.
-    pub fn from_radix_tree(tree: &crate::router::radix_tree::RadixTree) -> Self {
+    pub fn from_radix_tree(tree: &RadixTree) -> Self {
         let mut maps: [FastHashMap<Box<str>, u16>; HTTP_METHOD_COUNT] = Default::default();
         for (i, out_map) in maps.iter_mut().enumerate().take(HTTP_METHOD_COUNT) {
             *out_map = tree.static_route_full_mapping[i].clone();

@@ -57,13 +57,16 @@ mod register {
 
             for i in 0..threads {
                 handles.push(thread::spawn(move || {
+                    use crate::test_utils::registry as test_registry;
+                    use crate::pointer_registry as registry;
+
                     let data = vec![i as u8; 1024];
-                    crate::test_utils::registry::with_registered_vec(data, |p| {
+                    test_registry::with_registered_vec(data, |p| {
                         // brief work
                         for _ in 0..10 {
                             std::hint::black_box(());
                         }
-                        assert!(crate::pointer_registry::has(p));
+                        assert!(registry::has(p));
                     });
                 }));
             }

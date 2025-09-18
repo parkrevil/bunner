@@ -1,6 +1,7 @@
 use crate::router::errors::RouterErrorCode;
 use crate::router::structures::RouterError;
 use crate::router::structures::RouterResult;
+use crate::router::radix_tree::node::is_valid_segment_length;
 use serde_json::json;
 use smallvec::SmallVec;
 
@@ -168,7 +169,7 @@ pub fn match_segment(seg: &str, seg_l: &str, pat: &SegmentPattern) -> Option<Cap
                     return None;
                 }
 
-                if !crate::router::radix_tree::node::is_valid_segment_length(end - i) {
+                if !is_valid_segment_length(end - i) {
                     return None;
                 }
 

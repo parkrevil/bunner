@@ -5,6 +5,8 @@ use super::static_map::collect_static;
 use super::{node::RadixTreeNode, RadixTree, HTTP_METHOD_COUNT, STATIC_MAP_THRESHOLD};
 use super::{traversal::traverse, traversal::traverse_mut};
 use crate::router::interner::Interner;
+use crate::router::pattern::pattern_score;
+use crate::router::pattern::SegmentPart;
 
 pub(super) fn finalize(tree: &mut RadixTree) {
     if tree.root_node.is_sealed() {
@@ -233,7 +235,7 @@ fn build_pruning_maps(tree: &mut RadixTree) {
         }
     }
     for pat in n.patterns.iter() {
-        if let Some(crate::router::pattern::SegmentPart::Literal(l0)) = pat.parts.first() {
+        if let Some(SegmentPart::Literal(l0)) = pat.parts.first() {
             let l = l0.len().min(63) as u32;
             let mask = n.method_mask();
             for m in 0..HTTP_METHOD_COUNT {
@@ -337,7 +339,7 @@ pub(super) fn rebuild_pattern_index(node: &mut RadixTreeNode) {
     node.pattern_param_first.clear();
 
     for (idx, pat) in node.patterns.iter().enumerate() {
-        if let Some(crate::router::pattern::SegmentPart::Literal(l0)) = pat.parts.first() {
+        if let Some(SegmentPart::Literal(l0)) = pat.parts.first() {
             let entry = node
                 .pattern_first_literal
                 .entry(l0.clone())
@@ -350,7 +352,7 @@ pub(super) fn rebuild_pattern_index(node: &mut RadixTreeNode) {
                     .or_insert_with(smallvec::SmallVec::new);
                 entry2.push(idx as u16);
             }
-        } else if let Some(crate::router::pattern::SegmentPart::Param { .. }) = pat.parts.first() {
+        } else if let Some(SegmentPart::Param { .. }) = pat.parts.first() {
             node.pattern_param_first.push(idx as u16);
         }
     }
@@ -362,21 +364,21 @@ pub(super) fn rebuild_pattern_meta(node: &mut RadixTreeNode) {
     node.pattern_meta.reserve(node.patterns.len());
 
     for pat in node.patterns.iter() {
-        let score = crate::router::pattern::pattern_score(pat);
+        let score = pattern_score(pat);
 
         let mut min_len = 0u16;
         for part in pat.parts.iter() {
             match part {
-                crate::router::pattern::SegmentPart::Literal(l) => {
+                SegmentPart::Literal(l) => {
                     min_len += l.len() as u16;
                 }
-                crate::router::pattern::SegmentPart::Param { .. } => {}
+                SegmentPart::Param { .. } => {}
             }
         }
 
         let mut last_len = 0u16;
         for part in pat.parts.iter().rev() {
-            if let crate::router::pattern::SegmentPart::Literal(l) = part {
+            if let SegmentPart::Literal(l) = part {
                 last_len = l.len() as u16;
                 break;
             }
