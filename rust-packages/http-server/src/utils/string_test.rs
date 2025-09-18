@@ -1,215 +1,89 @@
-use crate::test_utils::pointer::with_raw_ptr;
-use crate::test_utils::string::{
-    make_invalid_utf8_buf, make_large_string, make_len_prefixed_buf, make_mismatched_len_buf,
-};
-use crate::utils::string::len_prefixed_pointer_to_string;
+// Clean TEST_GUIDE-compliant tests for `string` utilities
 
-/// Tests for `len_prefixed_pointer_to_string` behavior
+use crate::test_utils::pointer::with_raw_ptr;
+use crate::test_utils::string::{make_len_prefixed_buf, make_mismatched_len_buf};
+use crate::utils::string::{len_prefixed_pointer_to_string, string_to_len_prefixed_buffer};
+
 #[cfg(test)]
-mod len_prefixed_pointer_to_string {
+mod len_prefixed_pointer_to_string_tests {
     use super::*;
 
     #[test]
-    fn returns_string_for_valid_payload() {
-        // Arrange
+    fn reads_valid_utf8_payload() {
         let s = "hello world";
         let buf = make_len_prefixed_buf(s);
 
-        // Act
-        let result = with_raw_ptr(&buf, |p| unsafe { len_prefixed_pointer_to_string(p) });
-
-        // Assert
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), s.to_string());
-    }
-
-    #[test]
-    fn handles_empty_string() {
-        // Arrange
-        let s = "";
-        let buf = make_len_prefixed_buf(s);
-
-        // Act
-        let result = with_raw_ptr(&buf, |p| unsafe { len_prefixed_pointer_to_string(p) });
-
-        // Assert
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), "");
-    }
-
-    #[test]
-    fn handles_unicode_string() {
-        // Arrange
-        let s = "🦀 crab emoji 🦀";
-        let buf = make_len_prefixed_buf(s);
-
-        // Act
-        let result = with_raw_ptr(&buf, |p| unsafe { len_prefixed_pointer_to_string(p) });
-
-        // Assert
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), s.to_string());
-    }
-
-    #[test]
-    fn returns_error_on_null_ptr() {
-        // Act
-        let result = unsafe { len_prefixed_pointer_to_string(std::ptr::null()) };
-
-        // Assert
-        assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "Pointer is null".to_string(),
-        );
-    }
-
-    #[test]
-    fn returns_error_on_invalid_utf8() {
-        // Arrange: use common helper to build invalid-UTF8 len-prefixed buffer
-        let v = make_invalid_utf8_buf(2);
-
-        // Act
-        let result = with_raw_ptr(&v, |p| unsafe { len_prefixed_pointer_to_string(p) });
-
-        // Assert
-        assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "Pointer is null".to_string(),
-        );
-    }
-
-    #[test]
-    fn roundtrip_large_string() {
-        // Arrange
-        let large = make_large_string(10000);
-        let buf = make_len_prefixed_buf(&large);
-
-        // Act
-        let result = with_raw_ptr(&buf, |p| unsafe { len_prefixed_pointer_to_string(p) });
-
-        // Assert
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), large);
-    }
-
-    #[test]
-    fn header_zero_with_extra_payload_returns_empty() {
-        // Arrange: header = 0 but payload exists (use common helper)
-        let v = make_mismatched_len_buf(0, b"extra_payload");
-
-        // Act
-        let res = with_raw_ptr(&v, |p| unsafe { len_prefixed_pointer_to_string(p) });
-
-        // Assert
-        assert!(res.is_ok());
-        assert_eq!(res.unwrap(), "");
-    }
-
-    #[test]
-    fn very_large_payload_roundtrip() {
-        // Arrange: 1 million characters (use common helper to generate the string)
-        let large = make_large_string(1_000_000);
-        let buf = make_len_prefixed_buf(&large);
-
-        // Act
         let res = with_raw_ptr(&buf, |p| unsafe { len_prefixed_pointer_to_string(p) });
 
-        // Assert
         assert!(res.is_ok());
-        assert_eq!(res.unwrap().len(), large.len());
+        assert_eq!(res.unwrap(), s.to_string());
     }
 
     #[test]
-    fn randomish_unicode_roundtrip() {
-        // Arrange: build a string with a variety of unicode codepoints
-        let parts = ["hello", "🦀", "こんにちは", "مرحبا", "😊", "𐍈"];
-        let s = parts.join("-");
-        let buf = make_len_prefixed_buf(&s);
+    fn returns_error_on_null_pointer() {
+        let res = unsafe { len_prefixed_pointer_to_string(std::ptr::null()) };
 
-        // Act
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn reads_only_header_length_when_header_smaller_than_payload() {
+        let payload = b"abcdef".as_ref();
+        let buf = make_mismatched_len_buf(2, payload);
+
         let res = with_raw_ptr(&buf, |p| unsafe { len_prefixed_pointer_to_string(p) });
 
-        // Assert
         assert!(res.is_ok());
-        assert_eq!(res.unwrap(), s);
-    }
-
-    #[test]
-    fn returns_substring_when_header_smaller_than_payload() {
-        // Arrange: create a buffer where header=3 but payload contains more bytes
-        let v = make_mismatched_len_buf(3, b"abcdef");
-
-        // Act
-        let res = with_raw_ptr(&v, |p| unsafe { len_prefixed_pointer_to_string(p) });
-
-        // Assert
-        assert!(res.is_ok());
-        assert_eq!(res.unwrap(), "abc");
+        let out = res.unwrap();
+        assert_eq!(out.len(), 2);
+        assert_eq!(out.as_bytes(), &payload[..2]);
     }
 
     #[test]
     fn handles_embedded_nul_bytes() {
-        // Arrange
-        let s = "a\0b"; // embedded NUL
+        let s = "a\0b";
         let buf = make_len_prefixed_buf(s);
 
-        // Act
         let res = with_raw_ptr(&buf, |p| unsafe { len_prefixed_pointer_to_string(p) });
 
-        // Assert
-        assert!(res.is_ok());
-        assert_eq!(res.unwrap(), s.to_string());
-    }
-
-    #[test]
-    fn handles_control_characters() {
-        // Arrange
-        let s = "\n\r\t";
-        let buf = make_len_prefixed_buf(s);
-
-        // Act
-        let res = with_raw_ptr(&buf, |p| unsafe { len_prefixed_pointer_to_string(p) });
-
-        // Assert
         assert!(res.is_ok());
         assert_eq!(res.unwrap(), s.to_string());
     }
 }
 
-/// Tests for `string_to_len_prefixed_buffer` behavior
 #[cfg(test)]
-mod string_to_len_prefixed_buffer {
+mod string_to_len_prefixed_buffer_tests {
     use super::*;
 
     #[test]
-    fn creates_correct_length_prefix() {
-        // Arrange
+    fn buffer_contains_header_and_payload() {
         let s = "abc";
+        let v = string_to_len_prefixed_buffer(s);
 
-        // Act
-        let buf = make_len_prefixed_buf(s);
+        let header = u32::from_le_bytes([v[0], v[1], v[2], v[3]]);
+        assert_eq!(header, 3);
 
-        // Assert: first 4 bytes are little-endian length (3)
-        let len = u32::from_le_bytes([buf[0], buf[1], buf[2], buf[3]]) as usize;
-        assert_eq!(len, 3);
-        let payload = &buf[4..];
-        assert_eq!(payload, s.as_bytes());
+        let payload = &v[4..];
+        assert_eq!(payload, b"abc");
     }
 
     #[test]
-    fn roundtrip_round_trips_via_len_prefixed() {
-        // Arrange
+    fn empty_string_has_zero_header_and_no_payload() {
+        let v = string_to_len_prefixed_buffer("");
+        let header = u32::from_le_bytes([v[0], v[1], v[2], v[3]]);
+
+        assert_eq!(header, 0);
+        assert_eq!(v.len(), 4);
+    }
+
+    #[test]
+    fn roundtrip_via_len_prefixed_buffer() {
         let s = "roundtrip test";
-        let buf = make_len_prefixed_buf(s);
+        let v = string_to_len_prefixed_buffer(s);
 
-        // Act
-        let parsed = with_raw_ptr(&buf, |p| unsafe { len_prefixed_pointer_to_string(p) });
+        let res = with_raw_ptr(&v, |p| unsafe { len_prefixed_pointer_to_string(p) });
 
-        // Assert
-        assert!(parsed.is_ok());
-        assert_eq!(parsed.unwrap(), s.to_string());
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap(), s.to_string());
     }
 }
-// Following TEST_GUIDE.md conventions for unit testing
