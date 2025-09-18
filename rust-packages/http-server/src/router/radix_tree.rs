@@ -83,7 +83,7 @@ impl RadixTree {
     {
         if self.root_node.is_sealed() {
             return Err(Box::new(super::structures::RouterError::new(
-                super::errors::RouterErrorCode::RouterSealedCannotInsert,
+                super::errors::RouterErrorCode::AlreadySealed,
                 "router",
                 "route_registration",
                 "validation",

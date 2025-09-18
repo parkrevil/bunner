@@ -102,7 +102,7 @@ impl RouterReadOnly {
             Ok((rk, params.clone()))
         } else {
             Err(Box::new(RouterError::new(
-                RouterErrorCode::MatchNotFound,
+                RouterErrorCode::PathNotFound,
                 "router",
                 "route_matching",
                 "routing",

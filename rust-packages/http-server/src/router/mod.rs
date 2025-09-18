@@ -52,7 +52,7 @@ impl Router {
             let detail = serde_json::json!({ "path": path });
 
             return Err(Box::new(RouterError::new(
-                RouterErrorCode::RouterSealedCannotInsert,
+                RouterErrorCode::AlreadySealed,
                 "router",
                 "add",
                 "validation",
@@ -77,7 +77,7 @@ impl Router {
             let detail = serde_json::json!({ "count": cnt });
 
             return Err(Box::new(RouterError::new(
-                RouterErrorCode::RouterSealedCannotInsert,
+                RouterErrorCode::AlreadySealed,
                 "router",
                 "add_bulk",
                 "validation",
@@ -108,7 +108,7 @@ impl Router {
         match g.ro.get() {
             Some(ro) => ro.find(method, path),
             None => Err(Box::new(RouterError::new(
-                RouterErrorCode::RouterNotSealed,
+                RouterErrorCode::NotSealed,
                 "router",
                 "find",
                 "validation",
@@ -124,7 +124,7 @@ impl Router {
         match g.ro.get() {
             Some(ro) => Ok(ro.clone()),
             None => Err(Box::new(RouterError::new(
-                RouterErrorCode::RouterNotSealed,
+                RouterErrorCode::NotSealed,
                 "router",
                 "get_readonly",
                 "validation",

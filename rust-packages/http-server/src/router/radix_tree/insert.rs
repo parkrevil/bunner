@@ -19,7 +19,7 @@ impl RadixTree {
         tracing::event!(tracing::Level::TRACE, operation="insert", method=?method, path=%path);
         if self.root_node.is_sealed() {
             return Err(Box::new(RouterError::new(
-                RouterErrorCode::RouterSealedCannotInsert,
+                RouterErrorCode::AlreadySealed,
                 "router",
                 "route_registration",
                 "validation",
@@ -45,7 +45,7 @@ impl RadixTree {
         tracing::event!(tracing::Level::TRACE, operation="insert_parsed", method=?method, segments=parsed_segments.len() as u64);
         if self.root_node.is_sealed() {
             return Err(Box::new(RouterError::new(
-                RouterErrorCode::RouterSealedCannotInsert,
+                RouterErrorCode::AlreadySealed,
                 "router",
                 "route_registration",
                 "validation",
@@ -116,7 +116,7 @@ impl RadixTree {
         tracing::event!(tracing::Level::TRACE, operation="insert_parsed_preassigned", method=?method, segments=parsed_segments.len() as u64, assigned_key=assigned_key as u64);
         if self.root_node.is_sealed() {
             return Err(Box::new(RouterError::new(
-                RouterErrorCode::RouterSealedCannotInsert,
+                RouterErrorCode::AlreadySealed,
                 "router",
                 "route_registration",
                 "validation",
@@ -226,7 +226,7 @@ fn find_or_create_pattern_child<'a>(
     for exist in node.patterns.iter() {
         if !pattern_compatible_policy(exist, pat) {
             return Err(Box::new(RouterError::new(
-                RouterErrorCode::RouteParamNameConflictAtSamePosition,
+                RouterErrorCode::ParamNameConflicted,
                 "router",
                 "route_registration",
                 "validation",
@@ -265,7 +265,7 @@ fn handle_wildcard_insert(
 ) -> RouterResult<u16> {
     if index != total_segments - 1 {
         return Err(Box::new(RouterError::new(
-            RouterErrorCode::RouteWildcardSegmentNotAtEnd,
+            RouterErrorCode::InvalidWildcard,
             "router",
             "route_registration",
             "validation",
@@ -281,7 +281,7 @@ fn handle_wildcard_insert(
     let method_idx = method as usize;
     if node.wildcard_routes[method_idx] != 0 {
         return Err(Box::new(RouterError::new(
-            RouterErrorCode::RouteWildcardAlreadyExistsForMethod,
+            RouterErrorCode::WildcardAlreadyExists,
             "router",
             "route_registration",
             "validation",
@@ -307,7 +307,7 @@ fn handle_wildcard_insert_preassigned(
 ) -> RouterResult<u16> {
     if index != total_segments - 1 {
         return Err(Box::new(RouterError::new(
-            RouterErrorCode::RouteWildcardSegmentNotAtEnd,
+            RouterErrorCode::InvalidWildcard,
             "router",
             "route_registration",
             "validation",
@@ -323,7 +323,7 @@ fn handle_wildcard_insert_preassigned(
     let method_idx = method as usize;
     if node.wildcard_routes[method_idx] != 0 {
         return Err(Box::new(RouterError::new(
-            RouterErrorCode::RouteWildcardAlreadyExistsForMethod,
+            RouterErrorCode::WildcardAlreadyExists,
             "router",
             "route_registration",
             "validation",
@@ -346,7 +346,7 @@ fn assign_route_key(
     let method_idx = method as usize;
     if node.routes[method_idx] != 0 {
         return Err(Box::new(RouterError::new(
-            RouterErrorCode::RouteConflictOnDuplicatePath,
+            RouterErrorCode::DuplicatedPath,
             "router",
             "route_registration",
             "validation",
@@ -385,7 +385,7 @@ fn assign_route_key_preassigned(
     let method_idx = method as usize;
     if node.routes[method_idx] != 0 {
         return Err(Box::new(RouterError::new(
-            RouterErrorCode::RouteConflictOnDuplicatePath,
+            RouterErrorCode::DuplicatedPath,
             "router",
             "route_registration",
             "validation",
@@ -434,7 +434,7 @@ pub(super) fn prepare_path_segments_standalone(path: &str) -> RouterResult<Vec<S
     let segments: Vec<&str> = norm.split('/').filter(|s| !s.is_empty()).collect();
     if segments.is_empty() {
         return Err(Box::new(RouterError::new(
-            RouterErrorCode::RoutePathSyntaxInvalid,
+            RouterErrorCode::InvalidPath,
             "router",
             "route_registration",
             "validation",
@@ -480,7 +480,7 @@ pub(super) fn prepare_path_segments_standalone(path: &str) -> RouterResult<Vec<S
             if let SegmentPart::Param { name, .. } = part {
                 if seen_params.contains(name.as_str()) {
                     return Err(Box::new(RouterError::new(
-                        RouterErrorCode::RouteDuplicateParamNameInRoute,
+                        RouterErrorCode::DuplicateParamName,
                         "router",
                         "route_registration",
                         "validation",

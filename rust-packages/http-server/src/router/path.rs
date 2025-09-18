@@ -7,7 +7,7 @@ use serde_json::json;
 pub(crate) fn normalize_and_validate_path(path: &str) -> RouterResult<String> {
     if !path.is_ascii() {
         return Err(Box::new(RouterError::new(
-            RouterErrorCode::RoutePathNotAscii,
+            RouterErrorCode::InvalidPath,
             "router",
             "path_processing",
             "validation",
@@ -18,7 +18,7 @@ pub(crate) fn normalize_and_validate_path(path: &str) -> RouterResult<String> {
     let bytes = path.as_bytes();
     if bytes.is_empty() {
         return Err(Box::new(RouterError::new(
-            RouterErrorCode::RoutePathEmpty,
+            RouterErrorCode::EmptyPath,
             "router",
             "path_processing",
             "validation",
@@ -35,7 +35,7 @@ pub(crate) fn normalize_and_validate_path(path: &str) -> RouterResult<String> {
     for &b in &bytes[..end] {
         if b <= 0x20 {
             return Err(Box::new(RouterError::new(
-                RouterErrorCode::RoutePathContainsDisallowedCharacters,
+                RouterErrorCode::InvalidPath,
                 "router",
                 "path_processing",
                 "validation",
@@ -70,7 +70,7 @@ pub(crate) fn normalize_and_validate_path(path: &str) -> RouterResult<String> {
             | b'%' => {}
             _ => {
                 return Err(Box::new(RouterError::new(
-                    RouterErrorCode::RoutePathContainsDisallowedCharacters,
+                    RouterErrorCode::InvalidPath,
                     "router",
                     "path_processing",
                     "validation",
@@ -95,7 +95,7 @@ pub(crate) fn normalize_and_validate_path(path: &str) -> RouterResult<String> {
     }
     if normalized == "/.." || normalized.starts_with("/../") || normalized.contains("/../") {
         return Err(Box::new(RouterError::new(
-            RouterErrorCode::RoutePathSyntaxInvalid,
+            RouterErrorCode::InvalidPath,
             "router",
             "path_processing",
             "validation",

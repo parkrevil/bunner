@@ -194,7 +194,7 @@ pub fn match_segment(seg: &str, seg_l: &str, pat: &SegmentPattern) -> Option<Cap
 pub(crate) fn parse_segment(seg: &str) -> RouterResult<SegmentPattern> {
     if seg.contains('(') || seg.contains(')') {
         return Err(Box::new(RouterError::new(
-            RouterErrorCode::RoutePathSyntaxInvalid,
+            RouterErrorCode::InvalidPath,
             "router",
             "pattern_parsing",
             "validation",
@@ -210,7 +210,7 @@ pub(crate) fn parse_segment(seg: &str) -> RouterResult<SegmentPattern> {
 
         if j >= bytes.len() {
             return Err(Box::new(RouterError::new(
-                RouterErrorCode::RoutePathSyntaxInvalid,
+                RouterErrorCode::InvalidParamName,
                 "router",
                 "pattern_parsing",
                 "validation",
@@ -233,7 +233,7 @@ pub(crate) fn parse_segment(seg: &str) -> RouterResult<SegmentPattern> {
 
         if name.contains(':') {
             return Err(Box::new(RouterError::new(
-                RouterErrorCode::RoutePathSyntaxInvalid,
+                RouterErrorCode::InvalidParamName,
                 "router",
                 "pattern_parsing",
                 "validation",
@@ -246,7 +246,7 @@ pub(crate) fn parse_segment(seg: &str) -> RouterResult<SegmentPattern> {
 
         if nb.is_empty() {
             return Err(Box::new(RouterError::new(
-                RouterErrorCode::RoutePathSyntaxInvalid,
+                RouterErrorCode::InvalidParamName,
                 "router",
                 "pattern_parsing",
                 "validation",
@@ -257,7 +257,7 @@ pub(crate) fn parse_segment(seg: &str) -> RouterResult<SegmentPattern> {
 
         if !(nb[0].is_ascii_alphabetic() || nb[0] == b'_') {
             return Err(Box::new(RouterError::new(
-                RouterErrorCode::RouteParamNameInvalidStart,
+                RouterErrorCode::InvalidParamName,
                 "router",
                 "pattern_parsing",
                 "validation",
@@ -271,7 +271,7 @@ pub(crate) fn parse_segment(seg: &str) -> RouterResult<SegmentPattern> {
         for &c in &nb[1..] {
             if !(c.is_ascii_alphanumeric() || c == b'_') {
                 return Err(Box::new(RouterError::new(
-                    RouterErrorCode::RouteParamNameInvalidChar,
+                    RouterErrorCode::InvalidParamName,
                     "router",
                     "pattern_parsing",
                     "validation",
@@ -292,7 +292,7 @@ pub(crate) fn parse_segment(seg: &str) -> RouterResult<SegmentPattern> {
 
     if seg.contains(':') {
         return Err(Box::new(RouterError::new(
-            RouterErrorCode::RouteSegmentContainsMixedParamAndLiteral,
+            RouterErrorCode::InvalidParamName,
             "router",
             "pattern_parsing",
             "validation",

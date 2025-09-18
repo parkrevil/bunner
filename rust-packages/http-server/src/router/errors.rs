@@ -1,28 +1,24 @@
 #[repr(u16)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum RouterErrorCode {
-    // Insert-time
-    RouteConflictOnDuplicatePath = 10001,
-    RoutePathSyntaxInvalid,
-    RouteWildcardSegmentNotAtEnd,
-    RoutePathContainsDisallowedCharacters,
-    RouteDuplicateParamNameInRoute,
-    RouterSealedCannotInsert,
-    RouteParamNameConflictAtSamePosition,
-    RoutePathEmpty,
-    RoutePathNotAscii,
-    RouteParamNameInvalidStart,
-    RouteParamNameInvalidChar,
-    RouteSegmentContainsMixedParamAndLiteral,
-    RouteWildcardAlreadyExistsForMethod,
-    MaxRoutesExceeded,
+    AlreadySealed,
+    NotSealed,
+
+    EmptyPath,
+    InvalidPath,
+    DuplicatedPath,
+
+    InvalidParamName,
+    DuplicateParamName,
+    ParamNameConflicted,
+
     PatternTooLong,
-    // Match-time
-    MatchNotFound = 10101,
-    MatchPathContainsDisallowedCharacters,
-    MatchPathEmpty,
-    MatchPathNotAscii,
-    RouterNotSealed,
+
+    InvalidWildcard,
+    WildcardAlreadyExists,
+
+    MaxRoutesExceeded,
+    PathNotFound,
 }
 
 impl RouterErrorCode {
@@ -31,45 +27,27 @@ impl RouterErrorCode {
     }
 }
 
-impl From<RouterErrorCode> for u16 {
-    fn from(error: RouterErrorCode) -> u16 {
-        error as u16
-    }
-}
-
 impl RouterErrorCode {
     pub fn as_str(self) -> &'static str {
         match self {
-            RouterErrorCode::RouteConflictOnDuplicatePath => "RouteConflictOnDuplicatePath",
-            RouterErrorCode::RoutePathSyntaxInvalid => "RoutePathSyntaxInvalid",
-            RouterErrorCode::RouteWildcardSegmentNotAtEnd => "RouteWildcardSegmentNotAtEnd",
-            RouterErrorCode::RoutePathContainsDisallowedCharacters => {
-                "RoutePathContainsDisallowedCharacters"
-            }
-            RouterErrorCode::RouteDuplicateParamNameInRoute => "RouteDuplicateParamNameInRoute",
-            RouterErrorCode::RouterSealedCannotInsert => "RouterSealedCannotInsert",
-            RouterErrorCode::RouteParamNameConflictAtSamePosition => {
-                "RouteParamNameConflictAtSamePosition"
-            }
-            RouterErrorCode::RoutePathEmpty => "RoutePathEmpty",
-            RouterErrorCode::RoutePathNotAscii => "RoutePathNotAscii",
-            RouterErrorCode::RouteParamNameInvalidStart => "RouteParamNameInvalidStart",
-            RouterErrorCode::RouteParamNameInvalidChar => "RouteParamNameInvalidChar",
-            RouterErrorCode::RouteSegmentContainsMixedParamAndLiteral => {
-                "RouteSegmentContainsMixedParamAndLiteral"
-            }
-            RouterErrorCode::RouteWildcardAlreadyExistsForMethod => {
-                "RouteWildcardAlreadyExistsForMethod"
-            }
-            RouterErrorCode::MaxRoutesExceeded => "MaxRoutesExceeded",
+            RouterErrorCode::AlreadySealed => "AlreadySealed",
+            RouterErrorCode::NotSealed => "NotSealed",
+
+            RouterErrorCode::EmptyPath => "EmptyPath",
+            RouterErrorCode::InvalidPath => "InvalidPath",
+            RouterErrorCode::DuplicatedPath => "DuplicatedPath",
+
+            RouterErrorCode::InvalidParamName => "InvalidParamName",
+            RouterErrorCode::DuplicateParamName => "DuplicateParamName",
+            RouterErrorCode::ParamNameConflicted => "ParamNameConflicted",
+
             RouterErrorCode::PatternTooLong => "PatternTooLong",
-            RouterErrorCode::MatchNotFound => "MatchNotFound",
-            RouterErrorCode::MatchPathContainsDisallowedCharacters => {
-                "MatchPathContainsDisallowedCharacters"
-            }
-            RouterErrorCode::MatchPathEmpty => "MatchPathEmpty",
-            RouterErrorCode::MatchPathNotAscii => "MatchPathNotAscii",
-            RouterErrorCode::RouterNotSealed => "RouterNotSealed",
+
+            RouterErrorCode::InvalidWildcard => "InvalidWildcard",
+            RouterErrorCode::WildcardAlreadyExists => "WildcardAlreadyExists",
+
+            RouterErrorCode::MaxRoutesExceeded => "MaxRoutesExceeded",
+            RouterErrorCode::PathNotFound => "PathNotFound",
         }
     }
 }
