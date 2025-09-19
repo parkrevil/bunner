@@ -1,17 +1,20 @@
 use crate::enums::{HttpMethod, HttpStatusCode, LenPrefixedString};
 use crate::errors::{FfiError, FfiErrorCode};
-use crate::helpers::callback_handle_request;
-use crate::middlewares::{BodyParser, CookieParser, HeaderParser, MiddlewareChain, UrlParser};
+use crate::middlewares::{
+    BodyParser, CookieParser, HeaderParser, Lifecycle, MiddlewareChain, UrlParser,
+};
+use crate::request_callback_dispatcher;
 use crate::router::structures::RouterResult;
 use crate::router::{Router, RouterReadOnly};
 use crate::structures::{BunnerRequest, BunnerResponse, HandleRequestOutput, HandleRequestPayload};
 use crate::thread_pool::submit_job;
 use crate::types::RequestKey;
-use crate::utils::json::deserialize;
+use crate::utils::{ffi::make_result, json::deserialize};
 
 use super::HandleRequestCallback;
 
 use percent_encoding::percent_decode_str;
+use serde::Serialize;
 use serde_json::Value as JsonValue;
 use std::{str, sync::Arc};
 use uuid::Uuid;
@@ -30,11 +33,12 @@ impl Default for App {
 
 impl App {
     pub fn new() -> Self {
-        let middleware_chain = MiddlewareChain::new()
-            .with(HeaderParser)
-            .with(UrlParser)
-            .with(CookieParser)
-            .with(BodyParser);
+        let mut middleware_chain = MiddlewareChain::new();
+
+        middleware_chain.add_to(Lifecycle::PreRequest, HeaderParser);
+        middleware_chain.add_to(Lifecycle::PreRequest, UrlParser);
+        middleware_chain.add_to(Lifecycle::PreRequest, CookieParser);
+        middleware_chain.add_to(Lifecycle::PreRequest, BodyParser);
 
         App {
             router: Router::new(None),
@@ -153,6 +157,7 @@ fn process_request(
         }
     };
     let mut request = BunnerRequest {
+        request_id: Uuid::new_v4().to_string(),
         url: payload.url.clone(),
         http_method,
         path: String::new(),
@@ -170,26 +175,42 @@ fn process_request(
         headers: None,
         body: serde_json::Value::Null,
     };
-    let request_id = Uuid::new_v4().to_string();
-    if !middleware_chain.execute(&mut request, &mut response, &payload) {
-        let output = HandleRequestOutput {
-            request_id,
-            request,
-            response,
-        };
 
+    if !middleware_chain.execute(Lifecycle::PreRequest, &mut request, &mut response, &payload) {
         tracing::event!(
             tracing::Level::TRACE,
             step = "middleware_stopped",
             request_key = request_key
         );
 
-        callback_handle_request(cb, request_key, None, &output);
+        callback_handle_request(
+            cb,
+            request_key,
+            None,
+            &HandleRequestOutput { request, response },
+        );
 
         return;
     }
 
-    match ro.find(http_method, &request.path) {
+    if !middleware_chain.execute(Lifecycle::OnRequest, &mut request, &mut response, &payload) {
+        tracing::event!(
+            tracing::Level::TRACE,
+            step = "middleware_stopped",
+            request_key = request_key
+        );
+
+        callback_handle_request(
+            cb,
+            request_key,
+            None,
+            &HandleRequestOutput { request, response },
+        );
+
+        return;
+    }
+
+    let (route_key, params) = match ro.find(http_method, &request.path) {
         Ok((route_key, params_vec)) => {
             let params = if params_vec.is_empty() {
                 None
@@ -205,26 +226,17 @@ fn process_request(
                     }
                 }
 
+                tracing::event!(
+                    tracing::Level::TRACE,
+                    step = "route_match",
+                    request_key = request_key,
+                    route_key = route_key
+                );
+
                 Some(JsonValue::Object(obj))
             };
 
-            request.params = params;
-
-            let output = HandleRequestOutput {
-                request_id,
-                request,
-                response,
-            };
-
-            tracing::event!(
-                tracing::Level::TRACE,
-                step = "route_match",
-                request_key = request_key,
-                route_key = route_key,
-                request_id = output.request_id,
-            );
-
-            callback_handle_request(cb, request_key, Some(route_key), &output);
+            (route_key, params)
         }
         Err(router_error) => {
             let mut be = FfiError::from(router_error);
@@ -243,6 +255,53 @@ fn process_request(
             );
 
             callback_handle_request(cb, request_key, None, &be);
+
+            return;
         }
+    };
+
+    request.params = params;
+
+    if !middleware_chain.execute(
+        Lifecycle::BeforeHandle,
+        &mut request,
+        &mut response,
+        &payload,
+    ) {
+        tracing::event!(
+            tracing::Level::TRACE,
+            step = "middleware_before_handle_stopped",
+            request_key = request_key
+        );
+
+        callback_handle_request(
+            cb,
+            request_key,
+            None,
+            &HandleRequestOutput { request, response },
+        );
+
+        return;
+    }
+
+    callback_handle_request(
+        cb,
+        request_key,
+        Some(route_key),
+        &HandleRequestOutput { request, response },
+    );
+}
+
+#[inline(always)]
+pub fn callback_handle_request<T: Serialize>(
+    callback: HandleRequestCallback,
+    request_key: RequestKey,
+    route_key: Option<u16>,
+    result: &T,
+) {
+    let res_ptr = make_result(result);
+
+    unsafe {
+        request_callback_dispatcher::enqueue(callback, request_key, route_key, res_ptr);
     }
 }

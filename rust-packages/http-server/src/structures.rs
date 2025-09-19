@@ -35,6 +35,8 @@ pub struct BunnerResponse {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct BunnerRequest {
+    #[serde(rename = "requestId")]
+    pub request_id: String,
     #[serde(rename = "httpMethod")]
     pub http_method: HttpMethod,
     #[serde(skip_serializing, skip_deserializing)]
@@ -66,7 +68,6 @@ pub struct HandleRequestPayload {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct HandleRequestOutput {
-    pub request_id: String,
     pub request: BunnerRequest,
     pub response: BunnerResponse,
 }

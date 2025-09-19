@@ -1,5 +1,6 @@
 mod traits;
 pub use traits::Middleware;
+pub use traits::Lifecycle;
 
 mod middleware_chain;
 pub use middleware_chain::MiddlewareChain;
