@@ -33,23 +33,21 @@ use std::io;
 use std::{ffi::CStr, os::raw::c_char};
 use tracing_subscriber::{EnvFilter, fmt};
 
+use crate::app::App;
 use crate::app_registry::{find_app, register_app, unregister_app};
-use crate::constants::PAYLOAD_ZERO_COPY_THRESHOLD;
+use crate::constants::ZERO_COPY_THRESHOLD;
 use crate::enums::{HttpMethod, LenPrefixedString};
 use crate::errors::{FfiError, FfiErrorCode};
 use crate::helpers::callback_handle_request;
-use crate::structures::AddRouteResult;
+use crate::structures::{AddRouteResult, AppOptions};
 use crate::thread_pool::shutdown_pool;
 use crate::types::HandleRequestCallback;
-use crate::types::{AppId, RequestKey};
-use crate::utils::{
-    ffi::{make_result, take_len_prefixed_pointer},
-    json::deserialize,
-};
+use crate::types::{AppId, Pointer, RequestKey, StaticString};
+use crate::utils::ffi::{deserialize_json_pointer, make_result, take_len_prefixed_pointer};
 
 #[unsafe(no_mangle)]
 #[tracing::instrument(skip_all, fields(operation = "construct"))]
-pub extern "C" fn construct() -> AppId {
+pub extern "C" fn construct(options: Pointer) -> AppId {
     let subscriber = fmt()
         .with_env_filter(EnvFilter::new("trace"))
         .with_writer(io::stderr)
@@ -96,25 +94,14 @@ pub unsafe extern "C" fn add_route(
     http_method: u8,
     path_ptr: *const c_char,
 ) -> *mut u8 {
-    let app_ptr = match find_app(app_id) {
-        Some(p) => p,
-        None => {
-            let err = FfiError::new(
-                FfiErrorCode::AppNotFound,
-                "ffi",
-                "add_route",
-                "validation",
-                "App not found. please check if the app is constructed".to_string(),
-                Some(serde_json::json!(null)),
-            );
-
-            return make_result(&err);
-        }
+    let app = match get_app(app_id, "add_route") {
+        Ok(a) => a,
+        Err(e) => return make_result(&e)
     };
 
     if path_ptr.is_null() {
         let err = FfiError::new(
-            FfiErrorCode::InvalidPayload,
+            FfiErrorCode::InvalidArgument,
             "ffi",
             "add_route",
             "validation",
@@ -145,7 +132,6 @@ pub unsafe extern "C" fn add_route(
             return make_result(&err);
         }
     };
-    let app = unsafe { &*app_ptr };
     let path_str = unsafe { CStr::from_ptr(path_ptr) }.to_string_lossy();
 
     match app.add_route(http_method, &path_str) {
@@ -167,57 +153,20 @@ pub unsafe extern "C" fn add_route(
 /// - Passing invalid pointers or non-UTF8 data is undefined behavior.
 #[unsafe(no_mangle)]
 #[tracing::instrument(skip_all, fields(operation = "add_routes"))]
-pub unsafe extern "C" fn add_routes(handle: AppId, routes_ptr: *const u8) -> *mut u8 {
-    let app_ptr = match find_app(handle) {
-        Some(p) => p,
-        None => {
-            let err = FfiError::new(
-                FfiErrorCode::AppNotFound,
-                "ffi",
-                "add_routes",
-                "validation",
-                "App not found. please check if the app is constructed".to_string(),
-                Some(serde_json::json!(null)),
-            );
-
-            return make_result(&err);
-        }
+pub unsafe extern "C" fn add_routes(app_id: AppId, routes_ptr: Pointer) -> *mut u8 {
+    let app = match get_app(app_id, "add_routes") {
+        Ok(a) => a,
+        Err(e) => return make_result(&e),
     };
-    let routes_str: LenPrefixedString = match unsafe {
-        take_len_prefixed_pointer(routes_ptr, PAYLOAD_ZERO_COPY_THRESHOLD as usize)
-    } {
+    let routes = match deserialize_json_pointer::<Vec<(HttpMethod, String)>>(routes_ptr) {
         Ok(p) => p,
         Err(e) => {
             let err = FfiError::new(
-                FfiErrorCode::InvalidPayload,
+                FfiErrorCode::InvalidArgument,
                 "ffi",
                 "add_routes",
-                "validation",
-                e.to_string(),
-                None,
-            );
-
-            tracing::event!(tracing::Level::ERROR, reason="take_len_prefixed_pointer_error", routes_ptr=%format!("{:p}", routes_ptr));
-
-            return make_result(&err);
-        }
-    };
-    let routes_str_ref = match &routes_str {
-        LenPrefixedString::Text(s) => s.as_str(),
-        // SAFETY: The FFI caller (TypeScript side) guarantees that the payload is valid UTF-8.
-        // Therefore we intentionally use `str::from_utf8_unchecked` here to avoid an extra check.
-        // This function is `unsafe` and the caller must uphold the UTF-8 guarantee.
-        LenPrefixedString::Bytes(b) => unsafe { std::str::from_utf8_unchecked(b) },
-    };
-    let routes = match deserialize::<Vec<(HttpMethod, String)>>(routes_str_ref) {
-        Ok(p) => p,
-        Err(_) => {
-            let err = FfiError::new(
-                FfiErrorCode::InvalidPayload,
-                "app",
-                "process_request",
                 "parsing",
-                "Failed to deserialize request payload JSON".to_string(),
+                e.to_string(),
                 None,
             );
 
@@ -226,7 +175,6 @@ pub unsafe extern "C" fn add_routes(handle: AppId, routes_ptr: *const u8) -> *mu
             return make_result(&err);
         }
     };
-    let app = unsafe { &*app_ptr };
     let routes_len = routes.len();
 
     match app.add_routes(routes) {
@@ -253,47 +201,37 @@ pub unsafe extern "C" fn add_routes(handle: AppId, routes_ptr: *const u8) -> *mu
 #[unsafe(no_mangle)]
 #[tracing::instrument(skip_all, fields(operation = "handle_request"))]
 pub unsafe extern "C" fn handle_request(
-    handle: AppId,
+    app_id: AppId,
     request_key: RequestKey,
-    payload_ptr: *const u8,
+    payload_ptr: Pointer,
     cb: HandleRequestCallback,
 ) {
-    let app = match find_app(handle) {
-        Some(app_ptr) => unsafe { &*app_ptr },
-        None => {
-            let err = FfiError::new(
-                FfiErrorCode::AppNotFound,
-                "ffi",
-                "handle_request",
-                "system",
-                "App not found. please check if the app is constructed".to_string(),
-                Some(serde_json::json!(null)),
-            );
-
-            callback_handle_request(cb, request_key, None, &err);
-
-            return;
-        }
-    };
-    let payload_str: LenPrefixedString = match unsafe {
-        take_len_prefixed_pointer(payload_ptr, PAYLOAD_ZERO_COPY_THRESHOLD as usize)
-    } {
-        Ok(p) => p,
+    let app = match get_app(app_id, "handle_request") {
+        Ok(a) => a,
         Err(e) => {
-            let err = FfiError::new(
-                FfiErrorCode::InvalidPayload,
-                "ffi",
-                "handle_request",
-                "validation",
-                e.to_string(),
-                Some(serde_json::json!({"payload_ptr": format!("{:p}", payload_ptr)})),
-            );
-
-            callback_handle_request(cb, request_key, None, &err);
+            callback_handle_request(cb, request_key, None, &e);
 
             return;
         }
     };
+    let payload_str: LenPrefixedString =
+        match unsafe { take_len_prefixed_pointer(payload_ptr, ZERO_COPY_THRESHOLD as usize) } {
+            Ok(p) => p,
+            Err(e) => {
+                let err = FfiError::new(
+                    FfiErrorCode::InvalidArgument,
+                    "ffi",
+                    "handle_request",
+                    "validation",
+                    e.to_string(),
+                    Some(serde_json::json!({"payload_ptr": format!("{:p}", payload_ptr)})),
+                );
+
+                callback_handle_request(cb, request_key, None, &err);
+
+                return;
+            }
+        };
 
     app.handle_request(cb, request_key, payload_str);
 }
@@ -304,23 +242,11 @@ pub unsafe extern "C" fn handle_request(
 /// The `handle` pointer must be a valid pointer returned by `init`.
 #[unsafe(no_mangle)]
 #[tracing::instrument(skip_all, fields(operation = "seal_routes"))]
-pub unsafe extern "C" fn seal_routes(handle: AppId) -> *mut u8 {
-    let app_ptr = match find_app(handle) {
-        Some(p) => p,
-        None => {
-            let err = FfiError::new(
-                FfiErrorCode::AppNotFound,
-                "ffi",
-                "seal_routes",
-                "system",
-                "App not found. please check if the app is constructed".to_string(),
-                Some(serde_json::json!(null)),
-            );
-
-            return make_result(&err);
-        }
+pub unsafe extern "C" fn seal_routes(app_id: AppId) -> *mut u8 {
+    let app = match get_app(app_id, "seal_routes") {
+        Ok(a) => a,
+        Err(e) => return make_result(&e),
     };
-    let app = unsafe { &*app_ptr };
 
     app.seal_routes();
 
@@ -335,10 +261,28 @@ pub unsafe extern "C" fn seal_routes(handle: AppId) -> *mut u8 {
 /// - `ptr` must be a pointer previously returned by a Rust function in this crate
 ///   that registered the buffer via `pointer_registry::register_raw_vec_and_into_raw`.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn free(handle: AppId, ptr: *mut u8) {
-    if find_app(handle).is_none() {
+pub unsafe extern "C" fn free(app_id: AppId, ptr: *mut u8) {
+    if find_app(app_id).is_none() {
         return;
     }
 
     unsafe { pointer_registry::free(ptr) };
+}
+
+fn get_app<'a>(app_id: AppId, stage: StaticString) -> Result<&'a App, Box<FfiError>> {
+    match find_app(app_id) {
+        Some(p) => Ok(unsafe { &*p }),
+        None => {
+            let err = FfiError::new(
+                FfiErrorCode::AppNotFound,
+                "ffi",
+                stage,
+                "validation",
+                "App not found. please check if the app is constructed".to_string(),
+                Some(serde_json::json!(null)),
+            );
+
+            Err(Box::new(err))
+        }
+    }
 }

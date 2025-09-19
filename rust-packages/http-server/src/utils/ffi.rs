@@ -1,13 +1,17 @@
-use super::json::serialize;
+use super::json::{serialize, deserialize};
 use super::string::{len_prefixed_pointer_to_string, string_to_len_prefixed_buffer};
 use crate::enums::LenPrefixedString;
 use crate::pointer_registry;
-use crate::types::LengthHeaderSize;
-use crate::constants::LENGTH_HEADER_BYTES;
-use crate::types::ErrorString;
+use crate::types::{LengthHeaderSize, Pointer};
+use crate::constants::{LENGTH_HEADER_BYTES, ZERO_COPY_THRESHOLD};
+use crate::types::StaticString;
 
 use serde::Serialize;
-use std::slice;
+use std::{
+  slice,
+  str::from_utf8_unchecked,
+};
+use serde::de::DeserializeOwned;
 
 /// Serialize `value` to JSON string and return a len-prefixed raw pointer allocated/registered by Rust.
 pub fn make_result<T: Serialize>(value: &T) -> *mut u8 {
@@ -28,7 +32,7 @@ pub fn make_result<T: Serialize>(value: &T) -> *mut u8 {
 /// - Calling this function with a null or invalid pointer results in undefined behavior
 ///   in the caller context. The function returns an `Err` for a null pointer to allow
 ///   graceful handling.
-pub unsafe fn read_length_at_pointer(pointer: *const u8) -> Result<LengthHeaderSize, ErrorString> {
+pub unsafe fn read_length_at_pointer(pointer: *const u8) -> Result<LengthHeaderSize, StaticString> {
     if pointer.is_null() {
         return Err("Pointer is null");
     }
@@ -59,7 +63,7 @@ pub unsafe fn read_length_at_pointer(pointer: *const u8) -> Result<LengthHeaderS
 pub unsafe fn take_len_prefixed_pointer(
     ptr: *const u8,
     threshold: usize,
-) -> Result<LenPrefixedString, ErrorString> {
+) -> Result<LenPrefixedString, StaticString> {
     if ptr.is_null() {
         return Err("pointer is null");
     }
@@ -80,4 +84,17 @@ pub unsafe fn take_len_prefixed_pointer(
     let v = slice.to_vec();
 
     Ok(LenPrefixedString::Bytes(v))
+}
+
+pub fn deserialize_json_pointer<T: DeserializeOwned>(ptr: Pointer) -> Result<T, StaticString> {
+    let ptr_str = unsafe { take_len_prefixed_pointer(ptr, ZERO_COPY_THRESHOLD as usize) }?;
+    let ptr_str_ref = match &ptr_str {
+        LenPrefixedString::Text(s) => s.as_str(),
+        // SAFETY: The FFI caller (TypeScript side) guarantees that the payload is valid UTF-8.
+        // Therefore we intentionally use `str::from_utf8_unchecked` here to avoid an extra check.
+        // This function is `unsafe` and the caller must uphold the UTF-8 guarantee.
+        LenPrefixedString::Bytes(b) => unsafe { from_utf8_unchecked(b) },
+    };
+
+    deserialize::<T>(ptr_str_ref)
 }

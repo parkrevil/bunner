@@ -1,6 +1,6 @@
 use crate::types::LengthHeaderSize;
 use crate::constants::LENGTH_HEADER_BYTES;
-use crate::types::ErrorString;
+use crate::types::StaticString;
 
 use super::ffi::read_length_at_pointer;
 
@@ -15,7 +15,7 @@ use std::{
 /// - The memory for length+payload must be valid for reads of `LENGTH_HEADER_BYTES + len` bytes and the payload
 ///   must be valid UTF-8.
 ///
-pub unsafe fn len_prefixed_pointer_to_string(ptr: *const u8) -> Result<String, ErrorString> {
+pub unsafe fn len_prefixed_pointer_to_string(ptr: *const u8) -> Result<String, StaticString> {
     if ptr.is_null() {
         return Err("Pointer is null");
     }

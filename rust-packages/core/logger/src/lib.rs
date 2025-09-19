@@ -15,16 +15,6 @@ use tracing_subscriber::{fmt, EnvFilter};
 
 static LOGGER_INIT: OnceCell<()> = OnceCell::new();
 
-#[repr(C)]
-#[allow(non_camel_case_types)]
-pub enum LogLevel {
-    trace = 0,
-    debug = 1,
-    info = 2,
-    warn = 3,
-    error = 4,
-}
-
 #[unsafe(no_mangle)]
 pub extern "C" fn init() {
     LOGGER_INIT.get_or_init(|| {

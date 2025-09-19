@@ -107,7 +107,7 @@ fn process_request(
         Ok(p) => p,
         Err(_) => {
             let err = FfiError::new(
-                FfiErrorCode::InvalidPayload,
+                FfiErrorCode::InvalidArgument,
                 "app",
                 "process_request",
                 "parsing",

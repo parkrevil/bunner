@@ -125,6 +125,14 @@ impl HttpStatusCode {
     }
 }
 
+pub enum LogLevel {
+    Trace = 0,
+    Debug = 1,
+    Info = 2,
+    Warn = 3,
+    Error = 4,
+}
+
 /// A length-prefixed string, either text or binary.
 pub enum LenPrefixedString {
     Text(String),

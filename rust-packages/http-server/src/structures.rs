@@ -1,6 +1,10 @@
-use crate::enums::{HttpMethod, HttpStatusCode};
+use crate::enums::{HttpMethod, HttpStatusCode, LogLevel};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+pub struct AppOptions {
+  log_level: LogLevel,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AddRouteResult {

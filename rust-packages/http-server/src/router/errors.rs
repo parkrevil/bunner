@@ -1,4 +1,4 @@
-use crate::types::{ErrorCode, ErrorString};
+use crate::types::{ErrorCode, StaticString};
 
 #[repr(u16)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -28,7 +28,7 @@ impl RouterErrorCode {
         self as ErrorCode
     }
 
-    pub fn name(self) -> ErrorString {
+    pub fn name(self) -> StaticString {
         match self {
             RouterErrorCode::AlreadySealed => "AlreadySealed",
             RouterErrorCode::NotSealed => "NotSealed",
