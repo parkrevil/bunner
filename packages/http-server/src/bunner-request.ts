@@ -5,6 +5,7 @@ import type { HttpMethod } from './enums';
 import type { FfiBunnerRequest } from './ffi';
 
 export class BunnerRequest {
+  readonly requestId: string;
   readonly httpMethod: HttpMethod;
   readonly url: string;
   readonly path: string;
@@ -19,6 +20,7 @@ export class BunnerRequest {
   readonly ip: string | undefined;
 
   constructor(ffiReq: FfiBunnerRequest, rawReq: Request, server: Server) {
+    this.requestId = ffiReq.requestId;
     this.httpMethod = ffiReq.httpMethod;
     this.url = rawReq.url;
     this.path = ffiReq.path;

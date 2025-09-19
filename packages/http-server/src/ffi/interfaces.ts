@@ -75,7 +75,6 @@ export interface HandleRequestParams {
  * @description The output interface for Handle Request
  */
 export interface HandleRequestOutput {
-  requestId: string;
   request: FfiBunnerRequest;
   response: FfiBunnerResponse;
 }
@@ -93,6 +92,7 @@ export interface HandleRequestResult extends HandleRequestOutput {
  * @description The request interface for Rust Bunner
  */
 export interface FfiBunnerRequest {
+  requestId: string;
   httpMethod: HttpMethod;
   path: string;
   cookies: Record<string, any>;
