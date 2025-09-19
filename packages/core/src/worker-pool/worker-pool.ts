@@ -28,8 +28,8 @@ export class WorkerPool {
   }
 
   /** Report processing time (ms) for a finished job on worker `id`. */
-  reportProcessingTime(id: number, ms: number) {
-    this.balancer.reportProcessingTime(id, ms);
+  reportJobDuration(id: number, ms: number) {
+    this.balancer.reportJobDuration(id, ms);
   }
 
   /** Report current queue length for a worker (best-effort). */
@@ -38,13 +38,13 @@ export class WorkerPool {
   }
 
   /** Report CPU usage (0..1 or 0..100) for a worker. */
-  reportCpu(id: number, val: number) {
-    this.balancer.reportCpu(id, val);
+  reportCpuUsage(id: number, val: number) {
+    this.balancer.reportCpuUsage(id, val);
   }
 
   /** Report memory usage in bytes for a worker. */
-  reportMemory(id: number, bytes: number) {
-    this.balancer.reportMemory(id, bytes);
+  reportMemoryUsage(id: number, bytes: number) {
+    this.balancer.reportMemoryUsage(id, bytes);
   }
 
   destroy() {
