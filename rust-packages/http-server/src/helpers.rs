@@ -1,6 +1,6 @@
 use crate::request_callback_dispatcher;
 use crate::types::{HandleRequestCallback, RequestKey};
-use crate::utils::ffi::{make_result};
+use crate::utils::ffi::make_result;
 use serde::Serialize;
 
 #[inline(always)]

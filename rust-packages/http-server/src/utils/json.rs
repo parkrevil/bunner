@@ -46,9 +46,7 @@ pub fn deserialize<T: DeserializeOwned>(json_str: &str) -> Result<T, StaticStrin
 }
 
 #[cfg(not(feature = "simd-json"))]
-pub fn deserialize_with_serde_json<T: DeserializeOwned>(
-    json_str: &str,
-) -> Result<T, StaticString> {
+pub fn deserialize_with_serde_json<T: DeserializeOwned>(json_str: &str) -> Result<T, StaticString> {
     serde_json::from_str::<T>(json_str).map_err(|err| {
         tracing::error!("serde_json deserialization error: {:?}", err);
 
@@ -57,9 +55,7 @@ pub fn deserialize_with_serde_json<T: DeserializeOwned>(
 }
 
 #[cfg(feature = "simd-json")]
-pub fn deserialize_with_simd_json<T: DeserializeOwned>(
-    json_str: &str,
-) -> Result<T, StaticString> {
+pub fn deserialize_with_simd_json<T: DeserializeOwned>(json_str: &str) -> Result<T, StaticString> {
     let mut bytes = json_str.as_bytes().to_vec();
 
     simd_json::from_slice::<T>(&mut bytes).map_err(|err| {

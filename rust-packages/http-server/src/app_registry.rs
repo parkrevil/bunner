@@ -1,5 +1,5 @@
-use crate::types::AppId;
 use crate::app::App;
+use crate::types::AppId;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -21,10 +21,7 @@ pub fn register_app(b: Box<App>) -> AppId {
 pub fn unregister_app(id: AppId) -> Option<*mut App> {
     let map = INSTANCE_MAP.get_or_init(|| Mutex::new(HashMap::new()));
 
-    map.lock()
-        .unwrap()
-        .remove(&id)
-        .map(|u| u as *mut App)
+    map.lock().unwrap().remove(&id).map(|u| u as *mut App)
 }
 
 pub fn find_app(id: AppId) -> Option<*mut App> {
@@ -34,9 +31,5 @@ pub fn find_app(id: AppId) -> Option<*mut App> {
 
     let map = INSTANCE_MAP.get_or_init(|| Mutex::new(HashMap::new()));
 
-    map.lock()
-        .unwrap()
-        .get(&id)
-        .copied()
-        .map(|u| u as *mut App)
+    map.lock().unwrap().get(&id).copied().map(|u| u as *mut App)
 }

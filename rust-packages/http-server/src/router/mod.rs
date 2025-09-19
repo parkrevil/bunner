@@ -130,7 +130,7 @@ impl Router {
                 "validation",
                 "Router is not sealed; cannot get readonly snapshot".to_string(),
                 None,
-            )))
+            ))),
         }
     }
 }

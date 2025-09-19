@@ -4,11 +4,11 @@ use super::{
 use crate::enums::HttpMethod;
 use crate::router::errors::RouterErrorCode;
 use crate::router::interner::Interner;
+use crate::router::path::normalize_and_validate_path;
+use crate::router::pattern::parse_segment;
 use crate::router::pattern::{
     pattern_compatible_policy, pattern_is_pure_static, pattern_score, SegmentPart, SegmentPattern,
 };
-use crate::router::path::normalize_and_validate_path;
-use crate::router::pattern::parse_segment;
 use crate::router::structures::{RouterError, RouterResult};
 use hashbrown::HashSet;
 use serde_json::json;
@@ -447,7 +447,7 @@ pub(super) fn prepare_path_segments_standalone(path: &str) -> RouterResult<Vec<S
     let mut seen_params = HashSet::new();
 
     for seg in segments {
-    let pat = parse_segment(seg)?;
+        let pat = parse_segment(seg)?;
 
         let mut min_len = 0u16;
         let mut last_lit_len = 0u16;

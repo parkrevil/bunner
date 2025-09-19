@@ -1,7 +1,7 @@
 use crate::router::errors::RouterErrorCode;
+use crate::router::radix_tree::node::is_valid_segment_length;
 use crate::router::structures::RouterError;
 use crate::router::structures::RouterResult;
-use crate::router::radix_tree::node::is_valid_segment_length;
 use serde_json::json;
 use smallvec::SmallVec;
 

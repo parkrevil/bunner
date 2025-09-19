@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 pub struct AppOptions {
-  log_level: LogLevel,
+    log_level: LogLevel,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

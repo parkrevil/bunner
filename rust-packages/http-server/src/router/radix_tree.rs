@@ -11,8 +11,8 @@ type ParsedEntry = (
     bool,
     Vec<String>,
 );
-use crate::router::pattern::SegmentPattern;
 use crate::router::pattern::SegmentPart;
+use crate::router::pattern::SegmentPattern;
 
 use super::RouterOptions;
 use crate::enums::HttpMethod;
