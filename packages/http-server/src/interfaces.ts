@@ -1,6 +1,12 @@
+import type { LogLevel } from '@bunner/core';
+
 import type { BunnerRequest } from './bunner-request';
 import type { BunnerResponse } from './bunner-response';
 import type { HandlerFunction } from './types';
+
+export interface BunnerHttpServerOptions {
+  logLevel?: LogLevel;
+}
 
 /**
  * Find Handler Result

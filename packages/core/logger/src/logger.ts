@@ -1,7 +1,6 @@
-import { toCString, resolveRustLibPath } from '@bunner/core';
+import { toCString, resolveRustLibPath, LogLevel } from '@bunner/core';
 import { dlopen } from 'bun:ffi';
 
-import { LogLevel } from './enums';
 import type { FfiSymbols } from './interfaces';
 
 export class Logger {
@@ -37,24 +36,24 @@ export class Logger {
   }
 
   trace(message: string) {
-    this.log(LogLevel.trace, message);
+    this.log(LogLevel.Trace, message);
   }
 
   debug(message: string) {
-    this.log(LogLevel.debug, message);
+    this.log(LogLevel.Debug, message);
   }
 
   info(message: string) {
-    this.log(LogLevel.info, message);
+    this.log(LogLevel.Info, message);
   }
 
   warn(message: string) {
-    this.log(LogLevel.warn, message);
+    this.log(LogLevel.Warn, message);
   }
 
   error(e: any) {
     if (typeof e === 'string') {
-      this.log(LogLevel.error, e);
+      this.log(LogLevel.Error, e);
       return;
     }
 
@@ -66,7 +65,7 @@ export class Logger {
       detail: e?.detail,
     };
 
-    this.log(LogLevel.error, payload);
+    this.log(LogLevel.Error, payload);
   }
 
   private log(level: LogLevel, message: any) {

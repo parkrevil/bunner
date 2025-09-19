@@ -2,11 +2,25 @@ use crate::enums::{HttpMethod, HttpStatusCode, LogLevel};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+#[derive(Deserialize, Debug)]
 pub struct AppOptions {
-    log_level: LogLevel,
+    #[serde(rename = "logLevel")]
+    pub log_level: LogLevel,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+impl AppOptions {
+    pub fn log_level(&self) -> LogLevel {
+        self.log_level
+    }
+}
+
+#[derive(Serialize, Debug)]
+pub struct InitResult {
+    #[serde(rename = "appId")]
+    pub app_id: u64,
+}
+
+#[derive(Serialize, Debug)]
 pub struct AddRouteResult {
     pub key: u16,
 }

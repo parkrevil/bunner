@@ -7,7 +7,7 @@ import type { AppId, FreePointerFn } from './types';
  * @description The base symbols for a Rust core
  */
 export interface BaseFfiSymbols {
-  construct: (...args: any[]) => AppId | null;
+  init: (...args: any[]) => any;
   destroy: (appId: AppId) => void;
   free: FreePointerFn;
 }
@@ -29,6 +29,18 @@ export interface FfiErrorReport {
   extra: any;
 }
 
+/**
+ * Create JS Callback Options
+ * @description Options for creating a JS callback
+ */
 export interface CreateJsCallbackOptions extends FFIFunction {
   callOnce?: boolean;
+}
+
+/**
+ * Base Construct Result
+ * @description The result of constructing a Rust core
+ */
+export interface BaseInitResult {
+  appId: AppId;
 }

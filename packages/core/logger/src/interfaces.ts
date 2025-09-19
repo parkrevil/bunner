@@ -1,4 +1,4 @@
-import type { LogLevel } from './enums';
+import type { LogLevel } from '@bunner/core';
 
 export interface FfiSymbols {
   init: () => void;

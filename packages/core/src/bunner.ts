@@ -1,9 +1,5 @@
-import {
-  type BaseApplication,
-  type BaseModule,
-  type CreateApplicationOptions,
-} from './application';
-import type { Class } from './common';
+import { type BaseApplication, type BaseModule } from './application';
+import type { BunnerApplicationOptions, Class } from './common';
 
 /**
  * Bunner class
@@ -21,17 +17,18 @@ export class Bunner {
   static async create<T extends BaseApplication>(
     appConstructor: Class<T>,
     rootModule: Class<BaseModule>,
-    options?: CreateApplicationOptions,
+    options?: BunnerApplicationOptions<T>,
   ) {
     this.setupSignalHandlers();
 
-    const { name = this.generateApplicationDefaultName() } = options ?? {};
+    const { name = this.generateApplicationDefaultName(), ...appOptions } =
+      options ?? ({} as BunnerApplicationOptions<T>);
 
     if (this.apps.has(name)) {
       throw new Error(`Application with name "${name}" already exists`);
     }
 
-    const app = new appConstructor(rootModule);
+    const app = new appConstructor(rootModule, appOptions);
     await app.init();
     await app.bootstrap();
 

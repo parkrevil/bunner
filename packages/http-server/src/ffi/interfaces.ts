@@ -1,4 +1,9 @@
-import type { AppId, BaseFfiSymbols } from '@bunner/core';
+import type {
+  AppId,
+  BaseFfiSymbols,
+  BaseInitResult,
+  LogLevel,
+} from '@bunner/core';
 import type { Pointer } from 'bun:ffi';
 import type { StatusCodes } from 'http-status-codes';
 
@@ -31,6 +36,20 @@ export interface JSCallbackEntry<T> {
   resolve: (v: T) => void;
   reject: (e: unknown) => void;
 }
+
+/**
+ * FFI Options
+ * @description Options for the FFI
+ */
+export interface FfiOptions {
+  logLevel: LogLevel;
+}
+
+/**
+ * Construct Result
+ * @description The result interface for Construct
+ */
+export interface InitResult extends BaseInitResult {}
 
 /**
  * Add Route Result

@@ -125,12 +125,52 @@ impl HttpStatusCode {
     }
 }
 
+#[repr(u8)]
+#[derive(Debug, Clone, Copy)]
 pub enum LogLevel {
-    Trace = 0,
-    Debug = 1,
-    Info = 2,
-    Warn = 3,
-    Error = 4,
+    Trace,
+    Debug,
+    Info,
+    Warn,
+    Error,
+}
+
+impl<'de> Deserialize<'de> for LogLevel {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let v = u8::deserialize(deserializer)?;
+
+        match v {
+            0 => Ok(LogLevel::Trace),
+            1 => Ok(LogLevel::Debug),
+            2 => Ok(LogLevel::Info),
+            3 => Ok(LogLevel::Warn),
+            4 => Ok(LogLevel::Error),
+            _ => Ok(LogLevel::Error),
+        }
+    }
+}
+
+impl LogLevel {
+    /// Returns the string name suitable for `tracing_subscriber::EnvFilter::new`.
+    #[inline]
+    pub fn as_env_filter(&self) -> &'static str {
+        match self {
+            LogLevel::Trace => "trace",
+            LogLevel::Debug => "debug",
+            LogLevel::Info => "info",
+            LogLevel::Warn => "warn",
+            LogLevel::Error => "error",
+        }
+    }
+}
+
+impl std::fmt::Display for LogLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_env_filter())
+    }
 }
 
 /// A length-prefixed string, either text or binary.

@@ -3,9 +3,10 @@ import { Container } from '../injector';
 
 import type { BaseModule } from './interfaces';
 
-export abstract class BaseApplication {
-  protected rootModule: BaseModule;
-  protected container: Container;
+export abstract class BaseApplication<O = any> {
+  protected readonly rootModule: BaseModule;
+  protected readonly container: Container;
+  protected options: Required<O>;
 
   constructor(rootModule: Class<BaseModule>) {
     this.rootModule = new rootModule();

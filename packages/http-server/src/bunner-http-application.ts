@@ -1,22 +1,36 @@
-import { BaseApplication, type BaseModule, type Class } from '@bunner/core';
+import {
+  BaseApplication,
+  LogLevel,
+  type BaseModule,
+  type Class,
+} from '@bunner/core';
 import { Logger } from '@bunner/core-logger';
 import type { Server } from 'bun';
 
 import { HttpError } from './errors';
 import { Ffi } from './ffi';
+import type { BunnerHttpServerOptions } from './interfaces';
 import { RouteHandler } from './route-handler';
 
-export class BunnerHttpServer extends BaseApplication {
+export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
   private readonly logger = new Logger();
   private server: Server | undefined;
   private ffi: Ffi;
   private routeHandler: RouteHandler;
 
-  constructor(rootModule: Class<BaseModule>) {
+  constructor(
+    rootModule: Class<BaseModule>,
+    options?: BunnerHttpServerOptions,
+  ) {
     super(rootModule);
 
     this.server = undefined;
-    this.ffi = new Ffi();
+    this.options = {
+      logLevel: options?.logLevel ?? LogLevel.Info,
+    };
+    this.ffi = new Ffi({
+      logLevel: this.options.logLevel,
+    });
     this.routeHandler = new RouteHandler(this.container, this.ffi);
   }
 

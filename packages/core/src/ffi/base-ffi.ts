@@ -21,11 +21,7 @@ export abstract class BaseFfi<T extends BaseFfiSymbols> {
   protected close: () => void;
   protected appId: AppId;
 
-  /**
-   * Initialize the Rust core
-   * @description Initialize the Rust core
-   */
-  init(libPath: string, api: Record<keyof T, FFIFunction>) {
+  constructor(libPath: string, api: Record<keyof T, FFIFunction>) {
     const lib = dlopen(libPath, api);
 
     if (!lib.symbols) {
@@ -34,11 +30,17 @@ export abstract class BaseFfi<T extends BaseFfiSymbols> {
 
     this.symbols = lib.symbols as T;
     this.close = () => lib.close();
+  }
 
-    const appId = this.symbols.construct();
-
-    if (!appId) {
-      throw new BunnerFfiError('Failed to initialize Rust core');
+  /**
+   * Initialize the Rust core
+   * @description Initialize the Rust core
+   */
+  init(appId: AppId) {
+    if (appId === 0n) {
+      throw new BunnerFfiError(
+        'Invalid app id. Please ensure the core initialized correctly.',
+      );
     }
 
     this.appId = appId;

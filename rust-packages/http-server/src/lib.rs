@@ -29,7 +29,6 @@ pub mod test_utils;
 #[cfg(test)]
 mod pointer_registry_test;
 
-use std::io;
 use std::{ffi::CStr, os::raw::c_char};
 use tracing_subscriber::{fmt, EnvFilter};
 
@@ -39,26 +38,53 @@ use crate::constants::ZERO_COPY_THRESHOLD;
 use crate::enums::{HttpMethod, LenPrefixedString};
 use crate::errors::{FfiError, FfiErrorCode};
 use crate::helpers::callback_handle_request;
-use crate::structures::{AddRouteResult, AppOptions};
+use crate::structures::{AddRouteResult, AppOptions, InitResult};
 use crate::thread_pool::shutdown_pool;
 use crate::types::HandleRequestCallback;
 use crate::types::{AppId, MutablePointer, ReadonlyPointer, RequestKey, StaticString};
 use crate::utils::ffi::{deserialize_json_pointer, make_result, take_len_prefixed_pointer};
 
+/// Constructs a new HttpServer instance from the given options pointer.
+///
+/// # Safety
+/// The `options_ptr` must be a valid pointer to a length-prefixed JSON buffer representing `AppOptions`.
+/// Passing an invalid pointer or malformed data is undefined behavior.
 #[unsafe(no_mangle)]
-#[tracing::instrument(skip_all, fields(operation = "construct"))]
-pub extern "C" fn construct(options: ReadonlyPointer) -> AppId {
+#[tracing::instrument(skip_all)]
+pub unsafe extern "C" fn init(options_ptr: ReadonlyPointer) -> MutablePointer {
+    let options = match unsafe { deserialize_json_pointer::<AppOptions>(options_ptr) }
+    {
+        Ok(p) => p,
+        Err(e) => {
+            let err = FfiError::new(
+                FfiErrorCode::InvalidArgument,
+                "ffi",
+                "construct",
+                "parsing",
+                e.to_string(),
+                None,
+            );
+
+            tracing::event!(tracing::Level::ERROR, reason = "deserialize_construct_error");
+
+            return make_result(&err);
+        }
+    };
+
+    // Initialize global logger
     let subscriber = fmt()
-        .with_env_filter(EnvFilter::new("trace"))
-        .with_writer(io::stderr)
-        .with_ansi(false)
+        .with_env_filter(EnvFilter::new(options.log_level().as_env_filter()))
         .finish();
 
     tracing::subscriber::set_global_default(subscriber).expect("Failed to set global logger");
 
+    tracing::debug!("AppOptions: {:?}", options);
+
+    let app_id = register_app(Box::default());
+
     tracing::info!("Bunner Rust Http Server initialized.");
 
-    register_app(Box::default())
+    make_result(&InitResult { app_id })
 }
 
 /// Destroys the HttpServer instance and frees all associated memory.
@@ -67,7 +93,7 @@ pub extern "C" fn construct(options: ReadonlyPointer) -> AppId {
 /// The `handle` pointer must be a valid pointer returned by `init`.
 /// After calling this function, the handle is dangling and must not be used again.
 #[unsafe(no_mangle)]
-#[tracing::instrument(skip_all, fields(operation="destroy", app_id=?app_id))]
+#[tracing::instrument(skip_all, fields(app_id=app_id))]
 pub unsafe extern "C" fn destroy(app_id: AppId) {
     tracing::event!(tracing::Level::INFO, "App destroy called");
 
@@ -88,7 +114,7 @@ pub unsafe extern "C" fn destroy(app_id: AppId) {
 /// - The returned pointer is a length-prefixed buffer allocated by Rust and must be freed
 ///   by calling `free_buffer`.
 #[unsafe(no_mangle)]
-#[tracing::instrument(skip_all, fields(operation="add_route", http_method=http_method))]
+#[tracing::instrument(skip_all, fields(app_id=app_id))]
 pub unsafe extern "C" fn add_route(
     app_id: AppId,
     http_method: u8,
@@ -152,7 +178,7 @@ pub unsafe extern "C" fn add_route(
 ///   by calling `free_buffer`.
 /// - Passing invalid pointers or non-UTF8 data is undefined behavior.
 #[unsafe(no_mangle)]
-#[tracing::instrument(skip_all, fields(operation = "add_routes"))]
+#[tracing::instrument(skip_all, fields(app_id=app_id))]
 pub unsafe extern "C" fn add_routes(app_id: AppId, routes_ptr: ReadonlyPointer) -> MutablePointer {
     let app = match get_app(app_id, "add_routes") {
         Ok(a) => a,
@@ -200,7 +226,7 @@ pub unsafe extern "C" fn add_routes(app_id: AppId, routes_ptr: ReadonlyPointer) 
 /// - The `handle` pointer must be a valid pointer returned by `init`.
 /// - The `request_json` pointer must point to a valid, null-terminated C string.
 #[unsafe(no_mangle)]
-#[tracing::instrument(skip_all, fields(operation = "handle_request"))]
+#[tracing::instrument(skip_all, fields(app_id=app_id))]
 pub unsafe extern "C" fn handle_request(
     app_id: AppId,
     request_key: RequestKey,
@@ -242,7 +268,7 @@ pub unsafe extern "C" fn handle_request(
 /// # Safety
 /// The `handle` pointer must be a valid pointer returned by `init`.
 #[unsafe(no_mangle)]
-#[tracing::instrument(skip_all, fields(operation = "seal_routes"))]
+#[tracing::instrument(skip_all, fields(app_id=app_id))]
 pub unsafe extern "C" fn seal_routes(app_id: AppId) -> MutablePointer {
     let app = match get_app(app_id, "seal_routes") {
         Ok(a) => a,
@@ -262,6 +288,7 @@ pub unsafe extern "C" fn seal_routes(app_id: AppId) -> MutablePointer {
 /// - `ptr` must be a pointer previously returned by a Rust function in this crate
 ///   that registered the buffer via `pointer_registry::register_raw_vec_and_into_raw`.
 #[unsafe(no_mangle)]
+#[tracing::instrument(skip_all, fields(app_id=app_id))]
 pub unsafe extern "C" fn free(app_id: AppId, ptr: MutablePointer) {
     if find_app(app_id).is_none() {
         return;

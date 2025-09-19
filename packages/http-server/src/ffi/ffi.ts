@@ -20,15 +20,18 @@ import type {
   HandleRequestResult,
   FfiSymbols,
   JSCallbackEntry,
+  FfiOptions,
+  InitResult,
 } from './interfaces';
 import type { RequestKey } from './types';
 
 export class Ffi extends BaseFfi<FfiSymbols> {
-  private handleRequestCb: JSCallback;
-  private pendingHandleRequests: Map<
+  private readonly handleRequestCb: JSCallback;
+  private readonly pendingHandleRequests: Map<
     RequestKey,
     JSCallbackEntry<HandleRequestResult>
   >;
+  private readonly options: FfiOptions;
   private requestKey = 0n;
 
   /**
@@ -36,18 +39,12 @@ export class Ffi extends BaseFfi<FfiSymbols> {
    * @description Constructor
    * @returns
    */
-  constructor() {
-    super();
-
-    this.pendingHandleRequests = new Map();
-  }
-
-  override init() {
+  constructor(options: FfiOptions) {
     const api: Record<keyof FfiSymbols, FFIFunction> = {
       // BaseRustSymbols
-      free: { args: [FFI_APP_ID_TYPE], returns: FFIType.void },
-      construct: { args: [], returns: FFIType.u8 },
+      init: { args: [FFIType.pointer], returns: FFIType.pointer },
       destroy: { args: [FFIType.pointer], returns: FFIType.void },
+      free: { args: [FFI_APP_ID_TYPE], returns: FFIType.void },
 
       // HttpServerSymbols
       add_route: {
@@ -73,13 +70,27 @@ export class Ffi extends BaseFfi<FfiSymbols> {
       },
     };
 
-    super.init(resolveRustLibPath('bunner_http_server', import.meta.dir), api);
+    super(resolveRustLibPath('bunner_http_server', import.meta.dir), api);
 
+    this.options = options;
+    this.pendingHandleRequests = new Map();
     this.handleRequestCb = this.createJsCallback(this.handleRequestCallback, {
       args: [FFI_REQUEST_KEY_TYPE, FFIType.u16, FFIType.pointer],
       returns: FFIType.void,
       threadsafe: true,
     });
+  }
+
+  override init() {
+    const { appId } = this.ensure<InitResult>(
+      this.symbols.init(
+        toBuffer({
+          logLevel: this.options.logLevel,
+        }),
+      ),
+    );
+
+    super.init(appId);
   }
 
   /**
