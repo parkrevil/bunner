@@ -3,7 +3,7 @@ export type WorkerSlot = {
   active: number;
 };
 
-export class LeastLoadBalancer {
+export class LoadBalancer {
   private slots: WorkerSlot[];
 
   constructor(workerCount: number) {
@@ -52,5 +52,3 @@ export class LeastLoadBalancer {
     return this.slots.map(s => ({ ...s }));
   }
 }
-
-export default LeastLoadBalancer;
