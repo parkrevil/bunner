@@ -1,7 +1,8 @@
 use serde_json::json;
 
-use crate::middleware::chain::Middleware;
 use crate::structures::{BunnerRequest, BunnerResponse, HandleRequestPayload};
+
+use super::Middleware;
 
 pub struct CookieParser;
 

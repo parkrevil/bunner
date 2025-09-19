@@ -1,5 +1,8 @@
-mod chain;
-pub use chain::Chain;
+mod traits;
+pub use traits::Middleware;
+
+mod middleware_chain;
+pub use middleware_chain::MiddlewareChain;
 
 mod url_parser;
 pub use url_parser::UrlParser;

@@ -1,20 +1,11 @@
 use crate::structures::{BunnerRequest, BunnerResponse, HandleRequestPayload};
+use super::Middleware;
 
-pub trait Middleware: Send + Sync {
-    // return true to continue, false to stop chain immediately
-    fn handle(
-        &self,
-        req: &mut BunnerRequest,
-        res: &mut BunnerResponse,
-        payload: &HandleRequestPayload,
-    ) -> bool;
-}
-
-pub struct Chain {
+pub struct MiddlewareChain {
     layers: Vec<Box<dyn Middleware>>,
 }
 
-impl Chain {
+impl MiddlewareChain {
     pub fn new() -> Self {
         Self { layers: Vec::new() }
     }
@@ -55,7 +46,7 @@ impl Chain {
     }
 }
 
-impl Default for Chain {
+impl Default for MiddlewareChain {
     fn default() -> Self {
         Self::new()
     }

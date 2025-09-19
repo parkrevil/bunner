@@ -1,6 +1,8 @@
 use crate::enums::HttpStatusCode;
-use crate::middleware::chain::Middleware;
 use crate::structures::{BunnerRequest, BunnerResponse, HandleRequestPayload};
+
+use super::Middleware;
+
 use serde_json::Value as JsonValue;
 #[cfg(feature = "simd-json")]
 use simd_json as simdjson;

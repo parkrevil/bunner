@@ -1,7 +1,7 @@
 use crate::enums::{HttpMethod, HttpStatusCode, LenPrefixedString};
 use crate::errors::{FfiError, FfiErrorCode};
 use crate::helpers::callback_handle_request;
-use crate::middleware::{BodyParser, Chain, CookieParser, HeaderParser, UrlParser};
+use crate::middlewares::{BodyParser, CookieParser, HeaderParser, MiddlewareChain, UrlParser};
 use crate::router::structures::RouterResult;
 use crate::router::{Router, RouterReadOnly};
 use crate::structures::{BunnerRequest, BunnerResponse, HandleRequestOutput, HandleRequestPayload};
@@ -19,6 +19,7 @@ use uuid::Uuid;
 #[repr(C)]
 pub struct App {
     router: Router,
+    middleware_chain: Arc<MiddlewareChain>,
 }
 
 impl Default for App {
@@ -29,8 +30,15 @@ impl Default for App {
 
 impl App {
     pub fn new() -> Self {
+        let middleware_chain = MiddlewareChain::new()
+            .with(HeaderParser)
+            .with(UrlParser)
+            .with(CookieParser)
+            .with(BodyParser);
+
         App {
             router: Router::new(None),
+            middleware_chain: Arc::new(middleware_chain),
         }
     }
 
@@ -61,8 +69,10 @@ impl App {
             }
         };
 
+        let middleware_chain = self.middleware_chain.clone();
+
         match submit_job(Box::new(move || {
-            process_request(cb, request_key, payload, ro);
+            process_request(cb, request_key, payload, ro, middleware_chain);
         })) {
             Ok(()) => {
                 tracing::trace!("request enqueued");
@@ -93,6 +103,7 @@ fn process_request(
     request_key: RequestKey,
     payload_str: LenPrefixedString,
     ro: Arc<RouterReadOnly>,
+    middleware_chain: Arc<MiddlewareChain>,
 ) {
     tracing::trace!("processing request");
 
@@ -160,13 +171,7 @@ fn process_request(
         body: serde_json::Value::Null,
     };
     let request_id = Uuid::new_v4().to_string();
-    let chain = Chain::new()
-        .with(HeaderParser)
-        .with(UrlParser)
-        .with(CookieParser)
-        .with(BodyParser);
-
-    if !chain.execute(&mut request, &mut response, &payload) {
+    if !middleware_chain.execute(&mut request, &mut response, &payload) {
         let output = HandleRequestOutput {
             request_id,
             request,

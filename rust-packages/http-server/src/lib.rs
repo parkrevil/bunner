@@ -13,7 +13,7 @@ pub mod constants;
 pub mod enums;
 pub mod errors;
 pub mod helpers;
-pub mod middleware;
+pub mod middlewares;
 pub mod pointer_registry;
 pub mod request_callback_dispatcher;
 pub mod router;
