@@ -37,7 +37,7 @@ export abstract class BaseFfi<T extends BaseFfiSymbols> {
    * @description Initialize the Rust core
    */
   init(appId: AppId) {
-    if (appId === 0n) {
+    if (appId === 0) {
       throw new BunnerFfiError(
         'Invalid app id. Please ensure the core initialized correctly.',
       );

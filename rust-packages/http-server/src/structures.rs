@@ -1,4 +1,4 @@
-use crate::enums::{HttpMethod, HttpStatusCode, LogLevel};
+use crate::{enums::{HttpMethod, HttpStatusCode, LogLevel}, types::AppId};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -17,7 +17,7 @@ impl AppOptions {
 #[derive(Serialize, Debug)]
 pub struct InitResult {
     #[serde(rename = "appId")]
-    pub app_id: u64,
+    pub app_id: AppId,
 }
 
 #[derive(Serialize, Debug)]

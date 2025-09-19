@@ -4,7 +4,7 @@ import type { Pointer } from 'bun:ffi';
  * App ID
  * @description The type for the application ID
  */
-export type AppId = bigint;
+export type AppId = number;
 
 /**
  * Free Pointer Function
