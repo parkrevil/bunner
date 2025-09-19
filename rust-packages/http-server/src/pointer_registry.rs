@@ -1,3 +1,4 @@
+use crate::types::MutablePointer;
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 
@@ -9,7 +10,7 @@ fn registry() -> &'static Mutex<RawMap> {
     REGISTRY.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-pub fn has(ptr: *mut u8) -> bool {
+pub fn has(ptr: MutablePointer) -> bool {
     if ptr.is_null() {
         return false;
     }
@@ -40,7 +41,7 @@ pub fn has(ptr: *mut u8) -> bool {
 ///   behavior (the registry will log and ignore unknown pointers, but callers should
 ///   not rely on this for correctness).
 /// - Passing a null pointer is allowed and will be treated as a no-op.
-pub unsafe fn free(ptr: *mut u8) {
+pub unsafe fn free(ptr: MutablePointer) {
     if ptr.is_null() {
         tracing::warn!("pointer_registry: free_raw called with null pointer");
         return;
@@ -80,7 +81,7 @@ pub unsafe fn free(ptr: *mut u8) {
 
 /// Consume a `Vec<u8>`, register the raw pointer and metadata, and return it.
 #[track_caller]
-pub fn register(mut v: Vec<u8>) -> *mut u8 {
+pub fn register(mut v: Vec<u8>) -> MutablePointer {
     let ptr = v.as_mut_ptr();
     let len = v.len();
     let cap = v.capacity();

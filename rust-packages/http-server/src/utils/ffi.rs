@@ -1,20 +1,16 @@
-use super::json::{serialize, deserialize};
+use super::json::{deserialize, serialize};
 use super::string::{len_prefixed_pointer_to_string, string_to_len_prefixed_buffer};
+use crate::constants::{LENGTH_HEADER_BYTES, ZERO_COPY_THRESHOLD};
 use crate::enums::LenPrefixedString;
 use crate::pointer_registry;
-use crate::types::{LengthHeaderSize, Pointer};
-use crate::constants::{LENGTH_HEADER_BYTES, ZERO_COPY_THRESHOLD};
-use crate::types::StaticString;
+use crate::types::{LengthHeaderSize, MutablePointer, ReadonlyPointer, StaticString};
 
-use serde::Serialize;
-use std::{
-  slice,
-  str::from_utf8_unchecked,
-};
 use serde::de::DeserializeOwned;
+use serde::Serialize;
+use std::{slice, str::from_utf8_unchecked};
 
 /// Serialize `value` to JSON string and return a len-prefixed raw pointer allocated/registered by Rust.
-pub fn make_result<T: Serialize>(value: &T) -> *mut u8 {
+pub fn make_result<T: Serialize>(value: &T) -> MutablePointer {
     match serialize::<T>(value) {
         Ok(s) => {
             let v = string_to_len_prefixed_buffer(&s);
@@ -32,7 +28,9 @@ pub fn make_result<T: Serialize>(value: &T) -> *mut u8 {
 /// - Calling this function with a null or invalid pointer results in undefined behavior
 ///   in the caller context. The function returns an `Err` for a null pointer to allow
 ///   graceful handling.
-pub unsafe fn read_length_at_pointer(pointer: *const u8) -> Result<LengthHeaderSize, StaticString> {
+pub unsafe fn read_length_at_pointer(
+    pointer: ReadonlyPointer,
+) -> Result<LengthHeaderSize, StaticString> {
     if pointer.is_null() {
         return Err("Pointer is null");
     }
@@ -43,7 +41,9 @@ pub unsafe fn read_length_at_pointer(pointer: *const u8) -> Result<LengthHeaderS
     let mut header_arr = [0u8; std::mem::size_of::<LengthHeaderSize>()];
     header_arr.copy_from_slice(&header[..LENGTH_HEADER_BYTES]);
     let len = LengthHeaderSize::from_le_bytes(header_arr) as usize;
-    let _ = len.checked_add(LENGTH_HEADER_BYTES).ok_or("length overflow")?;
+    let _ = len
+        .checked_add(LENGTH_HEADER_BYTES)
+        .ok_or("length overflow")?;
 
     Ok(len as LengthHeaderSize)
 }
@@ -61,7 +61,7 @@ pub unsafe fn read_length_at_pointer(pointer: *const u8) -> Result<LengthHeaderS
 /// - For the Bytes variant the caller must have allocated the buffer with the same Rust allocator
 ///   used by this crate and must have relinquished ownership (must not use or free `ptr` afterwards).
 pub unsafe fn take_len_prefixed_pointer(
-    ptr: *const u8,
+    ptr: ReadonlyPointer,
     threshold: usize,
 ) -> Result<LenPrefixedString, StaticString> {
     if ptr.is_null() {
@@ -86,8 +86,18 @@ pub unsafe fn take_len_prefixed_pointer(
     Ok(LenPrefixedString::Bytes(v))
 }
 
-pub fn deserialize_json_pointer<T: DeserializeOwned>(ptr: Pointer) -> Result<T, StaticString> {
-    let ptr_str = unsafe { take_len_prefixed_pointer(ptr, ZERO_COPY_THRESHOLD as usize) }?;
+/// # Safety
+///
+/// - `ptr` must be a valid pointer to a length-prefixed buffer allocated by the caller.
+/// - The buffer must remain valid and not be mutated for the duration of this call.
+/// - For the `Bytes` variant, the FFI caller must guarantee that the payload is valid UTF-8,
+///   as this function will use `str::from_utf8_unchecked` to convert the bytes to a string.
+/// - Passing an invalid or null pointer, or a buffer that does not meet these requirements,
+///   results in undefined behavior.
+pub unsafe fn deserialize_json_pointer<T: DeserializeOwned>(
+    ptr: ReadonlyPointer,
+) -> Result<T, StaticString> {
+    let ptr_str = unsafe { take_len_prefixed_pointer(ptr, ZERO_COPY_THRESHOLD as usize)? };
     let ptr_str_ref = match &ptr_str {
         LenPrefixedString::Text(s) => s.as_str(),
         // SAFETY: The FFI caller (TypeScript side) guarantees that the payload is valid UTF-8.

@@ -1,8 +1,9 @@
 use crossbeam_channel as xchan;
 use std::sync::OnceLock;
 
-use crate::types::RequestKey;
 use crate::pointer_registry::free;
+use crate::types::MutablePointer;
+use crate::types::RequestKey;
 
 use super::HandleRequestCallback;
 
@@ -10,7 +11,7 @@ struct CallbackJob {
     callback: HandleRequestCallback,
     request_key: RequestKey,
     route_key: Option<u16>,
-    result_ptr: *mut u8,
+    result_ptr: MutablePointer,
 }
 
 unsafe impl Send for CallbackJob {}
@@ -63,7 +64,7 @@ pub unsafe fn enqueue(
     callback: HandleRequestCallback,
     request_key: RequestKey,
     route_key: Option<u16>,
-    result_ptr: *mut u8,
+    result_ptr: MutablePointer,
 ) {
     let tx = TX.get_or_init(init);
 

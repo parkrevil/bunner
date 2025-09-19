@@ -159,7 +159,7 @@ mod deserialize_json_pointer_tests {
         let json = "[1,2,3]";
         let buf = make_len_prefixed_buf(json);
 
-        let res: Result<Vec<i32>, _> = deserialize_json_pointer(buf.as_ptr());
+        let res: Result<Vec<i32>, _> = unsafe { deserialize_json_pointer(buf.as_ptr()) };
 
         assert!(res.is_ok());
         assert_eq!(res.unwrap(), vec![1, 2, 3]);
@@ -178,7 +178,7 @@ mod deserialize_json_pointer_tests {
         let _cap = buf.capacity();
         std::mem::forget(buf);
 
-        let res: Result<String, _> = deserialize_json_pointer(ptr);
+        let res: Result<String, _> = unsafe { deserialize_json_pointer(ptr) };
 
         assert!(res.is_ok());
         assert_eq!(res.unwrap(), large);
@@ -190,7 +190,7 @@ mod deserialize_json_pointer_tests {
     fn returns_error_on_invalid_json() {
         let buf = make_len_prefixed_buf("{invalid_json}");
 
-        let res: Result<Vec<i32>, _> = deserialize_json_pointer(buf.as_ptr());
+        let res: Result<Vec<i32>, _> = unsafe { deserialize_json_pointer(buf.as_ptr()) };
 
         assert!(res.is_err());
     }
@@ -199,7 +199,7 @@ mod deserialize_json_pointer_tests {
     fn deserializes_empty_array() {
         let buf = make_len_prefixed_buf("[]");
 
-        let res: Result<Vec<i32>, _> = deserialize_json_pointer(buf.as_ptr());
+        let res: Result<Vec<i32>, _> = unsafe { deserialize_json_pointer(buf.as_ptr()) };
 
         assert!(res.is_ok());
         assert_eq!(res.unwrap().len(), 0);
@@ -210,7 +210,8 @@ mod deserialize_json_pointer_tests {
         let json = "{\"a\":1,\"b\":\"x\"}";
         let buf = make_len_prefixed_buf(json);
 
-        let res: Result<HashMap<String, Value>, _> = deserialize_json_pointer(buf.as_ptr());
+        let res: Result<HashMap<String, Value>, _> =
+            unsafe { deserialize_json_pointer(buf.as_ptr()) };
 
         assert!(res.is_ok());
         let map = res.unwrap();
@@ -221,12 +222,13 @@ mod deserialize_json_pointer_tests {
     #[test]
     fn deserializes_bool_and_null() {
         let buf_true = make_len_prefixed_buf("true");
-        let res_bool: Result<bool, _> = deserialize_json_pointer(buf_true.as_ptr());
+        let res_bool: Result<bool, _> = unsafe { deserialize_json_pointer(buf_true.as_ptr()) };
         assert!(res_bool.is_ok());
         assert!(res_bool.unwrap());
 
         let buf_null = make_len_prefixed_buf("null");
-        let res_opt: Result<Option<String>, _> = deserialize_json_pointer(buf_null.as_ptr());
+        let res_opt: Result<Option<String>, _> =
+            unsafe { deserialize_json_pointer(buf_null.as_ptr()) };
         assert!(res_opt.is_ok());
         assert!(res_opt.unwrap().is_none());
     }
@@ -236,7 +238,7 @@ mod deserialize_json_pointer_tests {
         // Attempt to parse an array as a string -> should error
         let buf = make_len_prefixed_buf("[1,2,3]");
 
-        let res: Result<String, _> = deserialize_json_pointer(buf.as_ptr());
+        let res: Result<String, _> = unsafe { deserialize_json_pointer(buf.as_ptr()) };
 
         assert!(res.is_err());
     }
@@ -245,7 +247,7 @@ mod deserialize_json_pointer_tests {
     fn deserializes_with_whitespace() {
         let buf = make_len_prefixed_buf("  [1, 2] \n");
 
-        let res: Result<Vec<i32>, _> = deserialize_json_pointer(buf.as_ptr());
+        let res: Result<Vec<i32>, _> = unsafe { deserialize_json_pointer(buf.as_ptr()) };
 
         assert!(res.is_ok());
         assert_eq!(res.unwrap(), vec![1, 2]);
@@ -256,7 +258,7 @@ mod deserialize_json_pointer_tests {
         let json = "[{\"x\":[1,{\"y\":2}]}]";
         let buf = make_len_prefixed_buf(json);
 
-        let res: Result<Vec<Value>, _> = deserialize_json_pointer(buf.as_ptr());
+        let res: Result<Vec<Value>, _> = unsafe { deserialize_json_pointer(buf.as_ptr()) };
 
         assert!(res.is_ok());
         let v = res.unwrap();

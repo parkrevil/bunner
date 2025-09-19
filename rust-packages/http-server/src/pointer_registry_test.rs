@@ -57,8 +57,8 @@ mod register {
 
             for i in 0..threads {
                 handles.push(thread::spawn(move || {
-                    use crate::test_utils::registry as test_registry;
                     use crate::pointer_registry as registry;
+                    use crate::test_utils::registry as test_registry;
 
                     let data = vec![i as u8; 1024];
                     test_registry::with_registered_vec(data, |p| {
@@ -82,6 +82,7 @@ mod register {
 mod has {
     use crate::pointer_registry as registry;
     use crate::test_utils::registry as test_registry;
+    use crate::types::MutablePointer;
 
     #[test]
     fn reflects_registration_state_after_free() {
@@ -90,13 +91,13 @@ mod has {
         });
         // after helper returns, pointer should no longer be registered
         // we can't access the raw pointer here, but ensure registry is empty for a new pointer
-        let fake: *mut u8 = std::ptr::null_mut();
+        let fake: MutablePointer = std::ptr::null_mut();
         assert!(!registry::has(fake));
     }
 
     #[test]
     fn returns_false_for_null_pointer() {
-        let p: *mut u8 = std::ptr::null_mut();
+        let p: MutablePointer = std::ptr::null_mut();
         assert!(!registry::has(p));
     }
 }
@@ -104,6 +105,7 @@ mod has {
 #[cfg(test)]
 mod free {
     use crate::pointer_registry as registry;
+    use crate::types::MutablePointer;
 
     #[test]
     fn free_frees_and_subsequent_free_is_noop() {
@@ -122,7 +124,7 @@ mod free {
 
     #[test]
     fn free_ignores_null_pointer() {
-        let p: *mut u8 = std::ptr::null_mut();
+        let p: MutablePointer = std::ptr::null_mut();
         unsafe {
             registry::free(p);
         }
@@ -131,7 +133,7 @@ mod free {
 
     #[test]
     fn free_unknown_pointer_noop() {
-        let fake = 0x543210usize as *mut u8;
+        let fake = 0x543210usize as MutablePointer;
         unsafe {
             registry::free(fake);
         }

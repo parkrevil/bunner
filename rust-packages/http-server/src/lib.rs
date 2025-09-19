@@ -31,7 +31,7 @@ mod pointer_registry_test;
 
 use std::io;
 use std::{ffi::CStr, os::raw::c_char};
-use tracing_subscriber::{EnvFilter, fmt};
+use tracing_subscriber::{fmt, EnvFilter};
 
 use crate::app::App;
 use crate::app_registry::{find_app, register_app, unregister_app};
@@ -42,12 +42,12 @@ use crate::helpers::callback_handle_request;
 use crate::structures::{AddRouteResult, AppOptions};
 use crate::thread_pool::shutdown_pool;
 use crate::types::HandleRequestCallback;
-use crate::types::{AppId, Pointer, RequestKey, StaticString};
+use crate::types::{AppId, MutablePointer, ReadonlyPointer, RequestKey, StaticString};
 use crate::utils::ffi::{deserialize_json_pointer, make_result, take_len_prefixed_pointer};
 
 #[unsafe(no_mangle)]
 #[tracing::instrument(skip_all, fields(operation = "construct"))]
-pub extern "C" fn construct(options: Pointer) -> AppId {
+pub extern "C" fn construct(options: ReadonlyPointer) -> AppId {
     let subscriber = fmt()
         .with_env_filter(EnvFilter::new("trace"))
         .with_writer(io::stderr)
@@ -93,10 +93,10 @@ pub unsafe extern "C" fn add_route(
     app_id: AppId,
     http_method: u8,
     path_ptr: *const c_char,
-) -> *mut u8 {
+) -> MutablePointer {
     let app = match get_app(app_id, "add_route") {
         Ok(a) => a,
-        Err(e) => return make_result(&e)
+        Err(e) => return make_result(&e),
     };
 
     if path_ptr.is_null() {
@@ -153,12 +153,13 @@ pub unsafe extern "C" fn add_route(
 /// - Passing invalid pointers or non-UTF8 data is undefined behavior.
 #[unsafe(no_mangle)]
 #[tracing::instrument(skip_all, fields(operation = "add_routes"))]
-pub unsafe extern "C" fn add_routes(app_id: AppId, routes_ptr: Pointer) -> *mut u8 {
+pub unsafe extern "C" fn add_routes(app_id: AppId, routes_ptr: ReadonlyPointer) -> MutablePointer {
     let app = match get_app(app_id, "add_routes") {
         Ok(a) => a,
         Err(e) => return make_result(&e),
     };
-    let routes = match deserialize_json_pointer::<Vec<(HttpMethod, String)>>(routes_ptr) {
+    let routes = match unsafe { deserialize_json_pointer::<Vec<(HttpMethod, String)>>(routes_ptr) }
+    {
         Ok(p) => p,
         Err(e) => {
             let err = FfiError::new(
@@ -203,7 +204,7 @@ pub unsafe extern "C" fn add_routes(app_id: AppId, routes_ptr: Pointer) -> *mut 
 pub unsafe extern "C" fn handle_request(
     app_id: AppId,
     request_key: RequestKey,
-    payload_ptr: Pointer,
+    payload_ptr: ReadonlyPointer,
     cb: HandleRequestCallback,
 ) {
     let app = match get_app(app_id, "handle_request") {
@@ -242,7 +243,7 @@ pub unsafe extern "C" fn handle_request(
 /// The `handle` pointer must be a valid pointer returned by `init`.
 #[unsafe(no_mangle)]
 #[tracing::instrument(skip_all, fields(operation = "seal_routes"))]
-pub unsafe extern "C" fn seal_routes(app_id: AppId) -> *mut u8 {
+pub unsafe extern "C" fn seal_routes(app_id: AppId) -> MutablePointer {
     let app = match get_app(app_id, "seal_routes") {
         Ok(a) => a,
         Err(e) => return make_result(&e),
@@ -261,7 +262,7 @@ pub unsafe extern "C" fn seal_routes(app_id: AppId) -> *mut u8 {
 /// - `ptr` must be a pointer previously returned by a Rust function in this crate
 ///   that registered the buffer via `pointer_registry::register_raw_vec_and_into_raw`.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn free(app_id: AppId, ptr: *mut u8) {
+pub unsafe extern "C" fn free(app_id: AppId, ptr: MutablePointer) {
     if find_app(app_id).is_none() {
         return;
     }
