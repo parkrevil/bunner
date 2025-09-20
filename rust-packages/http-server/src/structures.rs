@@ -9,6 +9,8 @@ use std::collections::HashMap;
 pub struct AppOptions {
     #[serde(rename = "logLevel")]
     pub log_level: LogLevel,
+    #[serde(rename = "appName")]
+    pub app_name: String,
 }
 
 impl AppOptions {

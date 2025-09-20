@@ -16,7 +16,6 @@ export class Worker extends BaseWorker {
 
   async init(params: WorkerConstructParams) {
     console.log('🔧 Worker is initializing...');
-    console.log(this);
 
     const rootModuleCls = await import(params.rootModuleFile.path).then(
       mod => mod[params.rootModuleFile.className],
@@ -41,8 +40,6 @@ export class Worker extends BaseWorker {
   }
 
   handleRequest() {
-    console.log('handleRequest');
-
     return 'test';
     /*     try {
       const {

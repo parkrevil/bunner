@@ -6,10 +6,21 @@ use std::sync::{Mutex, OnceLock};
 
 static NEXT_ID: OnceLock<AtomicId> = OnceLock::new();
 static INSTANCE_MAP: OnceLock<Mutex<HashMap<AppId, usize>>> = OnceLock::new();
+static NAME_TO_ID: OnceLock<Mutex<HashMap<String, AppId>>> = OnceLock::new();
 
 type AtomicId = <AppId as AtomicOf>::Atomic;
 
-pub fn register_app(b: Box<App>) -> AppId {
+/// Registers an app and associates it with `name`. If an app with the same name
+/// already exists, returns the existing AppId without creating a new instance.
+pub fn register_app(name: &str, b: Box<App>) -> AppId {
+    let name_map = NAME_TO_ID.get_or_init(|| Mutex::new(HashMap::new()));
+
+    // Fast path: if name already exists, return it.
+    if let Some(existing) = name_map.lock().unwrap().get(name).copied() {
+        return existing;
+    }
+
+    // Otherwise allocate a new id and store pointers.
     let p = Box::into_raw(b);
     let map = INSTANCE_MAP.get_or_init(|| Mutex::new(HashMap::new()));
     let counter = NEXT_ID.get_or_init(|| AtomicId::new(1));
@@ -25,6 +36,7 @@ pub fn register_app(b: Box<App>) -> AppId {
     let id: AppId = prev as AppId;
 
     map.lock().unwrap().insert(id, p as usize);
+    name_map.lock().unwrap().insert(name.to_string(), id);
 
     id
 }
@@ -32,7 +44,25 @@ pub fn register_app(b: Box<App>) -> AppId {
 pub fn unregister_app(id: AppId) -> Option<*mut App> {
     let map = INSTANCE_MAP.get_or_init(|| Mutex::new(HashMap::new()));
 
-    map.lock().unwrap().remove(&id).map(|u| u as *mut App)
+    let removed = map.lock().unwrap().remove(&id).map(|u| u as *mut App);
+
+    if removed.is_some() {
+        // Clean up any name -> id entries that referenced this app id.
+        let name_map = NAME_TO_ID.get_or_init(|| Mutex::new(HashMap::new()));
+        let mut nm = name_map.lock().unwrap();
+
+        // Collect keys to remove to avoid holding mutable borrow while iterating.
+        let keys_to_remove: Vec<String> = nm
+            .iter()
+            .filter_map(|(k, &v)| if v == id { Some(k.clone()) } else { None })
+            .collect();
+
+        for k in keys_to_remove {
+            nm.remove(&k);
+        }
+    }
+
+    removed
 }
 
 pub fn find_app(id: AppId) -> Option<*mut App> {

@@ -55,7 +55,7 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
 
         console.log(res);
 
-        return new Response('Not implemented', { status: 501 });
+        return new Response('OK', { status: 200 });
       },
     });
   }

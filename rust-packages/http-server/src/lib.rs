@@ -88,7 +88,8 @@ pub unsafe extern "C" fn init(options_ptr: ReadonlyPointer) -> MutablePointer {
 
     tracing::debug!("AppOptions: {:?}", options);
 
-    let app_id = register_app(Box::default());
+    // Use name-based registration to avoid creating duplicate apps with the same name.
+    let app_id = register_app(options.app_name.as_str(), Box::default());
 
     tracing::info!("Bunner Rust Http Server initialized.");
 
