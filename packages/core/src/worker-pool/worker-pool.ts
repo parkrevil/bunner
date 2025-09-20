@@ -1,3 +1,4 @@
+import { WorkerEvent } from './enums';
 import type { WorkerPoolOptions } from './interfaces';
 import { LoadBalancer } from './load-balancer';
 
@@ -9,16 +10,18 @@ export class WorkerPool {
   constructor(options: WorkerPoolOptions) {
     this.size = options?.size ?? navigator.hardwareConcurrency;
     this.loadBalancer = new LoadBalancer(this.size);
-
-    for (let index = 0; index < this.size; index++) {
-      const worker = new Worker(options.scripts);
-
-      this.workers.push(worker);
-    }
+    this.workers = Array.from(
+      { length: this.size },
+      () => new Worker(options.script.href),
+    );
   }
 
-  acquire(): number {
-    return this.loadBalancer.acquire();
+  exec<T>(payload: any) {
+    const worker = this.workers[this.loadBalancer.acquire()];
+
+    worker!.postMessage({ event: WorkerEvent.Task, payload });
+
+    return '' as T;
   }
 
   release(id: number) {

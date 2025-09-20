@@ -1,6 +1,7 @@
 import {
   BaseApplication,
   LogLevel,
+  WorkerPool,
   type BaseModule,
   type Class,
 } from '@bunner/core';
@@ -15,6 +16,7 @@ import { RouteHandler } from './route-handler';
 export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
   private readonly logger = new Logger();
   private server: Server | undefined;
+  private workerPool: WorkerPool;
   private ffi: Ffi;
   private routeHandler: RouteHandler;
 
@@ -28,6 +30,9 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
     this.options = {
       logLevel: options?.logLevel ?? LogLevel.Info,
     };
+    this.workerPool = new WorkerPool({
+      script: new URL('./worker.ts', import.meta.url),
+    });
     this.ffi = new Ffi({
       logLevel: this.options.logLevel,
     });
@@ -52,7 +57,12 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
 
     this.server = Bun.serve({
       port: 5000,
-      fetch: this.onRequest.bind(this),
+      fetch: () => {
+        this.workerPool.exec({ ddd: 'ddd' });
+
+        // this.onRequest.bind(this),
+        return new Response('Not implemented', { status: 501 });
+      },
     });
   }
 
