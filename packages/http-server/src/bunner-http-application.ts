@@ -8,24 +8,21 @@ import {
 import { Logger } from '@bunner/core-logger';
 import type { Server } from 'bun';
 
-import { HttpError } from './errors';
-import { Ffi } from './ffi';
 import type { BunnerHttpServerOptions } from './interfaces';
-import { RouteHandler } from './route-handler';
 
 export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
+  private readonly rootModule: Class<BaseModule>;
   private readonly logger = new Logger();
   private server: Server | undefined;
   private workerPool: WorkerPool;
-  private ffi: Ffi;
-  private routeHandler: RouteHandler;
 
   constructor(
     rootModule: Class<BaseModule>,
     options?: BunnerHttpServerOptions,
   ) {
-    super(rootModule);
+    super();
 
+    this.rootModule = rootModule;
     this.server = undefined;
     this.options = {
       logLevel: options?.logLevel ?? LogLevel.Info,
@@ -33,28 +30,19 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
     this.workerPool = new WorkerPool({
       script: new URL('./worker.ts', import.meta.url),
     });
-    this.ffi = new Ffi({
-      logLevel: this.options.logLevel,
-    });
-    this.routeHandler = new RouteHandler(this.container, this.ffi);
   }
 
   /**
    * Initialize the server
    */
-  override async init() {
-    await super.init();
-
-    this.ffi.init();
-    this.routeHandler.register();
+  async init() {
+    //TODO init worker
   }
 
   /**
    * Start the server
    */
   start() {
-    this.ffi.buildRoutes();
-
     this.server = Bun.serve({
       port: 5000,
       fetch: () => {
@@ -67,66 +55,19 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
   }
 
   /**
-   * Stop the server
+   * Stop and destroy the server
    * @param force - Whether to force the server to close
    * @returns A promise that resolves to true if the application stopped successfully
    */
-  async stop(force = false) {
+  async shutdown(force = false) {
     if (!this.server) {
       return;
     }
 
     await this.server.stop(force);
-    this.ffi.destroy();
+
+    // TODO send destroy message to worker
 
     this.server = undefined;
-  }
-
-  /**
-   * On request
-   * @param rawReq - The raw request object
-   * @param server - The server object
-   * @returns The response object
-   */
-  private async onRequest(rawReq: Request, server: Server) {
-    try {
-      const {
-        handler,
-        request: req,
-        response: res,
-      } = await this.routeHandler.findHandler(rawReq, server);
-
-      // want to GC
-      rawReq = null as any;
-
-      const result = await handler(req, res);
-
-      /* 
-const handlerResult = await handler(req, res);
-
-if (handlerResult instanceof Response) {
-return handlerResult;
-}
-
-if (res.isSent) {
-return res.getResponse();
-}
-res.send(handlerResult);
-return res.getResponse();
-*/
-      //          const result = await handler();
-
-      return new Response(result, { status: 200 });
-    } catch (e: any) {
-      this.logger.error(e);
-
-      if (e instanceof HttpError) {
-        return new Response(e.message, { status: e.statusCode });
-      } else if (e instanceof Error) {
-        return new Response(e.message, { status: 500 });
-      }
-
-      return new Response('Internal server error', { status: 500 });
-    }
   }
 }

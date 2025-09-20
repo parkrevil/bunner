@@ -146,7 +146,7 @@ export class Ffi extends BaseFfi<FfiSymbols> {
    * @description Finalize the routes
    * @returns
    */
-  buildRoutes() {
+  sealRoutes() {
     this.symbols.seal_routes(this.appId);
   }
 

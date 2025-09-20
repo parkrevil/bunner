@@ -69,7 +69,7 @@ export class Bunner {
     await Promise.all(
       apps.map(async app => {
         try {
-          await app.stop(true);
+          await app.shutdown(true);
         } catch (e) {
           console.error('[Bunner] app shutdown failed:', e);
         }
