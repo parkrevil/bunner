@@ -1,5 +1,7 @@
 import { type BaseApplication, type BaseModule } from './application';
 import type { BunnerApplicationOptions, Class } from './common';
+import { BunnerError } from './errors';
+import { MetadataKey } from './injector';
 
 /**
  * Bunner class
@@ -15,11 +17,30 @@ export class Bunner {
    * @returns The Bunner application
    */
   static async create<T extends BaseApplication>(
-    appConstructor: Class<T>,
-    rootModule: Class<BaseModule>,
+    appCls: Class<T>,
+    rootModuleCls: Class<BaseModule>,
     options?: BunnerApplicationOptions<T>,
   ) {
     this.setupSignalHandlers();
+
+    const rootModuleMetadata = Reflect.getMetadata(
+      MetadataKey.RootModule,
+      rootModuleCls,
+    );
+
+    if (!rootModuleMetadata) {
+      throw new BunnerError(
+        `Root module "${rootModuleCls.name}" is missing @RootModule decorator`,
+      );
+    }
+
+    const rootModuleFile = Bun.file(rootModuleMetadata.path);
+
+    if (!(await rootModuleFile.exists())) {
+      throw new BunnerError(
+        `Root module file "${rootModuleMetadata.path}" does not exist`,
+      );
+    }
 
     const { name = this.generateApplicationDefaultName(), ...appOptions } =
       options ?? ({} as BunnerApplicationOptions<T>);
@@ -28,7 +49,14 @@ export class Bunner {
       throw new Error(`Application with name "${name}" already exists`);
     }
 
-    const app = new appConstructor(rootModule, appOptions);
+    const app = new appCls(
+      {
+        path: rootModuleMetadata.path,
+        className: rootModuleCls.name,
+      },
+      appOptions,
+    );
+
     await app.init();
 
     this.apps.set(name, app);

@@ -1,6 +1,7 @@
 import type {
   InjectableDecoratorOptions,
   ModuleDecoratorOptions,
+  RootModuleDecoratorOptions,
 } from '../application/decorators';
 import type { Class } from '../common/types';
 
@@ -37,6 +38,12 @@ export type Provider =
   | ProviderUseClass
   | ProviderUseExisting
   | ProviderUseFactory;
+
+/**
+ * Module decorator metadata
+ * @description The metadata for a module
+ */
+export type RootModuleMetadata = Required<RootModuleDecoratorOptions>;
 
 /**
  * Module decorator metadata

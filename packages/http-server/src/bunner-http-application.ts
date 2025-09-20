@@ -2,9 +2,8 @@ import {
   BaseApplication,
   createWorkerPool,
   LogLevel,
-  type BaseModule,
-  type Class,
   type ComlinkWorkerPool,
+  type RootModuleFile,
 } from '@bunner/core';
 import { Logger } from '@bunner/core-logger';
 import type { Server } from 'bun';
@@ -13,35 +12,35 @@ import type { BunnerHttpServerOptions } from './interfaces';
 import type { Worker } from './worker';
 
 export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
+  private readonly rootModuleFile: RootModuleFile;
   private readonly logger = new Logger();
   private server: Server | undefined;
   private workerPool: ComlinkWorkerPool<Worker>;
 
   constructor(
-    rootModule: Class<BaseModule>,
+    rootModuleFile: RootModuleFile,
     options?: BunnerHttpServerOptions,
   ) {
     super();
 
     this.server = undefined;
+    this.rootModuleFile = rootModuleFile;
     this.options = {
       logLevel: options?.logLevel ?? LogLevel.Info,
     };
     this.workerPool = createWorkerPool<Worker>({
       script: new URL('./worker.ts', import.meta.url),
     });
-
-    this.workerPool.construct({
-      options: this.options,
-      //      rootModuleGetter: () => rootModule,
-    });
   }
 
   /**
    * Initialize the server
    */
-  init() {
-    //this.workerPool.init();
+  async init() {
+    await this.workerPool.init({
+      options: this.options,
+      rootModuleFile: this.rootModuleFile,
+    });
 
     this.logger.info('✨ Bunner HTTP Server initialized');
   }

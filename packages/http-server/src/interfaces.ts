@@ -1,4 +1,4 @@
-import type { LogLevel } from '@bunner/core';
+import type { LogLevel, RootModuleFile } from '@bunner/core';
 
 import type { BunnerRequest } from './bunner-request';
 import type { BunnerResponse } from './bunner-response';
@@ -20,5 +20,5 @@ export interface FindHandlerResult {
 
 export interface WorkerConstructParams {
   options: BunnerHttpServerOptions;
-  //  rootModuleGetter: () => Class<BaseModule>;
+  rootModuleFile: RootModuleFile;
 }

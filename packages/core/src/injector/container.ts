@@ -51,7 +51,7 @@ export class Container {
   async init() {
     console.log('🔧 Building dependency graph...');
 
-    this.buildGraph();
+    this.exploreModule(this.rootModuleCls, true);
     await this.resolveModule(this.rootModuleCls);
 
     console.log('✅ Dependency graph built and resolved');
@@ -80,30 +80,23 @@ export class Container {
   }
 
   /**
-   * Build the dependency graph
-   */
-  private buildGraph() {
-    this.exploreModule(this.rootModuleCls);
-  }
-
-  /**
    * Explore the module
    * @param cls
    * @returns
    */
-  private exploreModule(cls: Class) {
+  private exploreModule(cls: Class, isRootModule = false) {
     if (this.graph.has(cls)) {
       return;
     }
 
     const metadata: ModuleMetadata = Reflect.getMetadata(
-      MetadataKey.Module,
+      isRootModule ? MetadataKey.RootModule : MetadataKey.Module,
       cls,
     );
 
     if (!metadata) {
       throw new Error(
-        `Module ${cls.name} does not have a @Module() decorator.`,
+        `Module ${cls.name} does not have a ${isRootModule ? '@RootModule()' : '@Module()'} decorator.`,
       );
     }
 

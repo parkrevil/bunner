@@ -2,10 +2,10 @@ import { Bunner, LogLevel } from '@bunner/core';
 import { Logger } from '@bunner/core-logger';
 import { BunnerHttpServer } from '@bunner/http-server';
 
-import { RootModule } from './root.module';
+import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await Bunner.create(BunnerHttpServer, RootModule, {
+  const app = await Bunner.create(BunnerHttpServer, AppModule, {
     logLevel: LogLevel.Trace,
   });
   const logger = Logger.getInstance();

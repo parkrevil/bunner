@@ -10,17 +10,23 @@ export class Worker extends BaseWorker {
   private ffi: Ffi;
   private routeHandler: RouteHandler;
 
-  construct(params: WorkerConstructParams) {
-    //    this.container = new Container(params.rootModuleGetter());
+  async init(params: WorkerConstructParams) {
+    console.log('🔧 Worker is initializing...');
+    console.log(this);
+
+    const rootModuleCls = await import(params.rootModuleFile.path).then(
+      mod => mod[params.rootModuleFile.className],
+    );
+
+    this.container = new Container(rootModuleCls);
+    await this.container.init();
+
     this.ffi = new Ffi({
       logLevel: params.options?.logLevel ?? LogLevel.Info,
     });
+    this.ffi.init();
+
     this.routeHandler = new RouteHandler(this.container, this.ffi);
-  }
-
-  async init() {
-    await Promise.all([this.container.init(), this.ffi.init()]);
-
     this.routeHandler.register();
   }
 
@@ -31,7 +37,7 @@ export class Worker extends BaseWorker {
   }
 
   handleRequest() {
-    console.log('handleRequest');
+    console.log('handleRequest', this);
     /*     try {
       const {
         handler,
@@ -76,4 +82,11 @@ return res.getResponse();
   }
 }
 
-expose(new Worker());
+const worker = new Worker();
+
+expose({
+  init: worker.init.bind(worker),
+  start: worker.start.bind(worker),
+  handleRequest: worker.handleRequest.bind(worker),
+  shutdown: worker.shutdown.bind(worker),
+});
