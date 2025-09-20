@@ -7,6 +7,8 @@ import {
   FfiPointer,
   toBuffer,
   FFI_APP_ID_TYPE,
+  FFI_WORKER_ID_TYPE,
+  type WorkerId,
 } from '@bunner/core';
 import { FFIType, JSCallback, type FFIFunction } from 'bun:ffi';
 
@@ -26,6 +28,7 @@ import type {
 import type { RequestKey } from './types';
 
 export class Ffi extends BaseFfi<FfiSymbols> {
+  private readonly workerId: WorkerId;
   private readonly handleRequestCb: JSCallback;
   private readonly pendingHandleRequests: Map<
     RequestKey,
@@ -39,7 +42,7 @@ export class Ffi extends BaseFfi<FfiSymbols> {
    * @description Constructor
    * @returns
    */
-  constructor(options: FfiOptions) {
+  constructor(workerId: WorkerId, options: FfiOptions) {
     const api: Record<keyof FfiSymbols, FFIFunction> = {
       // BaseRustSymbols
       init: { args: [FFIType.pointer], returns: FFIType.pointer },
@@ -48,11 +51,16 @@ export class Ffi extends BaseFfi<FfiSymbols> {
 
       // HttpServerSymbols
       add_route: {
-        args: [FFI_APP_ID_TYPE, FFIType.u8, FFIType.cstring],
+        args: [
+          FFI_APP_ID_TYPE,
+          FFI_WORKER_ID_TYPE,
+          FFIType.u8,
+          FFIType.cstring,
+        ],
         returns: FFIType.pointer,
       },
       add_routes: {
-        args: [FFI_APP_ID_TYPE, FFIType.pointer],
+        args: [FFI_APP_ID_TYPE, FFI_WORKER_ID_TYPE, FFIType.pointer],
         returns: FFIType.pointer,
       },
       handle_request: {
@@ -72,6 +80,7 @@ export class Ffi extends BaseFfi<FfiSymbols> {
 
     super(resolveRustLibPath('bunner_http_server', import.meta.dir), api);
 
+    this.workerId = workerId;
     this.options = options;
     this.pendingHandleRequests = new Map();
     this.handleRequestCb = this.createJsCallback(this.handleRequestCallback, {
@@ -98,7 +107,12 @@ export class Ffi extends BaseFfi<FfiSymbols> {
    */
   addRoute(httpMethod: HttpMethod, path: string) {
     return this.ensure<AddRouteResult>(
-      this.symbols.add_route(this.appId, httpMethod, toCString(path)),
+      this.symbols.add_route(
+        this.appId,
+        this.workerId,
+        httpMethod,
+        toCString(path),
+      ),
     );
   }
 
@@ -110,7 +124,7 @@ export class Ffi extends BaseFfi<FfiSymbols> {
    */
   addRoutes(params: [HttpMethod, string][]) {
     return this.ensure<number[]>(
-      this.symbols.add_routes(this.appId, toBuffer(params)),
+      this.symbols.add_routes(this.appId, this.workerId, toBuffer(params)),
     );
   }
 

@@ -1,4 +1,4 @@
-import { BaseWorker, Container, LogLevel } from '@bunner/core';
+import { BaseWorker, Container, LogLevel, type WorkerId } from '@bunner/core';
 import { expose } from 'comlink';
 
 import { Ffi } from './ffi';
@@ -6,6 +6,7 @@ import type { WorkerConstructParams } from './interfaces';
 import { RouteHandler } from './route-handler';
 
 export class Worker extends BaseWorker {
+  private workerId: WorkerId;
   private container: Container;
   private ffi: Ffi;
   private routeHandler: RouteHandler;
@@ -14,8 +15,10 @@ export class Worker extends BaseWorker {
     super();
   }
 
-  async init(params: WorkerConstructParams) {
+  async init(workerId: WorkerId, params: WorkerConstructParams) {
     console.log('🔧 Worker is initializing...');
+
+    this.workerId = workerId;
 
     const rootModuleCls = await import(params.rootModuleFile.path).then(
       mod => mod[params.rootModuleFile.className],
@@ -24,7 +27,7 @@ export class Worker extends BaseWorker {
     this.container = new Container(rootModuleCls);
     await this.container.init();
 
-    this.ffi = new Ffi({
+    this.ffi = new Ffi(this.workerId, {
       name: params.options.name,
       logLevel: params.options.logLevel ?? LogLevel.Info,
     });

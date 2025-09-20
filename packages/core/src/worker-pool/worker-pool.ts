@@ -4,12 +4,14 @@ import type { WorkerPoolOptions } from './interfaces';
 import { LoadBalancer } from './load-balancer';
 
 export class WorkerPool<T> {
-  readonly workers: Remote<T>[];
+  private readonly workers: Remote<T>[];
+  private workerId: number;
   private loadBalancer: LoadBalancer;
 
   constructor(options: WorkerPoolOptions) {
     const size = options?.size ?? navigator.hardwareConcurrency;
 
+    this.workerId = 0;
     this.loadBalancer = new LoadBalancer(size);
     this.workers = Array.from({ length: size }, () =>
       wrap(new Worker(options.script.href)),
@@ -21,7 +23,9 @@ export class WorkerPool<T> {
   }
 
   async init(params: any) {
-    await Promise.all(this.workers.map(worker => (worker as any).init(params)));
+    await Promise.all(
+      this.workers.map(worker => (worker as any).init(++this.workerId, params)),
+    );
   }
 
   release(id: number) {

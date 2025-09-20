@@ -3,6 +3,7 @@ import type {
   BaseFfiSymbols,
   BaseInitResult,
   LogLevel,
+  WorkerId,
 } from '@bunner/core';
 import type { Pointer } from 'bun:ffi';
 import type { StatusCodes } from 'http-status-codes';
@@ -14,10 +15,15 @@ import type { RequestKey } from './types';
 export interface FfiSymbols extends BaseFfiSymbols {
   add_route: (
     appId: AppId,
+    workerId: WorkerId,
     method: HttpMethod,
     path: Uint8Array,
   ) => Pointer | null;
-  add_routes: (appId: AppId, routes: Uint8Array) => Pointer | null;
+  add_routes: (
+    appId: AppId,
+    workerId: WorkerId,
+    routes: Uint8Array,
+  ) => Pointer | null;
   handle_request: (
     appId: AppId,
     requestKey: RequestKey,
