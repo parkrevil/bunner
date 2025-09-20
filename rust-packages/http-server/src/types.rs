@@ -14,6 +14,8 @@ pub type StaticString = &'static str;
 
 pub type ErrorCode = u16;
 
+pub type WorkerId = u32;
+
 /// Helper trait to map an integer ID type to the corresponding `Atomic` type.
 /// This allows other modules to derive the correct atomic type from `AppId`.
 pub trait AtomicOf {

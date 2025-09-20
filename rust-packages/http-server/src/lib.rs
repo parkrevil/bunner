@@ -41,7 +41,7 @@ use crate::errors::{FfiError, FfiErrorCode};
 use crate::structures::{AddRouteResult, AppOptions, InitResult};
 use crate::thread_pool::shutdown_pool;
 use crate::types::HandleRequestCallback;
-use crate::types::{AppId, MutablePointer, ReadonlyPointer, RequestKey, StaticString};
+use crate::types::{AppId, MutablePointer, ReadonlyPointer, RequestKey, StaticString, WorkerId};
 use crate::utils::ffi::{deserialize_json_pointer, make_result, take_len_prefixed_pointer};
 
 /// Constructs a new HttpServer instance from the given options pointer.
@@ -126,6 +126,7 @@ pub unsafe extern "C" fn destroy(app_id: AppId) {
 #[tracing::instrument(skip_all, fields(app_id=app_id))]
 pub unsafe extern "C" fn add_route(
     app_id: AppId,
+    worker_id: WorkerId,
     http_method: u8,
     path_ptr: *const c_char,
 ) -> MutablePointer {
@@ -169,7 +170,7 @@ pub unsafe extern "C" fn add_route(
     };
     let path_str = unsafe { CStr::from_ptr(path_ptr) }.to_string_lossy();
 
-    match app.add_route(http_method, &path_str) {
+    match app.add_route(worker_id, http_method, &path_str) {
         Ok(k) => make_result(&AddRouteResult { key: k }),
         Err(e) => make_result(&FfiError::from(e)),
     }
@@ -188,7 +189,7 @@ pub unsafe extern "C" fn add_route(
 /// - Passing invalid pointers or non-UTF8 data is undefined behavior.
 #[unsafe(no_mangle)]
 #[tracing::instrument(skip_all, fields(app_id=app_id))]
-pub unsafe extern "C" fn add_routes(app_id: AppId, routes_ptr: ReadonlyPointer) -> MutablePointer {
+pub unsafe extern "C" fn add_routes(app_id: AppId, worker_id: WorkerId, routes_ptr: ReadonlyPointer) -> MutablePointer {
     let app = match get_app(app_id, "add_routes") {
         Ok(a) => a,
         Err(e) => return make_result(&e),
@@ -213,7 +214,7 @@ pub unsafe extern "C" fn add_routes(app_id: AppId, routes_ptr: ReadonlyPointer) 
     };
     let routes_len = routes.len();
 
-    match app.add_routes(routes) {
+    match app.add_routes(worker_id, routes) {
         Ok(r) => {
             let cnt = r.len();
 

@@ -17,6 +17,7 @@ use crate::router::pattern::SegmentPattern;
 use super::RouterOptions;
 use crate::enums::HttpMethod;
 use crate::router::interner::Interner;
+use crate::types::WorkerId;
 
 pub(super) const HTTP_METHOD_COUNT: usize = 7;
 
@@ -53,6 +54,9 @@ pub struct RadixTree {
     pub enable_root_level_pruning: bool,
     pub enable_static_route_full_mapping: bool,
     pub(super) next_route_key: std::sync::atomic::AtomicU16,
+    // Side-table mapping route key index -> initial registrant worker id.
+    // Kept here so we can drop it at finalize() to reclaim heap memory.
+    pub(super) route_worker_side_table: Vec<Option<u32>>,
 }
 
 impl RadixTree {
@@ -70,6 +74,7 @@ impl RadixTree {
             enable_root_level_pruning: configuration.enable_root_level_pruning,
             enable_static_route_full_mapping: configuration.enable_static_route_full_mapping,
             next_route_key: std::sync::atomic::AtomicU16::new(0),
+            route_worker_side_table: Vec::new(),
         }
     }
 
@@ -77,7 +82,24 @@ impl RadixTree {
         builder::finalize(self);
     }
 
-    pub fn insert_bulk<I>(&mut self, entries: I) -> super::structures::RouterResult<Vec<u16>>
+    /// Record the initial registrant `worker_id` for `route_key` if none recorded yet.
+    /// Returns `true` if the value was recorded, `false` if an entry already existed.
+    pub fn record_route_worker(&mut self, route_key: u16, worker_id: u32) -> bool {
+        let idx = route_key as usize;
+        let needed = idx + 1;
+        if self.route_worker_side_table.len() < needed {
+            self.route_worker_side_table.resize(needed, None);
+        }
+        
+        if self.route_worker_side_table[idx].is_none() {
+            self.route_worker_side_table[idx] = Some(worker_id);
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn insert_bulk<I>(&mut self, worker_id: WorkerId, entries: I) -> super::structures::RouterResult<Vec<u16>>
     where
         I: IntoIterator<Item = (HttpMethod, String)>,
     {
@@ -239,7 +261,10 @@ impl RadixTree {
         for (idx, method, segs, _h, _l, _s, _lits) in pre.into_iter() {
             let assigned = base + (idx as u16) + 1; // stored keys are +1 encoded
                                                     // pass decoded value to helper (helper will re-encode)
-            out[idx] = self.insert_parsed_preassigned(method, segs, assigned - 1)?;
+            let route_key = self.insert_parsed_preassigned(method, segs, assigned - 1)?;
+            // Record worker_id for this route key
+            self.record_route_worker(route_key, worker_id);
+            out[idx] = route_key;
         }
         Ok(out)
     }

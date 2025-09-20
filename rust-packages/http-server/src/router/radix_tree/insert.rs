@@ -10,12 +10,13 @@ use crate::router::pattern::{
     pattern_compatible_policy, pattern_is_pure_static, pattern_score, SegmentPart, SegmentPattern,
 };
 use crate::router::structures::{RouterError, RouterResult};
+use crate::types::WorkerId;
 use hashbrown::HashSet;
 use serde_json::json;
 use std::sync::atomic::AtomicU16;
 
 impl RadixTree {
-    pub fn insert(&mut self, method: HttpMethod, path: &str) -> RouterResult<u16> {
+    pub fn insert(&mut self, worker_id: WorkerId, method: HttpMethod, path: &str) -> RouterResult<u16> {
         tracing::event!(tracing::Level::TRACE, operation="insert", method=?method, path=%path);
         if self.root_node.is_sealed() {
             return Err(Box::new(RouterError::new(
@@ -30,15 +31,18 @@ impl RadixTree {
         self.root_node.set_dirty(true);
 
         if path == "/" {
-            return assign_route_key(&mut self.root_node, method, &self.next_route_key);
+            let key = assign_route_key(&mut self.root_node, method, &self.next_route_key)?;
+            self.record_route_worker(key, worker_id);
+            return Ok(key);
         }
 
         let parsed_segments = self.prepare_path_segments(path)?;
-        self.insert_parsed(method, parsed_segments)
+        self.insert_parsed(worker_id, method, parsed_segments)
     }
 
     pub(super) fn insert_parsed(
         &mut self,
+        worker_id: WorkerId,
         method: HttpMethod,
         parsed_segments: Vec<SegmentPattern>,
     ) -> RouterResult<u16> {
@@ -63,13 +67,16 @@ impl RadixTree {
             let is_wildcard =
                 matches!(pat.parts.as_slice(), [SegmentPart::Literal(s)] if s.as_str() == "*");
             if is_wildcard {
-                return handle_wildcard_insert(
+                let key = handle_wildcard_insert(
                     current,
                     method,
                     i,
                     parsed_segments.len(),
                     &self.next_route_key,
-                );
+                )?;
+                // Record worker_id in side-table for wildcard routes
+                self.record_route_worker(key, worker_id);
+                return Ok(key);
             }
 
             // Detect pure static without building a joined string
@@ -104,7 +111,10 @@ impl RadixTree {
             current.set_dirty(true);
         }
 
-        assign_route_key(current, method, &self.next_route_key)
+        let key = assign_route_key(current, method, &self.next_route_key)?;
+        // Record worker_id in side-table after route key assignment
+        self.record_route_worker(key, worker_id);
+        Ok(key)
     }
 
     pub(super) fn insert_parsed_preassigned(

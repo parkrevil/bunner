@@ -14,3 +14,9 @@ export interface RootModuleFile {
   path: string;
   className: string;
 }
+
+/**
+ * Base Module Interface
+ * @description Represents a base module in the application.
+ */
+export interface BunnerModule {}

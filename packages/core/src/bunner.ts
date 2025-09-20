@@ -1,4 +1,4 @@
-import { type BaseApplication, type BaseModule } from './application';
+import { type BaseApplication, type BunnerModule } from './application';
 import type { BunnerApplicationOptions, Class } from './common';
 import { BunnerError } from './errors';
 import { MetadataKey } from './injector';
@@ -18,7 +18,7 @@ export class Bunner {
    */
   static async create<T extends BaseApplication>(
     appCls: Class<T>,
-    rootModuleCls: Class<BaseModule>,
+    rootModuleCls: Class<BunnerModule>,
     options?: BunnerApplicationOptions<T>,
   ) {
     this.setupSignalHandlers();

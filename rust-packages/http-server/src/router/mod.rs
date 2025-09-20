@@ -8,6 +8,7 @@ pub mod structures;
 pub mod types;
 
 use crate::enums::HttpMethod;
+use crate::types::WorkerId;
 
 pub use errors::RouterErrorCode;
 pub use readonly::RouterReadOnly;
@@ -45,7 +46,7 @@ impl Router {
         }
     }
 
-    pub fn add(&self, method: HttpMethod, path: &str) -> RouterResult<u16> {
+    pub fn add(&self, worker_id: WorkerId, method: HttpMethod, path: &str) -> RouterResult<u16> {
         let mut g = self.inner.write();
 
         if g.ro.get().is_some() {
@@ -61,10 +62,10 @@ impl Router {
             )));
         }
 
-        g.radix_tree.insert(method, path)
+        g.radix_tree.insert(worker_id, method, path)
     }
 
-    pub fn add_bulk<I>(&self, entries: I) -> RouterResult<Vec<u16>>
+    pub fn add_bulk<I>(&self, worker_id: WorkerId, entries: I) -> RouterResult<Vec<u16>>
     where
         I: IntoIterator<Item = (HttpMethod, String)>,
     {
@@ -86,7 +87,7 @@ impl Router {
             )));
         }
 
-        g.radix_tree.insert_bulk(entries)
+        g.radix_tree.insert_bulk(worker_id, entries)
     }
 
     pub fn seal(&self) {

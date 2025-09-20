@@ -8,7 +8,7 @@ use crate::router::structures::RouterResult;
 use crate::router::{Router, RouterReadOnly};
 use crate::structures::{BunnerRequest, BunnerResponse, HandleRequestOutput, HandleRequestPayload};
 use crate::thread_pool::submit_job;
-use crate::types::RequestKey;
+use crate::types::{RequestKey, WorkerId};
 use crate::utils::{ffi::make_result, json::deserialize};
 
 use super::HandleRequestCallback;
@@ -46,12 +46,21 @@ impl App {
         }
     }
 
-    pub fn add_route(&self, method: HttpMethod, path: &str) -> RouterResult<u16> {
-        self.router.add(method, path)
+    pub fn add_route(
+        &self,
+        worker_id: WorkerId,
+        method: HttpMethod,
+        path: &str,
+    ) -> RouterResult<u16> {
+        self.router.add(worker_id, method, path)
     }
 
-    pub fn add_routes(&self, routes: Vec<(HttpMethod, String)>) -> RouterResult<Vec<u16>> {
-        self.router.add_bulk(routes)
+    pub fn add_routes(
+        &self,
+        worker_id: WorkerId,
+        routes: Vec<(HttpMethod, String)>,
+    ) -> RouterResult<Vec<u16>> {
+        self.router.add_bulk(worker_id, routes)
     }
 
     pub fn seal_routes(&self) {
