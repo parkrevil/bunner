@@ -1,8 +1,5 @@
 use crossbeam_channel as xchan;
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    OnceLock,
-};
+use std::sync::OnceLock;
 use std::thread;
 use std::thread::JoinHandle;
 
@@ -16,7 +13,6 @@ pub(crate) enum Task {
 static TASK_SENDER: OnceLock<xchan::Sender<Task>> = OnceLock::new();
 static TASK_RECEIVER: OnceLock<xchan::Receiver<Task>> = OnceLock::new();
 static WORKER_COUNT: OnceLock<usize> = OnceLock::new();
-static JUST_SHUTDOWN: AtomicBool = AtomicBool::new(false);
 static WORKER_HANDLES: OnceLock<std::sync::Mutex<Vec<JoinHandle<()>>>> = OnceLock::new();
 
 fn env_usize(key: &str, default: usize, min: usize, max: usize) -> usize {
@@ -94,7 +90,6 @@ pub fn submit_job(job: Job) -> Result<(), xchan::TrySendError<Task>> {
 
 pub fn shutdown_pool() {
     if let (Some(&workers), Some(tx)) = (WORKER_COUNT.get(), TASK_SENDER.get()) {
-        JUST_SHUTDOWN.store(true, Ordering::SeqCst);
         tracing::event!(
             tracing::Level::INFO,
             workers = workers as u64,

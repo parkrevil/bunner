@@ -37,8 +37,8 @@ pub mod node;
 mod static_map;
 pub mod traversal;
 
-use alloc::{create_node_box_from_arena_pointer, NodeBox};
 pub use node::RadixTreeNode;
+pub(crate) use alloc::{create_node_box_from_arena_pointer, NodeBox};
 
 #[derive(Debug, Default)]
 pub struct RadixTree {
@@ -82,22 +82,6 @@ impl RadixTree {
         builder::finalize(self);
     }
 
-    /// Record the initial registrant `worker_id` for `route_key` if none recorded yet.
-    /// Returns `true` if the value was recorded, `false` if an entry already existed.
-    pub fn record_route_worker(&mut self, route_key: u16, worker_id: u32) -> bool {
-        let idx = route_key as usize;
-        let needed = idx + 1;
-        if self.route_worker_side_table.len() < needed {
-            self.route_worker_side_table.resize(needed, None);
-        }
-
-        if self.route_worker_side_table[idx].is_none() {
-            self.route_worker_side_table[idx] = Some(worker_id);
-            true
-        } else {
-            false
-        }
-    }
 
     pub fn insert_bulk<I>(
         &mut self,

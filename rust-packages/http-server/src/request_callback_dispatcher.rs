@@ -71,7 +71,6 @@ pub unsafe fn enqueue(
     tracing::event!(
         tracing::Level::TRACE,
         stage = "dispatcher_enqueue",
-        route_key = route_key,
         route_key = route_key
     );
 

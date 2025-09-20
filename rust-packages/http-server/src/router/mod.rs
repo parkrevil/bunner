@@ -19,11 +19,6 @@ use parking_lot::RwLock;
 use std::sync::Arc;
 use structures::RouterResult;
 
-#[derive(Debug, Default)]
-pub struct RouteMatchResult {
-    pub route_key: u16,
-    pub parameter_offsets: Vec<(String, (usize, usize))>,
-}
 
 #[derive(Debug)]
 struct RouterInner {
