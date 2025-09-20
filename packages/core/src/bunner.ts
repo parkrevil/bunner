@@ -50,11 +50,12 @@ export class Bunner {
     }
 
     const app = new appCls(
+      name,
       {
         path: rootModuleMetadata.path,
         className: rootModuleCls.name,
       },
-      { name, ...appOptions },
+      appOptions,
     );
 
     await app.init();

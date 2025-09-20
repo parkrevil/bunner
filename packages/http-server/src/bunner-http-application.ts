@@ -1,5 +1,6 @@
 import {
   BaseApplication,
+  capitalize,
   LogLevel,
   WorkerPool,
   type RootModuleFile,
@@ -7,25 +8,29 @@ import {
 import { Logger } from '@bunner/core-logger';
 import type { Server } from 'bun';
 
+import { HttpMethod } from './enums';
+import { MethodNotAllowedError } from './errors';
 import type { BunnerHttpServerOptions } from './interfaces';
 import type { Worker } from './worker';
 
 export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
+  private readonly name: string;
   private readonly rootModuleFile: RootModuleFile;
   private readonly logger = new Logger();
   private server: Server | undefined;
   private workerPool: WorkerPool<Worker>;
 
   constructor(
+    name: string,
     rootModuleFile: RootModuleFile,
     options: BunnerHttpServerOptions,
   ) {
     super();
 
+    this.name = name;
     this.server = undefined;
     this.rootModuleFile = rootModuleFile;
     this.options = {
-      name: options.name,
       logLevel: options.logLevel ?? LogLevel.Info,
     };
     this.workerPool = new WorkerPool<Worker>({
@@ -38,8 +43,11 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
    */
   async init() {
     await this.workerPool.init({
+      appName: this.name,
       rootModuleFile: this.rootModuleFile,
-      options: this.options,
+      options: {
+        ...this.options,
+      },
     });
 
     this.logger.info('✨ Bunner HTTP Server initialized');
@@ -48,15 +56,47 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
   /**
    * Start the server
    */
-  start() {
+  async start() {
+    await this.workerPool.bootstrap();
+
     this.server = Bun.serve({
       port: 5000,
-      fetch: async () => {
-        const res = await this.workerPool.worker.handleRequest();
+      fetch: async (req: Request) => {
+        try {
+          const httpMethod =
+            HttpMethod[
+              capitalize(req.method.toUpperCase()) as keyof typeof HttpMethod
+            ];
 
-        console.log(res, await this.workerPool.worker.getId());
+          if (httpMethod === undefined) {
+            throw new MethodNotAllowedError();
+          }
 
-        return new Response('OK', { status: 200 });
+          let body: ArrayBuffer | null;
+
+          if (
+            httpMethod === HttpMethod.Get ||
+            httpMethod === HttpMethod.Head ||
+            httpMethod === HttpMethod.Options
+          ) {
+            body = null;
+          } else {
+            body = await req.arrayBuffer();
+          }
+
+          await this.workerPool.worker.handleRequest({
+            httpMethod,
+            url: req.url,
+            headers: req.headers.toJSON(),
+            body,
+          });
+
+          return new Response('OK', { status: 200 });
+        } catch (e) {
+          this.logger.error(e);
+
+          return new Response('Internal server error', { status: 500 });
+        }
       },
     });
   }

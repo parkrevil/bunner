@@ -1,11 +1,14 @@
 import { BaseWorker, Container, LogLevel, type WorkerId } from '@bunner/core';
+import { Logger } from '@bunner/core-logger';
 import { expose } from 'comlink';
 
+import { HttpError, NotFoundError } from './errors';
 import { Ffi } from './ffi';
-import type { WorkerConstructParams } from './interfaces';
+import type { WorkerInitParams } from './interfaces';
 import { RouteHandler } from './route-handler';
 
 export class Worker extends BaseWorker {
+  private readonly logger = new Logger();
   private id: WorkerId;
   private container: Container;
   private ffi: Ffi;
@@ -19,7 +22,7 @@ export class Worker extends BaseWorker {
     return this.id;
   }
 
-  async init(workerId: WorkerId, params: WorkerConstructParams) {
+  async init(workerId: WorkerId, params: WorkerInitParams) {
     console.log('🔧 Worker is initializing...');
 
     this.id = workerId;
@@ -32,7 +35,7 @@ export class Worker extends BaseWorker {
     await this.container.init();
 
     this.ffi = new Ffi(this.id, {
-      name: params.options.name,
+      appName: params.appName,
       logLevel: params.options.logLevel ?? LogLevel.Info,
     });
     this.ffi.init();
@@ -41,51 +44,57 @@ export class Worker extends BaseWorker {
     this.routeHandler.register();
   }
 
-  start() {
+  bootstrap() {
     console.log('🚀 Worker is bootstrapping...');
 
     this.ffi.sealRoutes();
   }
 
-  handleRequest() {
-    return 'test';
-    /*     try {
-      const {
-        handler,
-        request: req,
-        response: res,
-      } = await this.routeHandler.findHandler(rawReq, server);
+  async handleRequest(params: any) {
+    try {
+      const handleResult = await this.ffi.handleRequest({
+        httpMethod: params.httpMethod,
+        url: params.url,
+        headers: params.headers,
+        body: params.body,
+      });
 
-      // want to GC
-      rawReq = null as any;
+      const handler = this.routeHandler.find(handleResult.routeKey);
 
-      const result = await handler(req, res); */
-    /* 
-const handlerResult = await handler(req, res);
+      if (!handler) {
+        throw new NotFoundError();
+      }
 
-if (handlerResult instanceof Response) {
-return handlerResult;
-}
+      /*       const request = new BunnerRequest(handleResult.request, rawReq, server);
+      const response = new BunnerResponse(request);
+ */
+      await handler();
 
-if (res.isSent) {
-return res.getResponse();
-}
-res.send(handlerResult);
-return res.getResponse();
-*/
-    //          const result = await handler();
-    /*       return new Response(result, { status: 200 });
+      return 'hello';
+      /* 
+  const handlerResult = await handler(req, res);
+  
+  if (handlerResult instanceof Response) {
+  return handlerResult;
+  }
+  
+  if (res.isSent) {
+  return res.getResponse();
+  }
+  res.send(handlerResult);
+  return res.getResponse();
+  */
     } catch (e: any) {
       this.logger.error(e);
 
       if (e instanceof HttpError) {
-        return new Response(e.message, { status: e.statusCode });
+        //        return new Response(e.message, { status: e.statusCode });
       } else if (e instanceof Error) {
-        return new Response(e.message, { status: 500 });
+        //      return new Response(e.message, { status: 500 });
       }
 
-      return new Response('Internal server error', { status: 500 });
-    } */
+      //  return new Response('Internal server error', { status: 500 });
+    }
   }
 
   shutdown() {

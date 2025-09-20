@@ -6,7 +6,7 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await Bunner.create(BunnerHttpServer, AppModule, {
-    logLevel: LogLevel.Trace,
+    logLevel: LogLevel.Info,
   });
   const logger = Logger.getInstance();
 
@@ -14,7 +14,7 @@ async function bootstrap() {
 
   logger.info('🚀 Server is starting...');
 
-  app.start();
+  await app.start();
 
   logger.info('🚀 Server is running on port 5000');
 

@@ -28,6 +28,10 @@ export class WorkerPool<T> {
     );
   }
 
+  async bootstrap() {
+    await Promise.all(this.workers.map(worker => (worker as any).bootstrap()));
+  }
+
   release(id: number) {
     this.loadBalancer.release(id);
   }

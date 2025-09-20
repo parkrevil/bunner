@@ -1,17 +1,12 @@
-import { capitalize, type Container } from '@bunner/core';
-import type { Server } from 'bun';
+import { type Container } from '@bunner/core';
 
-import { BunnerRequest } from './bunner-request';
-import { BunnerResponse } from './bunner-response';
 import {
   MetadataKey,
   type RestControllerMetadata,
   type RestRouteHandlerMetadata,
 } from './decorators';
 import { HttpMethod } from './enums';
-import { MethodNotAllowedError, NotFoundError } from './errors';
 import { Ffi } from './ffi';
-import type { FindHandlerResult } from './interfaces';
 import type { HandlerFunction } from './types';
 
 export class RouteHandler {
@@ -85,55 +80,10 @@ export class RouteHandler {
 
   /**
    * Handle the request
-   * @param rawReq - The raw request object
+   * @param routeKey - The route key
    * @returns
    */
-  async findHandler(rawReq: Request, server: Server) {
-    const httpMethod =
-      HttpMethod[
-        capitalize(rawReq.method.toUpperCase()) as keyof typeof HttpMethod
-      ];
-
-    if (httpMethod === undefined) {
-      throw new MethodNotAllowedError();
-    }
-
-    let body: string | null;
-
-    if (
-      httpMethod === HttpMethod.Get ||
-      httpMethod === HttpMethod.Head ||
-      httpMethod === HttpMethod.Options
-    ) {
-      body = null;
-    } else {
-      body = await rawReq.text();
-    }
-
-    const handleResult = await this.ffi.handleRequest({
-      httpMethod,
-      url: rawReq.url,
-      headers: rawReq.headers.toJSON(),
-      body,
-    });
-
-    // want to GC
-    body = null;
-
-    const handler = this.handlers.get(handleResult.routeKey);
-
-    if (!handler) {
-      throw new NotFoundError();
-    }
-
-    const request = new BunnerRequest(handleResult.request, rawReq, server);
-    const response = new BunnerResponse(request);
-    const result: FindHandlerResult = {
-      handler,
-      request,
-      response,
-    };
-
-    return result;
+  find(routeKey: number) {
+    return this.handlers.get(routeKey);
   }
 }
