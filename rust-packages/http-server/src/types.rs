@@ -2,7 +2,7 @@ pub type ReadonlyPointer = *const u8;
 
 pub type MutablePointer = *mut u8;
 
-pub type AppId = u32;
+pub type AppId = u8;
 
 pub type RequestKey = u64;
 

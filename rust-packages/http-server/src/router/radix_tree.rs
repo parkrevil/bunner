@@ -90,7 +90,7 @@ impl RadixTree {
         if self.route_worker_side_table.len() < needed {
             self.route_worker_side_table.resize(needed, None);
         }
-        
+
         if self.route_worker_side_table[idx].is_none() {
             self.route_worker_side_table[idx] = Some(worker_id);
             true
@@ -99,7 +99,11 @@ impl RadixTree {
         }
     }
 
-    pub fn insert_bulk<I>(&mut self, worker_id: WorkerId, entries: I) -> super::structures::RouterResult<Vec<u16>>
+    pub fn insert_bulk<I>(
+        &mut self,
+        worker_id: WorkerId,
+        entries: I,
+    ) -> super::structures::RouterResult<Vec<u16>>
     where
         I: IntoIterator<Item = (HttpMethod, String)>,
     {
@@ -261,9 +265,8 @@ impl RadixTree {
         for (idx, method, segs, _h, _l, _s, _lits) in pre.into_iter() {
             let assigned = base + (idx as u16) + 1; // stored keys are +1 encoded
                                                     // pass decoded value to helper (helper will re-encode)
-            let route_key = self.insert_parsed_preassigned(method, segs, assigned - 1)?;
-            // Record worker_id for this route key
-            self.record_route_worker(route_key, worker_id);
+            let route_key =
+                self.insert_parsed_preassigned(worker_id, method, segs, assigned - 1)?;
             out[idx] = route_key;
         }
         Ok(out)

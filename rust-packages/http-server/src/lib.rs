@@ -189,7 +189,11 @@ pub unsafe extern "C" fn add_route(
 /// - Passing invalid pointers or non-UTF8 data is undefined behavior.
 #[unsafe(no_mangle)]
 #[tracing::instrument(skip_all, fields(app_id=app_id))]
-pub unsafe extern "C" fn add_routes(app_id: AppId, worker_id: WorkerId, routes_ptr: ReadonlyPointer) -> MutablePointer {
+pub unsafe extern "C" fn add_routes(
+    app_id: AppId,
+    worker_id: WorkerId,
+    routes_ptr: ReadonlyPointer,
+) -> MutablePointer {
     let app = match get_app(app_id, "add_routes") {
         Ok(a) => a,
         Err(e) => return make_result(&e),
@@ -207,7 +211,11 @@ pub unsafe extern "C" fn add_routes(app_id: AppId, worker_id: WorkerId, routes_p
                 None,
             );
 
-            tracing::event!(tracing::Level::ERROR, reason = "deserialize_routes_error");
+            tracing::event!(
+                tracing::Level::ERROR,
+                worker_id = worker_id,
+                reason = "deserialize_routes_error"
+            );
 
             return make_result(&err);
         }
@@ -218,12 +226,17 @@ pub unsafe extern "C" fn add_routes(app_id: AppId, worker_id: WorkerId, routes_p
         Ok(r) => {
             let cnt = r.len();
 
-            tracing::event!(tracing::Level::DEBUG, count = cnt as u64, "routes added");
+            tracing::event!(
+                tracing::Level::DEBUG,
+                worker_id = worker_id,
+                count = cnt as u64,
+                "routes added"
+            );
 
             make_result(&r)
         }
         Err(e) => {
-            tracing::event!(tracing::Level::ERROR, code=?e.code, count=routes_len, "add_routes error");
+            tracing::event!(tracing::Level::ERROR, worker_id=worker_id, code=?e.code, count=routes_len, "add_routes error");
 
             make_result(&FfiError::from(e))
         }

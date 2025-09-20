@@ -6,7 +6,7 @@ import type { WorkerConstructParams } from './interfaces';
 import { RouteHandler } from './route-handler';
 
 export class Worker extends BaseWorker {
-  private workerId: WorkerId;
+  private id: WorkerId;
   private container: Container;
   private ffi: Ffi;
   private routeHandler: RouteHandler;
@@ -15,10 +15,14 @@ export class Worker extends BaseWorker {
     super();
   }
 
+  getId() {
+    return this.id;
+  }
+
   async init(workerId: WorkerId, params: WorkerConstructParams) {
     console.log('🔧 Worker is initializing...');
 
-    this.workerId = workerId;
+    this.id = workerId;
 
     const rootModuleCls = await import(params.rootModuleFile.path).then(
       mod => mod[params.rootModuleFile.className],
@@ -27,7 +31,7 @@ export class Worker extends BaseWorker {
     this.container = new Container(rootModuleCls);
     await this.container.init();
 
-    this.ffi = new Ffi(this.workerId, {
+    this.ffi = new Ffi(this.id, {
       name: params.options.name,
       logLevel: params.options.logLevel ?? LogLevel.Info,
     });

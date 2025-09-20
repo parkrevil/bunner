@@ -54,7 +54,7 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
       fetch: async () => {
         const res = await this.workerPool.worker.handleRequest();
 
-        console.log(res);
+        console.log(res, await this.workerPool.worker.getId());
 
         return new Response('OK', { status: 200 });
       },
