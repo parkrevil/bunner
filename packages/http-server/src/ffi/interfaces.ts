@@ -42,6 +42,7 @@ export interface JSCallbackEntry<T> {
  * @description Options for the FFI
  */
 export interface FfiOptions {
+  name: string;
   logLevel: LogLevel;
 }
 

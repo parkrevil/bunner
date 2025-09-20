@@ -54,7 +54,7 @@ export class Bunner {
         path: rootModuleMetadata.path,
         className: rootModuleCls.name,
       },
-      appOptions,
+      { name, ...appOptions },
     );
 
     await app.init();

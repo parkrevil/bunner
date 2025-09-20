@@ -83,11 +83,7 @@ export class Ffi extends BaseFfi<FfiSymbols> {
 
   override init() {
     const { appId } = this.ensure<InitResult>(
-      this.symbols.init(
-        toBuffer({
-          logLevel: this.options.logLevel,
-        }),
-      ),
+      this.symbols.init(toBuffer(this.options)),
     );
 
     super.init(appId);

@@ -18,14 +18,15 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
 
   constructor(
     rootModuleFile: RootModuleFile,
-    options?: BunnerHttpServerOptions,
+    options: BunnerHttpServerOptions,
   ) {
     super();
 
     this.server = undefined;
     this.rootModuleFile = rootModuleFile;
     this.options = {
-      logLevel: options?.logLevel ?? LogLevel.Info,
+      name: options.name,
+      logLevel: options.logLevel ?? LogLevel.Info,
     };
     this.workerPool = new WorkerPool<Worker>({
       script: new URL('./worker.ts', import.meta.url),
@@ -37,8 +38,8 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
    */
   async init() {
     await this.workerPool.init({
-      options: this.options,
       rootModuleFile: this.rootModuleFile,
+      options: this.options,
     });
 
     this.logger.info('✨ Bunner HTTP Server initialized');

@@ -25,7 +25,8 @@ export class Worker extends BaseWorker {
     await this.container.init();
 
     this.ffi = new Ffi({
-      logLevel: params.options?.logLevel ?? LogLevel.Info,
+      name: params.options.name,
+      logLevel: params.options.logLevel ?? LogLevel.Info,
     });
     this.ffi.init();
 

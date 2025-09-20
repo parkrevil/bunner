@@ -5,6 +5,7 @@ import type { BunnerResponse } from './bunner-response';
 import type { HandlerFunction } from './types';
 
 export interface BunnerHttpServerOptions {
+  name: string;
   logLevel?: LogLevel;
 }
 
@@ -19,6 +20,6 @@ export interface FindHandlerResult {
 }
 
 export interface WorkerConstructParams {
-  options: BunnerHttpServerOptions;
   rootModuleFile: RootModuleFile;
+  options: Required<BunnerHttpServerOptions>;
 }
