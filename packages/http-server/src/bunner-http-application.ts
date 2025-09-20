@@ -1,20 +1,21 @@
 import {
   BaseApplication,
+  createWorkerPool,
   LogLevel,
-  WorkerPool,
   type BaseModule,
   type Class,
+  type ComlinkWorkerPool,
 } from '@bunner/core';
 import { Logger } from '@bunner/core-logger';
 import type { Server } from 'bun';
 
 import type { BunnerHttpServerOptions } from './interfaces';
+import type { Worker } from './worker';
 
 export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
-  private readonly rootModule: Class<BaseModule>;
   private readonly logger = new Logger();
   private server: Server | undefined;
-  private workerPool: WorkerPool;
+  private workerPool: ComlinkWorkerPool<Worker>;
 
   constructor(
     rootModule: Class<BaseModule>,
@@ -22,21 +23,27 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
   ) {
     super();
 
-    this.rootModule = rootModule;
     this.server = undefined;
     this.options = {
       logLevel: options?.logLevel ?? LogLevel.Info,
     };
-    this.workerPool = new WorkerPool({
+    this.workerPool = createWorkerPool<Worker>({
       script: new URL('./worker.ts', import.meta.url),
+    });
+
+    this.workerPool.construct({
+      options: this.options,
+      //      rootModuleGetter: () => rootModule,
     });
   }
 
   /**
    * Initialize the server
    */
-  async init() {
-    //TODO init worker
+  init() {
+    //this.workerPool.init();
+
+    this.logger.info('✨ Bunner HTTP Server initialized');
   }
 
   /**
@@ -46,9 +53,8 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
     this.server = Bun.serve({
       port: 5000,
       fetch: () => {
-        this.workerPool.exec({ ddd: 'ddd' });
+        this.workerPool.handleRequest();
 
-        // this.onRequest.bind(this),
         return new Response('Not implemented', { status: 501 });
       },
     });

@@ -1,12 +1,7 @@
-import type {
-  WorkerDestroyMessage,
-  WorkerErrorMessage,
-  WorkerReadyMessage,
-  WorkerTaskMessage,
-} from './interfaces';
+import type { WorkerPool } from './worker-pool';
 
-export type WorkerMessage<T> =
-  | WorkerReadyMessage
-  | WorkerTaskMessage<T>
-  | WorkerErrorMessage
-  | WorkerDestroyMessage;
+/**
+ * Worker Pool Extended Type
+ * @description Combines the WorkerPool with the methods of the worker type T.
+ */
+export type ComlinkWorkerPool<T> = WorkerPool<T> & T;

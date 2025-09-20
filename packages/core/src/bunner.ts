@@ -30,7 +30,6 @@ export class Bunner {
 
     const app = new appConstructor(rootModule, appOptions);
     await app.init();
-    await app.bootstrap();
 
     this.apps.set(name, app);
 

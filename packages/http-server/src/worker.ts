@@ -1,8 +1,8 @@
 import { BaseWorker, Container, LogLevel } from '@bunner/core';
+import { expose } from 'comlink';
 
-import { WorkerTask } from './enums';
 import { Ffi } from './ffi';
-import type { WorkerConstructParams, WorkerTaskMessage } from './interfaces';
+import type { WorkerConstructParams } from './interfaces';
 import { RouteHandler } from './route-handler';
 
 export class Worker extends BaseWorker {
@@ -10,59 +10,28 @@ export class Worker extends BaseWorker {
   private ffi: Ffi;
   private routeHandler: RouteHandler;
 
-  protected async run(message: WorkerTaskMessage) {
-    switch (message.task) {
-      case WorkerTask.Construct:
-        this.construct(message.payload);
-
-        break;
-
-      case WorkerTask.Init:
-        await this.init();
-
-        break;
-
-      case WorkerTask.Start:
-        this.start();
-
-        break;
-
-      case WorkerTask.HandleRequest:
-        await this.handleRequest();
-
-        break;
-
-      case WorkerTask.Shutdown:
-        this.shutdown();
-
-        break;
-
-      default:
-        console.error('Unknown task', message);
-    }
-  }
-
-  private construct(params: WorkerConstructParams) {
-    this.container = new Container(params.rootModuleClass);
+  construct(params: WorkerConstructParams) {
+    //    this.container = new Container(params.rootModuleGetter());
     this.ffi = new Ffi({
       logLevel: params.options?.logLevel ?? LogLevel.Info,
     });
     this.routeHandler = new RouteHandler(this.container, this.ffi);
   }
 
-  private async init() {
+  async init() {
     await Promise.all([this.container.init(), this.ffi.init()]);
 
     this.routeHandler.register();
   }
 
-  private start() {
+  start() {
     console.log('🚀 Worker is bootstrapping...');
 
     this.ffi.sealRoutes();
   }
 
-  private async handleRequest() {
+  handleRequest() {
+    console.log('handleRequest');
     /*     try {
       const {
         handler,
@@ -102,9 +71,9 @@ return res.getResponse();
     } */
   }
 
-  private shutdown() {
+  shutdown() {
     this.ffi.destroy();
   }
 }
 
-new Worker();
+expose(new Worker());

@@ -1,27 +1,23 @@
-import { WorkerEvent } from './enums';
+import { type Remote, wrap } from 'comlink';
+
 import type { WorkerPoolOptions } from './interfaces';
 import { LoadBalancer } from './load-balancer';
 
-export class WorkerPool {
-  public readonly size: number;
-  public readonly workers: Worker[];
+export class WorkerPool<T> {
+  private readonly workers: Remote<T>[];
   private loadBalancer: LoadBalancer;
 
   constructor(options: WorkerPoolOptions) {
-    this.size = options?.size ?? navigator.hardwareConcurrency;
-    this.loadBalancer = new LoadBalancer(this.size);
-    this.workers = Array.from(
-      { length: this.size },
-      () => new Worker(options.script.href),
+    const size = options?.size ?? navigator.hardwareConcurrency;
+
+    this.loadBalancer = new LoadBalancer(size);
+    this.workers = Array.from({ length: size }, () =>
+      wrap(new Worker(options.script.href)),
     );
   }
 
-  exec<T>(payload: any) {
-    const worker = this.workers[this.loadBalancer.acquire()];
-
-    worker!.postMessage({ event: WorkerEvent.Task, payload });
-
-    return '' as T;
+  acquire() {
+    return this.workers[this.loadBalancer.acquire()]!;
   }
 
   release(id: number) {

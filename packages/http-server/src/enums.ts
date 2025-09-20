@@ -28,11 +28,3 @@ export enum ContentType {
   Text = 'text/plain',
   Json = 'application/json',
 }
-
-export enum WorkerTask {
-  Construct,
-  Init,
-  Start,
-  HandleRequest,
-  Shutdown,
-}
