@@ -28,15 +28,16 @@ pub mod test_utils;
 #[cfg(test)]
 mod pointer_registry_test;
 
+use std::io::Write;
 use std::{ffi::CStr, os::raw::c_char};
 use tracing_subscriber::{fmt, EnvFilter};
 
+use crate::app::callback_handle_request;
 use crate::app::App;
 use crate::app_registry::{find_app, register_app, unregister_app};
 use crate::constants::ZERO_COPY_THRESHOLD;
 use crate::enums::{HttpMethod, LenPrefixedString};
 use crate::errors::{FfiError, FfiErrorCode};
-use crate::app::callback_handle_request;
 use crate::structures::{AddRouteResult, AppOptions, InitResult};
 use crate::thread_pool::shutdown_pool;
 use crate::types::HandleRequestCallback;
@@ -51,8 +52,7 @@ use crate::utils::ffi::{deserialize_json_pointer, make_result, take_len_prefixed
 #[unsafe(no_mangle)]
 #[tracing::instrument(skip_all)]
 pub unsafe extern "C" fn init(options_ptr: ReadonlyPointer) -> MutablePointer {
-    let options = match unsafe { deserialize_json_pointer::<AppOptions>(options_ptr) }
-    {
+    let options = match unsafe { deserialize_json_pointer::<AppOptions>(options_ptr) } {
         Ok(p) => p,
         Err(e) => {
             let err = FfiError::new(
@@ -64,18 +64,27 @@ pub unsafe extern "C" fn init(options_ptr: ReadonlyPointer) -> MutablePointer {
                 None,
             );
 
-            tracing::event!(tracing::Level::ERROR, reason = "deserialize_construct_error");
+            tracing::event!(
+                tracing::Level::ERROR,
+                reason = "deserialize_construct_error"
+            );
 
             return make_result(&err);
         }
     };
 
-    // Initialize global logger
+    // Initialize global logger. If another subscriber is already installed,
+    // avoid panicking — simply ignore the error so the library remains usable
+    // when embedded in larger applications that set the global subscriber.
     let subscriber = fmt()
         .with_env_filter(EnvFilter::new(options.log_level().as_env_filter()))
         .finish();
 
-    tracing::subscriber::set_global_default(subscriber).expect("Failed to set global logger");
+    if let Err(_err) = tracing::subscriber::set_global_default(subscriber) {
+        // Another global subscriber was already set. Continue without overriding it.
+        // Use stderr since tracing may not be initialized in the embedding process.
+        let _ = std::io::stderr().write_all(b"warning: global tracing subscriber already set\n");
+    }
 
     tracing::debug!("AppOptions: {:?}", options);
 

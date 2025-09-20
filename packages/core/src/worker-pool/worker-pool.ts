@@ -4,7 +4,7 @@ import type { WorkerPoolOptions } from './interfaces';
 import { LoadBalancer } from './load-balancer';
 
 export class WorkerPool<T> {
-  private readonly workers: Remote<T>[];
+  readonly workers: Remote<T>[];
   private loadBalancer: LoadBalancer;
 
   constructor(options: WorkerPoolOptions) {
@@ -16,8 +16,12 @@ export class WorkerPool<T> {
     );
   }
 
-  acquire() {
+  get worker() {
     return this.workers[this.loadBalancer.acquire()]!;
+  }
+
+  async init(params: any) {
+    await Promise.all(this.workers.map(worker => (worker as any).init(params)));
   }
 
   release(id: number) {

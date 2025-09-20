@@ -10,6 +10,10 @@ export class Worker extends BaseWorker {
   private ffi: Ffi;
   private routeHandler: RouteHandler;
 
+  constructor() {
+    super();
+  }
+
   async init(params: WorkerConstructParams) {
     console.log('🔧 Worker is initializing...');
     console.log(this);
@@ -37,7 +41,9 @@ export class Worker extends BaseWorker {
   }
 
   handleRequest() {
-    console.log('handleRequest', this);
+    console.log('handleRequest');
+
+    return 'test';
     /*     try {
       const {
         handler,
@@ -82,11 +88,4 @@ return res.getResponse();
   }
 }
 
-const worker = new Worker();
-
-expose({
-  init: worker.init.bind(worker),
-  start: worker.start.bind(worker),
-  handleRequest: worker.handleRequest.bind(worker),
-  shutdown: worker.shutdown.bind(worker),
-});
+expose(new Worker());

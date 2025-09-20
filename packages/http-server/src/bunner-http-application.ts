@@ -1,8 +1,7 @@
 import {
   BaseApplication,
-  createWorkerPool,
   LogLevel,
-  type ComlinkWorkerPool,
+  WorkerPool,
   type RootModuleFile,
 } from '@bunner/core';
 import { Logger } from '@bunner/core-logger';
@@ -15,7 +14,7 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
   private readonly rootModuleFile: RootModuleFile;
   private readonly logger = new Logger();
   private server: Server | undefined;
-  private workerPool: ComlinkWorkerPool<Worker>;
+  private workerPool: WorkerPool<Worker>;
 
   constructor(
     rootModuleFile: RootModuleFile,
@@ -28,7 +27,7 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
     this.options = {
       logLevel: options?.logLevel ?? LogLevel.Info,
     };
-    this.workerPool = createWorkerPool<Worker>({
+    this.workerPool = new WorkerPool<Worker>({
       script: new URL('./worker.ts', import.meta.url),
     });
   }
@@ -51,8 +50,10 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
   start() {
     this.server = Bun.serve({
       port: 5000,
-      fetch: () => {
-        this.workerPool.handleRequest();
+      fetch: async () => {
+        const res = await this.workerPool.worker.handleRequest();
+
+        console.log(res);
 
         return new Response('Not implemented', { status: 501 });
       },
