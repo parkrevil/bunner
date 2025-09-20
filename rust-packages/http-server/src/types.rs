@@ -17,21 +17,21 @@ pub type ErrorCode = u16;
 /// Helper trait to map an integer ID type to the corresponding `Atomic` type.
 /// This allows other modules to derive the correct atomic type from `AppId`.
 pub trait AtomicOf {
-	type Atomic;
+    type Atomic;
 }
 
 impl AtomicOf for u8 {
-	type Atomic = std::sync::atomic::AtomicU8;
+    type Atomic = std::sync::atomic::AtomicU8;
 }
 
 impl AtomicOf for u16 {
-	type Atomic = std::sync::atomic::AtomicU16;
+    type Atomic = std::sync::atomic::AtomicU16;
 }
 
 impl AtomicOf for u32 {
-	type Atomic = std::sync::atomic::AtomicU32;
+    type Atomic = std::sync::atomic::AtomicU32;
 }
 
 impl AtomicOf for u64 {
-	type Atomic = std::sync::atomic::AtomicU64;
+    type Atomic = std::sync::atomic::AtomicU64;
 }

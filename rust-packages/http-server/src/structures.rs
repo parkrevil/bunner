@@ -1,4 +1,7 @@
-use crate::{enums::{HttpMethod, HttpStatusCode, LogLevel}, types::AppId};
+use crate::{
+    enums::{HttpMethod, HttpStatusCode, LogLevel},
+    types::AppId,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

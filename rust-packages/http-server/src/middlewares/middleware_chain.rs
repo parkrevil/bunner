@@ -1,5 +1,5 @@
+use super::{Lifecycle, Middleware};
 use crate::structures::{BunnerRequest, BunnerResponse, HandleRequestPayload};
-use super::{Middleware, Lifecycle};
 
 pub struct MiddlewareChain {
     pre_request: Vec<Box<dyn Middleware>>,
