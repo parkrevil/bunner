@@ -199,10 +199,6 @@ export class Ffi extends BaseFfi<FfiSymbols> {
     }
 
     try {
-      if (!resultPtr.isValid()) {
-        throw new BunnerError('Result pointer is null');
-      }
-
       const result = resultPtr.toResult<HandleRequestOutput>();
 
       if (!result) {

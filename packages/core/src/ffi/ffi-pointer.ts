@@ -16,17 +16,9 @@ export class FfiPointer {
     this.freed = false;
   }
 
-  isValid(val?: any): val is Pointer {
-    if (val === undefined) {
-      val = this.pointer;
-    }
-
-    return isPointer(val);
-  }
-
   toString(): string | undefined {
     try {
-      if (!this.isValid(this.pointer)) {
+      if (!isPointer(this.pointer)) {
         return undefined;
       }
 
@@ -40,7 +32,7 @@ export class FfiPointer {
 
   toObject<T>(): T | undefined {
     try {
-      if (!this.isValid(this.pointer)) {
+      if (!isPointer(this.pointer)) {
         return undefined;
       }
 
@@ -54,7 +46,7 @@ export class FfiPointer {
 
   toResult<T>(): T | undefined {
     try {
-      if (!this.isValid(this.pointer)) {
+      if (!isPointer(this.pointer)) {
         return undefined;
       }
 
@@ -81,7 +73,7 @@ export class FfiPointer {
       return;
     }
 
-    if (!this.isValid(this.pointer)) {
+    if (!isPointer(this.pointer)) {
       this.freed = true;
 
       return;
