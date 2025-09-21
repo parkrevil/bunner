@@ -7,10 +7,10 @@ use std::collections::HashMap;
 
 #[derive(Deserialize, Debug)]
 pub struct AppOptions {
-    #[serde(rename = "logLevel")]
-    pub log_level: LogLevel,
     #[serde(rename = "appName")]
     pub name: String,
+    #[serde(rename = "logLevel")]
+    pub log_level: LogLevel,
 }
 
 impl AppOptions {

@@ -32,7 +32,6 @@ use std::io::Write;
 use std::{ffi::CStr, os::raw::c_char};
 use tracing_subscriber::{fmt, EnvFilter};
 
-use crate::app::callback_handle_request;
 use crate::app::App;
 use crate::app_registry::{find_app, register_app, unregister_app};
 use crate::constants::ZERO_COPY_THRESHOLD;
@@ -73,23 +72,17 @@ pub unsafe extern "C" fn init(options_ptr: ReadonlyPointer) -> MutablePointer {
         }
     };
 
-    // Initialize global logger. If another subscriber is already installed,
-    // avoid panicking — simply ignore the error so the library remains usable
-    // when embedded in larger applications that set the global subscriber.
     let subscriber = fmt()
         .with_env_filter(EnvFilter::new(options.log_level().as_env_filter()))
         .finish();
 
     if let Err(_err) = tracing::subscriber::set_global_default(subscriber) {
-        // Another global subscriber was already set. Continue without overriding it.
-        // Use stderr since tracing may not be initialized in the embedding process.
         let _ = std::io::stderr().write_all(b"warning: global tracing subscriber already set\n");
     }
 
     tracing::debug!("AppOptions: {:?}", options);
 
-    // Use name-based registration to avoid creating duplicate apps with the same name.
-    let app_id = register_app(options.name.as_str(), Box::default());
+    let app_id = register_app(options.name.as_str());
 
     tracing::info!("Bunner Rust Http Server initialized.");
 
@@ -252,6 +245,7 @@ pub unsafe extern "C" fn add_routes(
 #[tracing::instrument(skip_all, fields(app_id=app_id))]
 pub unsafe extern "C" fn handle_request(
     app_id: AppId,
+    worker_id: WorkerId,
     request_key: RequestKey,
     payload_ptr: ReadonlyPointer,
     cb: HandleRequestCallback,
@@ -259,7 +253,7 @@ pub unsafe extern "C" fn handle_request(
     let app = match get_app(app_id, "handle_request") {
         Ok(a) => a,
         Err(e) => {
-            callback_handle_request(cb, request_key, None, &e);
+            (cb)(request_key, 0, make_result(&e));
 
             return;
         }
@@ -277,13 +271,13 @@ pub unsafe extern "C" fn handle_request(
                     Some(serde_json::json!({"payload_ptr": format!("{:p}", payload_ptr)})),
                 );
 
-                callback_handle_request(cb, request_key, None, &err);
+                (cb)(request_key, 0, make_result(&err));
 
                 return;
             }
         };
 
-    app.handle_request(cb, request_key, payload_str);
+    app.handle_request(app_id, worker_id, cb, request_key, payload_str);
 }
 
 /// Seals the router, optimizing it for fast lookups. No routes can be added after sealing.
@@ -318,6 +312,27 @@ pub unsafe extern "C" fn free(app_id: AppId, ptr: MutablePointer) {
     }
 
     unsafe { pointer_registry::free(ptr) };
+}
+
+/// Runs the callback dispatch loop on the current thread.
+///
+/// This function blocks and processes enqueued callback jobs. Use it from
+/// a JS Worker thread if you need callbacks to execute in that Worker's
+/// context without periodic polling.
+///
+/// # Safety
+/// This function does not take ownership of any external resources. It will
+/// block the calling thread until the process exits or the underlying channel
+/// is closed.
+#[unsafe(no_mangle)]
+#[tracing::instrument(skip_all, fields(app_id=app_id, worker_id=worker_id))]
+pub unsafe extern "C" fn run_dispatch_loop(app_id: AppId, worker_id: WorkerId) {
+    let app = match find_app(app_id) {
+        Some(p) => unsafe { &*p },
+        None => return,
+    };
+
+    app.dispatcher().run_foreground_loop(worker_id);
 }
 
 fn get_app<'a>(app_id: AppId, stage: StaticString) -> Result<&'a App, Box<FfiError>> {

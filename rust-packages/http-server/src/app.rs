@@ -1,14 +1,15 @@
+use crate::app_registry::find_app;
 use crate::enums::{HttpMethod, HttpStatusCode, LenPrefixedString};
 use crate::errors::{FfiError, FfiErrorCode};
 use crate::middlewares::{
     BodyParser, CookieParser, HeaderParser, Lifecycle, MiddlewareChain, UrlParser,
 };
-use crate::request_callback_dispatcher;
+use crate::request_callback_dispatcher::AppDispatcher;
 use crate::router::structures::RouterResult;
 use crate::router::{Router, RouterReadOnly};
 use crate::structures::{BunnerRequest, BunnerResponse, HandleRequestOutput, HandleRequestPayload};
 use crate::thread_pool::submit_job;
-use crate::types::{RequestKey, WorkerId};
+use crate::types::{AppId, RequestKey, WorkerId};
 use crate::utils::{ffi::make_result, json::deserialize};
 
 use super::HandleRequestCallback;
@@ -21,18 +22,14 @@ use uuid::Uuid;
 
 #[repr(C)]
 pub struct App {
+    app_id: AppId,
     router: Router,
     middleware_chain: Arc<MiddlewareChain>,
-}
-
-impl Default for App {
-    fn default() -> Self {
-        Self::new()
-    }
+    dispatcher: AppDispatcher,
 }
 
 impl App {
-    pub fn new() -> Self {
+    pub fn new(app_id: AppId) -> Self {
         let mut middleware_chain = MiddlewareChain::new();
 
         middleware_chain.add_to(Lifecycle::PreRequest, HeaderParser);
@@ -41,8 +38,10 @@ impl App {
         middleware_chain.add_to(Lifecycle::PreRequest, BodyParser);
 
         App {
+            app_id,
             router: Router::new(None),
             middleware_chain: Arc::new(middleware_chain),
+            dispatcher: AppDispatcher::new(),
         }
     }
 
@@ -67,8 +66,14 @@ impl App {
         self.router.seal();
     }
 
+    pub fn dispatcher(&self) -> &AppDispatcher {
+        &self.dispatcher
+    }
+
     pub fn handle_request(
         &self,
+        app_id: AppId,
+        worker_id: WorkerId,
         cb: HandleRequestCallback,
         request_key: RequestKey,
         payload: LenPrefixedString,
@@ -76,7 +81,14 @@ impl App {
         let ro = match self.router.get_readonly() {
             Ok(r) => r,
             Err(e) => {
-                callback_handle_request(cb, request_key, None, &FfiError::from(e));
+                callback_handle_request(
+                    app_id,
+                    worker_id,
+                    cb,
+                    request_key,
+                    None,
+                    &FfiError::from(e),
+                );
 
                 return;
             }
@@ -85,7 +97,15 @@ impl App {
         let middleware_chain = self.middleware_chain.clone();
 
         match submit_job(Box::new(move || {
-            process_request(cb, request_key, payload, ro, middleware_chain);
+            process_request(
+                app_id,
+                worker_id,
+                cb,
+                request_key,
+                payload,
+                ro,
+                middleware_chain,
+            );
         })) {
             Ok(()) => {
                 tracing::trace!("request enqueued");
@@ -105,13 +125,15 @@ impl App {
                     None,
                 );
 
-                callback_handle_request(cb, request_key, None, &err);
+                callback_handle_request(app_id, worker_id, cb, request_key, None, &err);
             }
         }
     }
 }
 
 fn process_request(
+    app_id: AppId,
+    worker_id: WorkerId,
     cb: HandleRequestCallback,
     request_key: RequestKey,
     payload_str: LenPrefixedString,
@@ -141,7 +163,7 @@ fn process_request(
 
             tracing::event!(tracing::Level::ERROR, reason="deserialize_payload_error", request_key=%request_key);
 
-            callback_handle_request(cb, request_key, None, &err);
+            callback_handle_request(app_id, worker_id, cb, request_key, None, &err);
 
             return;
         }
@@ -160,7 +182,7 @@ fn process_request(
                 ),
             );
 
-            callback_handle_request(cb, request_key, None, &bunner_error);
+            callback_handle_request(app_id, worker_id, cb, request_key, None, &bunner_error);
 
             return;
         }
@@ -193,6 +215,8 @@ fn process_request(
         );
 
         callback_handle_request(
+            app_id,
+            worker_id,
             cb,
             request_key,
             None,
@@ -210,6 +234,8 @@ fn process_request(
         );
 
         callback_handle_request(
+            app_id,
+            worker_id,
             cb,
             request_key,
             None,
@@ -263,7 +289,7 @@ fn process_request(
                 request_key = request_key
             );
 
-            callback_handle_request(cb, request_key, None, &be);
+            callback_handle_request(app_id, worker_id, cb, request_key, None, &be);
 
             return;
         }
@@ -284,6 +310,8 @@ fn process_request(
         );
 
         callback_handle_request(
+            app_id,
+            worker_id,
             cb,
             request_key,
             None,
@@ -294,6 +322,8 @@ fn process_request(
     }
 
     callback_handle_request(
+        app_id,
+        worker_id,
         cb,
         request_key,
         Some(route_key),
@@ -303,14 +333,30 @@ fn process_request(
 
 #[inline(always)]
 pub fn callback_handle_request<T: Serialize>(
+    app_id: AppId,
+    worker_id: WorkerId,
     callback: HandleRequestCallback,
     request_key: RequestKey,
     route_key: Option<u16>,
     result: &T,
 ) {
     let res_ptr = make_result(result);
+    // Prefer App-owned dispatcher when available; fall back to direct callback otherwise.
+    if let Some(app_ptr) = find_app(app_id) {
+        let app = unsafe { &*app_ptr };
 
-    unsafe {
-        request_callback_dispatcher::enqueue(callback, request_key, route_key, res_ptr);
+        unsafe {
+            app.dispatcher()
+                .enqueue(worker_id, callback, request_key, route_key, res_ptr)
+        };
+    } else {
+        tracing::event!(
+            tracing::Level::ERROR,
+            reason = "app_not_found_for_callback",
+            request_key = request_key,
+            route_key = route_key
+        );
+
+        unsafe { crate::pointer_registry::free(res_ptr) };
     }
 }

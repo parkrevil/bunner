@@ -1,9 +1,9 @@
 use crossbeam_channel as xchan;
-use std::sync::OnceLock;
+use std::collections::HashMap;
+use std::sync::Mutex;
 
 use crate::pointer_registry::free;
-use crate::types::MutablePointer;
-use crate::types::RequestKey;
+use crate::types::{MutablePointer, RequestKey, WorkerId};
 
 use super::HandleRequestCallback;
 
@@ -16,79 +16,87 @@ struct CallbackJob {
 
 unsafe impl Send for CallbackJob {}
 
-static TX: OnceLock<xchan::Sender<CallbackJob>> = OnceLock::new();
-static RX: OnceLock<xchan::Receiver<CallbackJob>> = OnceLock::new();
-
-const CALLBACK_CHANNEL_CAPACITY: usize = 1024;
-
-fn init() -> xchan::Sender<CallbackJob> {
-    let (tx, rx) = xchan::bounded::<CallbackJob>(CALLBACK_CHANNEL_CAPACITY);
-    let _ = RX.set(rx);
-
-    std::thread::Builder::new()
-        .name("bunner-callback-dispatcher".to_string())
-        .spawn(|| {
-            while let Ok(job) = RX.get().unwrap().recv() {
-                tracing::event!(
-                    tracing::Level::TRACE,
-                    stage = "dispatcher_recv",
-                    request_key = job.request_key,
-                    route_key = job.route_key
-                );
-
-                let res = std::panic::catch_unwind(|| {
-                    (job.callback)(
-                        job.request_key,
-                        job.route_key.unwrap_or_default(),
-                        job.result_ptr,
-                    )
-                });
-
-                if res.is_err() {
-                    tracing::event!(tracing::Level::ERROR, reason = "callback_panic_caught");
-                }
-
-                tracing::event!(tracing::Level::TRACE, stage = "dispatcher_done");
-            }
-        })
-        .ok();
-    tx
+struct WorkerQueue {
+    tx: xchan::Sender<CallbackJob>,
+    rx: xchan::Receiver<CallbackJob>,
 }
 
-/// # Safety
-///
-/// This function is unsafe because it dereferences raw pointers passed from FFI.
-/// The caller must ensure that the `callback`, `request_id`, and `res_ptr`
-/// are valid and point to memory that is safe to access.
-pub unsafe fn enqueue(
-    callback: HandleRequestCallback,
-    request_key: RequestKey,
-    route_key: Option<u16>,
-    result_ptr: MutablePointer,
-) {
-    let tx = TX.get_or_init(init);
+pub struct AppDispatcher {
+    workers: Mutex<HashMap<WorkerId, WorkerQueue>>,
+}
 
-    tracing::event!(
-        tracing::Level::TRACE,
-        stage = "dispatcher_enqueue",
-        route_key = route_key
-    );
+impl AppDispatcher {
+    pub fn new() -> Self {
+        Self {
+            workers: Mutex::new(HashMap::new()),
+        }
+    }
 
-    let send_result = tx.send(CallbackJob {
-        callback,
-        request_key,
-        route_key,
-        result_ptr,
-    });
+    fn get_or_create(&self, worker_id: WorkerId) -> WorkerQueue {
+        let mut guard = self.workers.lock().unwrap();
+        if let Some(wq) = guard.get(&worker_id) {
+            return WorkerQueue {
+                tx: wq.tx.clone(),
+                rx: wq.rx.clone(),
+            };
+        }
+        let (tx, rx) = xchan::unbounded::<CallbackJob>();
+        let wq = WorkerQueue { tx: tx.clone(), rx: rx.clone() };
+        guard.insert(worker_id, wq);
+        WorkerQueue { tx, rx }
+    }
 
-    if let Err(e) = send_result {
-        tracing::error!(
-            "Failed to enqueue callback job. Channel may be full or disconnected. Error: {:?}",
-            e
-        );
+    /// Enqueue a job for a specific worker.
+    /// # Safety
+    /// Caller must ensure pointers are valid.
+    pub unsafe fn enqueue(&self,
+        worker_id: WorkerId,
+        callback: HandleRequestCallback,
+        request_key: RequestKey,
+        route_key: Option<u16>,
+        result_ptr: MutablePointer,
+    ) {
+        let wq = self.get_or_create(worker_id);
+        let send_result = wq.tx.send(CallbackJob { callback, request_key, route_key, result_ptr });
+        if let Err(e) = send_result {
+            tracing::error!("Failed to enqueue app-scoped callback job: {:?}", e);
+            if !result_ptr.is_null() {
+                unsafe { free(result_ptr) };
+            }
+        }
+    }
 
-        if !result_ptr.is_null() {
-            unsafe { free(result_ptr) };
+    /// Run a foreground loop for a specific worker, consuming only that worker's queue.
+    pub fn run_foreground_loop(&self, worker_id: WorkerId) {
+        let rx = { self.get_or_create(worker_id).rx };
+        while let Ok(job) = rx.recv() {
+            tracing::event!(
+                tracing::Level::TRACE,
+                stage = "dispatcher_recv_fg_app",
+                request_key = job.request_key,
+                route_key = job.route_key
+            );
+
+            let res = std::panic::catch_unwind(|| {
+                (job.callback)(
+                    job.request_key,
+                    job.route_key.unwrap_or_default(),
+                    job.result_ptr,
+                )
+            });
+
+            if res.is_err() {
+                tracing::event!(tracing::Level::ERROR, reason = "callback_panic_caught");
+            }
+
+            tracing::event!(tracing::Level::TRACE, stage = "dispatcher_done_fg_app");
         }
     }
 }
+
+impl Default for AppDispatcher {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+

@@ -12,7 +12,7 @@ type AtomicId = <AppId as AtomicOf>::Atomic;
 
 /// Registers an app and associates it with `name`. If an app with the same name
 /// already exists, returns the existing AppId without creating a new instance.
-pub fn register_app(name: &str, b: Box<App>) -> AppId {
+pub fn register_app(name: &str) -> AppId {
     let name_map = NAME_TO_ID.get_or_init(|| Mutex::new(HashMap::new()));
 
     // Fast path: if name already exists, return it.
@@ -21,7 +21,6 @@ pub fn register_app(name: &str, b: Box<App>) -> AppId {
     }
 
     // Otherwise allocate a new id and store pointers.
-    let p = Box::into_raw(b);
     let map = INSTANCE_MAP.get_or_init(|| Mutex::new(HashMap::new()));
     let counter = NEXT_ID.get_or_init(|| AtomicId::new(1));
 
@@ -35,6 +34,9 @@ pub fn register_app(name: &str, b: Box<App>) -> AppId {
 
     let id: AppId = prev as AppId;
 
+    // Create App with this id and store the pointer
+    let app = Box::new(App::new(id));
+    let p = Box::into_raw(app);
     map.lock().unwrap().insert(id, p as usize);
     name_map.lock().unwrap().insert(name.to_string(), id);
 
