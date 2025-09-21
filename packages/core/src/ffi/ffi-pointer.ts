@@ -2,15 +2,15 @@ import type { Pointer } from 'bun:ffi';
 
 import { BunnerFfiError } from './errors';
 import { isFfiErrorReport, makeFfiError } from './helpers';
-import type { FreePointerFn } from './types';
+import type { FfiPointerFreeFn } from './types';
 import { pointerToJson, isPointer, pointerToString } from './utils';
 
 export class FfiPointer {
-  private readonly freeFn: FreePointerFn;
+  private readonly freeFn: FfiPointerFreeFn;
   private pointer: Pointer | null;
   private freed: boolean;
 
-  constructor(pointer: Pointer | null, freeFn: FreePointerFn) {
+  constructor(pointer: Pointer | null, freeFn: FfiPointerFreeFn) {
     this.pointer = pointer;
     this.freeFn = freeFn;
     this.freed = false;

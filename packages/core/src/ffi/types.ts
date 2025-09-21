@@ -11,10 +11,17 @@ export type AppId = number;
  * @description The function to free a pointer
  * @param ptr - The pointer to free
  */
-export type FreePointerFn = (ptr: Pointer) => void;
+export type FreePointerFn = (appId: AppId, ptr: Pointer) => number;
 
 /**
  * Ffi Stringable
  * @description The types that can be converted to a string for FFI
  */
 export type FfiStringable = string | object | Map<any, any> | Array<any>;
+
+/**
+ * Ffi Pointer Free Function
+ * @description The function to free a pointer
+ * @param ptr - The pointer to free
+ */
+export type FfiPointerFreeFn = (ptr: Pointer) => void;

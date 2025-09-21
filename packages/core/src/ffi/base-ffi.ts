@@ -89,7 +89,7 @@ export abstract class BaseFfi<T extends BaseFfiSymbols> {
 
       throw new BunnerFfiError('Failed to parse FFI result', e);
     } finally {
-      this.symbols.free(ptr);
+      this.symbols.free(this.appId, ptr);
     }
   }
 
@@ -106,6 +106,7 @@ export abstract class BaseFfi<T extends BaseFfiSymbols> {
   ) {
     const { callOnce = false, ...ffiOptions } = options;
     const freeArgIndexes: number[] = [];
+    const pointerFn = (ptr: Pointer) => this.symbols.free(this.appId, ptr);
 
     options.args?.forEach((arg, index) => {
       if (arg === FFIType.pointer) {
@@ -118,10 +119,7 @@ export abstract class BaseFfi<T extends BaseFfiSymbols> {
 
       try {
         freeArgIndexes.forEach(index => {
-          args[index] = new FfiPointer(
-            args[index],
-            this.symbols.free.bind(this.symbols),
-          );
+          args[index] = new FfiPointer(args[index], pointerFn);
 
           pointers.push(args[index]);
         });

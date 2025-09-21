@@ -47,7 +47,7 @@ export class Ffi extends BaseFfi<FfiSymbols> {
       // BaseRustSymbols
       init: { args: [FFIType.pointer], returns: FFIType.pointer },
       destroy: { args: [FFIType.pointer], returns: FFIType.void },
-      free: { args: [FFI_APP_ID_TYPE], returns: FFIType.void },
+      free: { args: [FFI_APP_ID_TYPE, FFIType.pointer], returns: FFIType.void },
 
       // HttpServerSymbols
       add_route: {

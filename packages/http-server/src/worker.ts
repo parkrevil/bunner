@@ -2,7 +2,7 @@ import { BaseWorker, Container, LogLevel, type WorkerId } from '@bunner/core';
 import { Logger } from '@bunner/core-logger';
 import { expose } from 'comlink';
 
-import { HttpError, NotFoundError } from './errors';
+import { HttpError } from './errors';
 import { Ffi } from './ffi';
 import type { WorkerInitParams } from './interfaces';
 import { RouteHandler } from './route-handler';
@@ -52,23 +52,23 @@ export class Worker extends BaseWorker {
 
   async handleRequest(params: any) {
     try {
-      const handleResult = await this.ffi.handleRequest({
+      await this.ffi.handleRequest({
         httpMethod: params.httpMethod,
         url: params.url,
         headers: params.headers,
         body: params.body,
       });
 
-      const handler = this.routeHandler.find(handleResult.routeKey);
+      /* const handler = this.routeHandler.find(handleResult.routeKey);
 
       if (!handler) {
         throw new NotFoundError();
       }
-
+ */
       /*       const request = new BunnerRequest(handleResult.request, rawReq, server);
       const response = new BunnerResponse(request);
  */
-      await handler();
+      //      await handler();
 
       return 'hello';
       /* 
