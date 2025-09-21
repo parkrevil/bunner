@@ -1,5 +1,5 @@
-use crate::app_handle_request_dispatcher::AppHandleRequestDispatcher;
 use crate::app_registry::find_app;
+use crate::app_request_callback_dispatcher::AppRequestCallbackDispatcher;
 use crate::enums::{HttpMethod, HttpStatusCode, LenPrefixedString};
 use crate::errors::{FfiError, FfiErrorCode};
 use crate::middlewares::{
@@ -25,7 +25,7 @@ pub struct App {
     app_id: AppId,
     router: Router,
     middleware_chain: Arc<MiddlewareChain>,
-    handle_request_dispatcher: AppHandleRequestDispatcher,
+    request_callback_dispatcher: AppRequestCallbackDispatcher,
 }
 
 impl App {
@@ -41,7 +41,7 @@ impl App {
             app_id,
             router: Router::new(None),
             middleware_chain: Arc::new(middleware_chain),
-            handle_request_dispatcher: AppHandleRequestDispatcher::new(),
+            request_callback_dispatcher: AppRequestCallbackDispatcher::new(),
         }
     }
 
@@ -66,8 +66,8 @@ impl App {
         self.router.seal();
     }
 
-    pub fn dispatcher(&self) -> &AppHandleRequestDispatcher {
-        &self.handle_request_dispatcher
+    pub fn dispatcher(&self) -> &AppRequestCallbackDispatcher {
+        &self.request_callback_dispatcher
     }
 
     pub fn handle_request(

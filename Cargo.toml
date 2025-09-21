@@ -20,3 +20,22 @@ build = []
 guide = "TEST_GUIDE.md"
 naming_convention = "*_test.rs"
 helper_module = "tests/helpers.rs"
+
+[profile.dev]
+opt-level = 1
+debug = 1
+debug-assertions = true
+overflow-checks = true
+incremental = true
+codegen-units = 256
+
+[profile.release]
+opt-level = 3
+debug = 0
+debug-assertions = false
+overflow-checks = false
+incremental = false
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+rpath = false

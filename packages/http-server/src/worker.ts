@@ -48,6 +48,7 @@ export class Worker extends BaseWorker {
     console.log('🚀 Worker is bootstrapping...');
 
     this.ffi.sealRoutes();
+    this.ffi.dispatchRequestCallback();
   }
 
   async handleRequest(params: any) {

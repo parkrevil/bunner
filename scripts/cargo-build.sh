@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 # Usage:
-#  bash scripts/cargo-test.sh [--release]
-#  BUILD_MODE=release bash scripts/cargo-test.sh
+#  bash scripts/cargo-build.sh [--release]
+#  BUILD_MODE=release bash scripts/cargo-build.sh
 
 BUILD_MODE=${BUILD_MODE:-}
 NATIVE=${NATIVE:-}
@@ -20,17 +20,15 @@ for arg in "$@"; do
 done
 
 if [[ "${BUILD_MODE:-}" == "release" ]]; then
-  NEXT_FLAGS=(--release)
+  CARGO_FLAGS=(--workspace --features simd-json --release)
   TARGET_KIND=release
 else
-  NEXT_FLAGS=()
+  CARGO_FLAGS=(--workspace --features simd-json)
   TARGET_KIND=debug
 fi
 
-# Run tests (once per feature set) for the specific package(s)
-export RUST_LOG=trace RUST_BACKTRACE=0
-cargo nextest run --package bunner_http_server "${NEXT_FLAGS[@]}"
-cargo nextest run --package bunner_http_server --features simd-json "${NEXT_FLAGS[@]}"
+# Build the entire workspace once
+cargo build "${CARGO_FLAGS[@]}"
 
 # Copy built dynamic libraries to each package's bin directory
 for manifest in $(find "$ROOT_DIR/rust-packages" -type f -name Cargo.toml); do

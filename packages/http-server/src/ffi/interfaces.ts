@@ -26,10 +26,12 @@ export interface FfiSymbols extends BaseFfiSymbols {
   ) => Pointer | null;
   handle_request: (
     appId: AppId,
+    workerId: WorkerId,
     requestKey: RequestKey,
     payload: Uint8Array,
     callback: Pointer,
   ) => void;
+  dispatch_request_callback: (appId: AppId, workerId: WorkerId) => void;
   seal_routes: (appId: AppId) => void;
 }
 

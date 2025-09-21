@@ -1,4 +1,4 @@
-.PHONY: lint, format, test, coverage
+.PHONY: lint, format, test, test-release, coverage, build, build-release
 
 lint:
 	# Strict for library/bin targets
@@ -23,5 +23,14 @@ format:
 test:
 	bash ./scripts/cargo-test.sh
 
+test-release:
+	BUILD_MODE=release bash ./scripts/cargo-test.sh --release
+
 coverage:
 	cargo llvm-cov --workspace
+
+build:
+	bash ./scripts/cargo-build.sh
+
+build-release:
+	BUILD_MODE=release bash ./scripts/cargo-build.sh --release

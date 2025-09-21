@@ -11,7 +11,7 @@ import type { Server } from 'bun';
 import { HttpMethod } from './enums';
 import { MethodNotAllowedError } from './errors';
 import type { BunnerHttpServerOptions } from './interfaces';
-import type { Worker } from './worker';
+import { Worker } from './worker';
 
 export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
   private readonly name: string;

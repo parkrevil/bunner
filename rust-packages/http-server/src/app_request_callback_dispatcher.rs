@@ -19,11 +19,11 @@ struct WorkerQueue {
     rx: xchan::Receiver<CallbackJob>,
 }
 
-pub struct AppHandleRequestDispatcher {
+pub struct AppRequestCallbackDispatcher {
     workers: Mutex<HashMap<WorkerId, WorkerQueue>>,
 }
 
-impl AppHandleRequestDispatcher {
+impl AppRequestCallbackDispatcher {
     pub fn new() -> Self {
         Self {
             workers: Mutex::new(HashMap::new()),
@@ -39,7 +39,10 @@ impl AppHandleRequestDispatcher {
             };
         }
         let (tx, rx) = xchan::unbounded::<CallbackJob>();
-        let wq = WorkerQueue { tx: tx.clone(), rx: rx.clone() };
+        let wq = WorkerQueue {
+            tx: tx.clone(),
+            rx: rx.clone(),
+        };
         guard.insert(worker_id, wq);
         WorkerQueue { tx, rx }
     }
@@ -47,7 +50,8 @@ impl AppHandleRequestDispatcher {
     /// Enqueue a job for a specific worker.
     /// # Safety
     /// Caller must ensure pointers are valid.
-    pub unsafe fn enqueue(&self,
+    pub unsafe fn enqueue(
+        &self,
         worker_id: WorkerId,
         callback: HandleRequestCallback,
         request_key: RequestKey,
@@ -55,7 +59,12 @@ impl AppHandleRequestDispatcher {
         result_ptr: MutablePointer,
     ) {
         let wq = self.get_or_create(worker_id);
-        let send_result = wq.tx.send(CallbackJob { callback, request_key, route_key, result_ptr });
+        let send_result = wq.tx.send(CallbackJob {
+            callback,
+            request_key,
+            route_key,
+            result_ptr,
+        });
         if let Err(e) = send_result {
             tracing::error!("Failed to enqueue app-scoped callback job: {:?}", e);
             if !result_ptr.is_null() {
@@ -67,7 +76,16 @@ impl AppHandleRequestDispatcher {
     /// Run a foreground loop for a specific worker, consuming only that worker's queue.
     pub fn run_foreground_loop(&self, worker_id: WorkerId) {
         let rx = { self.get_or_create(worker_id).rx };
-        while let Ok(job) = rx.recv() {
+        let mut remaining = rx.len();
+
+        while remaining > 0 {
+            let job = match rx.try_recv() {
+                Ok(j) => j,
+                Err(_e) => break,
+            };
+
+            remaining -= 1;
+
             tracing::event!(
                 tracing::Level::TRACE,
                 stage = "dispatcher_recv_fg_app",
@@ -92,9 +110,8 @@ impl AppHandleRequestDispatcher {
     }
 }
 
-impl Default for AppHandleRequestDispatcher {
+impl Default for AppRequestCallbackDispatcher {
     fn default() -> Self {
         Self::new()
     }
 }
-

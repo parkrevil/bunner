@@ -6,3 +6,4 @@ Cargo.lock
 bin
 di.json
 benchmarks
+*.log

@@ -14,7 +14,7 @@ pub mod enums;
 pub mod errors;
 pub mod middlewares;
 pub mod pointer_registry;
-pub mod app_handle_request_dispatcher;
+pub mod app_request_callback_dispatcher;
 pub mod router;
 pub mod structures;
 mod thread_pool;
@@ -326,7 +326,7 @@ pub unsafe extern "C" fn free(app_id: AppId, ptr: MutablePointer) {
 /// is closed.
 #[unsafe(no_mangle)]
 #[tracing::instrument(skip_all, fields(app_id=app_id, worker_id=worker_id))]
-pub unsafe extern "C" fn run_dispatch_loop(app_id: AppId, worker_id: WorkerId) {
+pub unsafe extern "C" fn dispatch_request_callback(app_id: AppId, worker_id: WorkerId) {
     let app = match find_app(app_id) {
         Some(p) => unsafe { &*p },
         None => return,

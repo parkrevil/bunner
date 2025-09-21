@@ -36,6 +36,8 @@ export class Ffi extends BaseFfi<FfiSymbols> {
   >;
   private readonly options: FfiOptions;
   private requestKey = 0n;
+  private dispatchLoopRunning = false;
+  private destroyed = false;
 
   /**
    * Constructor
@@ -66,10 +68,15 @@ export class Ffi extends BaseFfi<FfiSymbols> {
       handle_request: {
         args: [
           FFI_APP_ID_TYPE,
+          FFI_WORKER_ID_TYPE,
           FFI_REQUEST_KEY_TYPE,
           FFIType.pointer,
           FFIType.function,
         ],
+        returns: FFIType.void,
+      },
+      dispatch_request_callback: {
+        args: [FFI_APP_ID_TYPE, FFI_WORKER_ID_TYPE],
         returns: FFIType.void,
       },
       seal_routes: {
@@ -143,10 +150,14 @@ export class Ffi extends BaseFfi<FfiSymbols> {
 
     this.symbols.handle_request(
       this.appId,
+      this.workerId,
       requestKey,
       toBuffer(params),
       this.handleRequestCb.ptr!,
     );
+
+    // Ensure the dispatch loop runs while there are pending requests
+    this.dispatchRequestCallback();
 
     return promise;
   }
@@ -161,9 +172,50 @@ export class Ffi extends BaseFfi<FfiSymbols> {
   }
 
   /**
+   * Start an event-loop-safe infinite recursion to drain callbacks.
+   * Idempotent: calling multiple times won't create multiple loops.
+   */
+  dispatchRequestCallback() {
+    if (this.dispatchLoopRunning) {
+      return;
+    }
+    if (this.pendingHandleRequests.size === 0) {
+      return;
+    }
+
+    this.dispatchLoopRunning = true;
+
+    const tick = () => {
+      if (this.destroyed) {
+        this.dispatchLoopRunning = false;
+        return;
+      }
+
+      try {
+        this.symbols.dispatch_request_callback(this.appId, this.workerId);
+      } catch {}
+
+      if (this.pendingHandleRequests.size > 0) {
+        setImmediate(tick);
+      } else {
+        this.dispatchLoopRunning = false;
+      }
+    };
+
+    setImmediate(tick);
+  }
+
+  /**
+   * Stop the dispatch loop on next tick.
+   */
+  stopCallbackDispatchLoop() {}
+
+  /**
    * Gracefully destroy and reject all pending callbacks
    */
   override destroy() {
+    this.destroyed = true;
+
     const err = new BunnerFfiError('Core destroyed');
 
     for (const [id, entry] of this.pendingHandleRequests) {
@@ -172,6 +224,7 @@ export class Ffi extends BaseFfi<FfiSymbols> {
       this.pendingHandleRequests.delete(id);
     }
 
+    this.stopCallbackDispatchLoop();
     super.destroy();
   }
 
