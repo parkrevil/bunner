@@ -3,5 +3,5 @@
  */
 export interface WorkerPoolOptions {
   script: URL;
-  size?: number;
+  workers?: number;
 }

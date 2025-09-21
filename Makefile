@@ -34,3 +34,26 @@ build:
 
 build-release:
 	BUILD_MODE=release bash ./scripts/cargo-build.sh --release
+
+# --- Stress Testing ---
+.PHONY: stress stress-reqs stress-16c
+
+# Defaults for other tasks; stress targets use fixed values below
+URL ?= http://localhost:5000/users
+DURATION ?= 60s
+CONCURRENCIES ?= 512 1024 2048 3072
+RATE ?=
+REQUESTS ?=
+
+# Duration-based sweep (fixed parameters; not affected by env/overrides)
+stress:
+	@env -i HOME="$(HOME)" URL="http://localhost:5000/users" DURATION="60s" CONCURRENCIES="512 1024 2048 3072" bash ./scripts/stress-bombardier.sh
+
+# Requests-count run (fixed parameters)
+stress-reqs: 
+stress-reqs:
+	@env -i HOME="$(HOME)" URL="http://localhost:5000/users" REQUESTS="1000000" bash ./scripts/stress-bombardier.sh
+
+# 16-core oriented sweep (fixed parameters)
+stress-16c:
+	@env -i HOME="$(HOME)" URL="http://localhost:5000/users" DURATION="60s" CONCURRENCIES="800 1200 1600 2400 3200" bash ./scripts/stress-bombardier.sh

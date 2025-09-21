@@ -1,11 +1,12 @@
-import type { LogLevel, RootModuleFile } from '@bunner/core';
+import type { RootModuleFile } from '@bunner/core';
 
 import type { BunnerRequest } from './bunner-request';
 import type { BunnerResponse } from './bunner-response';
+import type { FfiOptions } from './ffi';
 import type { HandlerFunction } from './types';
 
 export interface BunnerHttpServerOptions {
-  logLevel?: LogLevel;
+  port: number;
 }
 
 /**
@@ -18,8 +19,17 @@ export interface FindHandlerResult {
   response: BunnerResponse;
 }
 
+/**
+ * Worker Init Params
+ * @description The parameters for initializing a worker
+ */
 export interface WorkerInitParams {
-  appName: string;
   rootModuleFile: RootModuleFile;
-  options: Required<BunnerHttpServerOptions>;
+  options: WorkerOptions;
 }
+
+/**
+ * Worker Options
+ * @description The options for the worker
+ */
+export interface WorkerOptions extends FfiOptions {}

@@ -7,6 +7,9 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await Bunner.create(BunnerHttpServer, AppModule, {
     logLevel: LogLevel.Error,
+    workers: 'full',
+    queueCapacity: 8192,
+    port: 5000,
   });
   const logger = Logger.getInstance();
 

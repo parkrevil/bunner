@@ -1,9 +1,25 @@
+import type { LogLevel } from '../common';
+
 /**
  * Create Bunner Application Options
  * @description The options for creating a Bunner application
  */
 export interface CreateApplicationOptions {
   name?: string;
+  logLevel?: LogLevel;
+  workers?: number | 'full' | 'half';
+  queueCapacity?: number;
+}
+
+/**
+ * Bunner Application Base Options
+ * @description The base options for a Bunner application
+ */
+export interface BunnerApplicationBaseOptions {
+  name: string;
+  logLevel: LogLevel;
+  workers: number;
+  queueCapacity: number;
 }
 
 /**

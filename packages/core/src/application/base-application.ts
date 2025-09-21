@@ -1,5 +1,7 @@
+import type { BunnerApplicationBaseOptions } from './interfaces';
+
 export abstract class BaseApplication<O = any> {
-  protected options: Required<O>;
+  protected options: O & Required<BunnerApplicationBaseOptions>;
 
   /**
    * Start the application

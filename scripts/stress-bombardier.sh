@@ -1,6 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
+# Ensure a sane PATH even if invoked with env -i
+if [[ -z "${PATH:-}" ]]; then
+  export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+fi
+
 # Config via env vars (provide sensible defaults)
 URL=${URL:-http://localhost:5000/users}
 DURATION=${DURATION:-30s}
@@ -16,15 +21,18 @@ mkdir -p "$OUT_DIR"
 if ! command -v bombardier >/dev/null 2>&1; then
   CANDIDATES=()
   if command -v go >/dev/null 2>&1; then
-    GOBIN_DIR=$(go env GOBIN || true)
-    GOPATH_DIR=$(go env GOPATH || true)
+    GOBIN_DIR=$(go env GOBIN 2>/dev/null || echo '')
+    GOPATH_DIR=$(go env GOPATH 2>/dev/null || echo '')
     if [[ -n "${GOBIN_DIR:-}" ]]; then CANDIDATES+=("$GOBIN_DIR"); fi
     if [[ -n "${GOPATH_DIR:-}" ]]; then CANDIDATES+=("$GOPATH_DIR/bin"); fi
   fi
-  CANDIDATES+=("$HOME/go/bin" "$HOME/.local/bin" "/usr/local/bin" "/usr/bin")
+  if [[ -n "${HOME:-}" ]]; then
+    CANDIDATES+=("$HOME/go/bin" "$HOME/.local/bin")
+  fi
+  CANDIDATES+=("/usr/local/bin" "/usr/bin")
   for dir in "${CANDIDATES[@]}"; do
     if [[ -x "$dir/bombardier" ]]; then
-      export PATH="$dir:$PATH"
+      export PATH="$dir:${PATH:-}"
       break
     fi
   done
@@ -36,8 +44,8 @@ if ! command -v bombardier >/dev/null 2>&1; then
   echo "설치 예:"
   echo "  go install github.com/codesenberg/bombardier@latest"
   if command -v go >/dev/null 2>&1; then
-    GOBIN_DIR=$(go env GOBIN || true)
-    GOPATH_DIR=$(go env GOPATH || true)
+    GOBIN_DIR=$(go env GOBIN 2>/dev/null || echo '')
+    GOPATH_DIR=$(go env GOPATH 2>/dev/null || echo '')
     if [[ -z "${GOBIN_DIR:-}" ]]; then
       echo "zsh PATH에 추가 (영구적):"
       echo "  echo 'export PATH=\"$PATH:$(printf %q "$GOPATH_DIR")/bin\"' >> ~/.zshrc && source ~/.zshrc"
@@ -66,17 +74,17 @@ for c in $CONCURRENCIES; do
   if [[ -n "$REQUESTS" ]]; then
     # Requests-bound run
     set -x
-    bombardier -c "$c" -n "$REQUESTS" "$URL" | tee -a "$log_file"
+    bombardier -c "$c" -n "$REQUESTS" -l "$URL" | tee -a "$log_file"
     set +x
   else
     # Duration-bound run, optional rate limit
     if [[ -n "$RATE" ]]; then
       set -x
-      bombardier -c "$c" -d "$DURATION" -r "$RATE" "$URL" | tee -a "$log_file"
+        bombardier -c "$c" -d "$DURATION" -r "$RATE" -l "$URL" | tee -a "$log_file"
       set +x
     else
       set -x
-      bombardier -c "$c" -d "$DURATION" "$URL" | tee -a "$log_file"
+        bombardier -c "$c" -d "$DURATION" -l "$URL" | tee -a "$log_file"
       set +x
     fi
   fi

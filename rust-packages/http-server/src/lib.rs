@@ -9,12 +9,12 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 pub mod app;
 pub mod app_registry;
+pub mod app_request_callback_dispatcher;
 pub mod constants;
 pub mod enums;
 pub mod errors;
 pub mod middlewares;
 pub mod pointer_registry;
-pub mod app_request_callback_dispatcher;
 pub mod router;
 pub mod structures;
 mod thread_pool;
@@ -38,7 +38,7 @@ use crate::constants::ZERO_COPY_THRESHOLD;
 use crate::enums::{HttpMethod, LenPrefixedString};
 use crate::errors::{FfiError, FfiErrorCode};
 use crate::structures::{AddRouteResult, AppOptions, InitResult};
-use crate::thread_pool::shutdown_pool;
+use crate::thread_pool::{configure_thread_pool, shutdown_pool};
 use crate::types::HandleRequestCallback;
 use crate::types::{AppId, MutablePointer, ReadonlyPointer, RequestKey, StaticString, WorkerId};
 use crate::utils::ffi::{deserialize_json_pointer, make_result, take_len_prefixed_pointer};
@@ -81,6 +81,9 @@ pub unsafe extern "C" fn init(options_ptr: ReadonlyPointer) -> MutablePointer {
     }
 
     tracing::debug!("AppOptions: {:?}", options);
+
+    // Configure thread pool sizing from options before any tasks are submitted.
+    configure_thread_pool(options.workers, options.queue_capacity);
 
     let app_id = register_app(options.name.as_str());
 

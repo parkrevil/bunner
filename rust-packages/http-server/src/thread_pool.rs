@@ -14,21 +14,21 @@ static TASK_SENDER: OnceLock<xchan::Sender<Task>> = OnceLock::new();
 static TASK_RECEIVER: OnceLock<xchan::Receiver<Task>> = OnceLock::new();
 static WORKER_COUNT: OnceLock<usize> = OnceLock::new();
 static WORKER_HANDLES: OnceLock<std::sync::Mutex<Vec<JoinHandle<()>>>> = OnceLock::new();
-
-fn env_usize(key: &str, default: usize, min: usize, max: usize) -> usize {
-    std::env::var(key)
-        .ok()
-        .and_then(|s| s.parse::<usize>().ok())
-        .map(|v| v.clamp(min, max))
-        .unwrap_or(default)
-}
+static DESIRED_WORKERS: OnceLock<usize> = OnceLock::new();
+static DESIRED_CAPACITY: OnceLock<usize> = OnceLock::new();
 
 fn init() -> xchan::Sender<Task> {
     let default_workers = thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(4);
-    let workers = env_usize("BUNNER_HTTP_WORKERS", default_workers, 1, 256);
-    let capacity = env_usize("BUNNER_HTTP_QUEUE_CAP", 512, 1, 65_536);
+    let workers = DESIRED_WORKERS
+        .get()
+        .copied()
+        .unwrap_or(default_workers.clamp(1, 256));
+    let capacity = DESIRED_CAPACITY
+        .get()
+        .copied()
+        .unwrap_or(512usize.clamp(1, 65_536));
 
     let (tx, rx) = xchan::bounded::<Task>(capacity);
     let _ = TASK_RECEIVER.set(rx);
@@ -67,6 +67,13 @@ fn init() -> xchan::Sender<Task> {
     }
 
     tx
+}
+
+/// Configure the thread pool sizing before first use.
+/// Safe to call multiple times; the first call wins.
+pub fn configure_thread_pool(workers: u16, capacity: u32) {
+    let _ = DESIRED_WORKERS.set((workers as usize).clamp(1, 256));
+    let _ = DESIRED_CAPACITY.set((capacity as usize).clamp(1, 65_536));
 }
 
 #[tracing::instrument(level = "trace", skip(job))]

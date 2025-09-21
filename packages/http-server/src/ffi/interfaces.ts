@@ -52,6 +52,8 @@ export interface JSCallbackEntry<T> {
 export interface FfiOptions {
   appName: string;
   logLevel: LogLevel;
+  workers: number;
+  queueCapacity: number;
 }
 
 /**

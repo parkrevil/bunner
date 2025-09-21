@@ -11,6 +11,9 @@ pub struct AppOptions {
     pub name: String,
     #[serde(rename = "logLevel")]
     pub log_level: LogLevel,
+    pub workers: u16,
+    #[serde(rename = "queueCapacity")]
+    pub queue_capacity: u32,
 }
 
 impl AppOptions {

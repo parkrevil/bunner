@@ -35,8 +35,10 @@ export class Worker extends BaseWorker {
     await this.container.init();
 
     this.ffi = new Ffi(this.id, {
-      appName: params.appName,
+      appName: params.options.appName,
       logLevel: params.options.logLevel ?? LogLevel.Info,
+      workers: params.options.workers,
+      queueCapacity: params.options.queueCapacity,
     });
     this.ffi.init();
 

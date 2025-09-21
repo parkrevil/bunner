@@ -1,8 +1,8 @@
 import {
   BaseApplication,
   capitalize,
-  LogLevel,
   WorkerPool,
+  type BunnerApplicationNormalizedOptions,
   type RootModuleFile,
 } from '@bunner/core';
 import { Logger } from '@bunner/core-logger';
@@ -10,31 +10,31 @@ import type { Server } from 'bun';
 
 import { HttpMethod } from './enums';
 import { MethodNotAllowedError } from './errors';
-import type { BunnerHttpServerOptions } from './interfaces';
+import {
+  type BunnerHttpServerOptions,
+  type WorkerInitParams,
+} from './interfaces';
 import { Worker } from './worker';
 
 export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
-  private readonly name: string;
   private readonly rootModuleFile: RootModuleFile;
   private readonly logger = new Logger();
   private server: Server | undefined;
   private workerPool: WorkerPool<Worker>;
 
   constructor(
-    name: string,
     rootModuleFile: RootModuleFile,
-    options: BunnerHttpServerOptions,
+    options: BunnerApplicationNormalizedOptions<BunnerHttpServer>,
   ) {
     super();
 
-    this.name = name;
     this.server = undefined;
     this.rootModuleFile = rootModuleFile;
-    this.options = {
-      logLevel: options.logLevel ?? LogLevel.Info,
-    };
+    this.options = options;
+    this.options.port = this.options.port ?? 5000;
     this.workerPool = new WorkerPool<Worker>({
       script: new URL('./worker.ts', import.meta.url),
+      workers: options.workers,
     });
   }
 
@@ -42,11 +42,13 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
    * Initialize the server
    */
   async init() {
-    await this.workerPool.init({
-      appName: this.name,
+    await this.workerPool.init<WorkerInitParams>({
       rootModuleFile: this.rootModuleFile,
       options: {
-        ...this.options,
+        appName: this.options.name,
+        logLevel: this.options.logLevel,
+        workers: this.options.workers,
+        queueCapacity: this.options.queueCapacity,
       },
     });
 

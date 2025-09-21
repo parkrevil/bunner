@@ -1,5 +1,10 @@
-import { type BaseApplication, type BunnerModule } from './application';
-import type { BunnerApplicationOptions, Class } from './common';
+import {
+  type BaseApplication,
+  type BunnerApplicationBaseOptions,
+  type BunnerModule,
+  type CreateApplicationOptions,
+} from './application';
+import { LogLevel, type BunnerApplicationOptions, type Class } from './common';
 import { BunnerError } from './errors';
 import { MetadataKey } from './injector';
 
@@ -16,7 +21,7 @@ export class Bunner {
    * @param type - The type of the application
    * @returns The Bunner application
    */
-  static async create<T extends BaseApplication>(
+  static async create<TOpts, T extends BaseApplication<TOpts>>(
     appCls: Class<T>,
     rootModuleCls: Class<BunnerModule>,
     options?: BunnerApplicationOptions<T>,
@@ -42,25 +47,25 @@ export class Bunner {
       );
     }
 
-    const { name = this.generateApplicationDefaultName(), ...appOptions } =
-      options ?? ({} as BunnerApplicationOptions<T>);
+    const normalizedOptions = this.normalizeOptions<T, TOpts>(options);
 
-    if (this.apps.has(name)) {
-      throw new Error(`Application with name "${name}" already exists`);
+    if (this.apps.has(normalizedOptions.name)) {
+      throw new Error(
+        `Application with name "${normalizedOptions.name}" already exists`,
+      );
     }
 
     const app = new appCls(
-      name,
       {
         path: rootModuleMetadata.path,
         className: rootModuleCls.name,
       },
-      appOptions,
+      normalizedOptions,
     );
 
     await app.init();
 
-    this.apps.set(name, app);
+    this.apps.set(normalizedOptions.name, app);
 
     return app;
   }
@@ -111,6 +116,40 @@ export class Bunner {
    */
   private static generateApplicationDefaultName() {
     return `bunner--${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
+  }
+
+  /**
+   * Normalize application options
+   * @param options The application options
+   * @returns The normalized options
+   */
+  private static normalizeOptions<
+    T extends BaseApplication<any>,
+    O = T extends BaseApplication<infer OO> ? OO : never,
+  >(options?: BunnerApplicationOptions<T>): O & BunnerApplicationBaseOptions {
+    const {
+      name = this.generateApplicationDefaultName(),
+      logLevel = LogLevel.Debug,
+      queueCapacity = 8192,
+      workers: workersInput = Math.floor(navigator.hardwareConcurrency / 2) ??
+        1,
+      ...appOptions
+    } = (options ?? {}) as O & CreateApplicationOptions;
+
+    let workers = workersInput;
+    if (workers === 'full') {
+      workers = navigator.hardwareConcurrency;
+    } else if (workers === 'half') {
+      workers = Math.floor(navigator.hardwareConcurrency / 2) || 1;
+    }
+
+    return {
+      ...(appOptions as O),
+      name,
+      logLevel,
+      workers,
+      queueCapacity,
+    };
   }
 
   /**

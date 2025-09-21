@@ -1,4 +1,8 @@
-import type { BaseApplication, CreateApplicationOptions } from '../application';
+import type {
+  BaseApplication,
+  BunnerApplicationBaseOptions,
+  CreateApplicationOptions,
+} from '../application';
 
 /**
  * Class
@@ -16,3 +20,16 @@ export type BunnerApplicationOptions<T> = (T extends BaseApplication<infer O>
   ? O
   : never) &
   CreateApplicationOptions;
+
+/**
+ * Bunner App Options
+ * @description The options for creating a Bunner application
+ * @template T - The type of the application
+ * @template O - The type of the options
+ */
+export type BunnerApplicationNormalizedOptions<T> = (T extends BaseApplication<
+  infer O
+>
+  ? O
+  : never) &
+  Required<BunnerApplicationBaseOptions>;

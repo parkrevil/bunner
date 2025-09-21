@@ -9,7 +9,7 @@ export class WorkerPool<T> {
   private loadBalancer: LoadBalancer;
 
   constructor(options: WorkerPoolOptions) {
-    const size = options?.size ?? navigator.hardwareConcurrency;
+    const size = options?.workers ?? navigator.hardwareConcurrency;
 
     this.workerId = 0;
     this.loadBalancer = new LoadBalancer(size);
@@ -22,7 +22,7 @@ export class WorkerPool<T> {
     return this.workers[this.loadBalancer.acquire()]!;
   }
 
-  async init(params: any) {
+  async init<T>(params: T) {
     await Promise.all(
       this.workers.map(worker => (worker as any).init(++this.workerId, params)),
     );
