@@ -100,10 +100,7 @@ pub unsafe fn deserialize_json_pointer<T: DeserializeOwned>(
     let ptr_str = unsafe { take_len_prefixed_pointer(ptr, ZERO_COPY_THRESHOLD as usize)? };
     let ptr_str_ref = match &ptr_str {
         LenPrefixedString::Text(s) => s.as_str(),
-        LenPrefixedString::Bytes(b) => {
-            let s = unsafe { std::str::from_utf8_unchecked(b) };
-            s
-        }
+        LenPrefixedString::Bytes(b) => unsafe { std::str::from_utf8_unchecked(b) },
     };
 
     deserialize::<T>(ptr_str_ref)
