@@ -19,7 +19,6 @@ use parking_lot::RwLock;
 use std::sync::Arc;
 use structures::RouterResult;
 
-
 #[derive(Debug)]
 struct RouterInner {
     pub radix_tree: radix_tree::RadixTree,

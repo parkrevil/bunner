@@ -135,8 +135,8 @@ export class Bunner {
         1,
       ...appOptions
     } = (options ?? {}) as O & CreateApplicationOptions;
-
     let workers = workersInput;
+
     if (workers === 'full') {
       workers = navigator.hardwareConcurrency;
     } else if (workers === 'half') {

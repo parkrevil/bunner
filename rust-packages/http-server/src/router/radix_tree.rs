@@ -37,8 +37,8 @@ pub mod node;
 mod static_map;
 pub mod traversal;
 
-pub use node::RadixTreeNode;
 pub(crate) use alloc::{create_node_box_from_arena_pointer, NodeBox};
+pub use node::RadixTreeNode;
 
 #[derive(Debug, Default)]
 pub struct RadixTree {
@@ -81,7 +81,6 @@ impl RadixTree {
     pub fn finalize(&mut self) {
         builder::finalize(self);
     }
-
 
     pub fn insert_bulk<I>(
         &mut self,

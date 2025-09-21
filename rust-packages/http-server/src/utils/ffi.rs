@@ -103,7 +103,7 @@ pub unsafe fn deserialize_json_pointer<T: DeserializeOwned>(
         LenPrefixedString::Bytes(b) => {
             let s = unsafe { std::str::from_utf8_unchecked(b) };
             s
-        },
+        }
     };
 
     deserialize::<T>(ptr_str_ref)
