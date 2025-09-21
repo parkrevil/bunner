@@ -100,12 +100,9 @@ pub unsafe fn deserialize_json_pointer<T: DeserializeOwned>(
     let ptr_str = unsafe { take_len_prefixed_pointer(ptr, ZERO_COPY_THRESHOLD as usize)? };
     let ptr_str_ref = match &ptr_str {
         LenPrefixedString::Text(s) => s.as_str(),
-        // SAFETY: The FFI caller (TypeScript side) guarantees that the payload is valid UTF-8.
-        // Therefore we intentionally use `str::from_utf8_unchecked` here to avoid an extra check.
-        // This function is `unsafe` and the caller must uphold the UTF-8 guarantee.
-        LenPrefixedString::Bytes(b) => match std::str::from_utf8(b) {
-            Ok(s) => s,
-            Err(_) => return Err("payload is not valid UTF-8"),
+        LenPrefixedString::Bytes(b) => {
+            let s = unsafe { std::str::from_utf8_unchecked(b) };
+            s
         },
     };
 

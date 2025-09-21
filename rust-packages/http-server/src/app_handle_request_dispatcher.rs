@@ -14,18 +14,16 @@ struct CallbackJob {
     result_ptr: MutablePointer,
 }
 
-unsafe impl Send for CallbackJob {}
-
 struct WorkerQueue {
     tx: xchan::Sender<CallbackJob>,
     rx: xchan::Receiver<CallbackJob>,
 }
 
-pub struct AppDispatcher {
+pub struct AppHandleRequestDispatcher {
     workers: Mutex<HashMap<WorkerId, WorkerQueue>>,
 }
 
-impl AppDispatcher {
+impl AppHandleRequestDispatcher {
     pub fn new() -> Self {
         Self {
             workers: Mutex::new(HashMap::new()),
@@ -94,7 +92,7 @@ impl AppDispatcher {
     }
 }
 
-impl Default for AppDispatcher {
+impl Default for AppHandleRequestDispatcher {
     fn default() -> Self {
         Self::new()
     }

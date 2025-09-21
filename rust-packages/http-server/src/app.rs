@@ -1,10 +1,10 @@
+use crate::app_handle_request_dispatcher::AppHandleRequestDispatcher;
 use crate::app_registry::find_app;
 use crate::enums::{HttpMethod, HttpStatusCode, LenPrefixedString};
 use crate::errors::{FfiError, FfiErrorCode};
 use crate::middlewares::{
     BodyParser, CookieParser, HeaderParser, Lifecycle, MiddlewareChain, UrlParser,
 };
-use crate::request_callback_dispatcher::AppDispatcher;
 use crate::router::structures::RouterResult;
 use crate::router::{Router, RouterReadOnly};
 use crate::structures::{BunnerRequest, BunnerResponse, HandleRequestOutput, HandleRequestPayload};
@@ -25,7 +25,7 @@ pub struct App {
     app_id: AppId,
     router: Router,
     middleware_chain: Arc<MiddlewareChain>,
-    dispatcher: AppDispatcher,
+    handle_request_dispatcher: AppHandleRequestDispatcher,
 }
 
 impl App {
@@ -41,7 +41,7 @@ impl App {
             app_id,
             router: Router::new(None),
             middleware_chain: Arc::new(middleware_chain),
-            dispatcher: AppDispatcher::new(),
+            handle_request_dispatcher: AppHandleRequestDispatcher::new(),
         }
     }
 
@@ -66,13 +66,12 @@ impl App {
         self.router.seal();
     }
 
-    pub fn dispatcher(&self) -> &AppDispatcher {
-        &self.dispatcher
+    pub fn dispatcher(&self) -> &AppHandleRequestDispatcher {
+        &self.handle_request_dispatcher
     }
 
     pub fn handle_request(
         &self,
-        app_id: AppId,
         worker_id: WorkerId,
         cb: HandleRequestCallback,
         request_key: RequestKey,
@@ -82,7 +81,7 @@ impl App {
             Ok(r) => r,
             Err(e) => {
                 callback_handle_request(
-                    app_id,
+                    self.app_id,
                     worker_id,
                     cb,
                     request_key,
@@ -95,6 +94,7 @@ impl App {
         };
 
         let middleware_chain = self.middleware_chain.clone();
+        let app_id = self.app_id;
 
         match submit_job(Box::new(move || {
             process_request(

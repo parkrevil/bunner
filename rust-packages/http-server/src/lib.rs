@@ -14,7 +14,7 @@ pub mod enums;
 pub mod errors;
 pub mod middlewares;
 pub mod pointer_registry;
-pub mod request_callback_dispatcher;
+pub mod app_handle_request_dispatcher;
 pub mod router;
 pub mod structures;
 mod thread_pool;
@@ -277,7 +277,7 @@ pub unsafe extern "C" fn handle_request(
             }
         };
 
-    app.handle_request(app_id, worker_id, cb, request_key, payload_str);
+    app.handle_request(worker_id, cb, request_key, payload_str);
 }
 
 /// Seals the router, optimizing it for fast lookups. No routes can be added after sealing.
