@@ -7,7 +7,7 @@ use crate::types::{LengthHeaderSize, MutablePointer, ReadonlyPointer, StaticStri
 
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use std::{slice, str::from_utf8_unchecked};
+use std::slice;
 
 /// Serialize `value` to JSON string and return a len-prefixed raw pointer allocated/registered by Rust.
 pub fn make_result<T: Serialize>(value: &T) -> MutablePointer {
@@ -103,7 +103,10 @@ pub unsafe fn deserialize_json_pointer<T: DeserializeOwned>(
         // SAFETY: The FFI caller (TypeScript side) guarantees that the payload is valid UTF-8.
         // Therefore we intentionally use `str::from_utf8_unchecked` here to avoid an extra check.
         // This function is `unsafe` and the caller must uphold the UTF-8 guarantee.
-        LenPrefixedString::Bytes(b) => unsafe { from_utf8_unchecked(b) },
+        LenPrefixedString::Bytes(b) => match std::str::from_utf8(b) {
+            Ok(s) => s,
+            Err(_) => return Err("payload is not valid UTF-8"),
+        },
     };
 
     deserialize::<T>(ptr_str_ref)
