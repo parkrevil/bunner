@@ -101,37 +101,36 @@ export class WorkerPool<T extends BaseWorker> {
 
   private spawnWorker(id: number): WrappedWorker<T> {
     const native = new Worker(this.script.href);
-    const onError = this.handleCrash('error', id).bind(this);
-    const onMessageError = this.handleCrash('messageerror', id).bind(this);
-    const onClose = this.handleCrash('close', id).bind(this);
 
     native.addEventListener('error', (e: unknown) => {
-      void onError(e);
+      void this.handleCrash('error', id, e);
     });
     native.addEventListener('messageerror', (e: unknown) => {
-      void onMessageError(e);
+      void this.handleCrash('messageerror', id, e);
     });
     native.addEventListener('close', (e: unknown) => {
-      void onClose(e);
+      void this.handleCrash('close', id, e);
     });
 
     return { remote: wrap<T>(native), native };
   }
 
-  private handleCrash(event: 'error' | 'messageerror' | 'close', id: number) {
-    return async (e: unknown) => {
-      if (this.destroying) {
-        return;
-      }
+  private async handleCrash(
+    event: 'error' | 'messageerror' | 'close',
+    id: number,
+    e: unknown,
+  ) {
+    if (this.destroying) {
+      return;
+    }
 
-      console.error(`💥 Worker #${id} ${event}: `, e);
+    console.error(`💥 Worker #${id} ${event}: `, e);
 
-      await this.destroyWorker(id).catch(() => {});
+    await this.destroyWorker(id).catch(() => {});
 
-      this.workers[id] = undefined;
+    this.workers[id] = undefined;
 
-      this.reviveWorker(id);
-    };
+    this.reviveWorker(id);
   }
 
   private reviveWorker(id: number) {
