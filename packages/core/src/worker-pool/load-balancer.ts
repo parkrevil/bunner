@@ -1,18 +1,18 @@
 import type { WorkerStats, WorkerSlot } from './interfaces';
 
 export class LoadBalancer {
-  private readonly alpha = 0.15;
+  private readonly alpha = 0.2;
   private readonly eps = 1e-6;
-  private readonly memoryLimit = 256 * 1024 * 1024;
+  private readonly memoryLimit = 512 * 1024 * 1024;
   private slots: WorkerSlot[];
   private weights = {
-    active: 0.3,
-    cpu: 0.15,
-    mem: 0.2,
+    active: 0.7,
+    cpu: 0.25,
+    mem: 0.05,
   };
 
-  constructor(workerCount: number) {
-    this.slots = Array.from({ length: workerCount }, (_, index) => ({
+  constructor(count: number) {
+    this.slots = Array.from({ length: count }, (_, index) => ({
       id: index,
       active: 0,
       cpu: 0,

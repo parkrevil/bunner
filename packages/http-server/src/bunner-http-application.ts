@@ -34,7 +34,7 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
     this.options.port = this.options.port ?? 5000;
     this.workerPool = new WorkerPool<BunnerHttpWorker>({
       script: new URL('./bunner-http-worker.ts', import.meta.url),
-      workers: options.workers,
+      size: options.workers,
     });
   }
 

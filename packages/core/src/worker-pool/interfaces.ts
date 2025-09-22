@@ -5,7 +5,7 @@ import type { Remote } from 'comlink';
  */
 export interface WorkerPoolOptions {
   script: URL;
-  workers?: number;
+  size: number;
 }
 
 export interface WrappedWorker<T> {

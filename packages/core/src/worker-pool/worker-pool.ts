@@ -10,7 +10,7 @@ export class WorkerPool<T extends BaseWorker> {
   private statsTimer: ReturnType<typeof setInterval> | undefined;
 
   constructor(options: WorkerPoolOptions) {
-    const size = options?.workers ?? navigator.hardwareConcurrency;
+    const size = options?.size ?? navigator.hardwareConcurrency;
 
     this.loadBalancer = new LoadBalancer(size);
     this.workers = Array.from({ length: size }, () => {
