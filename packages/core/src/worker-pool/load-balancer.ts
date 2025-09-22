@@ -43,7 +43,17 @@ export class LoadBalancer {
     return bestSlot.id;
   }
 
-  release(id: number) {
+  increaseActive(id: number) {
+    const slot = this.slots[id];
+
+    if (!slot) {
+      return;
+    }
+
+    slot.active++;
+  }
+
+  decreaseActive(id: number) {
     const slot = this.slots[id];
 
     if (!slot) {

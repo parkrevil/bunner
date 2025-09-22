@@ -9,9 +9,9 @@ export abstract class BaseWorker {
     this.prevCpu = process.cpuUsage();
   }
 
-  abstract init(workerId: WorkerId, params: any): void | Promise<void>;
+  abstract init(workerId: WorkerId, params?: any): void | Promise<void>;
 
-  abstract bootstrap(params: any): void | Promise<void>;
+  abstract bootstrap(params?: any): void | Promise<void>;
 
   abstract destroy(): void | Promise<void>;
 

@@ -3,11 +3,12 @@ import { Logger } from '@bunner/core-logger';
 import { expose } from 'comlink';
 
 import { HttpError } from './errors';
-import { Ffi, type HandleRequestParams } from './ffi';
+import { Ffi } from './ffi';
+import type { HandleRequestParams } from './ffi/interfaces';
 import type { WorkerInitParams } from './interfaces';
 import { RouteHandler } from './route-handler';
 
-export class BunnerHttpWorker extends BaseWorker {
+export class AppWorker extends BaseWorker {
   private readonly logger = new Logger();
   private container: Container;
   private ffi: Ffi;
@@ -22,7 +23,7 @@ export class BunnerHttpWorker extends BaseWorker {
   }
 
   async init(workerId: WorkerId, params: WorkerInitParams) {
-    console.log(`🔧 Bunner HTTP Worker #${workerId} is initializing...`);
+    console.log('🔧 Worker is initializing...');
 
     this.id = workerId;
 
@@ -46,7 +47,7 @@ export class BunnerHttpWorker extends BaseWorker {
   }
 
   bootstrap() {
-    console.log(`🚀 Bunner HTTP Worker #${this.id} is bootstrapping...`);
+    console.log('🚀 Worker is bootstrapping...');
 
     this.ffi.sealRoutes();
     this.ffi.dispatchRequestCallback();
@@ -106,4 +107,4 @@ export class BunnerHttpWorker extends BaseWorker {
   }
 }
 
-expose(new BunnerHttpWorker());
+expose(new AppWorker());

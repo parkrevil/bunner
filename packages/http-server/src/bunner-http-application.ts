@@ -11,10 +11,7 @@ import type { Server } from 'bun';
 import { BunnerHttpWorker } from './bunner-http-worker';
 import { HttpMethod } from './enums';
 import { MethodNotAllowedError } from './errors';
-import {
-  type BunnerHttpServerOptions,
-  type WorkerInitParams,
-} from './interfaces';
+import { type BunnerHttpServerOptions } from './interfaces';
 
 export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
   private readonly rootModuleFile: RootModuleFile;
@@ -42,7 +39,7 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
    * Initialize the server
    */
   async init() {
-    await this.workerPool.init<WorkerInitParams>({
+    await this.workerPool.init({
       rootModuleFile: this.rootModuleFile,
       options: {
         appName: this.options.name,
@@ -74,7 +71,7 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
             throw new MethodNotAllowedError();
           }
 
-          let body: ArrayBuffer | null;
+          let body: string | null;
 
           if (
             httpMethod === HttpMethod.Get ||
@@ -83,10 +80,10 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
           ) {
             body = null;
           } else {
-            body = await req.arrayBuffer();
+            body = await req.text();
           }
 
-          await this.workerPool.worker.handleRequest({
+          await this.workerPool.call('handleRequest', {
             httpMethod,
             url: req.url,
             headers: req.headers.toJSON(),
