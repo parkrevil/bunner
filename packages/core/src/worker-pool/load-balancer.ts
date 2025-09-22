@@ -1,10 +1,12 @@
+import { BunnerError } from '../errors';
+
 import type { WorkerStats, WorkerSlot } from './interfaces';
 
 export class LoadBalancer {
   private readonly alpha = 0.2;
   private readonly eps = 1e-6;
   private readonly memoryLimit = 512 * 1024 * 1024;
-  private slots: WorkerSlot[];
+  private slots: Array<WorkerSlot | undefined>;
   private weights = {
     active: 0.7,
     cpu: 0.25,
@@ -12,55 +14,68 @@ export class LoadBalancer {
   };
 
   constructor(count: number) {
-    this.slots = Array.from({ length: count }, (_, index) => ({
-      id: index,
+    this.slots = Array.from({ length: count }, () => ({
       active: 0,
       cpu: 0,
       memory: 0,
     }));
   }
 
+  addSlot(id: number) {
+    this.slots[id] = {
+      active: 0,
+      cpu: 0,
+      memory: 0,
+    };
+  }
+
+  deleteSlot(id: number) {
+    this.slots[id] = undefined;
+  }
+
   acquire() {
-    if (this.slots.length === 0) {
-      throw new Error('no worker slots');
+    const slots = this.slots.filter(Boolean);
+
+    if (!slots.length) {
+      throw new BunnerError('no worker slots');
     }
 
-    let bestSlot = this.slots[0]!;
-    let bestScore = this.getSlotScore(bestSlot);
+    let bestSlot: number | undefined;
+    let bestScore: number;
 
-    for (let i = 1; i < this.slots.length; i++) {
-      const slot = this.slots[i]!;
-      const score = this.getSlotScore(slot);
+    slots.forEach((slot, id) => {
+      if (bestSlot === undefined) {
+        bestSlot = id;
+        bestScore = this.getScore(slot);
+
+        return;
+      }
+
+      const score = this.getScore(slot);
 
       if (score < bestScore) {
-        bestSlot = slot;
+        bestSlot = id;
         bestScore = score;
       }
-    }
+    });
 
-    bestSlot.active++;
-
-    return bestSlot.id;
+    return bestSlot;
   }
 
   increaseActive(id: number) {
-    const slot = this.slots[id];
-
-    if (!slot) {
+    if (!this.slots[id]) {
       return;
     }
 
-    slot.active++;
+    this.slots[id].active++;
   }
 
   decreaseActive(id: number) {
-    const slot = this.slots[id];
-
-    if (!slot) {
+    if (!this.slots[id]) {
       return;
     }
 
-    slot.active = Math.max(0, slot.active - 1);
+    this.slots[id].active = Math.max(0, this.slots[id].active - 1);
   }
 
   updateStats(id: number, stats: WorkerStats) {
@@ -82,7 +97,11 @@ export class LoadBalancer {
     slot.memory = this.alpha * memory + (1 - this.alpha) * slot.memory;
   }
 
-  private getSlotScore(slot: WorkerSlot) {
+  private getScore(slot: WorkerSlot | undefined) {
+    if (!slot) {
+      return Infinity;
+    }
+
     const active = slot.active / (slot.active + 1 + this.eps);
     const cpu = Math.max(0, Math.min(1, slot.cpu));
     const mem = Math.max(0, Math.min(1, slot.memory));

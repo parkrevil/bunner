@@ -18,7 +18,6 @@ export interface WrappedWorker<T> {
  * @description The slot interface for a worker in the pool
  */
 export interface WorkerSlot {
-  id: number;
   active: number;
   cpu: number;
   memory: number;

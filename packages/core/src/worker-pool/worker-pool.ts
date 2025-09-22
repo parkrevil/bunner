@@ -2,6 +2,7 @@ import { releaseProxy, wrap } from 'comlink';
 import { backOff } from 'exponential-backoff';
 
 import type { ClassProperties, MethodParams, MethodReturn } from '../common';
+import { BunnerError } from '../errors';
 
 import type { BaseWorker } from './base-worker';
 import type { WrappedWorker, WorkerPoolOptions } from './interfaces';
@@ -54,18 +55,37 @@ export class WorkerPool<T extends BaseWorker> {
     method: K,
     ...args: MethodParams<T, K>
   ): Promise<Awaited<MethodReturn<T, K>>> {
-    // TODO Worker 가 없을 경우 대응 필요
-    const workerId = this.loadBalancer.acquire();
-    const remote = this.workers[workerId]!.remote;
+    let workerId: number | undefined;
+    let increased = false;
 
     try {
+      workerId = this.loadBalancer.acquire();
+
+      if (workerId === undefined) {
+        throw new BunnerError('no available workers');
+      }
+
+      const remote = this.workers[workerId]?.remote;
+
+      if (!remote) {
+        this.loadBalancer.deleteSlot(workerId);
+
+        throw new BunnerError(`worker ${workerId} is not available`);
+      }
+
       const fn = remote[method] as unknown as (
         ...args: MethodParams<T, K>
       ) => Promise<Awaited<MethodReturn<T, K>>>;
 
+      this.loadBalancer.increaseActive(workerId);
+
+      increased = true;
+
       return fn(...args);
     } finally {
-      this.loadBalancer.decreaseActive(workerId);
+      if (workerId && increased) {
+        this.loadBalancer.decreaseActive(workerId);
+      }
     }
   }
 
@@ -161,6 +181,7 @@ export class WorkerPool<T extends BaseWorker> {
 
         this.workers[id] = worker;
 
+        this.loadBalancer.addSlot(id);
         this.reviving.delete(id);
       },
       {
@@ -178,6 +199,8 @@ export class WorkerPool<T extends BaseWorker> {
   }
 
   private async destroyWorker(id: number) {
+    this.loadBalancer.deleteSlot(id);
+
     const worker = this.workers[id];
 
     if (!worker) {
