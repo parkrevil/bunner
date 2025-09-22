@@ -17,9 +17,9 @@ import type { AppId } from './types';
 import { isPointer, pointerToJson } from './utils';
 
 export abstract class BaseFfi<T extends BaseFfiSymbols> {
+  protected appId: AppId;
   protected symbols: T;
   protected close: () => void;
-  protected appId: AppId;
 
   constructor(libPath: string, api: Record<keyof T, FFIFunction>) {
     const lib = dlopen(libPath, api);
@@ -51,15 +51,9 @@ export abstract class BaseFfi<T extends BaseFfiSymbols> {
    * @description Destroy the Rust core
    */
   destroy() {
-    if (!this.appId) {
-      return;
-    }
-
     this.symbols.destroy(this.appId);
-    this.close();
 
-    this.appId = undefined as any;
-    this.close = undefined as any;
+    this.close();
   }
 
   /**

@@ -8,19 +8,19 @@ import {
 import { Logger } from '@bunner/core-logger';
 import type { Server } from 'bun';
 
+import { BunnerHttpWorker } from './bunner-http-worker';
 import { HttpMethod } from './enums';
 import { MethodNotAllowedError } from './errors';
 import {
   type BunnerHttpServerOptions,
   type WorkerInitParams,
 } from './interfaces';
-import { Worker } from './worker';
 
 export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
   private readonly rootModuleFile: RootModuleFile;
   private readonly logger = new Logger();
   private server: Server | undefined;
-  private workerPool: WorkerPool<Worker>;
+  private workerPool: WorkerPool<BunnerHttpWorker>;
 
   constructor(
     rootModuleFile: RootModuleFile,
@@ -32,8 +32,8 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
     this.rootModuleFile = rootModuleFile;
     this.options = options;
     this.options.port = this.options.port ?? 5000;
-    this.workerPool = new WorkerPool<Worker>({
-      script: new URL('./worker.ts', import.meta.url),
+    this.workerPool = new WorkerPool<BunnerHttpWorker>({
+      script: new URL('./bunner-http-worker.ts', import.meta.url),
       workers: options.workers,
     });
   }
@@ -109,14 +109,9 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
    * @returns A promise that resolves to true if the application stopped successfully
    */
   async shutdown(force = false) {
-    if (!this.server) {
-      return;
-    }
+    console.log('🛑 HTTP Server is shutting down...');
 
-    await this.server.stop(force);
-
-    // TODO send destroy message to worker
-
-    this.server = undefined;
+    await this.workerPool.destroy();
+    await this.server?.stop(force);
   }
 }

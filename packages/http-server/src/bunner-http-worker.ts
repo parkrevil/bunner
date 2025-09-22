@@ -7,7 +7,7 @@ import { Ffi } from './ffi';
 import type { WorkerInitParams } from './interfaces';
 import { RouteHandler } from './route-handler';
 
-export class Worker extends BaseWorker {
+export class BunnerHttpWorker extends BaseWorker {
   private readonly logger = new Logger();
   private container: Container;
   private ffi: Ffi;
@@ -22,7 +22,7 @@ export class Worker extends BaseWorker {
   }
 
   async init(workerId: WorkerId, params: WorkerInitParams) {
-    console.log('🔧 Worker is initializing...');
+    console.log(`🔧 Bunner HTTP Worker #${workerId} is initializing...`);
 
     this.id = workerId;
 
@@ -46,7 +46,7 @@ export class Worker extends BaseWorker {
   }
 
   bootstrap() {
-    console.log('🚀 Worker is bootstrapping...');
+    console.log(`🚀 Bunner HTTP Worker #${this.id} is bootstrapping...`);
 
     this.ffi.sealRoutes();
     this.ffi.dispatchRequestCallback();
@@ -99,9 +99,11 @@ export class Worker extends BaseWorker {
     }
   }
 
-  shutdown() {
+  destroy() {
+    console.log(`🛑 Worker #${this.id} is destroying...`);
+
     this.ffi.destroy();
   }
 }
 
-expose(new Worker());
+expose(new BunnerHttpWorker());

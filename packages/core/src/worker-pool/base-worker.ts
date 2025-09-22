@@ -13,6 +13,8 @@ export abstract class BaseWorker {
 
   abstract bootstrap(params: any): void | Promise<void>;
 
+  abstract destroy(): void | Promise<void>;
+
   getStats() {
     const currentCpu = process.cpuUsage(this.prevCpu);
     const totalCpu = (currentCpu.user ?? 0) + (currentCpu.system ?? 0);

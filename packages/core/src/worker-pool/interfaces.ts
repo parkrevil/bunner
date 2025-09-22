@@ -1,9 +1,16 @@
+import type { Remote } from 'comlink';
+
 /**
  * Options for configuring a worker pool.
  */
 export interface WorkerPoolOptions {
   script: URL;
   workers?: number;
+}
+
+export interface WrappedWorker<T> {
+  remote: Remote<T>;
+  native: Worker;
 }
 
 /**

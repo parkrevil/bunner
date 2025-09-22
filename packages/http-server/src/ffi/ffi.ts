@@ -206,25 +206,21 @@ export class Ffi extends BaseFfi<FfiSymbols> {
   }
 
   /**
-   * Stop the dispatch loop on next tick.
-   */
-  stopCallbackDispatchLoop() {}
-
-  /**
    * Gracefully destroy and reject all pending callbacks
    */
   override destroy() {
+    console.log('🛑 FFI is destroying...');
+
     this.destroyed = true;
 
     const err = new BunnerFfiError('Core destroyed');
 
     for (const [id, entry] of this.pendingHandleRequests) {
-      entry.reject?.(err);
+      entry.reject(err);
 
       this.pendingHandleRequests.delete(id);
     }
 
-    this.stopCallbackDispatchLoop();
     super.destroy();
   }
 
