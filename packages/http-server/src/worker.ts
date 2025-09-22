@@ -9,7 +9,6 @@ import { RouteHandler } from './route-handler';
 
 export class Worker extends BaseWorker {
   private readonly logger = new Logger();
-  private id: WorkerId;
   private container: Container;
   private ffi: Ffi;
   private routeHandler: RouteHandler;
