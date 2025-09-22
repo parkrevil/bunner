@@ -1,3 +1,4 @@
+import { nanoseconds } from 'bun';
 import { releaseProxy, wrap } from 'comlink';
 import { backOff } from 'exponential-backoff';
 
@@ -51,7 +52,7 @@ export class WorkerPool<T extends BaseWorker> {
    * @param args Arguments to pass to the method.
    * @returns The result of the method call.
    */
-  call<K extends ClassProperties<T>>(
+  async call<K extends ClassProperties<T>>(
     method: K,
     ...args: MethodParams<T, K>
   ): Promise<Awaited<MethodReturn<T, K>>> {
@@ -65,15 +66,13 @@ export class WorkerPool<T extends BaseWorker> {
         throw new BunnerError('no available workers');
       }
 
-      const remote = this.workers[workerId]?.remote;
-
-      if (!remote) {
+      if (!this.workers[workerId]) {
         this.loadBalancer.deleteSlot(workerId);
 
         throw new BunnerError(`worker ${workerId} is not available`);
       }
 
-      const fn = remote[method] as unknown as (
+      const fn = this.workers[workerId]!.remote[method] as unknown as (
         ...args: MethodParams<T, K>
       ) => Promise<Awaited<MethodReturn<T, K>>>;
 
@@ -81,9 +80,9 @@ export class WorkerPool<T extends BaseWorker> {
 
       increased = true;
 
-      return fn(...args);
+      return await fn(...args);
     } finally {
-      if (workerId && increased) {
+      if (workerId !== undefined && increased) {
         this.loadBalancer.decreaseActive(workerId);
       }
     }
@@ -93,11 +92,13 @@ export class WorkerPool<T extends BaseWorker> {
    * Initialize the worker pool.
    * @param params Parameters to pass to each worker's init method.
    */
-  async init(params: InitParams<T>) {
+  async init(params?: InitParams<T>) {
     this.initParams = params;
 
     await Promise.all(
-      this.workers.map((worker, index) => worker?.remote.init(index, params)),
+      this.workers
+        .filter(Boolean)
+        .map((worker, index) => worker?.remote.init(index, params)),
     );
 
     if (!this.statsTimer) {
@@ -111,11 +112,13 @@ export class WorkerPool<T extends BaseWorker> {
    * Bootstrap the worker pool.
    * @param params Parameters to pass to each worker's bootstrap method.
    */
-  async bootstrap(params: BootstrapParams<T>) {
+  async bootstrap(params?: BootstrapParams<T>) {
     this.bootstrapParams = params;
 
     await Promise.all(
-      this.workers.map(worker => worker?.remote.bootstrap(params)),
+      this.workers
+        .filter(Boolean)
+        .map(worker => worker?.remote.bootstrap(params)),
     );
   }
 
@@ -216,13 +219,21 @@ export class WorkerPool<T extends BaseWorker> {
   private async collectWorkerStats() {
     await Promise.all(
       this.workers.map(async (worker, id) => {
-        const stats = await worker?.remote.getStats().catch(() => null);
+        if (!worker) {
+          return;
+        }
+
+        const startTime = nanoseconds();
+        const stats = await worker.remote.getStats().catch(() => null);
 
         if (!stats) {
           return;
         }
 
-        this.loadBalancer.updateStats(id, stats);
+        this.loadBalancer.updateStats(id, {
+          ...stats,
+          responseTime: nanoseconds() - startTime,
+        });
       }),
     );
   }

@@ -6,6 +6,8 @@ import {
   FFIType,
 } from 'bun:ffi';
 
+import type { SyncFunction } from '../common';
+
 import { BunnerFfiError } from './errors';
 import { FfiPointer } from './ffi-pointer';
 import { isFfiErrorReport, makeFfiError } from './helpers';
@@ -94,8 +96,8 @@ export abstract class BaseFfi<T extends BaseFfiSymbols> {
    * @param options The FFIFunction options for the JSCallback
    * @returns A JSCallback instance wrapping the handler
    */
-  protected createJsCallback(
-    handler: Function,
+  protected createJsCallback<F extends (...args: any[]) => unknown>(
+    handler: SyncFunction<F>,
     options: CreateJsCallbackOptions,
   ) {
     const { callOnce = false, ...ffiOptions } = options;
@@ -118,7 +120,15 @@ export abstract class BaseFfi<T extends BaseFfiSymbols> {
           pointers.push(args[index]);
         });
 
-        const result = handler.bind(this)(...args);
+        const fn = (handler as (...args: any[]) => unknown).bind(this);
+        const result = fn(...args);
+
+        // Runtime guard: disallow thenable results (async behavior)
+        if (result && typeof (result as any).then === 'function') {
+          throw new BunnerFfiError(
+            'Async handlers are not supported in JSCallback. Handler returned a Promise.',
+          );
+        }
 
         return result;
       } finally {

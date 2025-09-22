@@ -21,6 +21,7 @@ export interface WorkerSlot {
   active: number;
   cpu: number;
   memory: number;
+  responseTime: number;
 }
 
 /**

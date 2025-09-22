@@ -91,3 +91,11 @@ export type MethodSecondParam<T, K extends ClassProperties<T>> = T[K] extends (
 ) => any
   ? S
   : never;
+
+/**
+ * Sync Function
+ * @description A function that is not async (does not return a Promise)
+ * @template T - The type of the function
+ */
+export type SyncFunction<T extends (...args: any[]) => unknown> =
+  ReturnType<T> extends Promise<any> ? never : T;
