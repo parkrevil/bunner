@@ -27,8 +27,13 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
 
     this.server = undefined;
     this.rootModuleFile = rootModuleFile;
-    this.options = options;
-    this.options.port = this.options.port ?? 5000;
+    this.options = {
+      ...{
+        port: 5000,
+        bodyLimit: 10 * 1024 * 1024, // 10 MB
+      },
+      ...options,
+    };
     this.workerPool = new WorkerPool<BunnerHttpWorker>({
       script: new URL('./bunner-http-worker.ts', import.meta.url),
       size: options.workers,
@@ -59,13 +64,14 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
     await this.workerPool.bootstrap();
 
     this.server = Bun.serve({
-      port: 5000,
+      port: this.options.port,
+      maxRequestBodySize: this.options.bodyLimit,
       fetch: async (req: Request) => {
         try {
-          const httpMethod =
-            HttpMethod[
-              capitalize(req.method.toUpperCase()) as keyof typeof HttpMethod
-            ];
+          const normalizedHttpMethod = capitalize(
+            req.method.toUpperCase(),
+          ) as keyof typeof HttpMethod;
+          const httpMethod = HttpMethod[normalizedHttpMethod];
 
           if (httpMethod === undefined) {
             throw new MethodNotAllowedError();
@@ -75,6 +81,7 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
 
           if (
             httpMethod === HttpMethod.Get ||
+            httpMethod === HttpMethod.Delete ||
             httpMethod === HttpMethod.Head ||
             httpMethod === HttpMethod.Options
           ) {

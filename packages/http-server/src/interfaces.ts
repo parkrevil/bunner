@@ -7,6 +7,7 @@ import type { HandlerFunction } from './types';
 
 export interface BunnerHttpServerOptions {
   port: number;
+  bodyLimit: number;
 }
 
 /**
