@@ -96,9 +96,9 @@ export class WorkerPool<T extends BaseWorker> {
     this.initParams = params;
 
     await Promise.all(
-      this.workers
-        .filter(Boolean)
-        .map((worker, index) => worker?.remote.init(index, params)),
+      this.workers.map((worker, id) =>
+        worker ? worker.remote.init(id, params) : Promise.resolve(),
+      ),
     );
 
     if (!this.statsTimer) {
@@ -116,9 +116,9 @@ export class WorkerPool<T extends BaseWorker> {
     this.bootstrapParams = params;
 
     await Promise.all(
-      this.workers
-        .filter(Boolean)
-        .map(worker => worker?.remote.bootstrap(params)),
+      this.workers.map(worker =>
+        worker ? worker.remote.bootstrap(params) : Promise.resolve(),
+      ),
     );
   }
 
