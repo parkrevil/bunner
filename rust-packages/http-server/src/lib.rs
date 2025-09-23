@@ -335,7 +335,7 @@ pub unsafe extern "C" fn dispatch_request_callback(app_id: AppId, worker_id: Wor
         None => return,
     };
 
-    app.dispatcher().run_foreground_loop(worker_id);
+    app.dispatcher().dispatch_callback(worker_id);
 }
 
 fn get_app<'a>(app_id: AppId, stage: StaticString) -> Result<&'a App, Box<FfiError>> {

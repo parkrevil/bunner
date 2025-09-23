@@ -74,7 +74,7 @@ impl AppRequestCallbackDispatcher {
     }
 
     /// Run a foreground loop for a specific worker, consuming only that worker's queue.
-    pub fn run_foreground_loop(&self, worker_id: WorkerId) {
+    pub fn dispatch_callback(&self, worker_id: WorkerId) {
         let rx = { self.get_or_create(worker_id).rx };
         let mut remaining = rx.len();
 
