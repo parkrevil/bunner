@@ -100,7 +100,8 @@ impl Middleware for HeaderParser {
         req.subdomains = req
             .hostname
             .as_ref()
-            .map(|hostname| compute_subdomains(hostname));
+            .map(|hostname| compute_subdomains(hostname))
+            .unwrap_or_default();
 
         if let Some(ct) = payload.headers.get("content-type") {
             let ct_trimmed = ct.trim();

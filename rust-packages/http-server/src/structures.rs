@@ -5,6 +5,10 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+fn empty_json_object() -> serde_json::Value {
+    serde_json::Value::Object(serde_json::Map::new())
+}
+
 #[derive(Deserialize, Debug, Clone)]
 pub struct AppOptions {
     #[serde(rename = "appName")]
@@ -51,12 +55,10 @@ pub struct RequestMetadata {
 pub struct BunnerRequest {
     pub request_id: String,
     pub http_method: HttpMethod,
-    #[serde(skip_serializing, skip_deserializing)]
     pub url: String,
     pub path: String,
     pub query_string: Option<String>,
     #[serde(default)]
-    #[serde(skip_serializing)]
     pub headers: HashMap<String, String>,
     // Derived by header/url parser middleware
     pub protocol: Option<String>,
@@ -64,15 +66,19 @@ pub struct BunnerRequest {
     pub hostname: Option<String>,
     pub port: Option<u16>,
     pub ip: Option<String>,
-    pub ips: Option<Vec<String>>,
+    #[serde(default)]
+    pub ips: Vec<String>,
     pub is_trusted_proxy: bool,
-    pub subdomains: Option<Vec<String>>,
+    #[serde(default)]
+    pub subdomains: Vec<String>,
     pub cookies: serde_json::Value,
     pub content_type: Option<String>,
     pub content_length: Option<u64>,
     pub charset: Option<String>,
-    pub params: Option<serde_json::Value>,
-    pub query_params: Option<serde_json::Value>,
+    #[serde(default = "empty_json_object")]
+    pub params: serde_json::Value,
+    #[serde(default = "empty_json_object")]
+    pub query_params: serde_json::Value,
     pub body: Option<serde_json::Value>,
 }
 

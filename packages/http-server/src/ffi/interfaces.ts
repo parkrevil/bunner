@@ -110,22 +110,24 @@ export interface HandleRequestResult extends HandleRequestOutput {
 export interface FfiBunnerRequest {
   requestId: string;
   httpMethod: HttpMethod;
+  url: string;
   path: string;
+  headers: Record<string, string>;
   protocol: string | null;
   host: string | null;
   hostname: string | null;
   port: number | null;
   queryString: string | null;
   ip: string | null;
-  ips: string[] | null;
+  ips: string[];
   isTrustedProxy: boolean;
-  subdomains: string[] | null;
+  subdomains: string[];
   cookies: Record<string, any>;
   contentType: string | null;
   contentLength: number | null;
   charset: string | null;
-  params: Record<string, any> | null;
-  queryParams: Record<string, any> | null;
+  params: Record<string, any>;
+  queryParams: Record<string, any>;
   body: string | Record<string, any> | null;
 }
 

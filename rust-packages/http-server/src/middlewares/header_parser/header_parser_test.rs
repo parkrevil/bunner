@@ -4,7 +4,7 @@ mod handle {
     use crate::middlewares::Middleware;
     use crate::middlewares::header_parser::HeaderParser;
     use crate::structures::{BunnerRequest, BunnerResponse, HandleRequestPayload, RequestMetadata};
-    use serde_json::Value;
+    use serde_json::{Map, Value};
     use std::collections::HashMap;
 
     fn build_request() -> BunnerRequest {
@@ -20,15 +20,15 @@ mod handle {
             hostname: None,
             port: None,
             ip: None,
-            ips: None,
+            ips: Vec::new(),
             is_trusted_proxy: false,
-            subdomains: None,
-            cookies: Value::Null,
+            subdomains: Vec::new(),
+            cookies: Value::Object(Map::new()),
             content_type: None,
             content_length: None,
             charset: None,
-            params: None,
-            query_params: None,
+            params: Value::Object(Map::new()),
+            query_params: Value::Object(Map::new()),
             body: None,
         }
     }
@@ -73,7 +73,7 @@ mod handle {
             req.headers.get("host").map(|s| s.as_str()),
             Some("example.com")
         );
-        assert_eq!(req.subdomains, Some(vec![]));
+        assert!(req.subdomains.is_empty());
     }
 
     #[test]
@@ -164,7 +164,7 @@ mod handle {
         assert_eq!(req.host.as_deref(), Some("app.api.eu.example.com"));
         assert_eq!(
             req.subdomains,
-            Some(vec!["app".to_string(), "api".to_string(), "eu".to_string()])
+            vec!["app".to_string(), "api".to_string(), "eu".to_string()]
         );
     }
 

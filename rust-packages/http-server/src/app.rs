@@ -205,15 +205,15 @@ fn process_request(
         hostname: None,
         port: None,
         ip: payload.request.ip.clone(),
-        ips: payload.request.ips.clone(),
+        ips: payload.request.ips.clone().unwrap_or_default(),
         is_trusted_proxy: payload.request.is_trusted_proxy,
-        subdomains: None,
+        subdomains: Vec::new(),
         cookies: serde_json::Value::Object(serde_json::Map::new()),
         content_type: None,
         content_length: None,
         charset: None,
-        params: None,
-        query_params: None,
+        params: serde_json::Value::Object(serde_json::Map::new()),
+        query_params: serde_json::Value::Object(serde_json::Map::new()),
         body: None,
     };
     let mut response = BunnerResponse {
@@ -310,7 +310,7 @@ fn process_request(
         }
     };
 
-    request.params = params;
+    request.params = params.unwrap_or_else(|| JsonValue::Object(serde_json::Map::new()));
 
     if !middleware_chain.execute(
         Lifecycle::BeforeHandle,

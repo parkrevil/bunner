@@ -18,20 +18,20 @@ export class BunnerRequest {
   readonly contentType: string | null;
   readonly contentLength: number | null;
   readonly charset: string | null;
-  readonly params: Record<string, any> | null;
-  readonly queryParams: Record<string, any> | null;
+  readonly params: Record<string, any>;
+  readonly queryParams: Record<string, any>;
   readonly body: unknown;
   readonly ip: string | null;
-  readonly ips: string[] | null;
+  readonly ips: string[];
   readonly isTrustedProxy: boolean;
-  readonly subdomains: string[] | null;
+  readonly subdomains: string[];
 
-  constructor(ffiReq: FfiBunnerRequest, rawReq: Request) {
+  constructor(ffiReq: FfiBunnerRequest) {
     this.requestId = ffiReq.requestId;
     this.httpMethod = ffiReq.httpMethod;
-    this.url = rawReq.url;
+    this.url = ffiReq.url;
     this.path = ffiReq.path;
-    this.headers = new Headers(rawReq.headers);
+    this.headers = new Headers(ffiReq.headers);
     this.cookies = new CookieMap(ffiReq.cookies);
     this.protocol = ffiReq.protocol ?? null;
     this.host = ffiReq.host ?? null;
@@ -41,12 +41,12 @@ export class BunnerRequest {
     this.contentType = ffiReq.contentType ?? null;
     this.contentLength = ffiReq.contentLength ?? null;
     this.charset = ffiReq.charset ?? null;
-    this.params = ffiReq.params ?? null;
-    this.queryParams = ffiReq.queryParams ?? null;
+    this.params = ffiReq.params;
+    this.queryParams = ffiReq.queryParams;
     this.body = ffiReq.body ?? null;
     this.isTrustedProxy = ffiReq.isTrustedProxy;
-    this.subdomains = ffiReq.subdomains ?? null;
+    this.subdomains = ffiReq.subdomains;
     this.ip = ffiReq.ip ?? null;
-    this.ips = ffiReq.ips ?? null;
+    this.ips = ffiReq.ips;
   }
 }
