@@ -1,15 +1,6 @@
 #!/usr/bin/env sh
 set -eu
 
-staged_tmp="$(mktemp)"
-trap 'rm -f "$staged_tmp"' EXIT INT TERM
-
-git diff --cached --name-only -z > "$staged_tmp"
-
 bunx lint-staged
 make format
 make lint
-
-if [ -s "$staged_tmp" ]; then
-	xargs -0 git add < "$staged_tmp"
-fi
