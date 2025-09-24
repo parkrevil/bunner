@@ -2,6 +2,8 @@ mod content_type;
 #[cfg(test)]
 mod content_type_test;
 mod forwarded;
+#[cfg(test)]
+mod forwarded_test;
 mod host;
 mod utils;
 
