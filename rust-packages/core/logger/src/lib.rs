@@ -11,7 +11,7 @@ use once_cell::sync::OnceCell;
 use std::ffi::CStr;
 use std::os::raw::c_char;
 use tracing::{debug, error, info, trace, warn};
-use tracing_subscriber::{fmt, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt};
 
 static LOGGER_INIT: OnceCell<()> = OnceCell::new();
 

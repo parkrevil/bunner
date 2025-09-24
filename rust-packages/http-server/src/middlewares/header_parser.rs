@@ -51,16 +51,13 @@ impl Middleware for HeaderParser {
         };
 
         req.protocol = if self.trust_proxy {
-            forwarded_values
-                .proto
-                .clone()
-                .or_else(|| {
-                    payload
-                        .headers
-                        .get("x-forwarded-proto")
-                        .and_then(|value| first_header_value(value))
-                        .map(|proto| proto.to_lowercase())
-                })
+            forwarded_values.proto.clone().or_else(|| {
+                payload
+                    .headers
+                    .get("x-forwarded-proto")
+                    .and_then(|value| first_header_value(value))
+                    .map(|proto| proto.to_lowercase())
+            })
         } else {
             None
         };
@@ -89,7 +86,6 @@ impl Middleware for HeaderParser {
 
         req.hostname = hostname;
         req.port = port;
-
 
         req.subdomains = req
             .hostname
@@ -206,7 +202,7 @@ fn parse_forwarded_values(header: &str) -> ForwardedValues {
         }
 
         let raw_value = parts.next().unwrap_or("").trim();
-    let cleaned = strip_surrounding_quotes(raw_value);
+        let cleaned = strip_surrounding_quotes(raw_value);
 
         match key.as_str() {
             "proto" => values.proto = Some(cleaned.to_lowercase()),
@@ -223,10 +219,7 @@ fn split_host_port(host: &str) -> (Option<String>, Option<u16>) {
     let trimmed = host.trim();
 
     if let Ok(socket_addr) = trimmed.parse::<SocketAddr>() {
-        return (
-            Some(socket_addr.ip().to_string()),
-            Some(socket_addr.port()),
-        );
+        return (Some(socket_addr.ip().to_string()), Some(socket_addr.port()));
     }
 
     if let Some(stripped) = trimmed
@@ -252,12 +245,11 @@ fn split_host_port(host: &str) -> (Option<String>, Option<u16>) {
         return (Some(ip_addr.to_string()), None);
     }
 
-    if let Some((host_part, port_part)) = trimmed.rsplit_once(':') {
-        if !host_part.contains(':') {
-            if let Ok(port) = port_part.parse::<u16>() {
-                return (Some(host_part.to_string()), Some(port));
-            }
-        }
+    if let Some((host_part, port_part)) = trimmed.rsplit_once(':')
+        && !host_part.contains(':')
+        && let Ok(port) = port_part.parse::<u16>()
+    {
+        return (Some(host_part.to_string()), Some(port));
     }
 
     (Some(trimmed.to_string()), None)
@@ -274,18 +266,21 @@ fn compute_subdomains(hostname: &str) -> Vec<String> {
     }
 
     if let Some(domain) = PUBLIC_SUFFIX_LIST.domain(host.as_bytes()) {
-        let domain_bytes = domain.as_bytes();
-        if let Some(pos) = host.as_bytes().len().checked_sub(domain_bytes.len() + 1) {
-            if host.as_bytes().len() > domain_bytes.len() {
-                let sub = &host.as_bytes()[..pos];
-                if !sub.is_empty() {
-                    return sub
-                        .split(|b| *b == b'.')
-                        .filter(|label| !label.is_empty())
-                        .map(|label| String::from_utf8_lossy(label).into_owned())
-                        .collect();
-                }
-            }
+        let domain_str = match std::str::from_utf8(domain.as_bytes()) {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
+
+        if let Some(prefix) = host
+            .strip_suffix(domain_str)
+            .and_then(|p| p.strip_suffix('.'))
+            .filter(|p| !p.is_empty())
+        {
+            return prefix
+                .split('.')
+                .filter(|segment| !segment.is_empty())
+                .map(|segment| segment.to_string())
+                .collect();
         }
     }
     Vec::new()

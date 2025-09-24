@@ -1,4 +1,6 @@
-make lint
+#!/usr/bin/env sh
+set -eu
+
 ./scripts/check-dependencies.sh
 make test
 bun test
