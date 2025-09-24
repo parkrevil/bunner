@@ -78,7 +78,12 @@ export interface HandleRequestParams {
   httpMethod: HttpMethod;
   url: string;
   headers: Record<string, any>;
-  body: string | null;
+  body: string | undefined;
+  request: {
+    ip: string | undefined;
+    ips: string[] | undefined;
+    isTrustedProxy: boolean;
+  };
 }
 
 /**
@@ -106,13 +111,22 @@ export interface FfiBunnerRequest {
   requestId: string;
   httpMethod: HttpMethod;
   path: string;
+  protocol: string;
+  host: string;
+  hostname: string;
+  port: number;
+  ip: string;
+  ips: string[] | null;
+  isTrustedProxy: boolean;
+  subdomains: string[] | null;
+  forwarded: string | null;
   cookies: Record<string, any>;
   contentType: string | null;
   contentLength: number | null;
   charset: string | null;
   params: Record<string, any> | null;
   queryParams: Record<string, any> | null;
-  body: Record<string, any> | null;
+  body: string | Record<string, any> | null;
 }
 
 /**

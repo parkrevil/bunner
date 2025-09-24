@@ -12,6 +12,7 @@ import { BunnerHttpWorker } from './bunner-http-worker';
 import { HttpMethod } from './enums';
 import { MethodNotAllowedError } from './errors';
 import { type BunnerHttpServerOptions } from './interfaces';
+import { getIps } from './utils';
 
 export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
   private readonly rootModuleFile: RootModuleFile;
@@ -31,6 +32,7 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
       ...{
         port: 5000,
         bodyLimit: 10 * 1024 * 1024, // 10 MB
+        trustProxy: false,
       },
       ...options,
     };
@@ -77,7 +79,7 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
             throw new MethodNotAllowedError();
           }
 
-          let body: string | null;
+          let body: string | undefined;
 
           if (
             httpMethod === HttpMethod.Get ||
@@ -85,16 +87,27 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
             httpMethod === HttpMethod.Head ||
             httpMethod === HttpMethod.Options
           ) {
-            body = null;
+            body = undefined;
           } else {
             body = await req.text();
           }
+
+          const { ip, ips } = getIps(
+            req,
+            this.server!,
+            this.options.trustProxy,
+          );
 
           await this.workerPool.call('handleRequest', {
             httpMethod,
             url: req.url,
             headers: req.headers.toJSON(),
             body,
+            request: {
+              ip,
+              ips,
+              isTrustedProxy: this.options.trustProxy,
+            },
           });
 
           return new Response('OK', { status: 200 });

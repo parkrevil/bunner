@@ -54,12 +54,9 @@ export class BunnerHttpWorker extends BaseWorker {
 
   async handleRequest(params: HandleRequestParams) {
     try {
-      await this.ffi.handleRequest({
-        httpMethod: params.httpMethod,
-        url: params.url,
-        headers: params.headers,
-        body: params.body,
-      });
+      const result = await this.ffi.handleRequest(params);
+
+      console.log(result);
 
       /* const handler = this.routeHandler.find(handleResult.routeKey);
 

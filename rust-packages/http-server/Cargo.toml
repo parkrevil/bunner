@@ -25,6 +25,7 @@ percent-encoding = "2"
 simd-json = { version = "0.13", features = ["serde_impl"], optional = true }
 lazy_static = "1.5.0"
 uuid = { version = "1.18", features = ["v4", "fast-rng", "std"] }
+publicsuffix = "2"
 
 [dev-dependencies]
 libc.workspace = true

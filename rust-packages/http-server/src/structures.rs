@@ -5,7 +5,7 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct AppOptions {
     #[serde(rename = "appName")]
     pub name: String,
@@ -14,12 +14,8 @@ pub struct AppOptions {
     pub workers: u16,
     #[serde(rename = "queueCapacity")]
     pub queue_capacity: u32,
-}
-
-impl AppOptions {
-    pub fn log_level(&self) -> LogLevel {
-        self.log_level
-    }
+    #[serde(default, rename = "trustProxy")]
+    pub trust_proxy: bool,
 }
 
 #[derive(Serialize, Debug)]
@@ -41,11 +37,19 @@ pub struct BunnerResponse {
     pub body: serde_json::Value,
 }
 
+#[derive(Deserialize, Debug, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RequestMetadata {
+    pub ip: Option<String>,
+    pub ips: Option<Vec<String>>,
+    #[serde(default)]
+    pub is_trusted_proxy: bool,
+}
+
 #[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct BunnerRequest {
-    #[serde(rename = "requestId")]
     pub request_id: String,
-    #[serde(rename = "httpMethod")]
     pub http_method: HttpMethod,
     #[serde(skip_serializing, skip_deserializing)]
     pub url: String,
@@ -53,14 +57,21 @@ pub struct BunnerRequest {
     #[serde(default)]
     #[serde(skip_serializing)]
     pub headers: HashMap<String, String>,
+    // Derived by header/url parser middleware
+    pub protocol: Option<String>,
+    pub host: Option<String>,
+    pub hostname: Option<String>,
+    pub port: Option<u16>,
+    pub ip: Option<String>,
+    pub ips: Option<Vec<String>>,
+    pub is_trusted_proxy: bool,
+    pub subdomains: Option<Vec<String>>,
+    pub forwarded: Option<String>,
     pub cookies: serde_json::Value,
-    #[serde(rename = "contentType")]
     pub content_type: Option<String>,
-    #[serde(rename = "contentLength")]
     pub content_length: Option<u64>,
     pub charset: Option<String>,
     pub params: Option<serde_json::Value>,
-    #[serde(rename = "queryParams")]
     pub query_params: Option<serde_json::Value>,
     pub body: Option<serde_json::Value>,
 }
@@ -72,6 +83,8 @@ pub struct HandleRequestPayload {
     pub url: String,
     pub headers: HashMap<String, String>,
     pub body: Option<String>,
+    #[serde(default)]
+    pub request: RequestMetadata,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

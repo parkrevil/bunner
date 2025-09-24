@@ -37,7 +37,7 @@ pub mod node;
 mod static_map;
 pub mod traversal;
 
-pub(crate) use alloc::{create_node_box_from_arena_pointer, NodeBox};
+pub(crate) use alloc::{NodeBox, create_node_box_from_arena_pointer};
 pub use node::RadixTreeNode;
 
 #[derive(Debug, Default)]
@@ -247,7 +247,7 @@ impl RadixTree {
         let mut out = vec![0u16; n];
         for (idx, method, segs, _h, _l, _s, _lits) in pre.into_iter() {
             let assigned = base + (idx as u16) + 1; // stored keys are +1 encoded
-                                                    // pass decoded value to helper (helper will re-encode)
+            // pass decoded value to helper (helper will re-encode)
             let route_key =
                 self.insert_parsed_preassigned(worker_id, method, segs, assigned - 1)?;
             out[idx] = route_key;

@@ -1,6 +1,6 @@
 use crate::types::StaticString;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 #[cfg(feature = "simd-json")]
 use simd_json;

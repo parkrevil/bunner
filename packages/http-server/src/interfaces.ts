@@ -6,8 +6,9 @@ import type { FfiOptions } from './ffi';
 import type { HandlerFunction } from './types';
 
 export interface BunnerHttpServerOptions {
-  port: number;
-  bodyLimit: number;
+  port?: number;
+  bodyLimit?: number;
+  trustProxy?: boolean;
 }
 
 /**

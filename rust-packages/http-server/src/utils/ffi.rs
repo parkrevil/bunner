@@ -5,8 +5,8 @@ use crate::enums::LenPrefixedString;
 use crate::pointer_registry;
 use crate::types::{LengthHeaderSize, MutablePointer, ReadonlyPointer, StaticString};
 
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use std::slice;
 
 /// Serialize `value` to JSON string and return a len-prefixed raw pointer allocated/registered by Rust.

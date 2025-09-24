@@ -10,14 +10,22 @@ export class BunnerRequest {
   readonly url: string;
   readonly path: string;
   readonly headers: Headers;
+  readonly protocol: string | undefined;
+  readonly host: string | undefined;
+  readonly hostname: string | undefined;
+  readonly port: number | undefined;
   readonly cookies: CookieMap;
   readonly contentType: string | undefined;
   readonly contentLength: number | undefined;
   readonly charset: string | undefined;
   readonly params: Record<string, any> | undefined;
   readonly queryParams: Record<string, any> | undefined;
-  readonly body: Record<string, any> | undefined;
+  readonly body: unknown;
   readonly ip: string | undefined;
+  readonly ips: string[] | undefined;
+  readonly isTrustedProxy: boolean;
+  readonly subdomains: string[] | undefined;
+  readonly forwarded: string | undefined;
 
   constructor(ffiReq: FfiBunnerRequest, rawReq: Request, server: Server) {
     this.requestId = ffiReq.requestId;
@@ -25,12 +33,19 @@ export class BunnerRequest {
     this.url = rawReq.url;
     this.path = ffiReq.path;
     this.headers = new Headers(rawReq.headers);
+    this.protocol = ffiReq.protocol ?? undefined;
+    this.host = ffiReq.host ?? undefined;
+    this.hostname = ffiReq.hostname ?? undefined;
+    this.port = ffiReq.port ?? undefined;
     this.contentType = ffiReq.contentType ?? undefined;
     this.contentLength = ffiReq.contentLength ?? undefined;
     this.charset = ffiReq.charset ?? undefined;
     this.params = ffiReq.params ?? undefined;
     this.queryParams = ffiReq.queryParams ?? undefined;
     this.body = ffiReq.body ?? undefined;
+    this.isTrustedProxy = ffiReq.isTrustedProxy;
+    this.subdomains = ffiReq.subdomains ?? undefined;
+    this.forwarded = ffiReq.forwarded ?? undefined;
 
     // Initialize the cookies
     this.cookies = new CookieMap();
@@ -40,14 +55,19 @@ export class BunnerRequest {
     });
 
     // Request IP
-    const xff = this.headers.get(HeaderField.XForwardedFor);
-    const socketAddress = server.requestIP(rawReq) || undefined;
+    this.ip = ffiReq.ip ?? undefined;
+    this.ips = ffiReq.ips ?? undefined;
 
-    this.ip = this.normalizeIp(
-      xff
-        ? xff?.split(',')[0]?.trim()
-        : (rawReq.headers.get(HeaderField.XRealIp) ?? socketAddress?.address),
-    );
+    if (!this.ip) {
+      const xff = this.headers.get(HeaderField.XForwardedFor);
+      const socketAddress = server.requestIP(rawReq) || undefined;
+
+      this.ip = this.normalizeIp(
+        xff
+          ? xff?.split(',')[0]?.trim()
+          : (rawReq.headers.get(HeaderField.XRealIp) ?? socketAddress?.address),
+      );
+    }
   }
 
   /**

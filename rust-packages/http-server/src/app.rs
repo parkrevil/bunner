@@ -7,7 +7,9 @@ use crate::middlewares::{
 };
 use crate::router::structures::RouterResult;
 use crate::router::{Router, RouterReadOnly};
-use crate::structures::{BunnerRequest, BunnerResponse, HandleRequestOutput, HandleRequestPayload};
+use crate::structures::{
+    AppOptions, BunnerRequest, BunnerResponse, HandleRequestOutput, HandleRequestPayload,
+};
 use crate::thread_pool::submit_job;
 use crate::types::{AppId, RequestKey, WorkerId};
 use crate::utils::{ffi::make_result, json::deserialize};
@@ -25,14 +27,17 @@ pub struct App {
     app_id: AppId,
     router: Router,
     middleware_chain: Arc<MiddlewareChain>,
+    options: AppOptions,
     request_callback_dispatcher: AppRequestCallbackDispatcher,
 }
 
 impl App {
-    pub fn new(app_id: AppId) -> Self {
+    pub fn new(app_id: AppId, options: AppOptions) -> Self {
         let mut middleware_chain = MiddlewareChain::new();
-
-        middleware_chain.add_to(Lifecycle::PreRequest, HeaderParser);
+        middleware_chain.add_to(
+            Lifecycle::PreRequest,
+            HeaderParser::new(options.trust_proxy),
+        );
         middleware_chain.add_to(Lifecycle::PreRequest, UrlParser);
         middleware_chain.add_to(Lifecycle::PreRequest, CookieParser);
         middleware_chain.add_to(Lifecycle::PreRequest, BodyParser);
@@ -41,6 +46,7 @@ impl App {
             app_id,
             router: Router::new(None),
             middleware_chain: Arc::new(middleware_chain),
+            options,
             request_callback_dispatcher: AppRequestCallbackDispatcher::new(),
         }
     }
@@ -193,6 +199,15 @@ fn process_request(
         http_method,
         path: String::new(),
         headers: payload.headers.clone(),
+        protocol: None,
+        host: None,
+        hostname: None,
+        port: None,
+        ip: payload.request.ip.clone(),
+        ips: payload.request.ips.clone(),
+        is_trusted_proxy: payload.request.is_trusted_proxy,
+        subdomains: None,
+        forwarded: None,
         cookies: serde_json::Value::Object(serde_json::Map::new()),
         content_type: None,
         content_length: None,

@@ -1,8 +1,8 @@
+use super::RouteMatch;
 use super::errors::RouterErrorCode;
 use super::path::normalize_and_validate_path;
 use super::structures::{RouterError, RouterResult};
-use super::RouteMatch;
-use super::{radix_tree::HTTP_METHOD_COUNT, Router};
+use super::{Router, radix_tree::HTTP_METHOD_COUNT};
 
 use crate::enums::HttpMethod;
 use crate::router::pattern::{self, SegmentPattern};

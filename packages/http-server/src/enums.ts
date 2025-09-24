@@ -13,6 +13,15 @@ export enum HttpMethod {
 }
 
 /**
+ * HTTP Protocol
+ * @description The HTTP protocol
+ */
+export enum HttpProtocol {
+  Http,
+  Https,
+}
+
+/**
  * Header Field
  * @description The header field
  */
@@ -24,6 +33,10 @@ export enum HeaderField {
   XRealIp = 'x-real-ip',
 }
 
+/**
+ * Content Type
+ * @description The content type
+ */
 export enum ContentType {
   Text = 'text/plain',
   Json = 'application/json',

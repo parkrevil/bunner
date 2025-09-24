@@ -1,4 +1,5 @@
 use crate::app::App;
+use crate::structures::AppOptions;
 use crate::types::{AppId, AtomicOf};
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
@@ -12,7 +13,7 @@ type AtomicId = <AppId as AtomicOf>::Atomic;
 
 /// Registers an app and associates it with `name`. If an app with the same name
 /// already exists, returns the existing AppId without creating a new instance.
-pub fn register_app(name: &str) -> AppId {
+pub fn register_app(name: &str, options: AppOptions) -> AppId {
     let name_map = NAME_TO_ID.get_or_init(|| Mutex::new(HashMap::new()));
 
     // Fast path: if name already exists, return it.
@@ -35,7 +36,7 @@ pub fn register_app(name: &str) -> AppId {
     let id: AppId = prev as AppId;
 
     // Create App with this id and store the pointer
-    let app = Box::new(App::new(id));
+    let app = Box::new(App::new(id, options));
     let p = Box::into_raw(app);
     map.lock().unwrap().insert(id, p as usize);
     name_map.lock().unwrap().insert(name.to_string(), id);

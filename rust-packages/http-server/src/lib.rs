@@ -30,7 +30,7 @@ mod pointer_registry_test;
 
 use std::io::Write;
 use std::{ffi::CStr, os::raw::c_char};
-use tracing_subscriber::{fmt, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt};
 
 use crate::app::App;
 use crate::app_registry::{find_app, register_app, unregister_app};
@@ -73,7 +73,7 @@ pub unsafe extern "C" fn init(options_ptr: ReadonlyPointer) -> MutablePointer {
     };
 
     let subscriber = fmt()
-        .with_env_filter(EnvFilter::new(options.log_level().as_env_filter()))
+        .with_env_filter(EnvFilter::new(options.log_level.as_env_filter()))
         .finish();
 
     if let Err(_err) = tracing::subscriber::set_global_default(subscriber) {
@@ -85,7 +85,7 @@ pub unsafe extern "C" fn init(options_ptr: ReadonlyPointer) -> MutablePointer {
     // Configure thread pool sizing from options before any tasks are submitted.
     configure_thread_pool(options.workers, options.queue_capacity);
 
-    let app_id = register_app(options.name.as_str());
+    let app_id = register_app(options.name.as_str(), options.clone());
 
     tracing::info!("Bunner Rust Http Server initialized.");
 

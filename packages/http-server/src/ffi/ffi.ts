@@ -140,9 +140,7 @@ export class Ffi extends BaseFfi<FfiSymbols> {
    * @param params
    * @returns
    */
-  async handleRequest(
-    params: HandleRequestParams,
-  ): Promise<HandleRequestResult> {
+  async handleRequest(params: HandleRequestParams) {
     const requestKey = ++this.requestKey;
     const promise = new Promise<HandleRequestResult>((resolve, reject) => {
       this.pendingHandleRequests.set(requestKey, { resolve, reject });

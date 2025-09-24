@@ -2,11 +2,11 @@ use super::compression::compress_root_node;
 use super::mask::compute_mask;
 use super::memory::{shrink_node, warm_node};
 use super::static_map::collect_static;
-use super::{node::RadixTreeNode, RadixTree, HTTP_METHOD_COUNT, STATIC_MAP_THRESHOLD};
+use super::{HTTP_METHOD_COUNT, RadixTree, STATIC_MAP_THRESHOLD, node::RadixTreeNode};
 use super::{traversal::traverse, traversal::traverse_mut};
 use crate::router::interner::Interner;
-use crate::router::pattern::pattern_score;
 use crate::router::pattern::SegmentPart;
+use crate::router::pattern::pattern_score;
 
 pub(super) fn finalize(tree: &mut RadixTree) {
     if tree.root_node.is_sealed() {

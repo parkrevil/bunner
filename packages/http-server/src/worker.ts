@@ -60,6 +60,7 @@ export class AppWorker extends BaseWorker {
         url: params.url,
         headers: params.headers,
         body: params.body,
+        request: params.request,
       });
 
       /* const handler = this.routeHandler.find(handleResult.routeKey);
