@@ -5,6 +5,8 @@ mod forwarded;
 #[cfg(test)]
 mod forwarded_test;
 mod host;
+#[cfg(test)]
+mod host_test;
 mod utils;
 
 use super::Middleware;
