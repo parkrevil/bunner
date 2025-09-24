@@ -54,6 +54,7 @@ pub struct BunnerRequest {
     #[serde(skip_serializing, skip_deserializing)]
     pub url: String,
     pub path: String,
+    pub query_string: Option<String>,
     #[serde(default)]
     #[serde(skip_serializing)]
     pub headers: HashMap<String, String>,

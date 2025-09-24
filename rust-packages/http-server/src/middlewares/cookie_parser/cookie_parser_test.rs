@@ -18,6 +18,7 @@ mod handle {
             http_method: HttpMethod::Get,
             url: "/".to_string(),
             path: "/".to_string(),
+            query_string: None,
             headers,
             protocol: None,
             host: None,

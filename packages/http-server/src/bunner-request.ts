@@ -13,6 +13,7 @@ export class BunnerRequest {
   readonly host: string | null;
   readonly hostname: string | null;
   readonly port: number | null;
+  readonly queryString: string | null;
   readonly cookies: CookieMap;
   readonly contentType: string | null;
   readonly contentLength: number | null;
@@ -36,6 +37,7 @@ export class BunnerRequest {
     this.host = ffiReq.host ?? null;
     this.hostname = ffiReq.hostname ?? null;
     this.port = ffiReq.port ?? null;
+    this.queryString = ffiReq.queryString ?? null;
     this.contentType = ffiReq.contentType ?? null;
     this.contentLength = ffiReq.contentLength ?? null;
     this.charset = ffiReq.charset ?? null;

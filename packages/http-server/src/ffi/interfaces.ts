@@ -115,6 +115,7 @@ export interface FfiBunnerRequest {
   host: string | null;
   hostname: string | null;
   port: number | null;
+  queryString: string | null;
   ip: string | null;
   ips: string[] | null;
   isTrustedProxy: boolean;

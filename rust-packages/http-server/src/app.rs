@@ -198,6 +198,7 @@ fn process_request(
         url: payload.url.clone(),
         http_method,
         path: String::new(),
+        query_string: None,
         headers: payload.headers.clone(),
         protocol: None,
         host: None,
