@@ -1,4 +1,6 @@
 mod parser;
+#[cfg(test)]
+mod parser_test;
 
 use crate::enums::HttpStatusCode;
 use crate::structures::{BunnerRequest, BunnerResponse, HandleRequestPayload};
