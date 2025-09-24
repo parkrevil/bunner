@@ -1,4 +1,8 @@
+#[cfg(test)]
+mod cookie_parser_test;
 mod parser;
+#[cfg(test)]
+mod parser_test;
 
 use crate::structures::{BunnerRequest, BunnerResponse, HandleRequestPayload};
 use parser::parse_cookie_header;
