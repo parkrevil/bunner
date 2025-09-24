@@ -28,6 +28,8 @@
   ],
   "scripts": {
     "tsc": "tsc --noEmit",
+    "test": "bun test",
+    "test:coverage": "bun test --coverage",
     "lint": "eslint . --fix",
     "format": "prettier --write .",
     "bench": "./scripts/bench.sh",

@@ -29,6 +29,7 @@ export enum HeaderField {
   SetCookie = 'set-cookie',
   ContentType = 'content-type',
   Location = 'location',
+  Forwarded = 'forwarded',
   XForwardedFor = 'x-forwarded-for',
   XRealIp = 'x-real-ip',
 }

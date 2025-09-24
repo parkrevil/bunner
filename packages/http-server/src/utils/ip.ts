@@ -24,7 +24,7 @@ export function getIps(
   const socketAddress = server.requestIP(request) ?? undefined;
 
   const forwardedIps = shouldTrustProxy
-    ? collectForwardedFor(headers.get('forwarded'))
+    ? collectForwardedFor(headers.get(HeaderField.Forwarded))
     : [];
   const xForwardedForIps = shouldTrustProxy
     ? collectXForwardedFor(headers.get(HeaderField.XForwardedFor))
@@ -144,21 +144,18 @@ function sanitizeIpCandidate(
     return undefined;
   }
 
-  value = stripOptionalQuotes(value);
-  if (!value) {
-    return undefined;
-  }
+  const isPlaceholder = (candidate: string): boolean => {
+    const lower = candidate.toLowerCase();
+    return (
+      lower === 'unknown' ||
+      lower === 'obfuscated' ||
+      lower === 'none' ||
+      candidate.startsWith('_')
+    );
+  };
 
-  const lower = value.toLowerCase();
-  if (
-    lower === 'unknown' ||
-    lower === '_hidden' ||
-    lower === 'obfuscated' ||
-    lower === 'none'
-  ) {
-    return undefined;
-  }
-  if (value.startsWith('_')) {
+  value = stripOptionalQuotes(value);
+  if (!value || isPlaceholder(value)) {
     return undefined;
   }
 
@@ -176,9 +173,10 @@ function sanitizeIpCandidate(
   }
 
   value = stripPortSuffix(value);
+  value = stripOptionalQuotes(value);
   value = value.trim();
 
-  if (!value) {
+  if (!value || isPlaceholder(value)) {
     return undefined;
   }
 
@@ -187,19 +185,20 @@ function sanitizeIpCandidate(
 
 function stripOptionalQuotes(value: string): string {
   let result = value.trim();
-  if (result.length < 2) {
-    return result;
+
+  while (result.length >= 2) {
+    const first = result[0];
+    const last = result[result.length - 1];
+    if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
+      result = result.slice(1, -1);
+      result = result.replace(/\\([\\"'])/g, '$1');
+      result = result.trim();
+      continue;
+    }
+    break;
   }
 
-  const first = result[0];
-  const last = result[result.length - 1];
-
-  if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
-    result = result.slice(1, -1);
-    result = result.replace(/\\([\\"'])/g, '$1');
-  }
-
-  return result.trim();
+  return result;
 }
 
 function stripPortSuffix(value: string): string {
@@ -207,18 +206,16 @@ function stripPortSuffix(value: string): string {
   const colonCount = colonMatches ? colonMatches.length : 0;
 
   if (value.includes('.') && colonCount === 1) {
-    const idx = value.lastIndexOf(':');
-    if (idx !== -1) {
-      return value.slice(0, idx);
-    }
+    return value.slice(0, value.lastIndexOf(':'));
   }
 
   if (colonCount > 1) {
     const idx = value.lastIndexOf(':');
-    if (idx !== -1) {
-      const trailing = value.slice(idx + 1);
-      if (/^\d+$/.test(trailing)) {
-        return value.slice(0, idx);
+    const trailing = value.slice(idx + 1);
+    if (/^\d+$/.test(trailing)) {
+      const candidate = value.slice(0, idx);
+      if (!isIpv6(value) && isIpv6(candidate)) {
+        return candidate;
       }
     }
   }
@@ -287,3 +284,16 @@ function isIpv6(value: string): boolean {
 
   return true;
 }
+
+export const __internals = {
+  collectForwardedFor,
+  collectXForwardedFor,
+  dedupePreserveOrder,
+  extractHeaderIp,
+  sanitizeIpCandidate,
+  stripOptionalQuotes,
+  stripPortSuffix,
+  isIpAddress,
+  isIpv4,
+  isIpv6,
+};
