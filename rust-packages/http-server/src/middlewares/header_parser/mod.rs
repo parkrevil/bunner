@@ -8,6 +8,8 @@ mod host;
 #[cfg(test)]
 mod host_test;
 mod utils;
+#[cfg(test)]
+mod utils_test;
 
 use super::Middleware;
 use crate::structures::{BunnerRequest, BunnerResponse, HandleRequestPayload};
