@@ -14,10 +14,8 @@ mod parse_content_type {
 
     #[test]
     fn parses_parameters_with_quotes_and_whitespace() {
-        let (media_type, parameters) = parse_content_type(
-            "application/json; charset=\"UTF-8\"; boundary= multipart",
-        )
-        .unwrap();
+        let (media_type, parameters) =
+            parse_content_type("application/json; charset=\"UTF-8\"; boundary= multipart").unwrap();
 
         assert_eq!(media_type, "application/json");
         assert_eq!(parameters.get("charset"), Some(&"UTF-8".to_string()));

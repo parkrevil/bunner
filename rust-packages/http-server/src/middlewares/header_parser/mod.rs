@@ -1,9 +1,9 @@
 mod content_type;
+#[cfg(test)]
+mod content_type_test;
 mod forwarded;
 mod host;
 mod utils;
-#[cfg(test)]
-mod content_type_test;
 
 use super::Middleware;
 use crate::structures::{BunnerRequest, BunnerResponse, HandleRequestPayload};
