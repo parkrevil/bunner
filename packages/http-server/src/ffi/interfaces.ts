@@ -111,11 +111,11 @@ export interface FfiBunnerRequest {
   requestId: string;
   httpMethod: HttpMethod;
   path: string;
-  protocol: string;
-  host: string;
-  hostname: string;
-  port: number;
-  ip: string;
+  protocol: string | null;
+  host: string | null;
+  hostname: string | null;
+  port: number | null;
+  ip: string | null;
   ips: string[] | null;
   isTrustedProxy: boolean;
   subdomains: string[] | null;
