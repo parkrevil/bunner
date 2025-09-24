@@ -4,6 +4,8 @@ mod content_type_test;
 mod forwarded;
 #[cfg(test)]
 mod forwarded_test;
+#[cfg(test)]
+mod header_parser_test;
 mod host;
 #[cfg(test)]
 mod host_test;
