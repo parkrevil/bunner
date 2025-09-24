@@ -9,5 +9,6 @@
     "benchmarks/**",
     ".husky/**",
     ".lintstagedrc.json"
-  ]
+  ],
+  "ignoreDependencies": ["@commitlint/cli"]
 }
