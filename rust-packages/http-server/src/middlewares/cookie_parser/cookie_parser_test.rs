@@ -27,7 +27,6 @@ mod handle {
             ips: None,
             is_trusted_proxy: false,
             subdomains: None,
-            forwarded: None,
             cookies: Value::Null,
             content_type: None,
             content_length: None,

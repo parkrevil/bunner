@@ -22,7 +22,6 @@ mod handle {
             ips: None,
             is_trusted_proxy: false,
             subdomains: None,
-            forwarded: None,
             cookies: Value::Null,
             content_type: None,
             content_length: None,
@@ -69,7 +68,6 @@ mod handle {
         assert_eq!(req.host.as_deref(), Some("example.com"));
         assert_eq!(req.hostname.as_deref(), Some("example.com"));
         assert_eq!(req.port, None);
-        assert_eq!(req.forwarded.as_deref(), Some("for=1.1.1.1"));
         assert_eq!(
             req.headers.get("host").map(|s| s.as_str()),
             Some("example.com")

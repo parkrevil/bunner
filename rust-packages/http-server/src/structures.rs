@@ -66,7 +66,6 @@ pub struct BunnerRequest {
     pub ips: Option<Vec<String>>,
     pub is_trusted_proxy: bool,
     pub subdomains: Option<Vec<String>>,
-    pub forwarded: Option<String>,
     pub cookies: serde_json::Value,
     pub content_type: Option<String>,
     pub content_length: Option<u64>,

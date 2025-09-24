@@ -49,7 +49,6 @@ impl Middleware for HeaderParser {
         tracing::event!(tracing::Level::TRACE, operation = "header_parser");
 
         req.headers = payload.headers.clone();
-        req.forwarded = payload.headers.get("forwarded").cloned();
 
         let forwarded_values = if self.trust_proxy {
             payload

@@ -207,7 +207,6 @@ fn process_request(
         ips: payload.request.ips.clone(),
         is_trusted_proxy: payload.request.is_trusted_proxy,
         subdomains: None,
-        forwarded: None,
         cookies: serde_json::Value::Object(serde_json::Map::new()),
         content_type: None,
         content_length: None,

@@ -119,7 +119,6 @@ export interface FfiBunnerRequest {
   ips: string[] | null;
   isTrustedProxy: boolean;
   subdomains: string[] | null;
-  forwarded: string | null;
   cookies: Record<string, any>;
   contentType: string | null;
   contentLength: number | null;

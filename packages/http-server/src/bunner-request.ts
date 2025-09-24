@@ -25,7 +25,6 @@ export class BunnerRequest {
   readonly ips: string[] | undefined;
   readonly isTrustedProxy: boolean;
   readonly subdomains: string[] | undefined;
-  readonly forwarded: string | undefined;
 
   constructor(ffiReq: FfiBunnerRequest, rawReq: Request, server: Server) {
     this.requestId = ffiReq.requestId;
@@ -45,7 +44,6 @@ export class BunnerRequest {
     this.body = ffiReq.body ?? undefined;
     this.isTrustedProxy = ffiReq.isTrustedProxy;
     this.subdomains = ffiReq.subdomains ?? undefined;
-    this.forwarded = ffiReq.forwarded ?? undefined;
 
     // Initialize the cookies
     this.cookies = new CookieMap();
