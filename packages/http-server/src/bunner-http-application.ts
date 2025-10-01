@@ -7,6 +7,7 @@ import {
 } from '@bunner/core';
 import { Logger } from '@bunner/core-logger';
 import type { Server } from 'bun';
+import { StatusCodes } from 'http-status-codes';
 
 import { BunnerHttpWorker } from './bunner-http-worker';
 import { HttpMethod } from './enums';
@@ -111,14 +112,18 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
           });
 
           if (!workerRes) {
-            return new Response('Internal server error', { status: 500 });
+            return new Response('Internal server error', {
+              status: StatusCodes.INTERNAL_SERVER_ERROR,
+            });
           }
 
           return new Response(workerRes.body, workerRes.init);
         } catch (e) {
           this.logger.error(e);
 
-          return new Response('Internal server error', { status: 500 });
+          return new Response('Internal server error', {
+            status: StatusCodes.INTERNAL_SERVER_ERROR,
+          });
         }
       },
     });
