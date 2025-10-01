@@ -11,16 +11,7 @@
       "packages/**/*.ts",
       "examples/**/*.ts"
     ],
-    "exclude": [
-      "target/**",
-      "node_modules/**",
-      "dist/**",
-      "build/**",
-      "coverage/**",
-      ".next/**",
-      "*.lock",
-      "*.lockb"
-    ]
+    "exclude": ["target/**", "node_modules/**", "dist/**", "build/**", "coverage/**", ".next/**", "*.lock", "*.lockb"]
   },
   "rules": {
     "rust": {

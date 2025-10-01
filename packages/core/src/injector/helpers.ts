@@ -1,12 +1,6 @@
 import { isClass } from '../common/helpers';
 
-import type {
-  ForwardRef,
-  ProviderUseClass,
-  ProviderUseExisting,
-  ProviderUseFactory,
-  ProviderUseValue,
-} from '.';
+import type { ForwardRef, ProviderUseClass, ProviderUseExisting, ProviderUseFactory, ProviderUseValue } from '.';
 
 /**
  * Forward Ref Decorator
@@ -54,9 +48,7 @@ export function isUseClassProvider(value: any): value is ProviderUseClass {
  * @param value
  * @returns
  */
-export function isUseExistingProvider(
-  value: any,
-): value is ProviderUseExisting {
+export function isUseExistingProvider(value: any): value is ProviderUseExisting {
   return value && isClass(value.useExisting);
 }
 

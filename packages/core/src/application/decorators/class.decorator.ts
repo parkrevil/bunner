@@ -1,23 +1,12 @@
-import {
-  MetadataKey,
-  type InjectableMetadata,
-  type ModuleMetadata,
-  type RootModuleMetadata,
-} from '../../injector';
+import { MetadataKey, type InjectableMetadata, type ModuleMetadata, type RootModuleMetadata } from '../../injector';
 
-import type {
-  InjectableDecoratorOptions,
-  ModuleDecoratorOptions,
-  RootModuleDecoratorOptions,
-} from './interfaces';
+import type { InjectableDecoratorOptions, ModuleDecoratorOptions, RootModuleDecoratorOptions } from './interfaces';
 
 /**
  * Module Decorator
  * Marks a class as a module and defines its metadata
  */
-export function RootModule(
-  options: RootModuleDecoratorOptions,
-): ClassDecorator {
+export function RootModule(options: RootModuleDecoratorOptions): ClassDecorator {
   return function <T extends Function>(target: T) {
     const moduleMetadata: RootModuleMetadata = {
       path: options.path,
@@ -51,9 +40,7 @@ export function Module(options?: ModuleDecoratorOptions): ClassDecorator {
  * Injectable Decorator
  * Marks a class as an injectable and defines its metadata
  */
-export function Injectable(
-  options?: InjectableDecoratorOptions,
-): ClassDecorator {
+export function Injectable(options?: InjectableDecoratorOptions): ClassDecorator {
   return function <T extends Function>(target: T) {
     const injectableMetadata: InjectableMetadata = {
       scope: options?.scope ?? 'singleton',

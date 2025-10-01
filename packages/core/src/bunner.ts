@@ -28,31 +28,22 @@ export class Bunner {
   ) {
     this.setupSignalHandlers();
 
-    const rootModuleMetadata = Reflect.getMetadata(
-      MetadataKey.RootModule,
-      rootModuleCls,
-    );
+    const rootModuleMetadata = Reflect.getMetadata(MetadataKey.RootModule, rootModuleCls);
 
     if (!rootModuleMetadata) {
-      throw new BunnerError(
-        `Root module "${rootModuleCls.name}" is missing @RootModule decorator`,
-      );
+      throw new BunnerError(`Root module "${rootModuleCls.name}" is missing @RootModule decorator`);
     }
 
     const rootModuleFile = Bun.file(rootModuleMetadata.path);
 
     if (!(await rootModuleFile.exists())) {
-      throw new BunnerError(
-        `Root module file "${rootModuleMetadata.path}" does not exist`,
-      );
+      throw new BunnerError(`Root module file "${rootModuleMetadata.path}" does not exist`);
     }
 
     const normalizedOptions = this.normalizeOptions<T, TOpts>(options);
 
     if (this.apps.has(normalizedOptions.name)) {
-      throw new Error(
-        `Application with name "${normalizedOptions.name}" already exists`,
-      );
+      throw new Error(`Application with name "${normalizedOptions.name}" already exists`);
     }
 
     const app = new appCls(
@@ -123,16 +114,14 @@ export class Bunner {
    * @param options The application options
    * @returns The normalized options
    */
-  private static normalizeOptions<
-    T extends BaseApplication<any>,
-    O = T extends BaseApplication<infer OO> ? OO : never,
-  >(options?: BunnerApplicationOptions<T>): O & BunnerApplicationBaseOptions {
+  private static normalizeOptions<T extends BaseApplication<any>, O = T extends BaseApplication<infer OO> ? OO : never>(
+    options?: BunnerApplicationOptions<T>,
+  ): O & BunnerApplicationBaseOptions {
     const {
       name = this.generateApplicationDefaultName(),
       logLevel = LogLevel.Debug,
       queueCapacity = 8192,
-      workers: workersInput = Math.floor(navigator.hardwareConcurrency / 2) ??
-        1,
+      workers: workersInput = Math.floor(navigator.hardwareConcurrency / 2) ?? 1,
       ...appOptions
     } = (options ?? {}) as O & CreateApplicationOptions;
 
@@ -169,9 +158,7 @@ export class Bunner {
 
         await Promise.race([
           this.shutdown(),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('shutdown timeout')), 10000),
-          ),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('shutdown timeout')), 10000)),
         ]);
       } catch (e) {
         console.error(`[Bunner] graceful shutdown failed on ${signal}:`, e);

@@ -1,12 +1,4 @@
-import {
-  RestController,
-  Delete,
-  Get,
-  Params,
-  Post,
-  Put,
-  Body,
-} from '@bunner/http-server';
+import { RestController, Delete, Get, Params, Post, Put, Body } from '@bunner/http-server';
 
 import { PostsService } from './posts.service';
 

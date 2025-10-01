@@ -9,13 +9,10 @@ export class Logger {
 
   constructor() {
     try {
-      const lib = dlopen(
-        resolveRustLibPath('bunner_core_logger', import.meta.dir),
-        {
-          init: { args: [], returns: 'void' },
-          log: { args: ['i32', 'cstring'], returns: 'void' },
-        },
-      );
+      const lib = dlopen(resolveRustLibPath('bunner_core_logger', import.meta.dir), {
+        init: { args: [], returns: 'void' },
+        log: { args: ['i32', 'cstring'], returns: 'void' },
+      });
 
       this.symbols = lib.symbols;
     } catch (e: any) {

@@ -5,29 +5,16 @@ import type { RestRouteHandlerParamMetadata } from './interfaces';
 import type { RouteHandlerParamType } from './types';
 
 function createHttpParamDecorator(type: RouteHandlerParamType) {
-  return function (
-    target: object,
-    propertyKey: string | symbol | undefined,
-    index: number,
-  ) {
+  return function (target: object, propertyKey: string | symbol | undefined, index: number) {
     if (!propertyKey) {
       throw new EmitDecoratorMetadataError();
     }
 
     const existingParams: RestRouteHandlerParamMetadata[] =
-      Reflect.getMetadata(
-        MetadataKey.RouteHandlerParams,
-        target,
-        propertyKey,
-      ) ?? [];
+      Reflect.getMetadata(MetadataKey.RouteHandlerParams, target, propertyKey) ?? [];
     existingParams.push({ index, type });
 
-    Reflect.defineMetadata(
-      MetadataKey.RouteHandlerParams,
-      existingParams,
-      target,
-      propertyKey,
-    );
+    Reflect.defineMetadata(MetadataKey.RouteHandlerParams, existingParams, target, propertyKey);
   };
 }
 

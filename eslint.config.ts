@@ -6,22 +6,11 @@ import { defineConfig } from 'eslint/config';
 import importPlugin from 'eslint-plugin-import';
 import unusedImports from 'eslint-plugin-unused-imports';
 import globals from 'globals';
-import {
-  plugin as tseslintPlugin,
-  configs as tseslintConfigs,
-} from 'typescript-eslint';
+import { plugin as tseslintPlugin, configs as tseslintConfigs } from 'typescript-eslint';
 
 export default defineConfig([
   {
-    ignores: [
-      'node_modules',
-      '**/node_modules/**',
-      '**/*.js',
-      '**/*.d.ts',
-      'bin',
-      '**/bin/**',
-      'rust-packages',
-    ],
+    ignores: ['node_modules', '**/node_modules/**', '**/*.js', '**/*.d.ts', 'bin', '**/bin/**', 'rust-packages'],
   },
   {
     files: ['**/*.ts'],
@@ -75,14 +64,7 @@ export default defineConfig([
       'import/order': [
         'error',
         {
-          groups: [
-            'builtin',
-            'external',
-            'internal',
-            'parent',
-            'sibling',
-            'index',
-          ],
+          groups: ['builtin', 'external', 'internal', 'parent', 'sibling', 'index'],
           'newlines-between': 'always',
           alphabetize: {
             order: 'asc',

@@ -16,8 +16,7 @@ export interface RootModuleDecoratorOptions {
  * Module decorator options
  * @description The metadata for a module
  */
-export interface ModuleDecoratorOptions
-  extends Omit<RootModuleDecoratorOptions, 'path'> {
+export interface ModuleDecoratorOptions extends Omit<RootModuleDecoratorOptions, 'path'> {
   exports?: Provider[];
 }
 

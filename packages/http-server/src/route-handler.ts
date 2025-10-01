@@ -28,69 +28,42 @@ export class RouteHandler {
     const entries: RouteHandlerEntry[] = [];
     const addRoutesParams: [HttpMethod, string][] = [];
 
-    this.container
-      .getControllers<RestControllerMetadata>(MetadataKey.RestController)
-      .forEach(controller => {
+    this.container.getControllers<RestControllerMetadata>(MetadataKey.RestController).forEach(controller => {
+      const { instance: controllerInstance, path: prefix, options: controllerOptions } = controller;
+      const controllerProto = Object.getPrototypeOf(controllerInstance);
+
+      Object.getOwnPropertyNames(controllerProto).forEach(handlerName => {
+        if (handlerName === 'constructor' || typeof controllerProto[handlerName] !== 'function') {
+          return;
+        }
+
         const {
-          instance: controllerInstance,
-          path: prefix,
-          options: controllerOptions,
-        } = controller;
-        const controllerProto = Object.getPrototypeOf(controllerInstance);
+          httpMethod,
+          path: routePath,
+          options: routeOptions,
+        }: RestRouteHandlerMetadata = Reflect.getMetadata(MetadataKey.RouteHandler, controllerProto, handlerName);
 
-        Object.getOwnPropertyNames(controllerProto).forEach(handlerName => {
-          if (
-            handlerName === 'constructor' ||
-            typeof controllerProto[handlerName] !== 'function'
-          ) {
-            return;
-          }
+        if (!httpMethod) {
+          return;
+        }
 
-          const {
-            httpMethod,
-            path: routePath,
-            options: routeOptions,
-          }: RestRouteHandlerMetadata = Reflect.getMetadata(
-            MetadataKey.RouteHandler,
-            controllerProto,
-            handlerName,
-          );
+        const routeParams: RestRouteHandlerParamMetadata[] =
+          Reflect.getMetadata(MetadataKey.RouteHandlerParams, controllerProto, handlerName) ?? [];
+        const fullPath =
+          '/' +
+          [routeOptions?.version ?? controllerOptions?.version ?? '', prefix ?? '', routePath ?? ''].filter(Boolean).join('/');
 
-          if (!httpMethod) {
-            return;
-          }
-
-          const routeParams: RestRouteHandlerParamMetadata[] =
-            Reflect.getMetadata(
-              MetadataKey.RouteHandlerParams,
-              controllerProto,
-              handlerName,
-            ) ?? [];
-          const fullPath =
-            '/' +
-            [
-              routeOptions?.version ?? controllerOptions?.version ?? '',
-              prefix ?? '',
-              routePath ?? '',
-            ]
-              .filter(Boolean)
-              .join('/');
-
-          entries.push({
-            handler: controllerInstance[handlerName].bind(controllerInstance),
-            paramType: routeParams
-              .sort((a, b) => a.index - b.index)
-              .map(p => p.type),
-          });
-          addRoutesParams.push([httpMethod, fullPath]);
+        entries.push({
+          handler: controllerInstance[handlerName].bind(controllerInstance),
+          paramType: routeParams.sort((a, b) => a.index - b.index).map(p => p.type),
         });
+        addRoutesParams.push([httpMethod, fullPath]);
       });
+    });
 
     const addRoutesResult = this.ffi.addRoutes(addRoutesParams);
 
-    this.handlers = new Map<RouteKey, RouteHandlerEntry>(
-      addRoutesResult.map((routeKey, index) => [routeKey, entries[index]!]),
-    );
+    this.handlers = new Map<RouteKey, RouteHandlerEntry>(addRoutesResult.map((routeKey, index) => [routeKey, entries[index]!]));
   }
 
   /**

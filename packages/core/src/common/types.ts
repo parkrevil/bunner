@@ -1,8 +1,4 @@
-import type {
-  BaseApplication,
-  BunnerApplicationBaseOptions,
-  CreateApplicationOptions,
-} from '../application';
+import type { BaseApplication, BunnerApplicationBaseOptions, CreateApplicationOptions } from '../application';
 
 /**
  * Class
@@ -16,10 +12,7 @@ export type Class<T = any> = new (...args: any[]) => T;
  * @template T - The type of the application
  * @template O - The type of the options
  */
-export type BunnerApplicationOptions<T> = (T extends BaseApplication<infer O>
-  ? O
-  : never) &
-  CreateApplicationOptions;
+export type BunnerApplicationOptions<T> = (T extends BaseApplication<infer O> ? O : never) & CreateApplicationOptions;
 
 /**
  * Bunner App Options
@@ -27,11 +20,7 @@ export type BunnerApplicationOptions<T> = (T extends BaseApplication<infer O>
  * @template T - The type of the application
  * @template O - The type of the options
  */
-export type BunnerApplicationNormalizedOptions<T> = (T extends BaseApplication<
-  infer O
->
-  ? O
-  : never) &
+export type BunnerApplicationNormalizedOptions<T> = (T extends BaseApplication<infer O> ? O : never) &
   Required<BunnerApplicationBaseOptions>;
 
 /**
@@ -49,11 +38,7 @@ export type ClassProperties<T> = {
  * @template T - The type of the class
  * @template K - The key of the function
  */
-export type MethodParams<T, K extends ClassProperties<T>> = T[K] extends (
-  ...args: infer P
-) => any
-  ? [...P]
-  : never;
+export type MethodParams<T, K extends ClassProperties<T>> = T[K] extends (...args: infer P) => any ? [...P] : never;
 
 /**
  * Function Return Type
@@ -61,11 +46,7 @@ export type MethodParams<T, K extends ClassProperties<T>> = T[K] extends (
  * @template T - The type of the class
  * @template K - The key of the function
  */
-export type MethodReturn<T, K extends ClassProperties<T>> = T[K] extends (
-  ...args: any[]
-) => infer R
-  ? R
-  : never;
+export type MethodReturn<T, K extends ClassProperties<T>> = T[K] extends (...args: any[]) => infer R ? R : never;
 
 /**
  * Function Tail Parameters (excluding first)
@@ -73,22 +54,13 @@ export type MethodReturn<T, K extends ClassProperties<T>> = T[K] extends (
  * @template T - The type of the class
  * @template K - The key of the function
  */
-export type MethodTailParams<T, K extends ClassProperties<T>> = T[K] extends (
-  first: any,
-  ...rest: infer R
-) => any
-  ? [...R]
-  : [];
+export type MethodTailParams<T, K extends ClassProperties<T>> = T[K] extends (first: any, ...rest: infer R) => any ? [...R] : [];
 
 /**
  * Function Second Parameter
  * @description The second parameter type of a function (if any)
  */
-export type MethodSecondParam<T, K extends ClassProperties<T>> = T[K] extends (
-  a: any,
-  b: infer S,
-  ...args: any[]
-) => any
+export type MethodSecondParam<T, K extends ClassProperties<T>> = T[K] extends (a: any, b: infer S, ...args: any[]) => any
   ? S
   : never;
 
@@ -97,8 +69,7 @@ export type MethodSecondParam<T, K extends ClassProperties<T>> = T[K] extends (
  * @description A function that is not async (does not return a Promise)
  * @template T - The type of the function
  */
-export type SyncFunction<T extends (...args: any[]) => unknown> =
-  ReturnType<T> extends Promise<any> ? never : T;
+export type SyncFunction<T extends (...args: any[]) => unknown> = ReturnType<T> extends Promise<any> ? never : T;
 
 /**
  * Any Function

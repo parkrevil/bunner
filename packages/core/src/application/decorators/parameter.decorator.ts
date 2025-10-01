@@ -16,14 +16,8 @@ import { EmitDecoratorMetadataError } from './errors';
  * @param providerToken
  * @returns
  */
-export function Inject(
-  providerToken?: ProviderToken | ForwardRef,
-): ParameterDecorator {
-  return function (
-    target: object,
-    property: string | symbol | undefined,
-    index: number,
-  ) {
+export function Inject(providerToken?: ProviderToken | ForwardRef): ParameterDecorator {
+  return function (target: object, property: string | symbol | undefined, index: number) {
     let token: InjectMetadata['token'];
     let provider: InjectMetadata['provider'];
 
@@ -39,11 +33,7 @@ export function Inject(
         provider = undefined;
       }
     } else {
-      const paramtypes = Reflect.getMetadata(
-        ReflectMetadataKey.DesignParamTypes,
-        target,
-        property!,
-      );
+      const paramtypes = Reflect.getMetadata(ReflectMetadataKey.DesignParamTypes, target, property!);
 
       if (!paramtypes || !paramtypes[index]) {
         throw new EmitDecoratorMetadataError();
@@ -53,15 +43,9 @@ export function Inject(
       provider = paramtypes[index];
     }
 
-    const existingParams: InjectMetadata[] =
-      Reflect.getMetadata(MetadataKey.Inject, target, property!) ?? [];
+    const existingParams: InjectMetadata[] = Reflect.getMetadata(MetadataKey.Inject, target, property!) ?? [];
     existingParams.push({ index, token, provider });
 
-    Reflect.defineMetadata(
-      MetadataKey.Inject,
-      existingParams,
-      target,
-      property!,
-    );
+    Reflect.defineMetadata(MetadataKey.Inject, existingParams, target, property!);
   };
 }

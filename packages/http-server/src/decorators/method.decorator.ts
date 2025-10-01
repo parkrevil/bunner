@@ -1,10 +1,7 @@
 import { HttpMethod } from '../enums';
 
 import { MetadataKey } from './enums';
-import type {
-  HttpMethodDecoratorOptions,
-  RestRouteHandlerMetadata,
-} from './interfaces';
+import type { HttpMethodDecoratorOptions, RestRouteHandlerMetadata } from './interfaces';
 
 /**
  * Create HTTP method decorator
@@ -13,10 +10,7 @@ import type {
  * @returns
  */
 function createHttpMethodDecorator(httpMethod: HttpMethod) {
-  return function (
-    path?: string,
-    options?: HttpMethodDecoratorOptions,
-  ): MethodDecorator {
+  return function (path?: string, options?: HttpMethodDecoratorOptions): MethodDecorator {
     return function (target: object, propertyKey: string | symbol) {
       const routeMetadata: RestRouteHandlerMetadata = {
         httpMethod,
@@ -24,12 +18,7 @@ function createHttpMethodDecorator(httpMethod: HttpMethod) {
         options,
       };
 
-      Reflect.defineMetadata(
-        MetadataKey.RouteHandler,
-        routeMetadata,
-        target,
-        propertyKey,
-      );
+      Reflect.defineMetadata(MetadataKey.RouteHandler, routeMetadata, target, propertyKey);
     };
   };
 }

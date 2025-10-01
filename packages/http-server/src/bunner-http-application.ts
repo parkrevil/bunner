@@ -21,10 +21,7 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
   private server: Server | undefined;
   private workerPool: WorkerPool<BunnerHttpWorker>;
 
-  constructor(
-    rootModuleFile: RootModuleFile,
-    options: BunnerApplicationNormalizedOptions<BunnerHttpServer>,
-  ) {
+  constructor(rootModuleFile: RootModuleFile, options: BunnerApplicationNormalizedOptions<BunnerHttpServer>) {
     super();
 
     this.server = undefined;
@@ -71,9 +68,7 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
       maxRequestBodySize: this.options.bodyLimit,
       fetch: async (req: Request) => {
         try {
-          const normalizedHttpMethod = capitalize(
-            req.method.toUpperCase(),
-          ) as keyof typeof HttpMethod;
+          const normalizedHttpMethod = capitalize(req.method.toUpperCase()) as keyof typeof HttpMethod;
           const httpMethod = HttpMethod[normalizedHttpMethod];
 
           if (httpMethod === undefined) {
@@ -93,11 +88,7 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
             body = await req.text();
           }
 
-          const { ip, ips } = getIps(
-            req,
-            this.server!,
-            this.options.trustProxy,
-          );
+          const { ip, ips } = getIps(req, this.server!, this.options.trustProxy);
 
           const workerRes = await this.workerPool.call('handleRequest', {
             httpMethod,

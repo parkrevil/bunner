@@ -93,8 +93,7 @@ export function pointerToString(ptr: Pointer) {
  * @returns The path to the library
  */
 export function resolveRustLibPath(libName: string, cwd: string) {
-  const fileName =
-    process.platform === 'win32' ? `${libName}.dll` : `lib${libName}.${suffix}`;
+  const fileName = process.platform === 'win32' ? `${libName}.dll` : `lib${libName}.${suffix}`;
 
   return `${packageDirectorySync({ cwd })}/bin/${fileName}`;
 }
@@ -105,8 +104,5 @@ export function resolveRustLibPath(libName: string, cwd: string) {
  * @returns True if the value is a valid pointer, false otherwise
  */
 export function isPointer(val: any): val is Pointer {
-  return (
-    (typeof val === 'number' && isFinite(val) && val !== 0) ||
-    (typeof val === 'bigint' && val !== BigInt(0))
-  );
+  return (typeof val === 'number' && isFinite(val) && val !== 0) || (typeof val === 'bigint' && val !== BigInt(0));
 }

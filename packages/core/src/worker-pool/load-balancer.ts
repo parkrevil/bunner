@@ -94,12 +94,8 @@ export class LoadBalancer {
     memory = Math.min(1, memory / Math.max(this.memoryLimit, 1));
     slot.memory = this.alpha * memory + (1 - this.alpha) * slot.memory;
 
-    responseTime = Math.min(
-      1,
-      responseTime / Math.max(this.responseTimeLimit, 1),
-    );
-    slot.responseTime =
-      this.alpha * responseTime + (1 - this.alpha) * slot.responseTime;
+    responseTime = Math.min(1, responseTime / Math.max(this.responseTimeLimit, 1));
+    slot.responseTime = this.alpha * responseTime + (1 - this.alpha) * slot.responseTime;
   }
 
   private getScore(slot: WorkerSlot | undefined) {

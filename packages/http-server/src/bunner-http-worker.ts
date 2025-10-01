@@ -1,11 +1,4 @@
-import {
-  BaseWorker,
-  BunnerError,
-  BunnerFfiError,
-  Container,
-  LogLevel,
-  type WorkerId,
-} from '@bunner/core';
+import { BaseWorker, BunnerError, BunnerFfiError, Container, LogLevel, type WorkerId } from '@bunner/core';
 import { Logger } from '@bunner/core-logger';
 import { expose } from 'comlink';
 import { StatusCodes } from 'http-status-codes';
@@ -14,11 +7,7 @@ import { BunnerRequest } from './bunner-request';
 import { BunnerResponse } from './bunner-response';
 import { HttpError } from './errors';
 import { Ffi, type HandleRequestParams } from './ffi';
-import type {
-  HttpWorkerResponse,
-  RouteHandlerEntry,
-  WorkerInitParams,
-} from './interfaces';
+import type { HttpWorkerResponse, RouteHandlerEntry, WorkerInitParams } from './interfaces';
 import { RouteHandler } from './route-handler';
 
 export class BunnerHttpWorker extends BaseWorker {
@@ -40,9 +29,7 @@ export class BunnerHttpWorker extends BaseWorker {
 
     this.id = workerId;
 
-    const rootModuleCls = await import(params.rootModuleFile.path).then(
-      mod => mod[params.rootModuleFile.className],
-    );
+    const rootModuleCls = await import(params.rootModuleFile.path).then(mod => mod[params.rootModuleFile.className]);
 
     this.container = new Container(rootModuleCls);
     await this.container.init();
@@ -66,15 +53,9 @@ export class BunnerHttpWorker extends BaseWorker {
     this.ffi.dispatchRequestCallback();
   }
 
-  async handleRequest(
-    params: HandleRequestParams,
-  ): Promise<HttpWorkerResponse> {
+  async handleRequest(params: HandleRequestParams): Promise<HttpWorkerResponse> {
     try {
-      const {
-        request: ffiReq,
-        response: ffiRes,
-        routeKey,
-      } = await this.ffi.handleRequest(params);
+      const { request: ffiReq, response: ffiRes, routeKey } = await this.ffi.handleRequest(params);
       const req = new BunnerRequest(ffiReq);
       const res = new BunnerResponse(req, ffiRes);
 
@@ -92,9 +73,7 @@ export class BunnerHttpWorker extends BaseWorker {
         return res.setStatus(StatusCodes.NOT_FOUND).end();
       }
 
-      const result = await routeEntry.handler(
-        ...this.buildRouteHandlerParams(routeEntry, req, res),
-      );
+      const result = await routeEntry.handler(...this.buildRouteHandlerParams(routeEntry, req, res));
 
       if (result instanceof Response || res.isSent()) {
         return res.end();
@@ -136,11 +115,7 @@ export class BunnerHttpWorker extends BaseWorker {
    * @param res The Bunner response.
    * @returns The parameters for the route handler.
    */
-  private buildRouteHandlerParams(
-    entry: RouteHandlerEntry,
-    req: BunnerRequest,
-    res: BunnerResponse,
-  ): any {
+  private buildRouteHandlerParams(entry: RouteHandlerEntry, req: BunnerRequest, res: BunnerResponse): any {
     const params = [];
 
     for (const type of entry.paramType) {

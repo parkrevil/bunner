@@ -13,31 +13,18 @@ import type { ClientIpsResult } from './interfaces';
  * @param trustProxy Whether to trust proxy headers
  * @returns The best-guess client IP and the forwarded chain (if any)
  */
-export function getIps(
-  request: Request,
-  server: Server,
-  trustProxy?: boolean,
-): ClientIpsResult {
+export function getIps(request: Request, server: Server, trustProxy?: boolean): ClientIpsResult {
   const shouldTrustProxy = trustProxy ?? false;
 
   const headers = request.headers;
   const socketAddress = server.requestIP(request) ?? undefined;
 
-  const forwardedIps = shouldTrustProxy
-    ? collectForwardedFor(headers.get(HeaderField.Forwarded))
-    : [];
-  const xForwardedForIps = shouldTrustProxy
-    ? collectXForwardedFor(headers.get(HeaderField.XForwardedFor))
-    : [];
+  const forwardedIps = shouldTrustProxy ? collectForwardedFor(headers.get(HeaderField.Forwarded)) : [];
+  const xForwardedForIps = shouldTrustProxy ? collectXForwardedFor(headers.get(HeaderField.XForwardedFor)) : [];
 
-  const dedupedForwardChain = dedupePreserveOrder([
-    ...forwardedIps,
-    ...xForwardedForIps,
-  ]);
+  const dedupedForwardChain = dedupePreserveOrder([...forwardedIps, ...xForwardedForIps]);
 
-  const xRealIp = shouldTrustProxy
-    ? extractHeaderIp(headers.get(HeaderField.XRealIp))
-    : undefined;
+  const xRealIp = shouldTrustProxy ? extractHeaderIp(headers.get(HeaderField.XRealIp)) : undefined;
 
   const socketIp = sanitizeIpCandidate(socketAddress?.address);
 
@@ -132,9 +119,7 @@ function extractHeaderIp(raw: string | undefined | null): string | undefined {
   return candidate;
 }
 
-function sanitizeIpCandidate(
-  raw: string | undefined | null,
-): string | undefined {
+function sanitizeIpCandidate(raw: string | undefined | null): string | undefined {
   if (!raw) {
     return undefined;
   }
@@ -146,12 +131,7 @@ function sanitizeIpCandidate(
 
   const isPlaceholder = (candidate: string): boolean => {
     const lower = candidate.toLowerCase();
-    return (
-      lower === 'unknown' ||
-      lower === 'obfuscated' ||
-      lower === 'none' ||
-      candidate.startsWith('_')
-    );
+    return lower === 'unknown' || lower === 'obfuscated' || lower === 'none' || candidate.startsWith('_');
   };
 
   value = stripOptionalQuotes(value);

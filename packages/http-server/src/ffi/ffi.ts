@@ -31,10 +31,7 @@ import type { RequestKey } from './types';
 export class Ffi extends BaseFfi<FfiSymbols> {
   private readonly workerId: WorkerId;
   private readonly handleRequestCb: JSCallback;
-  private readonly pendingHandleRequests: Map<
-    RequestKey,
-    JSCallbackEntry<HandleRequestResult>
-  >;
+  private readonly pendingHandleRequests: Map<RequestKey, JSCallbackEntry<HandleRequestResult>>;
   private readonly options: FfiOptions;
   private requestKey = 0n;
   private dispatchLoopRunning = false;
@@ -54,12 +51,7 @@ export class Ffi extends BaseFfi<FfiSymbols> {
 
       // HttpServerSymbols
       add_route: {
-        args: [
-          FFI_APP_ID_TYPE,
-          FFI_WORKER_ID_TYPE,
-          FFIType.u8,
-          FFIType.cstring,
-        ],
+        args: [FFI_APP_ID_TYPE, FFI_WORKER_ID_TYPE, FFIType.u8, FFIType.cstring],
         returns: FFIType.pointer,
       },
       add_routes: {
@@ -67,13 +59,7 @@ export class Ffi extends BaseFfi<FfiSymbols> {
         returns: FFIType.pointer,
       },
       handle_request: {
-        args: [
-          FFI_APP_ID_TYPE,
-          FFI_WORKER_ID_TYPE,
-          FFI_REQUEST_KEY_TYPE,
-          FFIType.pointer,
-          FFIType.function,
-        ],
+        args: [FFI_APP_ID_TYPE, FFI_WORKER_ID_TYPE, FFI_REQUEST_KEY_TYPE, FFIType.pointer, FFIType.function],
         returns: FFIType.void,
       },
       dispatch_request_callback: {
@@ -99,9 +85,7 @@ export class Ffi extends BaseFfi<FfiSymbols> {
   }
 
   override init() {
-    const { appId } = this.ensure<InitResult>(
-      this.symbols.init(toBuffer(this.options)),
-    );
+    const { appId } = this.ensure<InitResult>(this.symbols.init(toBuffer(this.options)));
 
     super.init(appId);
   }
@@ -114,14 +98,7 @@ export class Ffi extends BaseFfi<FfiSymbols> {
    * @returns
    */
   addRoute(httpMethod: HttpMethod, path: string) {
-    return this.ensure<AddRouteResult>(
-      this.symbols.add_route(
-        this.appId,
-        this.workerId,
-        httpMethod,
-        toCString(path),
-      ),
-    );
+    return this.ensure<AddRouteResult>(this.symbols.add_route(this.appId, this.workerId, httpMethod, toCString(path)));
   }
 
   /**
@@ -131,9 +108,7 @@ export class Ffi extends BaseFfi<FfiSymbols> {
    * @returns
    */
   addRoutes(params: [HttpMethod, string][]) {
-    return this.ensure<RouteKey[]>(
-      this.symbols.add_routes(this.appId, this.workerId, toBuffer(params)),
-    );
+    return this.ensure<RouteKey[]>(this.symbols.add_routes(this.appId, this.workerId, toBuffer(params)));
   }
 
   /**
@@ -147,13 +122,7 @@ export class Ffi extends BaseFfi<FfiSymbols> {
       this.pendingHandleRequests.set(requestKey, { resolve, reject });
     });
 
-    this.symbols.handle_request(
-      this.appId,
-      this.workerId,
-      requestKey,
-      toBuffer(params),
-      this.handleRequestCb.ptr!,
-    );
+    this.symbols.handle_request(this.appId, this.workerId, requestKey, toBuffer(params), this.handleRequestCb.ptr!);
 
     // Ensure the dispatch loop runs while there are pending requests
     this.dispatchRequestCallback();
@@ -231,11 +200,7 @@ export class Ffi extends BaseFfi<FfiSymbols> {
    * @param resultPtr - The result pointer
    * @param resultLength - The result length
    */
-  private handleRequestCallback(
-    requestKey: RequestKey,
-    routeKey: number,
-    resultPtr: FfiPointer,
-  ) {
+  private handleRequestCallback(requestKey: RequestKey, routeKey: number, resultPtr: FfiPointer) {
     requestKey = BigInt(requestKey);
 
     const entry = this.pendingHandleRequests.get(requestKey);

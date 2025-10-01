@@ -8,12 +8,8 @@ for (let i = 0; i < 50; i++) {
 }
 
 // 병렬 호출 두 라운드
-await Promise.all(
-  Array.from({ length: 32 }, () => Promise.resolve().then(() => logger.init())),
-);
-await Promise.all(
-  Array.from({ length: 32 }, () => Promise.resolve().then(() => logger.init())),
-);
+await Promise.all(Array.from({ length: 32 }, () => Promise.resolve().then(() => logger.init())));
+await Promise.all(Array.from({ length: 32 }, () => Promise.resolve().then(() => logger.init())));
 
 // 각 레벨 한 번씩 호출
 logger.trace('TRACE_OK_FFI_SINGLETON');

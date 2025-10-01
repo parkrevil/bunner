@@ -1,20 +1,11 @@
-import {
-  dlopen,
-  type FFIFunction,
-  type Pointer,
-  JSCallback,
-  FFIType,
-} from 'bun:ffi';
+import { dlopen, type FFIFunction, type Pointer, JSCallback, FFIType } from 'bun:ffi';
 
 import type { SyncFunction } from '../common';
 
 import { BunnerFfiError } from './errors';
 import { FfiPointer } from './ffi-pointer';
 import { isFfiErrorReport, makeFfiError } from './helpers';
-import {
-  type BaseFfiSymbols,
-  type CreateJsCallbackOptions,
-} from './interfaces';
+import { type BaseFfiSymbols, type CreateJsCallbackOptions } from './interfaces';
 import type { AppId } from './types';
 import { isPointer, pointerToJson } from './utils';
 
@@ -40,9 +31,7 @@ export abstract class BaseFfi<T extends BaseFfiSymbols> {
    */
   init(appId: AppId) {
     if (appId === 0) {
-      throw new BunnerFfiError(
-        'Invalid app id. Please ensure the core initialized correctly.',
-      );
+      throw new BunnerFfiError('Invalid app id. Please ensure the core initialized correctly.');
     }
 
     this.appId = appId;
@@ -96,10 +85,7 @@ export abstract class BaseFfi<T extends BaseFfiSymbols> {
    * @param options The FFIFunction options for the JSCallback
    * @returns A JSCallback instance wrapping the handler
    */
-  protected createJsCallback<F extends (...args: any[]) => unknown>(
-    handler: SyncFunction<F>,
-    options: CreateJsCallbackOptions,
-  ) {
+  protected createJsCallback<F extends (...args: any[]) => unknown>(handler: SyncFunction<F>, options: CreateJsCallbackOptions) {
     const { callOnce = false, ...ffiOptions } = options;
     const freeArgIndexes: number[] = [];
     const pointerFn = (ptr: Pointer) => this.symbols.free(this.appId, ptr);
@@ -125,9 +111,7 @@ export abstract class BaseFfi<T extends BaseFfiSymbols> {
 
         // Runtime guard: disallow thenable results (async behavior)
         if (result && typeof (result as any).then === 'function') {
-          throw new BunnerFfiError(
-            'Async handlers are not supported in JSCallback. Handler returned a Promise.',
-          );
+          throw new BunnerFfiError('Async handlers are not supported in JSCallback. Handler returned a Promise.');
         }
 
         return result;

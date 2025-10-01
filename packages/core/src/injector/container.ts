@@ -3,19 +3,8 @@ import { isClass } from '../common/helpers';
 import type { Class } from '../common/types';
 
 import { MetadataKey, ReflectMetadataKey } from './enums';
-import {
-  isForwardRef,
-  isUseClassProvider,
-  isUseExistingProvider,
-  isUseFactoryProvider,
-  isUseValueProvider,
-} from './helpers';
-import type {
-  DependencyGraphController,
-  DependencyGraphModule,
-  DependencyGraphProvider,
-  InjectMetadata,
-} from './interfaces';
+import { isForwardRef, isUseClassProvider, isUseExistingProvider, isUseFactoryProvider, isUseValueProvider } from './helpers';
+import type { DependencyGraphController, DependencyGraphModule, DependencyGraphProvider, InjectMetadata } from './interfaces';
 import type {
   Controller,
   DependencyGraphNode,
@@ -63,20 +52,18 @@ export class Container {
    * @returns
    */
   getControllers<Options>(metadataKey: string | symbol) {
-    return Array.from(this.controllers).map<Controller<Options>>(
-      ([cls, instance]) => {
-        const metadata = Reflect.getMetadata(metadataKey, cls);
+    return Array.from(this.controllers).map<Controller<Options>>(([cls, instance]) => {
+      const metadata = Reflect.getMetadata(metadataKey, cls);
 
-        if (!metadata) {
-          return;
-        }
+      if (!metadata) {
+        return;
+      }
 
-        return {
-          instance,
-          ...metadata,
-        };
-      },
-    );
+      return {
+        instance,
+        ...metadata,
+      };
+    });
   }
 
   /**
@@ -89,15 +76,10 @@ export class Container {
       return;
     }
 
-    const metadata: ModuleMetadata = Reflect.getMetadata(
-      isRootModule ? MetadataKey.RootModule : MetadataKey.Module,
-      cls,
-    );
+    const metadata: ModuleMetadata = Reflect.getMetadata(isRootModule ? MetadataKey.RootModule : MetadataKey.Module, cls);
 
     if (!metadata) {
-      throw new Error(
-        `Module ${cls.name} does not have a ${isRootModule ? '@RootModule()' : '@Module()'} decorator.`,
-      );
+      throw new Error(`Module ${cls.name} does not have a ${isRootModule ? '@RootModule()' : '@Module()'} decorator.`);
     }
 
     this.graph.set(cls, {
@@ -161,10 +143,7 @@ export class Container {
     };
 
     if (cls) {
-      const injectableMetadata: InjectableMetadata = Reflect.getMetadata(
-        MetadataKey.Injectable,
-        cls,
-      );
+      const injectableMetadata: InjectableMetadata = Reflect.getMetadata(MetadataKey.Injectable, cls);
 
       if (injectableMetadata) {
         node.scope = injectableMetadata.scope;
@@ -201,17 +180,13 @@ export class Container {
    * @returns
    */
   private getDependenciesFromConstructor(cls: Class) {
-    const paramTypes = Reflect.getMetadata(
-      ReflectMetadataKey.DesignParamTypes,
-      cls,
-    );
+    const paramTypes = Reflect.getMetadata(ReflectMetadataKey.DesignParamTypes, cls);
 
     if (!paramTypes) {
       return [];
     }
 
-    const injectParams: InjectMetadata[] =
-      Reflect.getMetadata(MetadataKey.Inject, cls) ?? [];
+    const injectParams: InjectMetadata[] = Reflect.getMetadata(MetadataKey.Inject, cls) ?? [];
     const dependencies: DependencyProvider[] = [];
 
     for (let i = 0; i < paramTypes.length; i++) {
@@ -249,9 +224,7 @@ export class Container {
 
     this.modules.set(moduleCls, module);
 
-    const node: DependencyGraphModule = this.graph.get(
-      moduleCls,
-    ) as DependencyGraphModule;
+    const node: DependencyGraphModule = this.graph.get(moduleCls) as DependencyGraphModule;
 
     for (const importedCls of node.imports) {
       await this.resolveModule(importedCls);
@@ -276,15 +249,9 @@ export class Container {
       return instance;
     }
 
-    const node: DependencyGraphController = this.graph.get(
-      cls,
-    ) as DependencyGraphController;
+    const node: DependencyGraphController = this.graph.get(cls) as DependencyGraphController;
     const dependencies = await Promise.all(
-      node.dependencies.map(dependency =>
-        this.resolveProvider(
-          isForwardRef(dependency) ? dependency.forwardRef() : dependency,
-        ),
-      ),
+      node.dependencies.map(dependency => this.resolveProvider(isForwardRef(dependency) ? dependency.forwardRef() : dependency)),
     );
 
     instance = new cls(...dependencies);
@@ -306,9 +273,7 @@ export class Container {
       return instance;
     }
 
-    const node: DependencyGraphProvider = this.graph.get(
-      token,
-    ) as DependencyGraphProvider;
+    const node: DependencyGraphProvider = this.graph.get(token) as DependencyGraphProvider;
     const provider = node.provider;
     let dependencies: any[] = [];
 
@@ -328,9 +293,7 @@ export class Container {
     } else if (isUseExistingProvider(provider)) {
       instance = await this.resolveProvider(provider.useExisting);
     } else if (isUseFactoryProvider(provider)) {
-      dependencies = await Promise.all(
-        (provider.inject ?? []).map(r => this.resolveProvider(r)),
-      );
+      dependencies = await Promise.all((provider.inject ?? []).map(r => this.resolveProvider(r)));
       instance = await provider.useFactory(...dependencies);
     } else if (isUseValueProvider(provider)) {
       instance = provider.useValue;

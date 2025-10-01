@@ -25,9 +25,7 @@ export class WorkerPool<T extends BaseWorker> {
 
     this.script = options.script;
     this.loadBalancer = new LoadBalancer(size);
-    this.workers = Array.from({ length: size }, (_, id) =>
-      this.spawnWorker(id),
-    );
+    this.workers = Array.from({ length: size }, (_, id) => this.spawnWorker(id));
   }
 
   /**
@@ -52,10 +50,7 @@ export class WorkerPool<T extends BaseWorker> {
    * @param args Arguments to pass to the method.
    * @returns The result of the method call.
    */
-  async call<K extends ClassProperties<T>>(
-    method: K,
-    ...args: MethodParams<T, K>
-  ): Promise<Awaited<MethodReturn<T, K>>> {
+  async call<K extends ClassProperties<T>>(method: K, ...args: MethodParams<T, K>): Promise<Awaited<MethodReturn<T, K>>> {
     let workerId: number | undefined;
     let increased = false;
 
@@ -95,11 +90,7 @@ export class WorkerPool<T extends BaseWorker> {
   async init(params?: InitParams<T>) {
     this.initParams = params;
 
-    await Promise.all(
-      this.workers.map((worker, id) =>
-        worker ? worker.remote.init(id, params) : Promise.resolve(),
-      ),
-    );
+    await Promise.all(this.workers.map((worker, id) => (worker ? worker.remote.init(id, params) : Promise.resolve())));
 
     if (!this.statsTimer) {
       this.statsTimer = setInterval(() => {
@@ -115,11 +106,7 @@ export class WorkerPool<T extends BaseWorker> {
   async bootstrap(params?: BootstrapParams<T>) {
     this.bootstrapParams = params;
 
-    await Promise.all(
-      this.workers.map(worker =>
-        worker ? worker.remote.bootstrap(params) : Promise.resolve(),
-      ),
-    );
+    await Promise.all(this.workers.map(worker => (worker ? worker.remote.bootstrap(params) : Promise.resolve())));
   }
 
   private spawnWorker(id: number): WrappedWorker<T> {
@@ -138,11 +125,7 @@ export class WorkerPool<T extends BaseWorker> {
     return { remote: wrap<T>(native), native };
   }
 
-  private async handleCrash(
-    event: 'error' | 'messageerror' | 'close',
-    id: number,
-    e: unknown,
-  ) {
+  private async handleCrash(event: 'error' | 'messageerror' | 'close', id: number, e: unknown) {
     if (this.destroying) {
       return;
     }

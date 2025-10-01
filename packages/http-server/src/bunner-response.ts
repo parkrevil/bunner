@@ -164,17 +164,12 @@ export class BunnerResponse {
       return this.setBody(undefined).buildWorkerResponse();
     }
 
-    if (
-      this._status === StatusCodes.NO_CONTENT ||
-      this._status === StatusCodes.NOT_MODIFIED
-    ) {
+    if (this._status === StatusCodes.NO_CONTENT || this._status === StatusCodes.NOT_MODIFIED) {
       return this.setBody(undefined).buildWorkerResponse();
     }
 
     if (!this._status && (this._body === null || this._body === undefined)) {
-      return this.setStatus(StatusCodes.NO_CONTENT)
-        .setBody(undefined)
-        .buildWorkerResponse();
+      return this.setStatus(StatusCodes.NO_CONTENT).setBody(undefined).buildWorkerResponse();
     }
 
     if (contentType === ContentType.Json) {
@@ -194,10 +189,7 @@ export class BunnerResponse {
    */
   private buildWorkerResponse(): BunnerResponse {
     if (this._cookies.size > 0) {
-      this.setHeader(
-        HeaderField.SetCookie,
-        this._cookies.toSetCookieHeaders().join(', '),
-      );
+      this.setHeader(HeaderField.SetCookie, this._cookies.toSetCookieHeaders().join(', '));
     }
 
     this._workerResponse = {
@@ -218,9 +210,7 @@ export class BunnerResponse {
   private inferContentType() {
     if (
       this._body !== null &&
-      (typeof this._body === 'object' ||
-        typeof this._body === 'number' ||
-        typeof this._body === 'boolean')
+      (typeof this._body === 'object' || typeof this._body === 'number' || typeof this._body === 'boolean')
     ) {
       return ContentType.Json;
     }
