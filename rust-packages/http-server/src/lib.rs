@@ -256,7 +256,7 @@ pub unsafe extern "C" fn handle_request(
     let app = match get_app(app_id, "handle_request") {
         Ok(a) => a,
         Err(e) => {
-            (cb)(request_key, 0, make_result(&e));
+            (cb)(request_key, make_result(&e));
 
             return;
         }
@@ -274,7 +274,7 @@ pub unsafe extern "C" fn handle_request(
                     Some(serde_json::json!({"payload_ptr": format!("{:p}", payload_ptr)})),
                 );
 
-                (cb)(request_key, 0, make_result(&err));
+                (cb)(request_key, make_result(&err));
 
                 return;
             }

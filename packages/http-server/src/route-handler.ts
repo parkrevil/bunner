@@ -43,7 +43,7 @@ export class RouteHandler {
           options: routeOptions,
         }: RestRouteHandlerMetadata = Reflect.getMetadata(MetadataKey.RouteHandler, controllerProto, handlerName);
 
-        if (!httpMethod) {
+        if (httpMethod === undefined) {
           return;
         }
 

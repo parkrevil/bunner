@@ -8,13 +8,15 @@ pub type RequestKey = u64;
 
 pub type LengthHeaderSize = u32;
 
-pub type HandleRequestCallback = extern "C" fn(RequestKey, u16, MutablePointer);
+pub type HandleRequestCallback = extern "C" fn(RequestKey, MutablePointer);
 
 pub type StaticString = &'static str;
 
 pub type ErrorCode = u16;
 
 pub type WorkerId = u32;
+
+pub type RouteKey = u16;
 
 /// Helper trait to map an integer ID type to the corresponding `Atomic` type.
 /// This allows other modules to derive the correct atomic type from `AppId`.

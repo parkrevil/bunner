@@ -1,14 +1,14 @@
 use crate::app_registry::find_app;
 use crate::app_request_callback_dispatcher::AppRequestCallbackDispatcher;
-use crate::enums::{HttpMethod, LenPrefixedString};
+use crate::enums::{HttpMethod, HttpStatusCode, LenPrefixedString};
 use crate::errors::{FfiError, FfiErrorCode};
 use crate::middlewares::{
     BodyParser, CookieParser, HeaderParser, Lifecycle, MiddlewareChain, UrlParser,
 };
 use crate::router::structures::RouterResult;
-use crate::router::{Router, RouterReadOnly};
+use crate::router::{Router, RouterErrorCode, RouterReadOnly};
 use crate::structures::{
-    AppOptions, BunnerRequest, BunnerResponse, HandleRequestOutput, HandleRequestPayload,
+    AppOptions, BunnerRequest, BunnerResponse, HandleRequestPayload, HandleRequestResult,
 };
 use crate::thread_pool::submit_job;
 use crate::types::{AppId, RequestKey, WorkerId};
@@ -223,11 +223,7 @@ fn process_request(
     };
 
     if !middleware_chain.execute(Lifecycle::PreRequest, &mut request, &mut response, &payload) {
-        tracing::event!(
-            tracing::Level::TRACE,
-            step = "middleware_stopped",
-            request_key = request_key
-        );
+        tracing::trace!(step = "middleware_stopped", request_key = request_key);
 
         callback_handle_request(
             app_id,
@@ -235,18 +231,18 @@ fn process_request(
             cb,
             request_key,
             None,
-            &HandleRequestOutput { request, response },
+            &HandleRequestResult {
+                route_key: None,
+                request,
+                response,
+            },
         );
 
         return;
     }
 
     if !middleware_chain.execute(Lifecycle::OnRequest, &mut request, &mut response, &payload) {
-        tracing::event!(
-            tracing::Level::TRACE,
-            step = "middleware_stopped",
-            request_key = request_key
-        );
+        tracing::trace!(step = "middleware_stopped", request_key = request_key);
 
         callback_handle_request(
             app_id,
@@ -254,7 +250,11 @@ fn process_request(
             cb,
             request_key,
             None,
-            &HandleRequestOutput { request, response },
+            &HandleRequestResult {
+                route_key: None,
+                request,
+                response,
+            },
         );
 
         return;
@@ -276,8 +276,7 @@ fn process_request(
                     }
                 }
 
-                tracing::event!(
-                    tracing::Level::TRACE,
+                tracing::trace!(
                     step = "route_match",
                     request_key = request_key,
                     route_key = route_key
@@ -289,6 +288,40 @@ fn process_request(
             (route_key, params)
         }
         Err(router_error) => {
+            if router_error.code == RouterErrorCode::PathNotFound {
+                tracing::trace!(
+                    step = "route_not_found",
+                    request_key = request_key,
+                    path = %request.path,
+                    http_method = %http_method as u8,
+                );
+
+                response.status = Some(HttpStatusCode::NotFound);
+
+                callback_handle_request(
+                    app_id,
+                    worker_id,
+                    cb,
+                    request_key,
+                    None,
+                    &HandleRequestResult {
+                        route_key: None,
+                        request,
+                        response,
+                    },
+                );
+
+                return;
+            }
+
+            tracing::trace!(
+                step = "route_error",
+                request_key = request_key,
+                path = %request.path,
+                http_method = %http_method as u8,
+                error = ?router_error
+            );
+
             let mut be = FfiError::from(router_error);
 
             be.merge_extra(serde_json::json!({
@@ -297,12 +330,6 @@ fn process_request(
                 "method": http_method as u8,
                 "path": request.path
             }));
-
-            tracing::event!(
-                tracing::Level::TRACE,
-                step = "route_not_found",
-                request_key = request_key
-            );
 
             callback_handle_request(app_id, worker_id, cb, request_key, None, &be);
 
@@ -330,7 +357,11 @@ fn process_request(
             cb,
             request_key,
             None,
-            &HandleRequestOutput { request, response },
+            &HandleRequestResult {
+                route_key: Some(route_key),
+                request,
+                response,
+            },
         );
 
         return;
@@ -342,7 +373,11 @@ fn process_request(
         cb,
         request_key,
         Some(route_key),
-        &HandleRequestOutput { request, response },
+        &HandleRequestResult {
+            route_key: Some(route_key),
+            request,
+            response,
+        },
     );
 }
 
@@ -362,7 +397,7 @@ pub fn callback_handle_request<T: Serialize>(
 
         unsafe {
             app.dispatcher()
-                .enqueue(worker_id, callback, request_key, route_key, res_ptr)
+                .enqueue(worker_id, callback, request_key, res_ptr)
         };
     } else {
         tracing::event!(

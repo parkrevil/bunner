@@ -67,20 +67,13 @@ export interface HandleRequestParams {
 }
 
 /**
- * Handle Request Output
- * @description The output interface for Handle Request
- */
-export interface HandleRequestOutput {
-  request: FfiBunnerRequest;
-  response: FfiBunnerResponse;
-}
-
-/**
  * Handle Request Result
  * @description The result interface for Handle Request
  */
-export interface HandleRequestResult extends HandleRequestOutput {
+export interface HandleRequestResult {
   routeKey: RouteKey;
+  request: FfiBunnerRequest;
+  response: FfiBunnerResponse;
 }
 
 /**

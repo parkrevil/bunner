@@ -18,7 +18,6 @@ import type { RouteKey } from '../types';
 import { FFI_REQUEST_KEY_TYPE } from './constants';
 import type {
   AddRouteResult,
-  HandleRequestOutput,
   HandleRequestParams,
   HandleRequestResult,
   FfiSymbols,
@@ -78,7 +77,7 @@ export class Ffi extends BaseFfi<FfiSymbols> {
     this.options = options;
     this.pendingHandleRequests = new Map();
     this.handleRequestCb = this.createJsCallback(this.handleRequestCallback, {
-      args: [FFI_REQUEST_KEY_TYPE, FFIType.u16, FFIType.pointer],
+      args: [FFI_REQUEST_KEY_TYPE, FFIType.pointer],
       returns: FFIType.void,
       threadsafe: true,
     });
@@ -194,13 +193,11 @@ export class Ffi extends BaseFfi<FfiSymbols> {
 
   /**
    * Handle request callback
-   * @param requestIdPtr - The request ID pointer
-   * @param requestIdLength - The request ID length
-   * @param routeKey - The route key
-   * @param resultPtr - The result pointer
-   * @param resultLength - The result length
+   * @param requestKey
+   * @param resultPtr
+   * @returns
    */
-  private handleRequestCallback(requestKey: RequestKey, routeKey: number, resultPtr: FfiPointer) {
+  private handleRequestCallback(requestKey: RequestKey, resultPtr: FfiPointer): void {
     requestKey = BigInt(requestKey);
 
     const entry = this.pendingHandleRequests.get(requestKey);
@@ -212,13 +209,13 @@ export class Ffi extends BaseFfi<FfiSymbols> {
     }
 
     try {
-      const result = resultPtr.toResult<HandleRequestOutput>();
+      const result = resultPtr.toResult<HandleRequestResult>();
 
       if (!result) {
         throw new BunnerError('Result is null');
       }
 
-      entry.resolve({ routeKey, ...result });
+      entry.resolve(result);
     } catch (e) {
       console.log('1');
       entry.reject(e);

@@ -1,6 +1,6 @@
 use crate::{
     enums::{HttpMethod, HttpStatusCode, LogLevel},
-    types::AppId,
+    types::{AppId, RouteKey},
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -94,7 +94,9 @@ pub struct HandleRequestPayload {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct HandleRequestOutput {
+pub struct HandleRequestResult {
+    #[serde(rename = "routeKey")]
+    pub route_key: Option<RouteKey>,
     pub request: BunnerRequest,
     pub response: BunnerResponse,
 }

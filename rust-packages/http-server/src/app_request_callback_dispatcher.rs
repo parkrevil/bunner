@@ -10,7 +10,6 @@ use super::HandleRequestCallback;
 struct CallbackJob {
     callback: HandleRequestCallback,
     request_key: RequestKey,
-    route_key: Option<u16>,
     result_ptr: MutablePointer,
 }
 
@@ -55,14 +54,12 @@ impl AppRequestCallbackDispatcher {
         worker_id: WorkerId,
         callback: HandleRequestCallback,
         request_key: RequestKey,
-        route_key: Option<u16>,
         result_ptr: MutablePointer,
     ) {
         let wq = self.get_or_create(worker_id);
         let send_result = wq.tx.send(CallbackJob {
             callback,
             request_key,
-            route_key,
             result_ptr,
         });
         if let Err(e) = send_result {
@@ -89,17 +86,10 @@ impl AppRequestCallbackDispatcher {
             tracing::event!(
                 tracing::Level::TRACE,
                 stage = "dispatcher_recv_fg_app",
-                request_key = job.request_key,
-                route_key = job.route_key
+                request_key = job.request_key
             );
 
-            let res = std::panic::catch_unwind(|| {
-                (job.callback)(
-                    job.request_key,
-                    job.route_key.unwrap_or_default(),
-                    job.result_ptr,
-                )
-            });
+            let res = std::panic::catch_unwind(|| (job.callback)(job.request_key, job.result_ptr));
 
             if res.is_err() {
                 tracing::event!(tracing::Level::ERROR, reason = "callback_panic_caught");

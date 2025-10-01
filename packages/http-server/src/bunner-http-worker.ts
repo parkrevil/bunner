@@ -63,7 +63,7 @@ export class BunnerHttpWorker extends BaseWorker {
         return res.getWorkerResponse();
       }
 
-      if (routeKey === 0) {
+      if (isNaN(routeKey)) {
         return res.setStatus(StatusCodes.NOT_FOUND).end();
       }
 
