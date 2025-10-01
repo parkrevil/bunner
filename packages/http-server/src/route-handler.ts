@@ -79,11 +79,11 @@ export class RouteHandler {
   }
 
   /**
-   * Handle the request
-   * @param routeKey - The route key
+   * Find a handler function by route key
+   * @param key - The route key
    * @returns
    */
-  find(routeKey: number) {
-    return this.handlers.get(routeKey);
+  find(key: number) {
+    return this.handlers.get(key);
   }
 }

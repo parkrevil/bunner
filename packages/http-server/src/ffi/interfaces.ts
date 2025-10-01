@@ -136,7 +136,8 @@ export interface FfiBunnerRequest {
  * @description The response interface for Rust Bunner
  */
 export interface FfiBunnerResponse {
-  httpStatus: StatusCodes;
+  httpStatus: StatusCodes | null;
+  httpStatusMessage: string | null;
   headers: Record<string, any>;
   body: string | Record<string, any>;
 }

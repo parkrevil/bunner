@@ -35,3 +35,12 @@ export interface WorkerInitParams {
  * @description The options for the worker
  */
 export interface WorkerOptions extends FfiOptions {}
+
+/**
+ * HTTP Worker Response
+ * @description The response structure sent from the worker to the main thread
+ */
+export interface HttpWorkerResponse {
+  body: any;
+  init: ResponseInit;
+}

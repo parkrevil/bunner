@@ -3,6 +3,8 @@ import { StatusCodes, getReasonPhrase } from 'http-status-codes';
 
 import type { BunnerRequest } from './bunner-request';
 import { ContentType, HeaderField, HttpMethod } from './enums';
+import type { FfiBunnerResponse } from './ffi';
+import type { HttpWorkerResponse } from './interfaces';
 
 export class BunnerResponse {
   private readonly req: BunnerRequest;
@@ -11,12 +13,23 @@ export class BunnerResponse {
   private _headers: Headers;
   private _status: StatusCodes;
   private _statusText: string;
-  private _built = false;
+  private _workerResponse: HttpWorkerResponse;
 
-  constructor(req: BunnerRequest) {
+  constructor(req: BunnerRequest, ffiRes: FfiBunnerResponse) {
     this.req = req;
-    this._headers = new Headers();
-    this._cookies = new CookieMap();
+    this._headers = new Headers(ffiRes.headers);
+    this._cookies = new CookieMap(ffiRes.headers[HeaderField.SetCookie] ?? {});
+
+    if (ffiRes.httpStatus) {
+      this.setStatus(
+        ffiRes.httpStatus,
+        ffiRes.httpStatusMessage ?? undefined,
+      ).end();
+    }
+  }
+
+  isSent() {
+    return this._workerResponse !== undefined;
   }
 
   getStatus() {
@@ -113,20 +126,27 @@ export class BunnerResponse {
     return this;
   }
 
-  build() {
-    if (this._built) {
+  end(): HttpWorkerResponse {
+    if (this.isSent()) {
+      return this._workerResponse;
+    }
+
+    this.build();
+
+    return this._workerResponse;
+  }
+
+  build(): BunnerResponse {
+    if (this.isSent()) {
       return this;
     }
 
-    const location = this.getHeader(HeaderField.Location);
-
-    if (location) {
+    if (this.getHeader(HeaderField.Location)) {
       if (!this._status) {
         this.setStatus(StatusCodes.MOVED_PERMANENTLY);
       }
-      this._body = undefined;
-      this._built = true;
-      return this;
+
+      return this.setBody(undefined).buildWorkerResponse();
     }
 
     const contentType: string | undefined = this.getContentType() ?? undefined;
@@ -140,47 +160,55 @@ export class BunnerResponse {
         this.setStatus(StatusCodes.OK);
       }
 
-      this._body = undefined;
-      this._built = true;
-
-      return this;
+      return this.setBody(undefined).buildWorkerResponse();
     }
 
     if (
       this._status === StatusCodes.NO_CONTENT ||
       this._status === StatusCodes.NOT_MODIFIED
     ) {
-      this._body = undefined;
-      this._built = true;
-
-      return this;
+      return this.setBody(undefined).buildWorkerResponse();
     }
 
     if (!this._status && (this._body === null || this._body === undefined)) {
-      this.setStatus(StatusCodes.NO_CONTENT);
-      this._body = undefined;
-      this._built = true;
-
-      return this;
+      return this.setStatus(StatusCodes.NO_CONTENT)
+        .setBody(undefined)
+        .buildWorkerResponse();
     }
 
     if (contentType === ContentType.Json) {
       try {
-        this._body = JSON.stringify(this._body);
+        this.setBody(JSON.stringify(this._body));
       } catch {
-        this.setContentType(ContentType.Text);
-
-        this._body = String(this._body);
+        this.setContentType(ContentType.Text).setBody(String(this._body));
       }
     }
 
-    this._built = true;
-
-    return this;
+    return this.buildWorkerResponse();
   }
 
-  toResponse() {
-    return new Response(this._body, this.makeResponseInit());
+  /**
+   * Build the response for the worker.
+   * @description This method finalizes the response by setting cookies and preparing the body and headers for sending to the worker.
+   */
+  private buildWorkerResponse(): BunnerResponse {
+    if (this._cookies.size > 0) {
+      this.setHeader(
+        HeaderField.SetCookie,
+        this._cookies.toSetCookieHeaders().join(', '),
+      );
+    }
+
+    this._workerResponse = {
+      body: this._body,
+      init: {
+        status: this._status,
+        statusText: this._statusText,
+        headers: this._headers,
+      },
+    };
+
+    return this;
   }
 
   /**
@@ -197,20 +225,5 @@ export class BunnerResponse {
     }
 
     return ContentType.Text;
-  }
-
-  private makeResponseInit() {
-    if (this._cookies.size > 0) {
-      this.setHeader(
-        HeaderField.SetCookie,
-        this._cookies.toSetCookieHeaders().join(', '),
-      );
-    }
-
-    return {
-      status: this._status,
-      statusText: this._statusText,
-      headers: this._headers,
-    } as ResponseInit;
   }
 }

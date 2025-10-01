@@ -1,8 +1,10 @@
 import { BaseWorker, Container, LogLevel, type WorkerId } from '@bunner/core';
 import { Logger } from '@bunner/core-logger';
 import { expose } from 'comlink';
+import { StatusCodes } from 'http-status-codes';
 
 import { BunnerRequest } from './bunner-request';
+import { BunnerResponse } from './bunner-response';
 import { HttpError } from './errors';
 import { Ffi, type HandleRequestParams } from './ffi';
 import type { WorkerInitParams } from './interfaces';
@@ -55,39 +57,41 @@ export class BunnerHttpWorker extends BaseWorker {
 
   async handleRequest(params: HandleRequestParams) {
     try {
-      const result = await this.ffi.handleRequest(params);
+      const {
+        request: ffiReq,
+        response: ffiRes,
+        routeKey,
+      } = await this.ffi.handleRequest(params);
+      const req = new BunnerRequest(ffiReq);
+      const res = new BunnerResponse(req, ffiRes);
 
-      //      console.log(result);
+      if (res.isSent()) {
+        throw res;
+      }
 
-      /* const handler = this.routeHandler.find(handleResult.routeKey);
+      if (routeKey === 0) {
+        throw res.setStatus(StatusCodes.NOT_FOUND);
+      }
+
+      const handler = this.routeHandler.find(routeKey);
 
       if (!handler) {
-        throw new NotFoundError();
+        throw res.setStatus(StatusCodes.NOT_FOUND);
       }
- */
-      const request = new BunnerRequest(result.request);
 
-      console.log(request);
-      /*(const response = new BunnerResponse(request);
-       */
-      //      await handler();
+      const result = await handler();
 
-      return 'hello';
-      /* 
-  const handlerResult = await handler(req, res);
-  
-  if (handlerResult instanceof Response) {
-  return handlerResult;
-  }
-  
-  if (res.isSent) {
-  return res.getResponse();
-  }
-  res.send(handlerResult);
-  return res.getResponse();
-  */
+      if (result instanceof Response || res.isSent()) {
+        throw res;
+      }
+
+      return res.setBody(result).end();
     } catch (e: any) {
       this.logger.error(e);
+
+      if (e instanceof BunnerResponse) {
+        return e.end();
+      }
 
       if (e instanceof HttpError) {
         //        return new Response(e.message, { status: e.statusCode });

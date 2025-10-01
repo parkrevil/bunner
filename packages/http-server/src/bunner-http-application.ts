@@ -98,7 +98,7 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
             this.options.trustProxy,
           );
 
-          await this.workerPool.call('handleRequest', {
+          const workerRes = await this.workerPool.call('handleRequest', {
             httpMethod,
             url: req.url,
             headers: req.headers.toJSON(),
@@ -110,7 +110,11 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
             },
           });
 
-          return new Response('OK', { status: 200 });
+          if (!workerRes) {
+            return new Response('Internal server error', { status: 500 });
+          }
+
+          return new Response(workerRes.body, workerRes.init);
         } catch (e) {
           this.logger.error(e);
 
