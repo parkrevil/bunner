@@ -150,11 +150,11 @@ export class BunnerResponse {
       return this.setBody(undefined).buildWorkerResponse();
     }
 
-    const contentType: string | undefined = this.getContentType() ?? undefined;
-
-    if (contentType === undefined) {
+    if (!this.getContentType()) {
       this.setContentType(this.inferContentType());
     }
+
+    const contentType = this.getContentType();
 
     if (this.req.httpMethod === HttpMethod.Head) {
       if (!this._status) {
@@ -172,7 +172,7 @@ export class BunnerResponse {
       return this.setStatus(StatusCodes.NO_CONTENT).setBody(undefined).buildWorkerResponse();
     }
 
-    if (contentType === ContentType.Json) {
+    if (contentType?.startsWith(ContentType.Json)) {
       try {
         this.setBody(JSON.stringify(this._body));
       } catch {
@@ -210,7 +210,10 @@ export class BunnerResponse {
   private inferContentType() {
     if (
       this._body !== null &&
-      (typeof this._body === 'object' || typeof this._body === 'number' || typeof this._body === 'boolean')
+      (typeof this._body === 'object' ||
+        Array.isArray(this._body) ||
+        typeof this._body === 'number' ||
+        typeof this._body === 'boolean')
     ) {
       return ContentType.Json;
     }
