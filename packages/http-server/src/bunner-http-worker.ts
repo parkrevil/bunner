@@ -71,11 +71,9 @@ export class BunnerHttpWorker extends BaseWorker {
         response: ffiRes,
         routeKey,
       } = await this.ffi.handleRequest(params);
-
-      console.log('2');
       const req = new BunnerRequest(ffiReq);
       const res = new BunnerResponse(req, ffiRes);
-      console.log('3');
+
       if (res.isSent()) {
         return res.getWorkerResponse();
       }
@@ -96,27 +94,21 @@ export class BunnerHttpWorker extends BaseWorker {
         return res.end();
       }
 
-      res.setBody(result).end();
-
-      console.log(res.getWorkerResponse());
-
-      return res.getWorkerResponse();
+      return res.setBody(result).end();
     } catch (e: any) {
       console.log(e);
 
       if (e instanceof BunnerFfiError) {
-        console.log('a');
+        //
       } else if (e instanceof BunnerError) {
-        console.log('b');
+        //
       } else if (e instanceof HttpError) {
-        console.log('c');
+        //
       } else if (e instanceof Error) {
-        console.log('d');
+        //
       } else {
-        console.log('e');
+        //
       }
-
-      console.log('ddddddd');
 
       return {
         body: '',
