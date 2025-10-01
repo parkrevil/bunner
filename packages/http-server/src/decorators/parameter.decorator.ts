@@ -1,9 +1,10 @@
 import { EmitDecoratorMetadataError } from '@bunner/core';
 
 import { MetadataKey } from './enums';
-import type { RestHttpParamMetadata } from './interfaces';
+import type { RestRouteHandlerParamMetadata } from './interfaces';
+import type { RouteHandlerParamType } from './types';
 
-function createHttpParamDecorator(type: string) {
+function createHttpParamDecorator(type: RouteHandlerParamType) {
   return function (
     target: object,
     propertyKey: string | symbol | undefined,
@@ -13,7 +14,7 @@ function createHttpParamDecorator(type: string) {
       throw new EmitDecoratorMetadataError();
     }
 
-    const existingParams: RestHttpParamMetadata[] =
+    const existingParams: RestRouteHandlerParamMetadata[] =
       Reflect.getMetadata(
         MetadataKey.RouteHandlerParams,
         target,
@@ -64,3 +65,17 @@ export const Request = () => createHttpParamDecorator('request');
  * @returns
  */
 export const Response = () => createHttpParamDecorator('response');
+
+/**
+ * Response HTTP parameter decorator
+ * @description Inject the BunnerResponse object
+ * @returns
+ */
+export const Cookie = () => createHttpParamDecorator('cookie');
+
+/**
+ * Response HTTP parameter decorator
+ * @description Inject the BunnerResponse object
+ * @returns
+ */
+export const Ip = () => createHttpParamDecorator('ip');

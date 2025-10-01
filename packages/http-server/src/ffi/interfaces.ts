@@ -9,6 +9,7 @@ import type { Pointer } from 'bun:ffi';
 import type { StatusCodes } from 'http-status-codes';
 
 import type { HttpMethod } from '../enums';
+import type { RouteKey } from '../types';
 
 import type { RequestKey } from './types';
 
@@ -100,7 +101,7 @@ export interface HandleRequestOutput {
  * @description The result interface for Handle Request
  */
 export interface HandleRequestResult extends HandleRequestOutput {
-  routeKey: number;
+  routeKey: RouteKey;
 }
 
 /**

@@ -1,7 +1,8 @@
-import type { RootModuleFile } from '@bunner/core';
+import type { AnyFunction, RootModuleFile } from '@bunner/core';
 
 import type { BunnerRequest } from './bunner-request';
 import type { BunnerResponse } from './bunner-response';
+import type { RouteHandlerParamType } from './decorators/types';
 import type { FfiOptions } from './ffi';
 import type { HandlerFunction } from './types';
 
@@ -43,4 +44,13 @@ export interface WorkerOptions extends FfiOptions {}
 export interface HttpWorkerResponse {
   body: any;
   init: ResponseInit;
+}
+
+/**
+ * Route Handler Entry
+ * @description The entry for a route handler
+ */
+export interface RouteHandlerEntry {
+  handler: AnyFunction;
+  paramType: RouteHandlerParamType[];
 }

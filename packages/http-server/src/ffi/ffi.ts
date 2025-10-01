@@ -13,6 +13,7 @@ import {
 import { FFIType, JSCallback, type FFIFunction } from 'bun:ffi';
 
 import type { HttpMethod } from '../enums';
+import type { RouteKey } from '../types';
 
 import { FFI_REQUEST_KEY_TYPE } from './constants';
 import type {
@@ -130,7 +131,7 @@ export class Ffi extends BaseFfi<FfiSymbols> {
    * @returns
    */
   addRoutes(params: [HttpMethod, string][]) {
-    return this.ensure<number[]>(
+    return this.ensure<RouteKey[]>(
       this.symbols.add_routes(this.appId, this.workerId, toBuffer(params)),
     );
   }
@@ -140,7 +141,7 @@ export class Ffi extends BaseFfi<FfiSymbols> {
    * @param params
    * @returns
    */
-  handleRequest(params: HandleRequestParams) {
+  handleRequest(params: HandleRequestParams): Promise<HandleRequestResult> {
     const requestKey = ++this.requestKey;
     const promise = new Promise<HandleRequestResult>((resolve, reject) => {
       this.pendingHandleRequests.set(requestKey, { resolve, reject });

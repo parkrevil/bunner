@@ -14,7 +14,11 @@ import { BunnerRequest } from './bunner-request';
 import { BunnerResponse } from './bunner-response';
 import { HttpError } from './errors';
 import { Ffi, type HandleRequestParams } from './ffi';
-import type { HttpWorkerResponse, WorkerInitParams } from './interfaces';
+import type {
+  HttpWorkerResponse,
+  RouteHandlerEntry,
+  WorkerInitParams,
+} from './interfaces';
 import { RouteHandler } from './route-handler';
 
 export class BunnerHttpWorker extends BaseWorker {
@@ -82,13 +86,15 @@ export class BunnerHttpWorker extends BaseWorker {
         return res.setStatus(StatusCodes.NOT_FOUND).end();
       }
 
-      const handler = this.routeHandler.find(routeKey);
+      const routeEntry = this.routeHandler.find(routeKey);
 
-      if (!handler) {
+      if (!routeEntry) {
         return res.setStatus(StatusCodes.NOT_FOUND).end();
       }
 
-      const result = await handler();
+      const result = await routeEntry.handler(
+        ...this.buildRouteHandlerParams(routeEntry, req, res),
+      );
 
       if (result instanceof Response || res.isSent()) {
         return res.end();
@@ -121,6 +127,63 @@ export class BunnerHttpWorker extends BaseWorker {
     console.log(`🛑 Worker #${this.id} is destroying...`);
 
     this.ffi.destroy();
+  }
+
+  /**
+   * Builds the parameters for the route handler.
+   * @param entry The route handler entry.
+   * @param req The Bunner request.
+   * @param res The Bunner response.
+   * @returns The parameters for the route handler.
+   */
+  private buildRouteHandlerParams(
+    entry: RouteHandlerEntry,
+    req: BunnerRequest,
+    res: BunnerResponse,
+  ): any {
+    const params = [];
+
+    for (const type of entry.paramType) {
+      switch (type) {
+        case 'body':
+          params.push(req.body);
+          break;
+
+        case 'param':
+          params.push(req.params);
+          break;
+
+        case 'query':
+          params.push(req.queryParams);
+          break;
+
+        case 'header':
+          params.push(req.headers);
+          break;
+
+        case 'cookie':
+          params.push(req.cookies);
+          break;
+
+        case 'request':
+          params.push(req);
+          break;
+
+        case 'response':
+          params.push(res);
+          break;
+
+        case 'ip':
+          params.push(req.ip);
+          break;
+
+        default:
+          params.push(undefined);
+          break;
+      }
+    }
+
+    return params;
   }
 }
 

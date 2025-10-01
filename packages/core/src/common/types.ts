@@ -99,3 +99,9 @@ export type MethodSecondParam<T, K extends ClassProperties<T>> = T[K] extends (
  */
 export type SyncFunction<T extends (...args: any[]) => unknown> =
   ReturnType<T> extends Promise<any> ? never : T;
+
+/**
+ * Any Function
+ * @description A function that can be sync or async
+ */
+export type AnyFunction = (...args: any[]) => any;

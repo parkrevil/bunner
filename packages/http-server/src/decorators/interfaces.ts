@@ -1,5 +1,7 @@
 import type { HttpMethod } from '../enums';
 
+import type { RouteHandlerParamType } from './types';
+
 /**
  * Controller Decorator Options
  * @description The options for the controller decorator
@@ -36,10 +38,10 @@ export interface RestRouteHandlerMetadata {
 }
 
 /**
- * Parameter Metadata
- * @description The metadata for the parameter decorator
+ * Route Handler Parameter Metadata
+ * @description The metadata for the route handler parameters
  */
-export interface RestHttpParamMetadata {
+export interface RestRouteHandlerParamMetadata {
   index: number;
-  type: string;
+  type: RouteHandlerParamType;
 }

@@ -1,5 +1,5 @@
 /**
- * Handler Function
- * @description The handler function
+ * Route Key
+ * @description The type for route keys
  */
-export type HandlerFunction = (...args: any[]) => any;
+export type RouteKey = number;

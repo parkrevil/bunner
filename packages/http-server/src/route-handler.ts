@@ -4,27 +4,28 @@ import {
   MetadataKey,
   type RestControllerMetadata,
   type RestRouteHandlerMetadata,
+  type RestRouteHandlerParamMetadata,
 } from './decorators';
 import { HttpMethod } from './enums';
 import { Ffi } from './ffi';
-import type { HandlerFunction } from './types';
+import type { RouteHandlerEntry } from './interfaces';
+import type { RouteKey } from './types';
 
 export class RouteHandler {
   private container: Container;
   private ffi: Ffi;
-  private handlers: Map<number, HandlerFunction>;
+  private handlers: Map<RouteKey, RouteHandlerEntry>;
 
   constructor(container: Container, ffi: Ffi) {
     this.container = container;
     this.ffi = ffi;
-    this.handlers = new Map<number, HandlerFunction>();
   }
 
   /**
    * Collect routes from controllers and register them to the router
    */
   register() {
-    const handlers: HandlerFunction[] = [];
+    const entries: RouteHandlerEntry[] = [];
     const addRoutesParams: [HttpMethod, string][] = [];
 
     this.container
@@ -32,7 +33,7 @@ export class RouteHandler {
       .forEach(controller => {
         const {
           instance: controllerInstance,
-          path: controllerPath,
+          path: prefix,
           options: controllerOptions,
         } = controller;
         const controllerProto = Object.getPrototypeOf(controllerInstance);
@@ -54,27 +55,41 @@ export class RouteHandler {
             controllerProto,
             handlerName,
           );
+
+          if (!httpMethod) {
+            return;
+          }
+
+          const routeParams: RestRouteHandlerParamMetadata[] =
+            Reflect.getMetadata(
+              MetadataKey.RouteHandlerParams,
+              controllerProto,
+              handlerName,
+            ) ?? [];
           const fullPath =
             '/' +
             [
               routeOptions?.version ?? controllerOptions?.version ?? '',
-              controllerPath ?? '',
+              prefix ?? '',
               routePath ?? '',
             ]
               .filter(Boolean)
               .join('/');
 
-          handlers.push(
-            controllerInstance[handlerName].bind(controllerInstance),
-          );
+          entries.push({
+            handler: controllerInstance[handlerName].bind(controllerInstance),
+            paramType: routeParams
+              .sort((a, b) => a.index - b.index)
+              .map(p => p.type),
+          });
           addRoutesParams.push([httpMethod, fullPath]);
         });
       });
 
     const addRoutesResult = this.ffi.addRoutes(addRoutesParams);
 
-    this.handlers = new Map<number, HandlerFunction>(
-      addRoutesResult.map((routeKey, index) => [routeKey, handlers[index]!]),
+    this.handlers = new Map<RouteKey, RouteHandlerEntry>(
+      addRoutesResult.map((routeKey, index) => [routeKey, entries[index]!]),
     );
   }
 
@@ -83,7 +98,7 @@ export class RouteHandler {
    * @param key - The route key
    * @returns
    */
-  find(key: number) {
+  find(key: RouteKey): RouteHandlerEntry | undefined {
     return this.handlers.get(key);
   }
 }
