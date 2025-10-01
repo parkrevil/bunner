@@ -1,4 +1,11 @@
-import { BaseWorker, Container, LogLevel, type WorkerId } from '@bunner/core';
+import {
+  BaseWorker,
+  BunnerError,
+  BunnerFfiError,
+  Container,
+  LogLevel,
+  type WorkerId,
+} from '@bunner/core';
 import { Logger } from '@bunner/core-logger';
 import { expose } from 'comlink';
 import { StatusCodes } from 'http-status-codes';
@@ -7,7 +14,7 @@ import { BunnerRequest } from './bunner-request';
 import { BunnerResponse } from './bunner-response';
 import { HttpError } from './errors';
 import { Ffi, type HandleRequestParams } from './ffi';
-import type { WorkerInitParams } from './interfaces';
+import type { HttpWorkerResponse, WorkerInitParams } from './interfaces';
 import { RouteHandler } from './route-handler';
 
 export class BunnerHttpWorker extends BaseWorker {
@@ -55,51 +62,66 @@ export class BunnerHttpWorker extends BaseWorker {
     this.ffi.dispatchRequestCallback();
   }
 
-  async handleRequest(params: HandleRequestParams) {
+  async handleRequest(
+    params: HandleRequestParams,
+  ): Promise<HttpWorkerResponse> {
     try {
       const {
         request: ffiReq,
         response: ffiRes,
         routeKey,
       } = await this.ffi.handleRequest(params);
+
+      console.log('2');
       const req = new BunnerRequest(ffiReq);
       const res = new BunnerResponse(req, ffiRes);
-
+      console.log('3');
       if (res.isSent()) {
-        throw res;
+        return res.getWorkerResponse();
       }
 
       if (routeKey === 0) {
-        throw res.setStatus(StatusCodes.NOT_FOUND);
+        return res.setStatus(StatusCodes.NOT_FOUND).end();
       }
 
       const handler = this.routeHandler.find(routeKey);
 
       if (!handler) {
-        throw res.setStatus(StatusCodes.NOT_FOUND);
+        return res.setStatus(StatusCodes.NOT_FOUND).end();
       }
 
       const result = await handler();
 
       if (result instanceof Response || res.isSent()) {
-        throw res;
+        return res.end();
       }
 
-      return res.setBody(result).end();
+      res.setBody(result).end();
+
+      console.log(res.getWorkerResponse());
+
+      return res.getWorkerResponse();
     } catch (e: any) {
-      this.logger.error(e);
+      console.log(e);
 
-      if (e instanceof BunnerResponse) {
-        return e.end();
-      }
-
-      if (e instanceof HttpError) {
-        //        return new Response(e.message, { status: e.statusCode });
+      if (e instanceof BunnerFfiError) {
+        console.log('a');
+      } else if (e instanceof BunnerError) {
+        console.log('b');
+      } else if (e instanceof HttpError) {
+        console.log('c');
       } else if (e instanceof Error) {
-        //      return new Response(e.message, { status: 500 });
+        console.log('d');
+      } else {
+        console.log('e');
       }
 
-      //  return new Response('Internal server error', { status: 500 });
+      console.log('ddddddd');
+
+      return {
+        body: '',
+        init: { status: StatusCodes.INTERNAL_SERVER_ERROR },
+      };
     }
   }
 

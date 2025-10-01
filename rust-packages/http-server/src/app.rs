@@ -1,6 +1,6 @@
 use crate::app_registry::find_app;
 use crate::app_request_callback_dispatcher::AppRequestCallbackDispatcher;
-use crate::enums::{HttpMethod, HttpStatusCode, LenPrefixedString};
+use crate::enums::{HttpMethod, LenPrefixedString};
 use crate::errors::{FfiError, FfiErrorCode};
 use crate::middlewares::{
     BodyParser, CookieParser, HeaderParser, Lifecycle, MiddlewareChain, UrlParser,
@@ -19,7 +19,7 @@ use super::HandleRequestCallback;
 use percent_encoding::percent_decode_str;
 use serde::Serialize;
 use serde_json::Value as JsonValue;
-use std::{str, sync::Arc};
+use std::{collections::HashMap, str, sync::Arc};
 use uuid::Uuid;
 
 #[repr(C)]
@@ -217,9 +217,9 @@ fn process_request(
         body: None,
     };
     let mut response = BunnerResponse {
-        http_status: HttpStatusCode::OK,
-        headers: None,
-        body: serde_json::Value::Null,
+        status: None,
+        headers: HashMap::new(),
+        body: None,
     };
 
     if !middleware_chain.execute(Lifecycle::PreRequest, &mut request, &mut response, &payload) {

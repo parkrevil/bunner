@@ -140,7 +140,7 @@ export class Ffi extends BaseFfi<FfiSymbols> {
    * @param params
    * @returns
    */
-  async handleRequest(params: HandleRequestParams) {
+  handleRequest(params: HandleRequestParams) {
     const requestKey = ++this.requestKey;
     const promise = new Promise<HandleRequestResult>((resolve, reject) => {
       this.pendingHandleRequests.set(requestKey, { resolve, reject });
@@ -237,7 +237,7 @@ export class Ffi extends BaseFfi<FfiSymbols> {
   ) {
     requestKey = BigInt(requestKey);
 
-    const entry = this.pendingHandleRequests.get(requestKey)!;
+    const entry = this.pendingHandleRequests.get(requestKey);
 
     if (entry === undefined) {
       console.error(`No pending handle request for key ${requestKey}`);
@@ -254,6 +254,7 @@ export class Ffi extends BaseFfi<FfiSymbols> {
 
       entry.resolve({ routeKey, ...result });
     } catch (e) {
+      console.log('1');
       entry.reject(e);
     } finally {
       this.pendingHandleRequests.delete(requestKey);

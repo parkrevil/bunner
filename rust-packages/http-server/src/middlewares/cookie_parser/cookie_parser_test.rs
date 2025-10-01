@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod handle {
     use super::super::CookieParser;
-    use crate::enums::{HttpMethod, HttpStatusCode};
+    use crate::enums::HttpMethod;
     use crate::middlewares::Middleware;
     use crate::structures::{BunnerRequest, BunnerResponse, HandleRequestPayload, RequestMetadata};
     use serde_json::Value;
@@ -40,9 +40,9 @@ mod handle {
 
     fn build_response() -> BunnerResponse {
         BunnerResponse {
-            http_status: HttpStatusCode::OK,
-            headers: None,
-            body: Value::Null,
+            status: None,
+            headers: HashMap::new(),
+            body: None,
         }
     }
 

@@ -112,19 +112,6 @@ impl<'de> Deserialize<'de> for HttpStatusCode {
     }
 }
 
-impl HttpStatusCode {
-    #[inline]
-    pub fn reason_phrase(self) -> &'static str {
-        match self {
-            HttpStatusCode::OK => "OK",
-            HttpStatusCode::BadRequest => "Bad Request",
-            HttpStatusCode::NotFound => "Not Found",
-            HttpStatusCode::UnsupportedMediaType => "Unsupported Media Type",
-            HttpStatusCode::InternalServerError => "Internal Server Error",
-        }
-    }
-}
-
 #[repr(u8)]
 #[derive(Debug, Clone, Copy)]
 pub enum LogLevel {

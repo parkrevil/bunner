@@ -20,16 +20,17 @@ export class BunnerResponse {
     this._headers = new Headers(ffiRes.headers);
     this._cookies = new CookieMap(ffiRes.headers[HeaderField.SetCookie] ?? {});
 
-    if (ffiRes.httpStatus) {
-      this.setStatus(
-        ffiRes.httpStatus,
-        ffiRes.httpStatusMessage ?? undefined,
-      ).end();
+    if (ffiRes.status) {
+      this.setStatus(ffiRes.status).end();
     }
   }
 
   isSent() {
     return this._workerResponse !== undefined;
+  }
+
+  getWorkerResponse() {
+    return this._workerResponse;
   }
 
   getStatus() {
@@ -204,7 +205,7 @@ export class BunnerResponse {
       init: {
         status: this._status,
         statusText: this._statusText,
-        headers: this._headers,
+        headers: this._headers.toJSON(),
       },
     };
 

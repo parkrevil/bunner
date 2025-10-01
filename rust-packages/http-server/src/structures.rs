@@ -35,10 +35,10 @@ pub struct AddRouteResult {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct BunnerResponse {
-    #[serde(rename = "httpStatus")]
-    pub http_status: HttpStatusCode,
-    pub headers: Option<HashMap<String, String>>,
-    pub body: serde_json::Value,
+    pub status: Option<HttpStatusCode>,
+    #[serde(default)]
+    pub headers: HashMap<String, String>,
+    pub body: Option<serde_json::Value>,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]

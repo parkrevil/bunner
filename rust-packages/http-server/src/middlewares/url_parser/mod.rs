@@ -15,8 +15,7 @@ pub struct UrlParser;
 
 impl UrlParser {
     fn reject_request(res: &mut BunnerResponse, status: HttpStatusCode) -> bool {
-        res.http_status = status;
-        res.body = serde_json::Value::String(status.reason_phrase().to_string());
+        res.status = Some(status);
         false
     }
 }

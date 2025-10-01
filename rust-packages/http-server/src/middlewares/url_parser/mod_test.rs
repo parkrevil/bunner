@@ -34,9 +34,9 @@ mod handle {
 
     fn build_response() -> BunnerResponse {
         BunnerResponse {
-            http_status: HttpStatusCode::OK,
-            headers: None,
-            body: Value::Null,
+            status: None,
+            headers: HashMap::new(),
+            body: None,
         }
     }
 
@@ -103,8 +103,8 @@ mod handle {
         let continued = parser.handle(&mut req, &mut res, &payload);
 
         assert!(!continued);
-        assert_eq!(res.http_status, HttpStatusCode::BadRequest);
-        assert_eq!(res.body, Value::String("Bad Request".to_string()));
+        assert_eq!(res.status, Some(HttpStatusCode::BadRequest));
+        assert_eq!(res.body, None);
         assert_eq!(req.path, original_path);
         assert_eq!(req.query_string, None);
     }
@@ -160,18 +160,18 @@ mod handle {
     }
 
     #[test]
-    fn overwrites_response_body_on_rejection() {
+    fn keep_response_body_on_rejection() {
         let parser = UrlParser;
         let payload = build_payload("relative/no-scheme");
 
         let mut req = build_request();
         let mut res = build_response();
-        res.body = Value::String("previous body".to_string());
+        res.body = Some(Value::String("body".to_string()));
 
         let continued = parser.handle(&mut req, &mut res, &payload);
 
         assert!(!continued);
-        assert_eq!(res.http_status, HttpStatusCode::BadRequest);
-        assert_eq!(res.body, Value::String("Bad Request".to_string()));
+        assert_eq!(res.status, Some(HttpStatusCode::BadRequest));
+        assert_eq!(res.body, Some(Value::String("body".to_string())));
     }
 }

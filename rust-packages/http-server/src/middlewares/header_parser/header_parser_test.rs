@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod handle {
-    use crate::enums::{HttpMethod, HttpStatusCode};
+    use crate::enums::HttpMethod;
     use crate::middlewares::Middleware;
     use crate::middlewares::header_parser::HeaderParser;
     use crate::structures::{BunnerRequest, BunnerResponse, HandleRequestPayload, RequestMetadata};
@@ -35,9 +35,9 @@ mod handle {
 
     fn build_response() -> BunnerResponse {
         BunnerResponse {
-            http_status: HttpStatusCode::OK,
-            headers: None,
-            body: Value::Null,
+            status: None,
+            headers: HashMap::new(),
+            body: None,
         }
     }
 
