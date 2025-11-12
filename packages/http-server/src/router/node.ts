@@ -10,13 +10,17 @@ export class RouterNode {
    */
   segment: string;
 
-  // Children: static -> Map for O(1) lookups, plus single param/wildcard child for precedence control
+  // Children: static -> Map for O(1) lookups
   staticChildren: Map<string, RouterNode> = new Map();
-  paramChild?: RouterNode; // ":param"
+  // Multiple param variants at same position (e.g., with different regex constraints)
+  paramChildren: RouterNode[] = [];
   wildcardChild?: RouterNode; // "*" catch-all (must be terminal)
 
   // Methods assigned at this exact path (leaf)
   methods: RouteMethods = { byMethod: new Map() };
+
+  // For Param nodes: optional compiled regex constraint
+  pattern?: RegExp;
 
   constructor(kind: NodeKind, segment: string) {
     this.kind = kind;

@@ -58,16 +58,46 @@ export class RadixRouter implements Router {
       }
 
       if (seg.charCodeAt(0) === 58 /* ':' */) {
-        const name = seg.slice(1);
+        // Support ":name" and ":name{regex}"
+        const brace = seg.indexOf('{');
+        let name = '';
+        let patternSrc: string | undefined;
+        if (brace === -1) {
+          name = seg.slice(1);
+        } else {
+          name = seg.slice(1, brace);
+          if (!seg.endsWith('}')) {
+            throw new Error("Parameter regex must close with '}'");
+          }
+          patternSrc = seg.slice(brace + 1, -1);
+          if (patternSrc.length === 0) {
+            patternSrc = undefined;
+          }
+        }
         if (!name) {
           throw new Error("Parameter segment must have a name, eg ':id'");
         }
-        if (!node.paramChild) {
-          node.paramChild = new RouterNode(NodeKind.Param, name);
-        } else if (node.paramChild.segment !== name) {
-          // allow different param names at same position; keep first
+        // Find or create a param child matching name+pattern
+        let child: RouterNode | undefined;
+        if (node.paramChildren.length) {
+          for (const c of node.paramChildren) {
+            const sameName = c.segment === name;
+            const samePattern = (c.pattern?.source ?? undefined) === (patternSrc ?? undefined);
+            if (sameName && samePattern) {
+              child = c;
+              break;
+            }
+          }
         }
-        node = node.paramChild;
+        if (!child) {
+          child = new RouterNode(NodeKind.Param, name);
+          if (patternSrc) {
+            // Anchor regex to whole segment by default
+            child.pattern = new RegExp(`^(?:${patternSrc})$`);
+          }
+          node.paramChildren.push(child);
+        }
+        node = child;
         continue;
       }
 
@@ -99,7 +129,20 @@ export class RadixRouter implements Router {
       if (seg === '*') {
         next = node.wildcardChild;
       } else if (seg.charCodeAt(0) === 58) {
-        next = node.paramChild;
+        // Choose param child by name+pattern from the route definition
+        const brace = seg.indexOf('{');
+        let name = '';
+        let patternSrc: string | undefined;
+        if (brace === -1) {
+          name = seg.slice(1);
+        } else {
+          name = seg.slice(1, brace);
+          if (!seg.endsWith('}')) {
+            return false;
+          }
+          patternSrc = seg.slice(brace + 1, -1) || undefined;
+        }
+        next = node.paramChildren.find(c => c.segment === name && (c.pattern?.source ?? undefined) === (patternSrc ?? undefined));
       } else {
         next = node.staticChildren.get(seg);
       }
@@ -135,17 +178,22 @@ export class RadixRouter implements Router {
         }
       }
 
-      if (node.paramChild) {
-        const prev = params[node.paramChild.segment];
-        params[node.paramChild.segment] = decodeURIComponentSafe(seg);
-        const k = matchDfs(node.paramChild, idx + 1);
-        if (k !== null) {
-          return k;
-        }
-        if (prev === undefined) {
-          delete params[node.paramChild.segment];
-        } else {
-          params[node.paramChild.segment] = prev;
+      if (node.paramChildren.length) {
+        for (const c of node.paramChildren) {
+          if (c.pattern && !c.pattern.test(seg)) {
+            continue;
+          }
+          const prev = params[c.segment];
+          params[c.segment] = decodeURIComponentSafe(seg);
+          const k = matchDfs(c, idx + 1);
+          if (k !== null) {
+            return k;
+          }
+          if (prev === undefined) {
+            delete params[c.segment];
+          } else {
+            params[c.segment] = prev;
+          }
         }
       }
 
@@ -185,9 +233,11 @@ export class RadixRouter implements Router {
           return true;
         }
       }
-      if (node.paramChild) {
-        if (dfs(node.paramChild, idx + 1)) {
-          return true;
+      if (node.paramChildren.length) {
+        for (const c of node.paramChildren) {
+          if (dfs(c, idx + 1)) {
+            return true;
+          }
         }
       }
       if (node.wildcardChild) {
