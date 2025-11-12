@@ -4,7 +4,7 @@ import type { RouteKey } from '../types';
 import type { RouterOptions, RouteMatch } from './types';
 
 export interface Router {
-  add(method: HttpMethod, path: string): RouteKey;
+  add(method: HttpMethod | HttpMethod[] | '*', path: string): RouteKey | RouteKey[];
   addAll(entries: Array<[HttpMethod, string]>): RouteKey[];
   match(method: HttpMethod, path: string): RouteMatch | null;
   /** Return methods available at matched path (ignoring method) — useful for 405 */
