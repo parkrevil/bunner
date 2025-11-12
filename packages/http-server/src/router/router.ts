@@ -15,6 +15,8 @@ let GLOBAL_ROUTE_KEY_SEQ = 1 as RouteKey;
  */
 export class RadixRouter implements Router {
   private root: RouterNode;
+  // Host-based routing: maintain separate roots per host pattern (exact or param-style)
+  private hostRoots: Map<string, RouterNode> = new Map();
   private options: Required<RouterOptions>;
 
   constructor(options?: RouterOptions) {
@@ -146,7 +148,20 @@ export class RadixRouter implements Router {
       addSegments(child, idx + 1);
     };
 
-    addSegments(this.root, 0);
+    // Host pattern prefix support: paths starting with '@host/'
+    // e.g. @:sub.example.com/users -> host pattern ':sub.example.com'
+    let targetRoot = this.root;
+    if (segments.length && segments[0]!.charCodeAt(0) === 64 /* '@' */) {
+      const hostSeg = segments[0]!.slice(1); // drop '@'
+      // host pattern stored separately; remove first segment from path
+      segments.shift();
+      if (!this.hostRoots.has(hostSeg)) {
+        this.hostRoots.set(hostSeg, new RouterNode(NodeKind.Static, ''));
+      }
+      targetRoot = this.hostRoots.get(hostSeg)!;
+    }
+
+    addSegments(targetRoot, 0);
     // At least one key must have been created
 
     return firstKey!;
@@ -254,7 +269,33 @@ export class RadixRouter implements Router {
       return null;
     };
 
-    const key = matchDfs(this.root, 0);
+    // If host-based roots exist, allow host prefix match using Host header pattern embedded in path as '@host/...'
+    // Expect caller to prepend '@actual.host' or '@sub.example.com'; if absent, fall back to default root.
+    let startNode = this.root;
+    if (segments.length && segments[0]!.charCodeAt(0) === 64 /* '@' */) {
+      const hostSeg = segments[0]!.slice(1);
+      segments.shift();
+      // Try exact first
+      if (this.hostRoots.has(hostSeg)) {
+        startNode = this.hostRoots.get(hostSeg)!;
+      } else {
+        // Param-like host patterns (e.g., ':sub.example.com')
+        for (const [pat, root] of this.hostRoots.entries()) {
+          if (pat.charCodeAt(0) === 58 /* ':' */) {
+            // Simple wildcard for subdomain segment before first '.'
+            const dotIndex = pat.indexOf('.');
+            if (dotIndex > 0) {
+              const suffix = pat.slice(dotIndex); // '.example.com'
+              if (hostSeg.endsWith(suffix)) {
+                startNode = root;
+                break;
+              }
+            }
+          }
+        }
+      }
+    }
+    const key = matchDfs(startNode, 0);
     if (key === null) {
       return null;
     }
@@ -296,7 +337,15 @@ export class RadixRouter implements Router {
       return false;
     };
 
-    dfs(this.root, 0);
+    let startNode = this.root;
+    if (segments.length && segments[0]!.charCodeAt(0) === 64 /* '@' */) {
+      const hostSeg = segments[0]!.slice(1);
+      segments.shift();
+      if (this.hostRoots.has(hostSeg)) {
+        startNode = this.hostRoots.get(hostSeg)!;
+      }
+    }
+    dfs(startNode, 0);
     return Array.from(methods.values());
   }
 }
