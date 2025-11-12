@@ -24,6 +24,7 @@ export class RadixRouter implements Router {
       ignoreTrailingSlash: options?.ignoreTrailingSlash ?? true,
       collapseSlashes: options?.collapseSlashes ?? true,
       caseSensitive: options?.caseSensitive ?? true,
+      redirectTrailingSlash: options?.redirectTrailingSlash ?? 'off',
     };
     this.root = new RouterNode(NodeKind.Static, '');
   }

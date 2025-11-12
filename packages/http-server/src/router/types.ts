@@ -3,6 +3,8 @@ import type { RouteKey } from '../types';
 export interface RouteMatch {
   key: RouteKey;
   params: Record<string, string>;
+  /** If set, indicates a trailing-slash redirect target path */
+  redirectTo?: string;
 }
 
 export interface RouterOptions {
@@ -12,4 +14,6 @@ export interface RouterOptions {
   collapseSlashes?: boolean;
   /** Case sensitivity for static matching (default: true) */
   caseSensitive?: boolean;
+  /** Trailing slash redirect policy: off | remove | add | auto (default: off) */
+  redirectTrailingSlash?: 'off' | 'remove' | 'add' | 'auto';
 }
