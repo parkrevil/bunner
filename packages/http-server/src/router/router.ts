@@ -9,13 +9,8 @@ import { normalizePath, splitSegments, decodeURIComponentSafe } from './utils';
 
 let GLOBAL_ROUTE_KEY_SEQ = 1 as RouteKey;
 
-/**
- * Radix-style router (static > param > wildcard precedence)
- * Single-file facade combining the previously split implementation.
- */
 export class RadixRouter implements Router {
   private root: RouterNode;
-  // Host-based routing: maintain separate roots per host pattern (exact or param-style)
   private hostRoots: Map<string, RouterNode> = new Map();
   private options: Required<RouterOptions>;
 
@@ -39,6 +34,7 @@ export class RadixRouter implements Router {
       const [m, p] = entries[i]!;
       out[i] = this._addSingle(m, p);
     }
+    this.compressStaticPaths();
     return out;
   }
 
@@ -50,7 +46,6 @@ export class RadixRouter implements Router {
     if (Array.isArray(method)) {
       return this.addAll(method.map(m => [m, path]));
     }
-    // Host aware single method add delegates to single-path builder after extracting host
     let normalized = normalizePath(path, this.options);
     if (!this.options.caseSensitive) {
       normalized = normalized.toLowerCase();
@@ -65,10 +60,13 @@ export class RadixRouter implements Router {
       const originalRoot = this.root;
       this.root = this.hostRoots.get(hostSeg)!;
       const key = this._addSingle(method, '/' + segments.join('/'));
-      this.root = originalRoot; // restore
+      this.root = originalRoot;
+      this.compressStaticPaths();
       return key;
     }
-    return this._addSingle(method, path);
+    const k = this._addSingle(method, path);
+    this.compressStaticPaths();
+    return k;
   }
 
   remove(method: HttpMethod, path: string): boolean {
@@ -85,8 +83,6 @@ export class RadixRouter implements Router {
       if (seg.charCodeAt(0) === 42) {
         next = node.wildcardChild;
       } else if (seg.charCodeAt(0) === 58) {
-        // Choose param child by name+pattern from the route definition
-        // Normalize optional marker if present
         let s = seg.endsWith('?') ? seg.slice(0, -1) : seg;
         const isMulti = s.endsWith('+');
         if (isMulti) {
@@ -113,6 +109,23 @@ export class RadixRouter implements Router {
         }
       } else {
         next = node.staticChildren.get(seg);
+        if (!next && node.staticChildren.size) {
+          for (const child of node.staticChildren.values()) {
+            const parts = child.segmentParts ?? [child.segment];
+            if (parts[0] !== seg) {
+              continue;
+            }
+            let j = 1;
+            while (j < parts.length && i + j < segments.length && segments[i + j] === parts[j]) {
+              j++;
+            }
+            if (j === parts.length) {
+              next = child;
+              i += j - 1;
+              break;
+            }
+          }
+        }
       }
       if (!next) {
         return false;
@@ -127,7 +140,7 @@ export class RadixRouter implements Router {
     if (!this.options.caseSensitive) {
       normalized = normalized.toLowerCase();
     }
-    const segments = splitSegments(normalized);
+    let segments = splitSegments(normalized);
     const params: Record<string, string> = Object.create(null);
 
     const matchDfs = (node: RouterNode, idx: number): RouteKey | null => {
@@ -138,17 +151,32 @@ export class RadixRouter implements Router {
         }
         return null;
       }
-
       const seg = segments[idx]!;
-
-      const staticNext = node.staticChildren.get(seg);
-      if (staticNext) {
-        const k = matchDfs(staticNext, idx + 1);
-        if (k !== null) {
-          return k;
+      if (node.staticChildren.size) {
+        const direct = node.staticChildren.get(seg);
+        if (direct) {
+          const k = matchDfs(direct, idx + 1);
+          if (k !== null) {
+            return k;
+          }
+        }
+        for (const child of node.staticChildren.values()) {
+          const parts = child.segmentParts ?? [child.segment];
+          if (parts[0] !== seg) {
+            continue;
+          }
+          let j = 1;
+          while (j < parts.length && idx + j < segments.length && segments[idx + j] === parts[j]) {
+            j++;
+          }
+          if (j === parts.length) {
+            const k = matchDfs(child, idx + j);
+            if (k !== null) {
+              return k;
+            }
+          }
         }
       }
-
       if (node.paramChildren.length) {
         for (const c of node.paramChildren) {
           if (c.pattern && !c.pattern.test(seg)) {
@@ -167,7 +195,6 @@ export class RadixRouter implements Router {
           }
         }
       }
-
       if (node.wildcardChild) {
         const wname = node.wildcardChild.segment || '*';
         params[wname] = decodeURIComponentSafe(segments.slice(idx).join('/'));
@@ -179,23 +206,18 @@ export class RadixRouter implements Router {
       return null;
     };
 
-    // If host-based roots exist, allow host prefix match using Host header pattern embedded in path as '@host/...'
-    // Expect caller to prepend '@actual.host' or '@sub.example.com'; if absent, fall back to default root.
     let startNode = this.root;
     if (segments.length && segments[0]!.charCodeAt(0) === 64 /* '@' */) {
       const hostSeg = segments[0]!.slice(1);
       segments.shift();
-      // Try exact first
       if (this.hostRoots.has(hostSeg)) {
         startNode = this.hostRoots.get(hostSeg)!;
       } else {
-        // Param-like host patterns (e.g., ':sub.example.com')
         for (const [pat, root] of this.hostRoots.entries()) {
           if (pat.charCodeAt(0) === 58 /* ':' */) {
-            // Simple wildcard for subdomain segment before first '.'
             const dotIndex = pat.indexOf('.');
             if (dotIndex > 0) {
-              const suffix = pat.slice(dotIndex); // '.example.com'
+              const suffix = pat.slice(dotIndex);
               if (hostSeg.endsWith(suffix)) {
                 startNode = root;
                 break;
@@ -207,6 +229,32 @@ export class RadixRouter implements Router {
     }
     const key = matchDfs(startNode, 0);
     if (key === null) {
+      const pol = this.options.redirectTrailingSlash;
+      if (pol && pol !== 'off') {
+        const had = path.length > 1 && path.endsWith('/');
+        let targetPath = path;
+        if (pol === 'remove' || (pol === 'auto' && had)) {
+          if (had) {
+            targetPath = path.slice(0, -1);
+          }
+        } else if (pol === 'add' || (pol === 'auto' && !had)) {
+          if (!had) {
+            targetPath = path + '/';
+          }
+        }
+        if (targetPath !== path) {
+          let alt = normalizePath(targetPath, { ignoreTrailingSlash: false, collapseSlashes: this.options.collapseSlashes });
+          if (!this.options.caseSensitive) {
+            alt = alt.toLowerCase();
+          }
+          const altSegments = splitSegments(alt);
+          segments = altSegments;
+          const altKey = matchDfs(startNode, 0);
+          if (altKey !== null) {
+            return { key: altKey, params, redirectTo: targetPath };
+          }
+        }
+      }
       return null;
     }
     return { key, params };
@@ -219,8 +267,7 @@ export class RadixRouter implements Router {
     }
     const segments = splitSegments(normalized);
     const methods = new Set<HttpMethod>();
-
-    const dfs = (node: RouterNode, idx: number) => {
+    const dfs = (node: RouterNode, idx: number): boolean => {
       if (idx === segments.length) {
         for (const m of node.methods.byMethod.keys()) {
           methods.add(m);
@@ -228,10 +275,23 @@ export class RadixRouter implements Router {
         return true;
       }
       const seg = segments[idx]!;
-      const staticNext = node.staticChildren.get(seg);
-      if (staticNext) {
-        if (dfs(staticNext, idx + 1)) {
+      if (node.staticChildren.size) {
+        const direct = node.staticChildren.get(seg);
+        if (direct && dfs(direct, idx + 1)) {
           return true;
+        }
+        for (const child of node.staticChildren.values()) {
+          const parts = child.segmentParts ?? [child.segment];
+          if (parts[0] !== seg) {
+            continue;
+          }
+          let j = 1;
+          while (j < parts.length && idx + j < segments.length && segments[idx + j] === parts[j]) {
+            j++;
+          }
+          if (j === parts.length && dfs(child, idx + j)) {
+            return true;
+          }
         }
       }
       if (node.paramChildren.length) {
@@ -249,7 +309,6 @@ export class RadixRouter implements Router {
       }
       return false;
     };
-
     let startNode = this.root;
     if (segments.length && segments[0]!.charCodeAt(0) === 64 /* '@' */) {
       const hostSeg = segments[0]!.slice(1);
@@ -262,7 +321,6 @@ export class RadixRouter implements Router {
     return Array.from(methods.values());
   }
 
-  // Keep private builder after all public APIs to satisfy member-ordering linter
   private _addSingle(method: HttpMethod, path: string): RouteKey {
     const normalized = normalizePath(path, this.options);
     const segments = splitSegments(normalized);
@@ -358,6 +416,40 @@ export class RadixRouter implements Router {
     };
     addSegments(this.root, 0);
     return firstKey!;
+  }
+
+  private compressStaticPaths(): void {
+    const compressFrom = (parent: RouterNode) => {
+      const children = Array.from(parent.staticChildren.values());
+      for (const child of children) {
+        compressFrom(child);
+        let cursor = child;
+        const parts: string[] = [child.segment];
+        while (
+          cursor.kind === NodeKind.Static &&
+          cursor.methods.byMethod.size === 0 &&
+          cursor.paramChildren.length === 0 &&
+          !cursor.wildcardChild &&
+          cursor.staticChildren.size === 1
+        ) {
+          const next = cursor.staticChildren.values().next().value as RouterNode;
+          if (next.kind !== NodeKind.Static) {
+            break;
+          }
+          parts.push(next.segment);
+          cursor = next;
+        }
+        if (parts.length > 1) {
+          child.segment = parts.join('/');
+          child.segmentParts = parts;
+          child.staticChildren = cursor.staticChildren;
+          child.paramChildren = cursor.paramChildren;
+          child.wildcardChild = cursor.wildcardChild;
+          child.methods = cursor.methods;
+        }
+      }
+    };
+    compressFrom(this.root);
   }
 }
 
