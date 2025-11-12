@@ -340,6 +340,10 @@ export class RadixRouter implements Router {
       }
       const seg = segments[idx]!;
       if (seg.charCodeAt(0) === 42 /* '*' */) {
+        // Conflict: wildcard cannot coexist with other children (would shadow them)
+        if (node.staticChildren.size || node.paramChildren.length) {
+          throw new Error(`Conflict: adding wildcard '*' at '${segments.slice(0, idx).join('/')}' would shadow existing routes`);
+        }
         if (idx !== segments.length - 1) {
           throw new Error("Wildcard '*' must be the last segment");
         }
@@ -398,6 +402,19 @@ export class RadixRouter implements Router {
           }
         }
         if (!child) {
+          // Conflict: same name with different regex already present
+          const dup = node.paramChildren.find(c => c.segment === name && (c.pattern?.source ?? '') !== (patternSrc ?? ''));
+          if (dup) {
+            throw new Error(
+              `Conflict: parameter ':${name}' with different regex already exists at '${segments.slice(0, idx).join('/')}'`,
+            );
+          }
+          // Conflict: attempting to add param beneath a wildcard sibling
+          if (node.wildcardChild) {
+            throw new Error(
+              `Conflict: adding parameter ':${name}' under existing wildcard at '${segments.slice(0, idx).join('/')}'`,
+            );
+          }
           child = new RouterNode(NodeKind.Param, name);
           if (patternSrc) {
             child.pattern = new RegExp(`^(?:${patternSrc})$`);
@@ -408,6 +425,12 @@ export class RadixRouter implements Router {
         return;
       }
       let child = node.staticChildren.get(seg);
+      if (!child && node.wildcardChild) {
+        // Conflict: static segment would be shadowed by existing wildcard
+        throw new Error(
+          `Conflict: adding static segment '${seg}' under existing wildcard at '${segments.slice(0, idx).join('/')}'`,
+        );
+      }
       if (!child) {
         child = new RouterNode(NodeKind.Static, seg);
         node.staticChildren.set(seg, child);
