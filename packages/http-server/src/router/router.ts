@@ -481,6 +481,60 @@ export class RadixRouter implements Router {
     return results;
   }
 
+  snapshot(): unknown {
+    const serNode = (node: RouterNode): any => ({
+      k: node.kind,
+      s: node.segment,
+      sp: node.segmentParts,
+      p: node.pattern?.source,
+      m: Array.from(node.methods.byMethod.entries()),
+      sc: Array.from(node.staticChildren.values()).map(serNode),
+      pc: node.paramChildren.map(serNode),
+      wc: node.wildcardChild ? serNode(node.wildcardChild) : undefined,
+    });
+    return {
+      root: serNode(this.root),
+      hosts: Array.from(this.hostRoots.entries()).map(([h, r]) => [h, serNode(r)] as const),
+      options: this.options,
+    };
+  }
+
+  restore(data: unknown): void {
+    const d = data as any;
+    const revive = (n: any): RouterNode => {
+      const node = new RouterNode(n.k, n.s);
+      if (n.sp) {
+        node.segmentParts = n.sp;
+      }
+      if (n.p) {
+        node.pattern = new RegExp(n.p);
+      }
+      for (const [m, key] of n.m as Array<[HttpMethod, RouteKey]>) {
+        node.methods.byMethod.set(m, key);
+      }
+      for (const c of n.sc as any[]) {
+        const child = revive(c);
+        node.staticChildren.set(child.segment, child);
+      }
+      for (const c of n.pc as any[]) {
+        node.paramChildren.push(revive(c));
+      }
+      if (n.wc) {
+        node.wildcardChild = revive(n.wc);
+      }
+      return node;
+    };
+    this.root = revive(d.root);
+    this.hostRoots.clear();
+    for (const [h, r] of d.hosts as Array<[string, any]>) {
+      this.hostRoots.set(h, revive(r));
+    }
+    this.staticFast.clear();
+    if (this.cache) {
+      this.cache.clear();
+    }
+  }
+
   private _addSingle(method: HttpMethod, path: string): RouteKey {
     const normalized = normalizePath(path, this.options);
     const segments = splitSegments(normalized);

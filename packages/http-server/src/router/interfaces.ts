@@ -14,6 +14,10 @@ export interface Router {
   has(path: string, method?: HttpMethod): boolean;
   /** List all routes (path pattern and methods) for introspection */
   list(): Array<{ path: string; methods: HttpMethod[] }>;
+  /** Serialize the router trie for persistence or hot-reload */
+  snapshot(): unknown;
+  /** Restore a router from a previous snapshot */
+  restore(data: unknown): void;
   reset(): void;
 }
 
