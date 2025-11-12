@@ -20,6 +20,8 @@ export class RadixRouter implements Router {
       collapseSlashes: options?.collapseSlashes ?? true,
       caseSensitive: options?.caseSensitive ?? true,
       redirectTrailingSlash: options?.redirectTrailingSlash ?? 'off',
+      decodeParams: options?.decodeParams ?? true,
+      blockTraversal: options?.blockTraversal ?? true,
     };
     this.root = new RouterNode(NodeKind.Static, '');
   }
@@ -183,7 +185,7 @@ export class RadixRouter implements Router {
             continue;
           }
           const prev = params[c.segment];
-          params[c.segment] = decodeURIComponentSafe(seg);
+          params[c.segment] = this.options.decodeParams ? decodeURIComponentSafe(seg) : seg;
           const k = matchDfs(c, idx + 1);
           if (k !== null) {
             return k;
@@ -197,7 +199,8 @@ export class RadixRouter implements Router {
       }
       if (node.wildcardChild) {
         const wname = node.wildcardChild.segment || '*';
-        params[wname] = decodeURIComponentSafe(segments.slice(idx).join('/'));
+        const joined = segments.slice(idx).join('/');
+        params[wname] = this.options.decodeParams ? decodeURIComponentSafe(joined) : joined;
         const key = node.wildcardChild.methods.byMethod.get(method);
         if (key !== undefined) {
           return key;

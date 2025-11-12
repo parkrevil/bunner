@@ -16,4 +16,8 @@ export interface RouterOptions {
   caseSensitive?: boolean;
   /** Trailing slash redirect policy: off | remove | add | auto (default: off) */
   redirectTrailingSlash?: 'off' | 'remove' | 'add' | 'auto';
+  /** Decode percent-encoded params (default: true). If false, params remain raw */
+  decodeParams?: boolean;
+  /** Block dot-segment traversal like '/../' and '/./' (default: true) */
+  blockTraversal?: boolean;
 }

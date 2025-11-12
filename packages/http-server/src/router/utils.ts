@@ -7,10 +7,28 @@ export function normalizePath(path: string, opts: RouterOptions): string {
   let p = path;
   if (opts.collapseSlashes !== false) {
     // collapse multiple slashes
-    p = p.replace(/\/\+/g, '/');
+    p = p.replace(/\/+/g, '/');
   }
   if (p[0] !== '/') {
     p = '/' + p;
+  }
+  // Remove dot-segments when blocking traversal
+  if (opts.blockTraversal !== false) {
+    const parts = p.split('/');
+    const stack: string[] = [];
+    for (const part of parts) {
+      if (part === '' || part === '.') {
+        continue;
+      }
+      if (part === '..') {
+        if (stack.length) {
+          stack.pop();
+        }
+        continue;
+      }
+      stack.push(part);
+    }
+    p = '/' + stack.join('/');
   }
   if (opts.ignoreTrailingSlash !== false) {
     if (p.length > 1 && p.endsWith('/')) {
