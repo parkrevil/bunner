@@ -14,6 +14,7 @@ export class RadixRouter implements Router {
   private hostRoots: Map<string, RouterNode> = new Map();
   private options: Required<RouterOptions>;
   private cache?: Map<string, RouteMatch | null>;
+  private staticFast: Map<string, Map<HttpMethod, RouteKey>> = new Map();
 
   constructor(options?: RouterOptions) {
     this.options = {
@@ -37,6 +38,7 @@ export class RadixRouter implements Router {
     if (this.cache) {
       this.cache.clear();
     }
+    this.staticFast.clear();
   }
 
   addAll(entries: Array<[HttpMethod, string]>): RouteKey[] {
@@ -44,6 +46,29 @@ export class RadixRouter implements Router {
     for (let i = 0; i < entries.length; i++) {
       const [m, p] = entries[i]!;
       out[i] = this._addSingle(m, p);
+      // static fast-path table update
+      const norm = normalizePath(p, this.options);
+      if (!this.options.caseSensitive) {
+        // fast table uses normalized, case-processed key same as match
+        const keyPath = norm.toLowerCase();
+        if (p.indexOf(':') === -1 && p.indexOf('*') === -1) {
+          let by = this.staticFast.get(keyPath);
+          if (!by) {
+            by = new Map();
+            this.staticFast.set(keyPath, by);
+          }
+          by.set(m, out[i]!);
+        }
+      } else {
+        if (p.indexOf(':') === -1 && p.indexOf('*') === -1) {
+          let by = this.staticFast.get(norm);
+          if (!by) {
+            by = new Map();
+            this.staticFast.set(norm, by);
+          }
+          by.set(m, out[i]!);
+        }
+      }
     }
     this.compressStaticPaths();
     if (this.cache) {
@@ -87,6 +112,14 @@ export class RadixRouter implements Router {
     let normalized = normalizePath(path, this.options);
     if (!this.options.caseSensitive) {
       normalized = normalized.toLowerCase();
+    }
+    // remove from static fast-path
+    const by = this.staticFast.get(normalized);
+    if (by) {
+      by.delete(method);
+      if (by.size === 0) {
+        this.staticFast.delete(normalized);
+      }
     }
     const segments = splitSegments(normalized);
 
@@ -153,6 +186,14 @@ export class RadixRouter implements Router {
     let normalized = normalizePath(path, this.options);
     if (!this.options.caseSensitive) {
       normalized = normalized.toLowerCase();
+    }
+    // static fast-path lookup
+    const fast = this.staticFast.get(normalized);
+    if (fast) {
+      const k = fast.get(method);
+      if (k !== undefined) {
+        return { key: k, params: {} };
+      }
     }
     let segments = splitSegments(normalized);
     const params: Record<string, string> = Object.create(null);
