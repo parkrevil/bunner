@@ -7,18 +7,15 @@ import {
   type RestRouteHandlerParamMetadata,
 } from './decorators';
 import { HttpMethod } from './enums';
-import { Ffi } from './ffi';
 import type { RouteHandlerEntry } from './interfaces';
 import type { RouteKey } from './types';
 
 export class RouteHandler {
   private container: Container;
-  private ffi: Ffi;
   private handlers: Map<RouteKey, RouteHandlerEntry>;
 
-  constructor(container: Container, ffi: Ffi) {
+  constructor(container: Container) {
     this.container = container;
-    this.ffi = ffi;
   }
 
   /**

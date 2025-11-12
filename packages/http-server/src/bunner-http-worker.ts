@@ -1,4 +1,4 @@
-import { BaseWorker, BunnerError, BunnerFfiError, Container, LogLevel, type WorkerId } from '@bunner/core';
+import { BaseWorker, BunnerError, Container, type WorkerId } from '@bunner/core';
 import { Logger } from '@bunner/core-logger';
 import { expose } from 'comlink';
 import { StatusCodes } from 'http-status-codes';
@@ -6,14 +6,12 @@ import { StatusCodes } from 'http-status-codes';
 import { BunnerRequest } from './bunner-request';
 import { BunnerResponse } from './bunner-response';
 import { HttpError } from './errors';
-import { Ffi, type HandleRequestParams } from './ffi';
 import type { HttpWorkerResponse, RouteHandlerEntry, WorkerInitParams } from './interfaces';
 import { RouteHandler } from './route-handler';
 
 export class BunnerHttpWorker extends BaseWorker {
   private readonly logger = new Logger();
   private container: Container;
-  private ffi: Ffi;
   private routeHandler: RouteHandler;
 
   constructor() {
@@ -34,23 +32,12 @@ export class BunnerHttpWorker extends BaseWorker {
     this.container = new Container(rootModuleCls);
     await this.container.init();
 
-    this.ffi = new Ffi(this.id, {
-      appName: params.options.appName,
-      logLevel: params.options.logLevel ?? LogLevel.Info,
-      workers: params.options.workers,
-      queueCapacity: params.options.queueCapacity,
-    });
-    this.ffi.init();
-
-    this.routeHandler = new RouteHandler(this.container, this.ffi);
+    this.routeHandler = new RouteHandler(this.container);
     this.routeHandler.register();
   }
 
   bootstrap() {
     console.log(`🚀 Bunner HTTP Worker #${this.id} is bootstrapping...`);
-
-    this.ffi.sealRoutes();
-    this.ffi.dispatchRequestCallback();
   }
 
   async handleRequest(params: HandleRequestParams): Promise<HttpWorkerResponse> {
@@ -104,8 +91,6 @@ export class BunnerHttpWorker extends BaseWorker {
 
   destroy() {
     console.log(`🛑 Worker #${this.id} is destroying...`);
-
-    this.ffi.destroy();
   }
 
   /**

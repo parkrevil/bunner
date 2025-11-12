@@ -18,7 +18,7 @@ import { getIps } from './utils';
 export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
   private readonly rootModuleFile: RootModuleFile;
   private readonly logger = new Logger();
-  private server: Server | undefined;
+  private server: Server<unknown> | undefined;
   private workerPool: WorkerPool<BunnerHttpWorker>;
 
   constructor(rootModuleFile: RootModuleFile, options: BunnerApplicationNormalizedOptions<BunnerHttpServer>) {

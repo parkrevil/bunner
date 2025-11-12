@@ -1,9 +1,4 @@
 #!/usr/bin/env sh
 set -eu
 
-make format
-git add --update
-
 bunx lint-staged
-
-make lint

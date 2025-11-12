@@ -1,9 +1,3 @@
 node_modules
 dist
-target
 bun.lock
-Cargo.lock
-bin
-di.json
-benchmarks
-*.log

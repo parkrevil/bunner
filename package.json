@@ -32,10 +32,9 @@
     "test:coverage": "bun test --coverage",
     "lint": "eslint . --fix",
     "format": "prettier --write .",
-    "bench": "./scripts/bench.sh",
-    "deps": "./scripts/check-dependencies.sh",
     "prepare": "husky"
   },
+  "dependencies": {},
   "devDependencies": {
     "@commitlint/cli": "^19.8.1",
     "@commitlint/config-conventional": "^19.8.1",
@@ -55,6 +54,5 @@
     "prettier": "^3.4.2",
     "typescript": "^5",
     "typescript-eslint": "^8.42.0"
-  },
-  "dependencies": {}
+  }
 }
