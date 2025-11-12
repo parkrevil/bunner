@@ -13,6 +13,7 @@ export class RadixRouter implements Router {
   private root: RouterNode;
   private hostRoots: Map<string, RouterNode> = new Map();
   private options: Required<RouterOptions>;
+  private cache?: Map<string, RouteMatch | null>;
 
   constructor(options?: RouterOptions) {
     this.options = {
@@ -22,12 +23,20 @@ export class RadixRouter implements Router {
       redirectTrailingSlash: options?.redirectTrailingSlash ?? 'off',
       decodeParams: options?.decodeParams ?? true,
       blockTraversal: options?.blockTraversal ?? true,
+      enableCache: options?.enableCache ?? false,
+      cacheSize: options?.cacheSize ?? 1024,
     };
     this.root = new RouterNode(NodeKind.Static, '');
+    if (this.options.enableCache) {
+      this.cache = new Map();
+    }
   }
 
   reset(): void {
     this.root = new RouterNode(NodeKind.Static, '');
+    if (this.cache) {
+      this.cache.clear();
+    }
   }
 
   addAll(entries: Array<[HttpMethod, string]>): RouteKey[] {
@@ -37,6 +46,9 @@ export class RadixRouter implements Router {
       out[i] = this._addSingle(m, p);
     }
     this.compressStaticPaths();
+    if (this.cache) {
+      this.cache.clear();
+    }
     return out;
   }
 
@@ -144,6 +156,16 @@ export class RadixRouter implements Router {
     }
     let segments = splitSegments(normalized);
     const params: Record<string, string> = Object.create(null);
+    const cacheKey = `${method} ${segments.join('/')}`;
+    if (this.cache && this.cache.has(cacheKey)) {
+      const hit = this.cache.get(cacheKey);
+      if (hit === null) {
+        return null;
+      }
+      if (hit) {
+        return { key: hit.key, params: { ...hit.params }, redirectTo: hit.redirectTo };
+      }
+    }
 
     const matchDfs = (node: RouterNode, idx: number): RouteKey | null => {
       if (idx === segments.length) {
@@ -254,13 +276,24 @@ export class RadixRouter implements Router {
           segments = altSegments;
           const altKey = matchDfs(startNode, 0);
           if (altKey !== null) {
-            return { key: altKey, params, redirectTo: targetPath };
+            const res: RouteMatch = { key: altKey, params, redirectTo: targetPath };
+            if (this.cache) {
+              this.setCache(cacheKey, res);
+            }
+            return res;
           }
         }
       }
+      if (this.cache) {
+        this.setCache(cacheKey, null);
+      }
       return null;
     }
-    return { key, params };
+    const res: RouteMatch = { key, params };
+    if (this.cache) {
+      this.setCache(cacheKey, res);
+    }
+    return res;
   }
 
   allowed(path: string): HttpMethod[] {
@@ -476,6 +509,23 @@ export class RadixRouter implements Router {
       }
     };
     compressFrom(this.root);
+  }
+
+  private setCache(key: string, value: RouteMatch | null): void {
+    if (!this.cache) {
+      return;
+    }
+    // LRU discipline via delete+set
+    if (this.cache.has(key)) {
+      this.cache.delete(key);
+    }
+    this.cache.set(key, value);
+    if (this.cache.size > this.options.cacheSize) {
+      const first = this.cache.keys().next().value;
+      if (first !== undefined) {
+        this.cache.delete(first);
+      }
+    }
   }
 }
 

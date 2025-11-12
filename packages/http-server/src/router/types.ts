@@ -20,4 +20,8 @@ export interface RouterOptions {
   decodeParams?: boolean;
   /** Block dot-segment traversal like '/../' and '/./' (default: true) */
   blockTraversal?: boolean;
+  /** Enable LRU cache for match results (default: false) */
+  enableCache?: boolean;
+  /** Max entries for match LRU cache (default: 1024) */
+  cacheSize?: number;
 }
