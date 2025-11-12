@@ -41,64 +41,84 @@ export class RadixRouter implements Router {
   add(method: HttpMethod, path: string): RouteKey {
     const normalized = normalizePath(path, this.options);
     const segments = splitSegments(normalized);
+    // Use recursive builder to support optional params branching
+    let firstKey: RouteKey | null = null;
+    const addSegments = (node: RouterNode, idx: number): void => {
+      if (idx === segments.length) {
+        const existing = node.methods.byMethod.get(method);
+        if (existing !== undefined) {
+          throw new Error(`Route already exists for method at path: ${path}`);
+        }
+        const key = GLOBAL_ROUTE_KEY_SEQ++ as unknown as RouteKey;
+        node.methods.byMethod.set(method, key);
+        if (firstKey === null) {
+          firstKey = key;
+        }
+        return;
+      }
 
-    let node = this.root;
-    for (let i = 0; i < segments.length; i++) {
-      const seg = segments[i]!;
+      const seg = segments[idx]!;
 
       if (seg === '*') {
-        if (i !== segments.length - 1) {
+        if (idx !== segments.length - 1) {
           throw new Error("Wildcard '*' must be the last segment");
         }
         if (!node.wildcardChild) {
           node.wildcardChild = new RouterNode(NodeKind.Wildcard, '*');
         }
-        node = node.wildcardChild;
-        break;
+        // Leaf will be set in the next recursion step
+        addSegments(node.wildcardChild, idx + 1);
+        return;
       }
 
       if (seg.charCodeAt(0) === 58 /* ':' */) {
+        // Optional param support: ":name?" (no regex with ? in this iteration)
+        let optional = false;
+        let core = seg;
+        if (seg.endsWith('?')) {
+          optional = true;
+          core = seg.slice(0, -1);
+        }
+
         // Support ":name" and ":name{regex}"
-        const brace = seg.indexOf('{');
+        const brace = core.indexOf('{');
         let name = '';
         let patternSrc: string | undefined;
         if (brace === -1) {
-          name = seg.slice(1);
+          name = core.slice(1);
         } else {
-          name = seg.slice(1, brace);
-          if (!seg.endsWith('}')) {
+          name = core.slice(1, brace);
+          if (!core.endsWith('}')) {
             throw new Error("Parameter regex must close with '}'");
           }
-          patternSrc = seg.slice(brace + 1, -1);
-          if (patternSrc.length === 0) {
-            patternSrc = undefined;
-          }
+          patternSrc = core.slice(brace + 1, -1) || undefined;
         }
         if (!name) {
           throw new Error("Parameter segment must have a name, eg ':id'");
         }
+
+        // If optional, branch that skips this segment entirely
+        if (optional) {
+          addSegments(node, idx + 1);
+        }
+
         // Find or create a param child matching name+pattern
         let child: RouterNode | undefined;
-        if (node.paramChildren.length) {
-          for (const c of node.paramChildren) {
-            const sameName = c.segment === name;
-            const samePattern = (c.pattern?.source ?? undefined) === (patternSrc ?? undefined);
-            if (sameName && samePattern) {
-              child = c;
-              break;
-            }
+        for (const c of node.paramChildren) {
+          if (c.segment === name && (c.pattern?.source ?? undefined) === (patternSrc ?? undefined)) {
+            child = c;
+            break;
           }
         }
         if (!child) {
           child = new RouterNode(NodeKind.Param, name);
           if (patternSrc) {
-            // Anchor regex to whole segment by default
             child.pattern = new RegExp(`^(?:${patternSrc})$`);
           }
           node.paramChildren.push(child);
         }
-        node = child;
-        continue;
+        addSegments(child, idx + 1);
+        return;
       }
 
       let child = node.staticChildren.get(seg);
@@ -106,16 +126,13 @@ export class RadixRouter implements Router {
         child = new RouterNode(NodeKind.Static, seg);
         node.staticChildren.set(seg, child);
       }
-      node = child;
-    }
+      addSegments(child, idx + 1);
+    };
 
-    const existing = node.methods.byMethod.get(method);
-    if (existing !== undefined) {
-      throw new Error(`Route already exists for method at path: ${path}`);
-    }
-    const key = GLOBAL_ROUTE_KEY_SEQ++ as unknown as RouteKey;
-    node.methods.byMethod.set(method, key);
-    return key;
+    addSegments(this.root, 0);
+    // At least one key must have been created
+
+    return firstKey!;
   }
 
   remove(method: HttpMethod, path: string): boolean {
@@ -130,17 +147,19 @@ export class RadixRouter implements Router {
         next = node.wildcardChild;
       } else if (seg.charCodeAt(0) === 58) {
         // Choose param child by name+pattern from the route definition
-        const brace = seg.indexOf('{');
+        // Normalize optional marker if present
+        const s = seg.endsWith('?') ? seg.slice(0, -1) : seg;
+        const brace = s.indexOf('{');
         let name = '';
         let patternSrc: string | undefined;
         if (brace === -1) {
-          name = seg.slice(1);
+          name = s.slice(1);
         } else {
-          name = seg.slice(1, brace);
-          if (!seg.endsWith('}')) {
+          name = s.slice(1, brace);
+          if (!s.endsWith('}')) {
             return false;
           }
-          patternSrc = seg.slice(brace + 1, -1) || undefined;
+          patternSrc = s.slice(brace + 1, -1) || undefined;
         }
         next = node.paramChildren.find(c => c.segment === name && (c.pattern?.source ?? undefined) === (patternSrc ?? undefined));
       } else {
