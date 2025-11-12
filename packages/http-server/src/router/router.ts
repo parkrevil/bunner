@@ -122,14 +122,19 @@ export class RadixRouter implements Router {
       }
     }
     const segments = splitSegments(normalized);
-
+    const stack: Array<{ parent: RouterNode; type: 'static' | 'param' | 'wildcard'; key?: string; child: RouterNode }> = [];
     let node = this.root;
     for (let i = 0; i < segments.length; i++) {
       const seg = segments[i]!;
       let next: RouterNode | undefined;
+      let type: 'static' | 'param' | 'wildcard' = 'static';
+      let keySeg: string | undefined;
       if (seg.charCodeAt(0) === 42) {
+        // '*'
         next = node.wildcardChild;
+        type = 'wildcard';
       } else if (seg.charCodeAt(0) === 58) {
+        // ':'
         let s = seg.endsWith('?') ? seg.slice(0, -1) : seg;
         const isMulti = s.endsWith('+');
         if (isMulti) {
@@ -149,13 +154,17 @@ export class RadixRouter implements Router {
         }
         if (isMulti) {
           next = node.wildcardChild;
+          type = 'wildcard';
         } else {
           next = node.paramChildren.find(
             c => c.segment === name && (c.pattern?.source ?? undefined) === (patternSrc ?? undefined),
           );
+          type = 'param';
         }
       } else {
         next = node.staticChildren.get(seg);
+        keySeg = seg;
+        type = 'static';
         if (!next && node.staticChildren.size) {
           for (const child of node.staticChildren.values()) {
             const parts = child.segmentParts ?? [child.segment];
@@ -169,6 +178,7 @@ export class RadixRouter implements Router {
             if (j === parts.length) {
               next = child;
               i += j - 1;
+              keySeg = parts[0];
               break;
             }
           }
@@ -177,9 +187,36 @@ export class RadixRouter implements Router {
       if (!next) {
         return false;
       }
+      stack.push({ parent: node, type, key: keySeg, child: next });
       node = next;
     }
-    return node.methods.byMethod.delete(method);
+    const removed = node.methods.byMethod.delete(method);
+    if (!removed) {
+      return false;
+    }
+    for (let i = stack.length - 1; i >= 0; i--) {
+      const { parent, type, key, child } = stack[i]!;
+      const empty =
+        child.methods.byMethod.size === 0 &&
+        child.staticChildren.size === 0 &&
+        child.paramChildren.length === 0 &&
+        !child.wildcardChild;
+      if (empty) {
+        if (type === 'static' && key !== undefined) {
+          parent.staticChildren.delete(key);
+        } else if (type === 'param') {
+          parent.paramChildren = parent.paramChildren.filter(n => n !== child);
+        } else if (type === 'wildcard') {
+          parent.wildcardChild = undefined;
+        }
+      } else {
+        break;
+      }
+    }
+    if (this.cache) {
+      this.cache.clear();
+    }
+    return true;
   }
 
   match(method: HttpMethod, path: string): RouteMatch | null {
@@ -396,6 +433,52 @@ export class RadixRouter implements Router {
     }
     dfs(startNode, 0);
     return Array.from(methods.values());
+  }
+
+  has(path: string, method?: HttpMethod): boolean {
+    if (method === undefined) {
+      return this.allowed(path).length > 0;
+    }
+    const m = this.match(method, path);
+    return m !== null;
+  }
+
+  list(): Array<{ path: string; methods: HttpMethod[] }> {
+    const results: Array<{ path: string; methods: HttpMethod[] }> = [];
+    const pushIfMethods = (p: string, node: RouterNode) => {
+      if (node.methods.byMethod.size) {
+        results.push({ path: p || '/', methods: Array.from(node.methods.byMethod.keys()) });
+      }
+    };
+    const walk = (prefix: string, node: RouterNode) => {
+      pushIfMethods(prefix, node);
+      // static children
+      for (const [, child] of node.staticChildren) {
+        const parts = child.segmentParts ?? [child.segment];
+        const next = prefix === '/' || prefix === '' ? `/${parts.join('/')}` : `${prefix}/${parts.join('/')}`;
+        walk(next, child);
+      }
+      // params
+      for (const child of node.paramChildren) {
+        const seg = `:${child.segment}${child.pattern ? '{' + child.pattern.source.replace(/^(?:\^\(\?:)?|\$\)?$/g, '') + '}' : ''}`;
+        const next = prefix === '/' || prefix === '' ? `/${seg}` : `${prefix}/${seg}`;
+        walk(next, child);
+      }
+      // wildcard
+      if (node.wildcardChild) {
+        const name = node.wildcardChild.segment || '*';
+        const seg = name === '*' ? '*' : `*${name}`;
+        const next = prefix === '/' || prefix === '' ? `/${seg}` : `${prefix}/${seg}`;
+        walk(next, node.wildcardChild);
+      }
+    };
+    // default root
+    walk('', this.root);
+    // host roots
+    for (const [host, root] of this.hostRoots) {
+      walk(`@${host}`, root);
+    }
+    return results;
   }
 
   private _addSingle(method: HttpMethod, path: string): RouteKey {

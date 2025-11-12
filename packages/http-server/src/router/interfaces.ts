@@ -10,6 +10,10 @@ export interface Router {
   /** Return methods available at matched path (ignoring method) — useful for 405 */
   allowed(path: string): HttpMethod[];
   remove(method: HttpMethod, path: string): boolean;
+  /** Check if a route exists; if method omitted, checks any method */
+  has(path: string, method?: HttpMethod): boolean;
+  /** List all routes (path pattern and methods) for introspection */
+  list(): Array<{ path: string; methods: HttpMethod[] }>;
   reset(): void;
 }
 
