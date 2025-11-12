@@ -23,6 +23,7 @@ export class RadixRouter implements Router {
     this.options = {
       ignoreTrailingSlash: options?.ignoreTrailingSlash ?? true,
       collapseSlashes: options?.collapseSlashes ?? true,
+      caseSensitive: options?.caseSensitive ?? true,
     };
     this.root = new RouterNode(NodeKind.Static, '');
   }
@@ -49,7 +50,10 @@ export class RadixRouter implements Router {
       return this.addAll(method.map(m => [m, path]));
     }
     // Host aware single method add delegates to single-path builder after extracting host
-    const normalized = normalizePath(path, this.options);
+    let normalized = normalizePath(path, this.options);
+    if (!this.options.caseSensitive) {
+      normalized = normalized.toLowerCase();
+    }
     const segments = splitSegments(normalized);
     if (segments.length && segments[0]!.charCodeAt(0) === 64 /* '@' */) {
       const hostSeg = segments[0]!.slice(1);
@@ -67,7 +71,10 @@ export class RadixRouter implements Router {
   }
 
   remove(method: HttpMethod, path: string): boolean {
-    const normalized = normalizePath(path, this.options);
+    let normalized = normalizePath(path, this.options);
+    if (!this.options.caseSensitive) {
+      normalized = normalized.toLowerCase();
+    }
     const segments = splitSegments(normalized);
 
     let node = this.root;
@@ -115,7 +122,10 @@ export class RadixRouter implements Router {
   }
 
   match(method: HttpMethod, path: string): RouteMatch | null {
-    const normalized = normalizePath(path, this.options);
+    let normalized = normalizePath(path, this.options);
+    if (!this.options.caseSensitive) {
+      normalized = normalized.toLowerCase();
+    }
     const segments = splitSegments(normalized);
     const params: Record<string, string> = Object.create(null);
 
@@ -202,7 +212,10 @@ export class RadixRouter implements Router {
   }
 
   allowed(path: string): HttpMethod[] {
-    const normalized = normalizePath(path, this.options);
+    let normalized = normalizePath(path, this.options);
+    if (!this.options.caseSensitive) {
+      normalized = normalized.toLowerCase();
+    }
     const segments = splitSegments(normalized);
     const methods = new Set<HttpMethod>();
 

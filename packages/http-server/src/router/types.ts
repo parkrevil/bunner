@@ -10,4 +10,6 @@ export interface RouterOptions {
   ignoreTrailingSlash?: boolean;
   /** Collapse duplicate slashes ("//a///b" -> "/a/b") */
   collapseSlashes?: boolean;
+  /** Case sensitivity for static matching (default: true) */
+  caseSensitive?: boolean;
 }
