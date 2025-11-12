@@ -59,12 +59,13 @@ export class RadixRouter implements Router {
 
       const seg = segments[idx]!;
 
-      if (seg === '*') {
+      if (seg.charCodeAt(0) === 42 /* '*' */) {
         if (idx !== segments.length - 1) {
           throw new Error("Wildcard '*' must be the last segment");
         }
+        const name = seg.length > 1 ? seg.slice(1) : '*';
         if (!node.wildcardChild) {
-          node.wildcardChild = new RouterNode(NodeKind.Wildcard, '*');
+          node.wildcardChild = new RouterNode(NodeKind.Wildcard, name);
         }
         // Leaf will be set in the next recursion step
         addSegments(node.wildcardChild, idx + 1);
@@ -78,6 +79,11 @@ export class RadixRouter implements Router {
         if (seg.endsWith('?')) {
           optional = true;
           core = seg.slice(0, -1);
+        }
+        let multi = false;
+        if (core.endsWith('+')) {
+          multi = true;
+          core = core.slice(0, -1);
         }
 
         // Support ":name" and ":name{regex}"
@@ -100,6 +106,17 @@ export class RadixRouter implements Router {
         // If optional, branch that skips this segment entirely
         if (optional) {
           addSegments(node, idx + 1);
+        }
+        // Multi-segment param ":name+" behaves like a named wildcard and must be terminal
+        if (multi) {
+          if (idx !== segments.length - 1) {
+            throw new Error("Multi-segment param ':name+' must be the last segment");
+          }
+          if (!node.wildcardChild) {
+            node.wildcardChild = new RouterNode(NodeKind.Wildcard, name || '*');
+          }
+          addSegments(node.wildcardChild, idx + 1);
+          return;
         }
 
         // Find or create a param child matching name+pattern
@@ -143,12 +160,16 @@ export class RadixRouter implements Router {
     for (let i = 0; i < segments.length; i++) {
       const seg = segments[i]!;
       let next: RouterNode | undefined;
-      if (seg === '*') {
+      if (seg.charCodeAt(0) === 42) {
         next = node.wildcardChild;
       } else if (seg.charCodeAt(0) === 58) {
         // Choose param child by name+pattern from the route definition
         // Normalize optional marker if present
-        const s = seg.endsWith('?') ? seg.slice(0, -1) : seg;
+        let s = seg.endsWith('?') ? seg.slice(0, -1) : seg;
+        const isMulti = s.endsWith('+');
+        if (isMulti) {
+          s = s.slice(0, -1);
+        }
         const brace = s.indexOf('{');
         let name = '';
         let patternSrc: string | undefined;
@@ -161,7 +182,13 @@ export class RadixRouter implements Router {
           }
           patternSrc = s.slice(brace + 1, -1) || undefined;
         }
-        next = node.paramChildren.find(c => c.segment === name && (c.pattern?.source ?? undefined) === (patternSrc ?? undefined));
+        if (isMulti) {
+          next = node.wildcardChild;
+        } else {
+          next = node.paramChildren.find(
+            c => c.segment === name && (c.pattern?.source ?? undefined) === (patternSrc ?? undefined),
+          );
+        }
       } else {
         next = node.staticChildren.get(seg);
       }
@@ -217,7 +244,8 @@ export class RadixRouter implements Router {
       }
 
       if (node.wildcardChild) {
-        params['*'] = decodeURIComponentSafe(segments.slice(idx).join('/'));
+        const wname = node.wildcardChild.segment || '*';
+        params[wname] = decodeURIComponentSafe(segments.slice(idx).join('/'));
         const key = node.wildcardChild.methods.byMethod.get(method);
         if (key !== undefined) {
           return key;
