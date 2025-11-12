@@ -3,7 +3,6 @@ import { StatusCodes, getReasonPhrase } from 'http-status-codes';
 
 import type { BunnerRequest } from './bunner-request';
 import { ContentType, HeaderField, HttpMethod } from './enums';
-import type { FfiBunnerResponse } from './ffi';
 import type { HttpWorkerResponse } from './interfaces';
 
 export class BunnerResponse {

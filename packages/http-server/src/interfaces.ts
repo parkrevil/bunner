@@ -3,8 +3,6 @@ import type { AnyFunction, RootModuleFile } from '@bunner/core';
 import type { BunnerRequest } from './bunner-request';
 import type { BunnerResponse } from './bunner-response';
 import type { RouteHandlerParamType } from './decorators/types';
-import type { FfiOptions } from './ffi';
-import type { HandlerFunction } from './types';
 
 export interface BunnerHttpServerOptions {
   port?: number;

@@ -1,7 +1,6 @@
 import { CookieMap } from 'bun';
 
 import type { HttpMethod } from './enums';
-import type { FfiBunnerRequest } from './ffi';
 
 export class BunnerRequest {
   readonly requestId: string;
