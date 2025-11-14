@@ -199,17 +199,25 @@ export class RadixRouter implements Router {
   list(): Array<{ path: string; methods: HttpMethod[] }> {
     this.ensureCompressed();
     const results: Array<{ path: string; methods: HttpMethod[] }> = [];
-    const pushIfMethods = (p: string, node: RouterNode) => {
+    const joinPath = (prefix: string, segment: string): string => {
+      if (!segment) {
+        return prefix || '/';
+      }
+      if (prefix === '' || prefix === '/') {
+        return `/${segment}`;
+      }
+      return `${prefix}/${segment}`;
+    };
+    const pushIfMethods = (path: string, node: RouterNode) => {
       if (node.methods.byMethod.size) {
-        results.push({ path: p || '/', methods: getCachedMethodList(node.methods) });
+        results.push({ path: path || '/', methods: getCachedMethodList(node.methods) });
       }
     };
     const walk = (prefix: string, node: RouterNode) => {
       pushIfMethods(prefix, node);
       // static children
       for (const [, child] of node.staticChildren) {
-        const parts = child.segmentParts ?? [child.segment];
-        const next = prefix === '/' || prefix === '' ? `/${parts.join('/')}` : `${prefix}/${parts.join('/')}`;
+        const next = joinPath(prefix, child.segment);
         walk(next, child);
       }
       // params
@@ -217,14 +225,14 @@ export class RadixRouter implements Router {
         const rawPattern =
           child.patternSource ?? (child.pattern ? child.pattern.source.replace(/^\^\(\?:/, '').replace(/\)\$$/, '') : undefined);
         const seg = `:${child.segment}${rawPattern ? `{${rawPattern}}` : ''}`;
-        const next = prefix === '/' || prefix === '' ? `/${seg}` : `${prefix}/${seg}`;
+        const next = joinPath(prefix, seg);
         walk(next, child);
       }
       // wildcard
       if (node.wildcardChild) {
         const name = node.wildcardChild.segment || '*';
         const seg = name === '*' ? '*' : `*${name}`;
-        const next = prefix === '/' || prefix === '' ? `/${seg}` : `${prefix}/${seg}`;
+        const next = joinPath(prefix, seg);
         walk(next, node.wildcardChild);
       }
     };
