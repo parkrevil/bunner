@@ -2,7 +2,7 @@ import { HttpMethod } from '../enums';
 import type { RouteKey } from '../types';
 
 import { NodeKind } from './enums';
-import type { Router } from './interfaces';
+import type { RouteMethods, Router } from './interfaces';
 import { RouterNode } from './node';
 import type { RouterOptions, RouteMatch } from './types';
 import { normalizePath, splitSegments, decodeURIComponentSafe } from './utils';
@@ -201,7 +201,7 @@ export class RadixRouter implements Router {
     const results: Array<{ path: string; methods: HttpMethod[] }> = [];
     const pushIfMethods = (p: string, node: RouterNode) => {
       if (node.methods.byMethod.size) {
-        results.push({ path: p || '/', methods: Array.from(node.methods.byMethod.keys()) });
+        results.push({ path: p || '/', methods: getCachedMethodList(node.methods) });
       }
     };
     const walk = (prefix: string, node: RouterNode) => {
@@ -244,6 +244,7 @@ export class RadixRouter implements Router {
         }
         const key = GLOBAL_ROUTE_KEY_SEQ++ as unknown as RouteKey;
         node.methods.byMethod.set(method, key);
+        node.methods.listCache = undefined;
         if (firstKey === null) {
           firstKey = key;
         }
@@ -413,6 +414,21 @@ export class RadixRouter implements Router {
       }
     }
   }
+}
+
+function getCachedMethodList(methods: RouteMethods): HttpMethod[] {
+  const cached = methods.listCache;
+  if (cached && cached.length === methods.byMethod.size) {
+    return cached;
+  }
+  const size = methods.byMethod.size;
+  const next = new Array<HttpMethod>(size);
+  let i = 0;
+  for (const key of methods.byMethod.keys()) {
+    next[i++] = key;
+  }
+  methods.listCache = next;
+  return next;
 }
 
 export default RadixRouter;

@@ -14,6 +14,8 @@ export interface Router {
 export interface RouteMethods {
   /** Per-method registered route keys at this node (leaf) */
   byMethod: Map<HttpMethod, RouteKey>;
+  /** Cached method list for read-heavy operations like router.list() */
+  listCache?: HttpMethod[];
 }
 
 export interface RouterConstructor<T extends Router = Router> {
