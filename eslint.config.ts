@@ -39,8 +39,9 @@ export default defineConfig([
     ],
     settings: {
       'import/resolver': {
-        typescript: true,
-        node: true,
+        typescript: {
+          bun: true,
+        },
       },
     },
     rules: {

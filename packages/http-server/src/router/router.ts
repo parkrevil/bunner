@@ -14,6 +14,7 @@ export class RadixRouter implements Router {
   private options: Required<RouterOptions>;
   private cache?: Map<string, RouteMatch | null>;
   private staticFast: Map<string, Map<HttpMethod, RouteKey>> = new Map();
+  private needsCompression = false;
 
   constructor(options?: RouterOptions) {
     this.options = {
@@ -60,7 +61,7 @@ export class RadixRouter implements Router {
         }
       }
     }
-    this.compressStaticPaths();
+    this.needsCompression = true;
     if (this.cache) {
       this.cache.clear();
     }
@@ -76,15 +77,26 @@ export class RadixRouter implements Router {
       return this.addAll(method.map(m => [m, path]));
     }
     const k = this._addSingle(method, path);
-    this.compressStaticPaths();
+    if (path.indexOf(':') === -1 && path.indexOf('*') === -1) {
+      const norm = normalizePath(path, this.options);
+      const keyPath = this.options.caseSensitive ? norm : norm.toLowerCase();
+      let by = this.staticFast.get(keyPath);
+      if (!by) {
+        by = new Map();
+        this.staticFast.set(keyPath, by);
+      }
+      by.set(method, k);
+    }
+    this.needsCompression = true;
+    if (this.cache) {
+      this.cache.clear();
+    }
     return k;
   }
 
   match(method: HttpMethod, path: string): RouteMatch | null {
-    let normalized = normalizePath(path, this.options);
-    if (!this.options.caseSensitive) {
-      normalized = normalized.toLowerCase();
-    }
+    this.ensureCompressed();
+    const normalized = normalizePath(path, this.options);
     // static fast-path lookup
     const fast = this.staticFast.get(normalized);
     if (fast) {
@@ -185,6 +197,7 @@ export class RadixRouter implements Router {
   }
 
   list(): Array<{ path: string; methods: HttpMethod[] }> {
+    this.ensureCompressed();
     const results: Array<{ path: string; methods: HttpMethod[] }> = [];
     const pushIfMethods = (p: string, node: RouterNode) => {
       if (node.methods.byMethod.size) {
@@ -201,7 +214,9 @@ export class RadixRouter implements Router {
       }
       // params
       for (const child of node.paramChildren) {
-        const seg = `:${child.segment}${child.pattern ? '{' + child.pattern.source.replace(/^(?:\^\(\?:)?|\$\)?$/g, '') + '}' : ''}`;
+        const rawPattern =
+          child.patternSource ?? (child.pattern ? child.pattern.source.replace(/^\^\(\?:/, '').replace(/\)\$$/, '') : undefined);
+        const seg = `:${child.segment}${rawPattern ? `{${rawPattern}}` : ''}`;
         const next = prefix === '/' || prefix === '' ? `/${seg}` : `${prefix}/${seg}`;
         walk(next, child);
       }
@@ -314,6 +329,7 @@ export class RadixRouter implements Router {
           child = new RouterNode(NodeKind.Param, name);
           if (patternSrc) {
             child.pattern = new RegExp(`^(?:${patternSrc})$`);
+            child.patternSource = patternSrc;
           }
           node.paramChildren.push(child);
         }
@@ -343,7 +359,7 @@ export class RadixRouter implements Router {
       for (const child of children) {
         compressFrom(child);
         let cursor = child;
-        const parts: string[] = [child.segment];
+        const parts: string[] = child.segmentParts ? [...child.segmentParts] : [child.segment];
         while (
           cursor.kind === NodeKind.Static &&
           cursor.methods.byMethod.size === 0 &&
@@ -355,7 +371,8 @@ export class RadixRouter implements Router {
           if (next.kind !== NodeKind.Static) {
             break;
           }
-          parts.push(next.segment);
+          const nextParts = next.segmentParts ?? [next.segment];
+          parts.push(...nextParts);
           cursor = next;
         }
         if (parts.length > 1) {
@@ -371,6 +388,14 @@ export class RadixRouter implements Router {
     compressFrom(this.root);
   }
 
+  private ensureCompressed(): void {
+    if (!this.needsCompression) {
+      return;
+    }
+    this.compressStaticPaths();
+    this.needsCompression = false;
+  }
+
   private setCache(key: string, value: RouteMatch | null): void {
     if (!this.cache) {
       return;
@@ -379,7 +404,8 @@ export class RadixRouter implements Router {
     if (this.cache.has(key)) {
       this.cache.delete(key);
     }
-    this.cache.set(key, value);
+    const snapshot = value ? { key: value.key, params: { ...value.params } } : null;
+    this.cache.set(key, snapshot);
     if (this.cache.size > this.options.cacheSize) {
       const first = this.cache.keys().next().value;
       if (first !== undefined) {

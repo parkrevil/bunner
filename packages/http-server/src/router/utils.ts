@@ -12,6 +12,7 @@ export function normalizePath(path: string, opts: RouterOptions): string {
   if (p[0] !== '/') {
     p = '/' + p;
   }
+  const preserveTrailingSlash = opts.ignoreTrailingSlash === false && p.length > 1 && p.endsWith('/');
   // Remove dot-segments when blocking traversal
   if (opts.blockTraversal !== false) {
     const parts = p.split('/');
@@ -29,11 +30,17 @@ export function normalizePath(path: string, opts: RouterOptions): string {
       stack.push(part);
     }
     p = '/' + stack.join('/');
+    if (preserveTrailingSlash && p.length > 1 && !p.endsWith('/')) {
+      p += '/';
+    }
   }
   if (opts.ignoreTrailingSlash !== false) {
     if (p.length > 1 && p.endsWith('/')) {
       p = p.slice(0, -1);
     }
+  }
+  if (opts.caseSensitive === false) {
+    p = p.toLowerCase();
   }
   return p;
 }
