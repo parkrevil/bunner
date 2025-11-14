@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'bun:test';
 
-import { HttpMethod } from '../../../packages/http-server/src/enums';
-import { RadixRouter } from '../../../packages/http-server/src/router/router';
+import { HttpMethod } from '../../../src/enums';
+import { RadixRouter } from '../../../src/router/router';
 
 describe('RadixRouter :: validation and conflicts', () => {
   it('should throw when registering the same method and path twice', () => {

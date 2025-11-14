@@ -1,8 +1,8 @@
 import { beforeAll, afterAll, beforeEach, afterEach, describe, it, expect } from 'bun:test';
 
-import { HttpMethod } from '../../../packages/http-server/src/enums';
-import { RadixRouter } from '../../../packages/http-server/src/router/router';
-import type { RouteKey } from '../../../packages/http-server/src/types';
+import { HttpMethod } from '../../../src/enums';
+import { RadixRouter } from '../../../src/router/router';
+import type { RouteKey } from '../../../src/types';
 
 const METHOD_ENTRIES: Array<[string, HttpMethod]> = [];
 
