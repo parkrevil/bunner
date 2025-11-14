@@ -157,16 +157,10 @@ export class RadixRouter implements Router {
           if (c.pattern && !c.pattern.test(seg)) {
             continue;
           }
-          const prev = params[c.segment];
-          params[c.segment] = this.options.decodeParams ? decodeURIComponentSafe(seg) : seg;
           const k = matchDfs(c, idx + 1);
           if (k !== null) {
+            params[c.segment] = this.options.decodeParams ? decodeURIComponentSafe(seg) : seg;
             return k;
-          }
-          if (prev === undefined) {
-            delete params[c.segment];
-          } else {
-            params[c.segment] = prev;
           }
         }
       }

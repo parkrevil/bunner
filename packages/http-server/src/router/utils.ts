@@ -5,16 +5,18 @@ export function normalizePath(path: string, opts: RouterOptions): string {
     return '/';
   }
   let p = path;
-  if (opts.collapseSlashes !== false) {
+  const trackTrailingSlash = opts.ignoreTrailingSlash === false;
+  const hadTrailing = trackTrailingSlash && p.length > 1 && p.endsWith('/');
+  if (opts.collapseSlashes !== false && p.indexOf('//') !== -1) {
     // collapse multiple slashes
     p = p.replace(/\/+/g, '/');
   }
   if (p[0] !== '/') {
     p = '/' + p;
   }
-  const preserveTrailingSlash = opts.ignoreTrailingSlash === false && p.length > 1 && p.endsWith('/');
+  const preserveTrailingSlash = trackTrailingSlash && hadTrailing;
   // Remove dot-segments when blocking traversal
-  if (opts.blockTraversal !== false) {
+  if (opts.blockTraversal !== false && (p.indexOf('/.') !== -1 || p.indexOf('..') !== -1)) {
     const parts = p.split('/');
     const stack: string[] = [];
     for (const part of parts) {
@@ -54,6 +56,9 @@ export function splitSegments(path: string): string[] {
 }
 
 export function decodeURIComponentSafe(val: string): string {
+  if (val.indexOf('%') === -1) {
+    return val;
+  }
   try {
     return decodeURIComponent(val);
   } catch {
