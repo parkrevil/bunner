@@ -27,6 +27,7 @@ export class RouterNode {
   patternSource?: string;
   // For Static nodes: optional precomputed parts when compressed (e.g., 'a/b/c' -> ['a','b','c'])
   segmentParts?: string[];
+  compressionDepth = 1;
 
   constructor(kind: NodeKind, segment: string) {
     this.kind = kind;

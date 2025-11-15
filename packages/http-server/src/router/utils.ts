@@ -11,6 +11,20 @@ export function normalizePath(path: string, opts: RouterOptions): string {
   const caseSensitive = opts.caseSensitive !== false;
   const trackTrailingSlash = !ignoreTrailingSlash;
 
+  const defaultsApplied = collapseSlashes && ignoreTrailingSlash && blockTraversal && caseSensitive;
+  if (defaultsApplied && path.charCodeAt(0) === 47) {
+    const trailingSlash = path.length > 1 && path.charCodeAt(path.length - 1) === 47;
+    if (
+      !trailingSlash &&
+      path.indexOf('//') === -1 &&
+      path.indexOf('/.') === -1 &&
+      path.indexOf('./') === -1 &&
+      path.indexOf('..') === -1
+    ) {
+      return path;
+    }
+  }
+
   let p = path;
   const hadTrailing = trackTrailingSlash && p.length > 1 && p.charCodeAt(p.length - 1) === 47;
 
