@@ -13,7 +13,7 @@ import type { ClientIpsResult } from './interfaces';
  * @param trustProxy Whether to trust proxy headers
  * @returns The best-guess client IP and the forwarded chain (if any)
  */
-export function getIps(request: Request, server: Server, trustProxy?: boolean): ClientIpsResult {
+export function getIps(request: Request, server: Server<unknown>, trustProxy?: boolean): ClientIpsResult {
   const shouldTrustProxy = trustProxy ?? false;
 
   const headers = request.headers;
