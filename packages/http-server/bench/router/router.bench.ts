@@ -21,7 +21,8 @@ let sinkPrimary = 0;
 let sinkSecondary = 0;
 let buildSequence = 0;
 
-const HOT_LIST_ITERATIONS = Number(process.env.ROUTER_LIST_WARM ?? '5');
+const HOT_LIST_ITERATIONS = Math.max(1, Number(process.env.ROUTER_LIST_WARM ?? '5'));
+const HOT_PARAM_ITERATIONS = Math.max(1, Number(process.env.ROUTER_PARAM_WARM ?? '8'));
 
 const staticRoutes1k = generateStaticRouteSpecs(1_000, 3, 8);
 const staticRoutes10k = generateStaticRouteSpecs(10_000, 4, 8);
@@ -235,6 +236,11 @@ group('match / method coverage & priority', () => {
 group('match / misses', () => {
   bench('match: static 10k miss', () => consumeMatchResult(routerStatic10k.match(HttpMethod.Get, roundStaticMiss())));
   bench('match: param-heavy miss', () => consumeMatchResult(routerParamHeavy.match(HttpMethod.Get, roundParamMiss())));
+  bench(`match: param-heavy miss x${HOT_PARAM_ITERATIONS}`, () => {
+    for (let i = 0; i < HOT_PARAM_ITERATIONS; i++) {
+      consumeMatchResult(routerParamHeavy.match(HttpMethod.Get, roundParamMiss()));
+    }
+  });
 });
 
 group('match / cache behavior', () => {
@@ -248,6 +254,11 @@ group('match / params & wildcards', () => {
   bench('match: param heavy (regex + multi)', () =>
     consumeMatchResult(routerParamHeavy.match(HttpMethod.Get, roundParamHeavy())),
   );
+  bench(`match: param heavy hot x${HOT_PARAM_ITERATIONS}`, () => {
+    for (let i = 0; i < HOT_PARAM_ITERATIONS; i++) {
+      consumeMatchResult(routerParamHeavy.match(HttpMethod.Get, roundParamHeavy()));
+    }
+  });
   bench('match: wildcard capture', () => consumeMatchResult(routerWildcard.match(HttpMethod.Get, roundWildcard())));
   bench('match: optional params', () => consumeMatchResult(routerOptional.match(HttpMethod.Get, roundOptionalMissing())));
   bench('match: multi-segment + params', () => consumeMatchResult(routerMultiParam.match(HttpMethod.Get, roundMultiParam())));

@@ -18,6 +18,9 @@ export class RadixRouter implements Router {
   private cacheKeyPrefixes: Record<number, string> = Object.create(null);
   private cacheKeyPool?: Map<number, Map<string, string>>;
   private cacheKeyPoolLimit: number;
+  private lastCacheKeyMethod?: HttpMethod;
+  private lastCacheKeyPath?: string;
+  private lastCacheKeyValue?: string;
 
   constructor(options?: RouterOptions) {
     this.options = {
@@ -110,6 +113,41 @@ export class RadixRouter implements Router {
       }
     }
     const segments = splitSegments(normalized);
+    const suffixCache: string[] = [];
+    if (segments.length) {
+      let suffix = '';
+      for (let i = segments.length - 1; i >= 0; i--) {
+        suffix = suffix ? `${segments[i]!}/${suffix}` : segments[i]!;
+        suffixCache[i] = suffix;
+      }
+    }
+    const decodedSegmentCache = this.options.decodeParams ? new Array<string | undefined>(segments.length) : undefined;
+    const decodedSuffixCache = this.options.decodeParams ? new Array<string | undefined>(segments.length) : undefined;
+    const getDecodedSegment = (index: number): string => {
+      if (!this.options.decodeParams) {
+        return segments[index]!;
+      }
+      const cached = decodedSegmentCache![index];
+      if (cached !== undefined) {
+        return cached;
+      }
+      const value = decodeURIComponentSafe(segments[index]!);
+      decodedSegmentCache![index] = value;
+      return value;
+    };
+    const getSuffixValue = (index: number): string => {
+      const raw = suffixCache[index] ?? '';
+      if (!this.options.decodeParams || index >= segments.length) {
+        return raw;
+      }
+      const cached = decodedSuffixCache![index];
+      if (cached !== undefined) {
+        return cached;
+      }
+      const value = decodeURIComponentSafe(raw);
+      decodedSuffixCache![index] = value;
+      return value;
+    };
     let params: Record<string, string> | null = null;
     const ensureParams = (): Record<string, string> => {
       if (params === null) {
@@ -146,8 +184,8 @@ export class RadixRouter implements Router {
           }
         }
         for (const child of node.staticChildren.values()) {
-          const parts = child.segmentParts ?? [child.segment];
-          if (parts[0] !== seg) {
+          const parts = child.segmentParts;
+          if (!parts || parts.length <= 1 || parts[0] !== seg) {
             continue;
           }
           let j = 1;
@@ -170,16 +208,16 @@ export class RadixRouter implements Router {
           const k = matchDfs(c, idx + 1);
           if (k !== null) {
             const bag = ensureParams();
-            bag[c.segment] = this.options.decodeParams ? decodeURIComponentSafe(seg) : seg;
+            bag[c.segment] = getDecodedSegment(idx);
             return k;
           }
         }
       }
       if (node.wildcardChild) {
         const wname = node.wildcardChild.segment || '*';
-        const joined = segments.slice(idx).join('/');
+        const joined = getSuffixValue(idx);
         const bag = ensureParams();
-        bag[wname] = this.options.decodeParams ? decodeURIComponentSafe(joined) : joined;
+        bag[wname] = joined;
         const key = node.wildcardChild.methods.byMethod.get(method);
         if (key !== undefined) {
           return key;
@@ -205,30 +243,65 @@ export class RadixRouter implements Router {
 
   list(): Array<{ path: string; methods: HttpMethod[] }> {
     this.ensureCompressed();
+
     type Frame = {
       node: RouterNode;
       path: string;
       visitedSelf: boolean;
-      staticEntries: Array<[string, RouterNode]>;
+      staticChildren: RouterNode[];
       staticIndex: number;
       paramIndex: number;
       wildcardHandled: boolean;
     };
+
     const results: Array<{ path: string; methods: HttpMethod[] }> = [];
-    const EMPTY_STATIC: Array<[string, RouterNode]> = [];
-    const pushFrame = (node: RouterNode, path: string) => {
-      const staticEntries = node.staticChildren.size ? Array.from(node.staticChildren.entries()) : EMPTY_STATIC;
-      stack.push({
-        node,
-        path,
+    const stack: Frame[] = [];
+    const framePool: Frame[] = [];
+    const EMPTY_STATIC: RouterNode[] = [];
+
+    const acquireFrame = (): Frame => {
+      if (framePool.length) {
+        return framePool.pop()!;
+      }
+      return {
+        node: this.root,
+        path: '',
         visitedSelf: false,
-        staticEntries,
+        staticChildren: EMPTY_STATIC,
         staticIndex: 0,
         paramIndex: 0,
-        wildcardHandled: !node.wildcardChild,
-      });
+        wildcardHandled: true,
+      };
     };
-    const stack: Frame[] = [];
+
+    const releaseFrame = (frame: Frame) => {
+      frame.staticChildren = EMPTY_STATIC;
+      framePool.push(frame);
+    };
+
+    const getStaticSnapshot = (node: RouterNode): RouterNode[] => {
+      if (node.staticChildren.size === 0) {
+        return EMPTY_STATIC;
+      }
+      if (!node.cachedStaticChildren || node.cachedStaticChildrenVersion !== node.staticChildrenVersion) {
+        node.cachedStaticChildren = Array.from(node.staticChildren.values());
+        node.cachedStaticChildrenVersion = node.staticChildrenVersion;
+      }
+      return node.cachedStaticChildren;
+    };
+
+    const pushFrame = (node: RouterNode, path: string) => {
+      const frame = acquireFrame();
+      frame.node = node;
+      frame.path = path;
+      frame.visitedSelf = false;
+      frame.staticChildren = getStaticSnapshot(node);
+      frame.staticIndex = 0;
+      frame.paramIndex = 0;
+      frame.wildcardHandled = !node.wildcardChild;
+      stack.push(frame);
+    };
+
     pushFrame(this.root, '');
     while (stack.length) {
       const frame = stack[stack.length - 1]!;
@@ -239,8 +312,8 @@ export class RadixRouter implements Router {
         frame.visitedSelf = true;
         continue;
       }
-      if (frame.staticIndex < frame.staticEntries.length) {
-        const [, child] = frame.staticEntries[frame.staticIndex++]!;
+      if (frame.staticIndex < frame.staticChildren.length) {
+        const child = frame.staticChildren[frame.staticIndex++]!;
         pushFrame(child, buildPath(frame.path, child.segment));
         continue;
       }
@@ -261,6 +334,7 @@ export class RadixRouter implements Router {
         continue;
       }
       stack.pop();
+      releaseFrame(frame);
     }
     return results;
   }
@@ -382,6 +456,9 @@ export class RadixRouter implements Router {
       if (!child) {
         child = new RouterNode(NodeKind.Static, seg);
         node.staticChildren.set(seg, child);
+        node.staticChildrenVersion++;
+        node.cachedStaticChildren = undefined;
+        node.cachedStaticChildrenVersion = -1;
       }
       addSegments(child, idx + 1);
     };
@@ -415,6 +492,9 @@ export class RadixRouter implements Router {
           child.segment = parts.join('/');
           child.segmentParts = parts;
           child.staticChildren = cursor.staticChildren;
+          child.staticChildrenVersion = cursor.staticChildrenVersion;
+          child.cachedStaticChildren = cursor.cachedStaticChildren;
+          child.cachedStaticChildrenVersion = cursor.cachedStaticChildrenVersion;
           child.paramChildren = cursor.paramChildren;
           child.wildcardChild = cursor.wildcardChild;
           child.methods = cursor.methods;
@@ -451,6 +531,9 @@ export class RadixRouter implements Router {
   }
 
   private getCacheKey(method: HttpMethod, normalized: string): string {
+    if (this.lastCacheKeyMethod === method && this.lastCacheKeyPath === normalized && this.lastCacheKeyValue) {
+      return this.lastCacheKeyValue;
+    }
     let methodPool: Map<string, string> | undefined;
     if (this.cacheKeyPool) {
       methodPool = this.cacheKeyPool.get(method as number);
@@ -464,6 +547,9 @@ export class RadixRouter implements Router {
     }
     const existing = methodPool.get(normalized);
     if (existing) {
+      this.lastCacheKeyMethod = method;
+      this.lastCacheKeyPath = normalized;
+      this.lastCacheKeyValue = existing;
       return existing;
     }
     let prefix = this.cacheKeyPrefixes[method as number];
@@ -476,6 +562,9 @@ export class RadixRouter implements Router {
       methodPool.clear();
     }
     methodPool.set(normalized, key);
+    this.lastCacheKeyMethod = method;
+    this.lastCacheKeyPath = normalized;
+    this.lastCacheKeyValue = key;
     return key;
   }
 }
