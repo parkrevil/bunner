@@ -15,6 +15,7 @@ export class RadixRouter implements Router {
   private cache?: Map<string, RouteMatch | null>;
   private staticFast: Map<string, Map<HttpMethod, RouteKey>> = new Map();
   private needsCompression = false;
+  private cacheKeyPrefixes: Record<number, string> = Object.create(null);
 
   constructor(options?: RouterOptions) {
     this.options = {
@@ -106,9 +107,15 @@ export class RadixRouter implements Router {
       }
     }
     const segments = splitSegments(normalized);
-    const params: Record<string, string> = Object.create(null);
-    const cacheKey = `${method} ${segments.join('/')}`;
-    if (this.cache && this.cache.has(cacheKey)) {
+    let params: Record<string, string> | null = null;
+    const ensureParams = (): Record<string, string> => {
+      if (params === null) {
+        params = Object.create(null);
+      }
+      return params as Record<string, string>;
+    };
+    const cacheKey = this.cache ? this.getCacheKey(method, normalized) : undefined;
+    if (cacheKey && this.cache && this.cache.has(cacheKey)) {
       const hit = this.cache.get(cacheKey);
       if (hit === null) {
         return null;
@@ -159,7 +166,8 @@ export class RadixRouter implements Router {
           }
           const k = matchDfs(c, idx + 1);
           if (k !== null) {
-            params[c.segment] = this.options.decodeParams ? decodeURIComponentSafe(seg) : seg;
+            const bag = ensureParams();
+            bag[c.segment] = this.options.decodeParams ? decodeURIComponentSafe(seg) : seg;
             return k;
           }
         }
@@ -167,7 +175,8 @@ export class RadixRouter implements Router {
       if (node.wildcardChild) {
         const wname = node.wildcardChild.segment || '*';
         const joined = segments.slice(idx).join('/');
-        params[wname] = this.options.decodeParams ? decodeURIComponentSafe(joined) : joined;
+        const bag = ensureParams();
+        bag[wname] = this.options.decodeParams ? decodeURIComponentSafe(joined) : joined;
         const key = node.wildcardChild.methods.byMethod.get(method);
         if (key !== undefined) {
           return key;
@@ -178,13 +187,14 @@ export class RadixRouter implements Router {
 
     const key = matchDfs(this.root, 0);
     if (key === null) {
-      if (this.cache) {
+      if (cacheKey && this.cache) {
         this.setCache(cacheKey, null);
       }
       return null;
     }
-    const res: RouteMatch = { key, params };
-    if (this.cache) {
+    const finalParams = params ?? Object.create(null);
+    const res: RouteMatch = { key, params: finalParams };
+    if (cacheKey && this.cache) {
       this.setCache(cacheKey, res);
     }
     return res;
@@ -435,6 +445,15 @@ export class RadixRouter implements Router {
         this.cache.delete(first);
       }
     }
+  }
+
+  private getCacheKey(method: HttpMethod, normalized: string): string {
+    let prefix = this.cacheKeyPrefixes[method as number];
+    if (!prefix) {
+      prefix = `${method} `;
+      this.cacheKeyPrefixes[method as number] = prefix;
+    }
+    return prefix + normalized;
   }
 }
 
