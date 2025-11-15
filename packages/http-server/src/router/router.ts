@@ -192,45 +192,63 @@ export class RadixRouter implements Router {
 
   list(): Array<{ path: string; methods: HttpMethod[] }> {
     this.ensureCompressed();
+    type Frame = {
+      node: RouterNode;
+      path: string;
+      visitedSelf: boolean;
+      staticEntries: Array<[string, RouterNode]>;
+      staticIndex: number;
+      paramIndex: number;
+      wildcardHandled: boolean;
+    };
     const results: Array<{ path: string; methods: HttpMethod[] }> = [];
-    const joinPath = (prefix: string, segment: string): string => {
-      if (!segment) {
-        return prefix || '/';
-      }
-      if (prefix === '' || prefix === '/') {
-        return `/${segment}`;
-      }
-      return `${prefix}/${segment}`;
+    const EMPTY_STATIC: Array<[string, RouterNode]> = [];
+    const pushFrame = (node: RouterNode, path: string) => {
+      const staticEntries = node.staticChildren.size ? Array.from(node.staticChildren.entries()) : EMPTY_STATIC;
+      stack.push({
+        node,
+        path,
+        visitedSelf: false,
+        staticEntries,
+        staticIndex: 0,
+        paramIndex: 0,
+        wildcardHandled: !node.wildcardChild,
+      });
     };
-    const pushIfMethods = (path: string, node: RouterNode) => {
-      if (node.methods.byMethod.size) {
-        results.push({ path: path || '/', methods: getCachedMethodList(node.methods) });
+    const stack: Frame[] = [];
+    pushFrame(this.root, '');
+    while (stack.length) {
+      const frame = stack[stack.length - 1]!;
+      if (!frame.visitedSelf) {
+        if (frame.node.methods.byMethod.size) {
+          results.push({ path: frame.path || '/', methods: getCachedMethodList(frame.node.methods) });
+        }
+        frame.visitedSelf = true;
+        continue;
       }
-    };
-    const walk = (prefix: string, node: RouterNode) => {
-      pushIfMethods(prefix, node);
-      // static children
-      for (const [, child] of node.staticChildren) {
-        const next = joinPath(prefix, child.segment);
-        walk(next, child);
+      if (frame.staticIndex < frame.staticEntries.length) {
+        const [, child] = frame.staticEntries[frame.staticIndex++]!;
+        pushFrame(child, buildPath(frame.path, child.segment));
+        continue;
       }
-      // params
-      for (const child of node.paramChildren) {
+      if (frame.paramIndex < frame.node.paramChildren.length) {
+        const child = frame.node.paramChildren[frame.paramIndex++]!;
         const rawPattern =
           child.patternSource ?? (child.pattern ? child.pattern.source.replace(/^\^\(\?:/, '').replace(/\)\$$/, '') : undefined);
         const seg = `:${child.segment}${rawPattern ? `{${rawPattern}}` : ''}`;
-        const next = joinPath(prefix, seg);
-        walk(next, child);
+        pushFrame(child, buildPath(frame.path, seg));
+        continue;
       }
-      // wildcard
-      if (node.wildcardChild) {
-        const name = node.wildcardChild.segment || '*';
+      if (!frame.wildcardHandled) {
+        frame.wildcardHandled = true;
+        const child = frame.node.wildcardChild!;
+        const name = child.segment || '*';
         const seg = name === '*' ? '*' : `*${name}`;
-        const next = joinPath(prefix, seg);
-        walk(next, node.wildcardChild);
+        pushFrame(child, buildPath(frame.path, seg));
+        continue;
       }
-    };
-    walk('', this.root);
+      stack.pop();
+    }
     return results;
   }
 
@@ -247,6 +265,8 @@ export class RadixRouter implements Router {
         const key = GLOBAL_ROUTE_KEY_SEQ++ as unknown as RouteKey;
         node.methods.byMethod.set(method, key);
         node.methods.listCache = undefined;
+        node.methods.listCacheVersion = undefined;
+        node.methods.version = (node.methods.version ?? 0) + 1;
         if (firstKey === null) {
           firstKey = key;
         }
@@ -418,9 +438,19 @@ export class RadixRouter implements Router {
   }
 }
 
+function buildPath(prefix: string, segment: string): string {
+  if (!segment) {
+    return prefix || '/';
+  }
+  if (!prefix || prefix === '/') {
+    return `/${segment}`;
+  }
+  return `${prefix}/${segment}`;
+}
+
 function getCachedMethodList(methods: RouteMethods): HttpMethod[] {
   const cached = methods.listCache;
-  if (cached && cached.length === methods.byMethod.size) {
+  if (cached && methods.listCacheVersion === methods.version) {
     return cached;
   }
   const size = methods.byMethod.size;
@@ -430,6 +460,7 @@ function getCachedMethodList(methods: RouteMethods): HttpMethod[] {
     next[i++] = key;
   }
   methods.listCache = next;
+  methods.listCacheVersion = methods.version;
   return next;
 }
 

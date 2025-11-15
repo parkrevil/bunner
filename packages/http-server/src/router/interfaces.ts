@@ -16,6 +16,10 @@ export interface RouteMethods {
   byMethod: Map<HttpMethod, RouteKey>;
   /** Cached method list for read-heavy operations like router.list() */
   listCache?: HttpMethod[];
+  /** Incremented whenever byMethod mutates to invalidate caches */
+  version: number;
+  /** Mirrors version when listCache is fresh */
+  listCacheVersion?: number;
 }
 
 export interface RouterConstructor<T extends Router = Router> {
