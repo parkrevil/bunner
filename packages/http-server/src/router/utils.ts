@@ -1,12 +1,13 @@
 import type { RouterOptions } from './types';
 
-export function normalizePath(path: string, opts: RouterOptions): string {
-  if (!path) {
-    return '/';
-  }
+export interface NormalizedPathSegments {
+  normalized: string;
+  segments: string[];
+}
 
-  if (path === '/') {
-    return '/';
+export function normalizeAndSplit(path: string, opts: RouterOptions): NormalizedPathSegments {
+  if (!path || path === '/') {
+    return { normalized: '/', segments: [] };
   }
 
   const collapseSlashes = opts.collapseSlashes !== false;
@@ -20,57 +21,51 @@ export function normalizePath(path: string, opts: RouterOptions): string {
   const startIndex = hasLeadingSlash ? 1 : 0;
 
   const segments: string[] = [];
-  let segment = '';
   let allowEmpty = hasLeadingSlash;
+  let segmentStart = startIndex;
   let sawChar = false;
   let needsDotHandling = false;
+  let segmentSawUpper = false;
 
-  // Emits the current segment while honoring collapse and traversal rules.
-  const emitSegment = () => {
-    if (segment.length) {
-      segments.push(segment);
-      if (blockTraversal && (segment === '.' || segment === '..')) {
+  const pushSegment = (endIdx: number) => {
+    if (endIdx > segmentStart) {
+      let part = path.slice(segmentStart, endIdx);
+      if (!caseSensitive && segmentSawUpper) {
+        part = part.toLowerCase();
+      }
+      segments.push(part);
+      if (blockTraversal && (part === '.' || part === '..')) {
         needsDotHandling = true;
       }
-      segment = '';
       allowEmpty = true;
-      return;
-    }
-
-    if (!collapseSlashes && allowEmpty) {
+    } else if (!collapseSlashes && allowEmpty) {
       segments.push('');
+      allowEmpty = true;
     }
-    allowEmpty = true;
+    segmentStart = endIdx + 1;
+    segmentSawUpper = false;
   };
 
   for (let i = startIndex; i < path.length; i++) {
     sawChar = true;
-    let code = path.charCodeAt(i);
-
+    const code = path.charCodeAt(i);
     if (code === 47) {
-      emitSegment();
+      pushSegment(i);
       continue;
     }
-
     if (!caseSensitive && code >= 65 && code <= 90) {
-      code |= 32;
+      segmentSawUpper = true;
     }
-
-    segment += String.fromCharCode(code);
     allowEmpty = false;
   }
 
-  if (segment.length) {
-    segments.push(segment);
-    if (blockTraversal && (segment === '.' || segment === '..')) {
-      needsDotHandling = true;
-    }
+  if (segmentStart < path.length) {
+    pushSegment(path.length);
   } else if (!collapseSlashes && allowEmpty && sawChar) {
     segments.push('');
   }
 
   let normalizedSegments = segments;
-
   if (blockTraversal && needsDotHandling) {
     const stack: string[] = [];
     for (const part of segments) {
@@ -89,17 +84,27 @@ export function normalizePath(path: string, opts: RouterOptions): string {
   }
 
   let normalized = normalizedSegments.length ? '/' + normalizedSegments.join('/') : '/';
-
   if (ignoreTrailingSlash && normalized.length > 1 && normalized.charCodeAt(normalized.length - 1) === 47) {
     normalized = normalized.slice(0, -1);
   } else if (trackTrailingSlash && hadTrailing && normalized.length > 1 && normalized.charCodeAt(normalized.length - 1) !== 47) {
     normalized += '/';
   }
 
-  return normalized.length ? normalized : '/';
+  let matchSegments = normalizedSegments;
+  if (normalized.length > 1 && normalized.charCodeAt(normalized.length - 1) === 47) {
+    matchSegments = [...normalizedSegments, ''];
+  }
+
+  return {
+    normalized: normalized.length ? normalized : '/',
+    segments: matchSegments,
+  };
 }
 
-// Manual splitting avoids String.split allocations on hot paths.
+export function normalizePath(path: string, opts: RouterOptions): string {
+  return normalizeAndSplit(path, opts).normalized;
+}
+
 export function splitSegments(path: string): string[] {
   if (path === '/') {
     return [];

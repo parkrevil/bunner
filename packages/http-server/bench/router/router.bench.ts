@@ -213,6 +213,97 @@ group('match / normalization & options', () => {
   );
 });
 
+// Optional competitor benchmarks (find-my-way, trouter). Enable with ROUTER_COMPARE=1
+if (process.env.ROUTER_COMPARE === '1') {
+  type Competitor = {
+    name: string;
+    buildStatic: (paths: string[]) => unknown;
+    buildParamHeavy: (paths: string[]) => unknown;
+    match: (router: any, method: string, path: string) => boolean;
+  };
+
+  const competitors: Competitor[] = [];
+
+  try {
+    // find-my-way
+
+    const createFmw = (require as any)?.('find-my-way') ?? (await import('find-my-way')).default;
+    const fmwAdapter: Competitor = {
+      name: 'find-my-way',
+      buildStatic(paths) {
+        const r = createFmw({ ignoreTrailingSlash: false });
+        for (const p of paths) {
+          r.on('GET', p, () => {});
+        }
+        return r;
+      },
+      buildParamHeavy(paths) {
+        const r = createFmw({ ignoreTrailingSlash: false });
+        for (const p of paths) {
+          r.on('GET', p, () => {});
+        }
+        return r;
+      },
+      match(r, method, path) {
+        return !!r.find(method, path);
+      },
+    };
+    competitors.push(fmwAdapter);
+  } catch {}
+
+  try {
+    // trouter
+    const { default: Trouter } = await import('trouter');
+    const trouterAdapter: Competitor = {
+      name: 'trouter',
+      buildStatic(paths) {
+        const r = new (Trouter as any)();
+        for (const p of paths) {
+          r.add('GET', p, 1);
+        }
+        return r;
+      },
+      buildParamHeavy(paths) {
+        const r = new (Trouter as any)();
+        for (const p of paths) {
+          r.add('GET', p, 1);
+        }
+        return r;
+      },
+      match(r, method, path) {
+        const m = r.find(method, path);
+        return !!(m && m.handlers && m.handlers.length);
+      },
+    };
+    competitors.push(trouterAdapter);
+  } catch {}
+
+  if (competitors.length) {
+    for (const c of competitors) {
+      const cStatic = c.buildStatic(static10kPatterns);
+      const cParam = c.buildParamHeavy(dynamicParamPatterns);
+
+      group(`competitors / ${c.name}`, () => {
+        bench('build: add 10k static routes', () => {
+          return c.buildStatic(static10kPatterns);
+        });
+        bench('build: add 12k param-heavy routes', () => {
+          return c.buildParamHeavy(dynamicParamPatterns);
+        });
+        bench('match: static 10k router', () => {
+          return c.match(cStatic, 'GET', roundStatic10k());
+        });
+        bench('match: static 10k miss', () => {
+          return c.match(cStatic, 'GET', makeRoundRobin(static10kMissSamples)());
+        });
+        bench('match: param-heavy', () => {
+          return c.match(cParam, 'GET', roundParamHeavy());
+        });
+      });
+    }
+  }
+}
+
 group('match / method coverage & priority', () => {
   for (const { method, label } of methodLabels) {
     bench(`match: multi-method ${label}`, () => consumeMatchResult(routerMultiMethod.match(method, roundMultiMethod())));
