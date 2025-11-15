@@ -2,7 +2,7 @@ import { HttpMethod } from '../enums';
 import type { RouteKey } from '../types';
 
 import { NodeKind } from './enums';
-import type { RouteMethods, Router } from './interfaces';
+import type { Router } from './interfaces';
 import { RouterNode } from './node';
 import type { RouterOptions, RouteMatch } from './types';
 import { normalizePath, splitSegments, decodeURIComponentSafe } from './utils';
@@ -241,129 +241,6 @@ export class RadixRouter implements Router {
     return res;
   }
 
-  list(): Array<{ path: string; methods: HttpMethod[] }> {
-    this.ensureCompressed();
-
-    type Frame = {
-      node: RouterNode;
-      depth: number;
-      visitedSelf: boolean;
-      staticChildren: RouterNode[];
-      staticIndex: number;
-      paramIndex: number;
-      wildcardHandled: boolean;
-    };
-
-    const results: Array<{ path: string; methods: HttpMethod[] }> = [];
-    const stack: Frame[] = [];
-    const framePool: Frame[] = [];
-    const EMPTY_STATIC: RouterNode[] = [];
-    const pathSegments: string[] = [];
-
-    const acquireFrame = (): Frame => {
-      if (framePool.length) {
-        return framePool.pop()!;
-      }
-      return {
-        node: this.root,
-        depth: 0,
-        visitedSelf: false,
-        staticChildren: EMPTY_STATIC,
-        staticIndex: 0,
-        paramIndex: 0,
-        wildcardHandled: true,
-      };
-    };
-
-    const releaseFrame = (frame: Frame) => {
-      frame.staticChildren = EMPTY_STATIC;
-      framePool.push(frame);
-    };
-
-    const getStaticSnapshot = (node: RouterNode): RouterNode[] => {
-      if (node.staticChildren.size === 0) {
-        return EMPTY_STATIC;
-      }
-      if (!node.cachedStaticChildren || node.cachedStaticChildrenVersion !== node.staticChildrenVersion) {
-        node.cachedStaticChildren = Array.from(node.staticChildren.values());
-        node.cachedStaticChildren.sort((a, b) => {
-          const depthDelta = (a.compressionDepth ?? 1) - (b.compressionDepth ?? 1);
-          if (depthDelta !== 0) {
-            return depthDelta;
-          }
-          if (a.segment.length !== b.segment.length) {
-            return a.segment.length - b.segment.length;
-          }
-          return a.segment < b.segment ? -1 : a.segment > b.segment ? 1 : 0;
-        });
-        node.cachedStaticChildrenVersion = node.staticChildrenVersion;
-      }
-      return node.cachedStaticChildren;
-    };
-
-    const pushFrame = (node: RouterNode, depth: number) => {
-      const frame = acquireFrame();
-      frame.node = node;
-      frame.depth = depth;
-      frame.visitedSelf = false;
-      frame.staticChildren = getStaticSnapshot(node);
-      frame.staticIndex = 0;
-      frame.paramIndex = 0;
-      frame.wildcardHandled = !node.wildcardChild;
-      stack.push(frame);
-    };
-
-    const buildCurrentPath = (depth: number): string => {
-      if (depth === 0) {
-        return '/';
-      }
-      let out = '';
-      for (let i = 0; i < depth; i++) {
-        out += '/' + pathSegments[i]!;
-      }
-      return out;
-    };
-
-    pushFrame(this.root, 0);
-    while (stack.length) {
-      const frame = stack[stack.length - 1]!;
-      if (!frame.visitedSelf) {
-        if (frame.node.methods.byMethod.size) {
-          results.push({ path: buildCurrentPath(frame.depth), methods: getCachedMethodList(frame.node.methods) });
-        }
-        frame.visitedSelf = true;
-        continue;
-      }
-      if (frame.staticIndex < frame.staticChildren.length) {
-        const child = frame.staticChildren[frame.staticIndex++]!;
-        pathSegments[frame.depth] = child.segment;
-        pushFrame(child, frame.depth + 1);
-        continue;
-      }
-      if (frame.paramIndex < frame.node.paramChildren.length) {
-        const child = frame.node.paramChildren[frame.paramIndex++]!;
-        const rawPattern =
-          child.patternSource ?? (child.pattern ? child.pattern.source.replace(/^\^\(\?:/, '').replace(/\)\$$/, '') : undefined);
-        const seg = `:${child.segment}${rawPattern ? `{${rawPattern}}` : ''}`;
-        pathSegments[frame.depth] = seg;
-        pushFrame(child, frame.depth + 1);
-        continue;
-      }
-      if (!frame.wildcardHandled) {
-        frame.wildcardHandled = true;
-        const child = frame.node.wildcardChild!;
-        const name = child.segment || '*';
-        const seg = name === '*' ? '*' : `*${name}`;
-        pathSegments[frame.depth] = seg;
-        pushFrame(child, frame.depth + 1);
-        continue;
-      }
-      stack.pop();
-      releaseFrame(frame);
-    }
-    return results;
-  }
-
   private _addSingle(method: HttpMethod, path: string): RouteKey {
     const normalized = normalizePath(path, this.options);
     const segments = splitSegments(normalized);
@@ -376,8 +253,6 @@ export class RadixRouter implements Router {
         }
         const key = GLOBAL_ROUTE_KEY_SEQ++ as unknown as RouteKey;
         node.methods.byMethod.set(method, key);
-        node.methods.listCache = undefined;
-        node.methods.listCacheVersion = undefined;
         node.methods.version = (node.methods.version ?? 0) + 1;
         if (firstKey === null) {
           firstKey = key;
@@ -481,9 +356,6 @@ export class RadixRouter implements Router {
       if (!child) {
         child = new RouterNode(NodeKind.Static, seg);
         node.staticChildren.set(seg, child);
-        node.staticChildrenVersion++;
-        node.cachedStaticChildren = undefined;
-        node.cachedStaticChildrenVersion = -1;
       }
       addSegments(child, idx + 1);
     };
@@ -517,16 +389,9 @@ export class RadixRouter implements Router {
           child.segment = parts.join('/');
           child.segmentParts = parts;
           child.staticChildren = cursor.staticChildren;
-          child.staticChildrenVersion = cursor.staticChildrenVersion;
-          child.cachedStaticChildren = cursor.cachedStaticChildren;
-          child.cachedStaticChildrenVersion = cursor.cachedStaticChildrenVersion;
           child.paramChildren = cursor.paramChildren;
           child.wildcardChild = cursor.wildcardChild;
           child.methods = cursor.methods;
-          child.compressionDepth = parts.length;
-        } else {
-          child.segmentParts = undefined;
-          child.compressionDepth = 1;
         }
       }
     };
@@ -597,22 +462,6 @@ export class RadixRouter implements Router {
     this.lastCacheKeyValue = key;
     return key;
   }
-}
-
-function getCachedMethodList(methods: RouteMethods): HttpMethod[] {
-  const cached = methods.listCache;
-  if (cached && methods.listCacheVersion === methods.version) {
-    return cached;
-  }
-  const size = methods.byMethod.size;
-  const next = new Array<HttpMethod>(size);
-  let i = 0;
-  for (const key of methods.byMethod.keys()) {
-    next[i++] = key;
-  }
-  methods.listCache = next;
-  methods.listCacheVersion = methods.version;
-  return next;
 }
 
 export default RadixRouter;

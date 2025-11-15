@@ -7,19 +7,13 @@ export interface Router {
   add(method: HttpMethod | HttpMethod[] | '*', path: string): RouteKey | RouteKey[];
   addAll(entries: Array<[HttpMethod, string]>): RouteKey[];
   match(method: HttpMethod, path: string): RouteMatch | null;
-  /** List all routes (path pattern and methods) for introspection */
-  list(): Array<{ path: string; methods: HttpMethod[] }>;
 }
 
 export interface RouteMethods {
   /** Per-method registered route keys at this node (leaf) */
   byMethod: Map<HttpMethod, RouteKey>;
-  /** Cached method list for read-heavy operations like router.list() */
-  listCache?: HttpMethod[];
   /** Incremented whenever byMethod mutates to invalidate caches */
   version: number;
-  /** Mirrors version when listCache is fresh */
-  listCacheVersion?: number;
 }
 
 export interface RouterConstructor<T extends Router = Router> {

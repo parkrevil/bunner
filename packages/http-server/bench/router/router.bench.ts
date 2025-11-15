@@ -21,7 +21,6 @@ let sinkPrimary = 0;
 let sinkSecondary = 0;
 let buildSequence = 0;
 
-const HOT_LIST_ITERATIONS = Math.max(1, Number(process.env.ROUTER_LIST_WARM ?? '5'));
 const HOT_PARAM_ITERATIONS = Math.max(1, Number(process.env.ROUTER_PARAM_WARM ?? '8'));
 
 const staticRoutes1k = generateStaticRouteSpecs(1_000, 3, 8);
@@ -78,7 +77,6 @@ const routerCacheThrash = buildRouter([...static10kPatterns, '/cache/miss/:id{[0
   enableCache: true,
   cacheSize: 256,
 });
-const routerListMixed = buildRouter([...static10kPatterns.slice(0, 5000), ...dynamicParamPatterns]);
 
 const routerTrailingLoose = buildRouter(['/loose/path'], { ignoreTrailingSlash: true });
 const routerTrailingStrict = buildRouter(['/strict/path/'], { ignoreTrailingSlash: false });
@@ -278,25 +276,6 @@ group('match / extremes', () => {
   );
 });
 
-group('router utilities', () => {
-  bench('list(): 22k mixed routes', () => consumeListResult(routerListMixed.list()));
-  bench('list(): 100k static routes', () => consumeListResult(routerStatic100k.list()));
-  bench(`list(): 22k mixed routes x${HOT_LIST_ITERATIONS} (hot)`, () => {
-    let entries: Array<{ path: string; methods: HttpMethod[] }> = [];
-    for (let i = 0; i < HOT_LIST_ITERATIONS; i++) {
-      entries = routerListMixed.list();
-    }
-    consumeListResult(entries);
-  });
-  bench(`list(): 100k static routes x${HOT_LIST_ITERATIONS} (hot)`, () => {
-    let entries: Array<{ path: string; methods: HttpMethod[] }> = [];
-    for (let i = 0; i < HOT_LIST_ITERATIONS; i++) {
-      entries = routerStatic100k.list();
-    }
-    consumeListResult(entries);
-  });
-});
-
 if (hasManualGc) {
   Bun.gc(true);
 }
@@ -459,13 +438,6 @@ function consumeMatchResult(result: RouteMatch | null): void {
   }
   sinkPrimary ^= Number(result.key) & 0xffff;
   sinkSecondary ^= Object.keys(result.params).length & 0xffff;
-}
-
-function consumeListResult(entries: Array<{ path: string; methods: HttpMethod[] }>): void {
-  sinkPrimary ^= entries.length & 0xffff;
-  if (entries.length) {
-    sinkSecondary ^= entries[0]!.methods.length & 0xffff;
-  }
 }
 
 function consumeBuildResult(router: RadixRouter): RadixRouter {

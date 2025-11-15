@@ -102,29 +102,6 @@ describe('RadixRouter :: basic routing', () => {
     }
   });
 
-  it('should expand optional parameters when calling list()', () => {
-    router.add(HttpMethod.Get, '/optional/:id?');
-
-    expect(router.list()).toEqual(
-      expect.arrayContaining([
-        { path: '/optional', methods: [HttpMethod.Get] },
-        { path: '/optional/:id', methods: [HttpMethod.Get] },
-      ]),
-    );
-  });
-
-  it('should preserve regex parameter notation in list()', () => {
-    router.add(HttpMethod.Get, '/users/:id{[0-9]+}');
-
-    expect(router.list()).toContainEqual({ path: '/users/:id{[0-9]+}', methods: [HttpMethod.Get] });
-  });
-
-  it('should expose wildcard names as-is in list()', () => {
-    router.add(HttpMethod.Get, '/files/*rest');
-
-    expect(router.list()).toContainEqual({ path: '/files/*rest', methods: [HttpMethod.Get] });
-  });
-
   it('should cache pure static routes in the fast-path table', () => {
     const key = router.add(HttpMethod.Get, '/fast/path') as RouteKey;
     const internal = router as unknown as { staticFast: Map<string, Map<HttpMethod, RouteKey>> };
