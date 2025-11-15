@@ -21,6 +21,8 @@ let sinkPrimary = 0;
 let sinkSecondary = 0;
 let buildSequence = 0;
 
+const HOT_LIST_ITERATIONS = Number(process.env.ROUTER_LIST_WARM ?? '5');
+
 const staticRoutes1k = generateStaticRouteSpecs(1_000, 3, 8);
 const staticRoutes10k = generateStaticRouteSpecs(10_000, 4, 8);
 const staticRoutes100k = generateStaticRouteSpecs(100_000, 5, 8);
@@ -268,6 +270,20 @@ group('match / extremes', () => {
 group('router utilities', () => {
   bench('list(): 22k mixed routes', () => consumeListResult(routerListMixed.list()));
   bench('list(): 100k static routes', () => consumeListResult(routerStatic100k.list()));
+  bench(`list(): 22k mixed routes x${HOT_LIST_ITERATIONS} (hot)`, () => {
+    let entries: Array<{ path: string; methods: HttpMethod[] }> = [];
+    for (let i = 0; i < HOT_LIST_ITERATIONS; i++) {
+      entries = routerListMixed.list();
+    }
+    consumeListResult(entries);
+  });
+  bench(`list(): 100k static routes x${HOT_LIST_ITERATIONS} (hot)`, () => {
+    let entries: Array<{ path: string; methods: HttpMethod[] }> = [];
+    for (let i = 0; i < HOT_LIST_ITERATIONS; i++) {
+      entries = routerStatic100k.list();
+    }
+    consumeListResult(entries);
+  });
 });
 
 if (hasManualGc) {

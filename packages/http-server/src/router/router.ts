@@ -16,6 +16,8 @@ export class RadixRouter implements Router {
   private staticFast: Map<string, Map<HttpMethod, RouteKey>> = new Map();
   private needsCompression = false;
   private cacheKeyPrefixes: Record<number, string> = Object.create(null);
+  private cacheKeyPool?: Map<number, Map<string, string>>;
+  private cacheKeyPoolLimit: number;
 
   constructor(options?: RouterOptions) {
     this.options = {
@@ -28,6 +30,7 @@ export class RadixRouter implements Router {
       cacheSize: options?.cacheSize ?? 1024,
     };
     this.root = new RouterNode(NodeKind.Static, '');
+    this.cacheKeyPoolLimit = Math.max(512, this.options.cacheSize * 2);
     if (this.options.enableCache) {
       this.cache = new Map();
     }
@@ -448,12 +451,32 @@ export class RadixRouter implements Router {
   }
 
   private getCacheKey(method: HttpMethod, normalized: string): string {
+    let methodPool: Map<string, string> | undefined;
+    if (this.cacheKeyPool) {
+      methodPool = this.cacheKeyPool.get(method as number);
+    }
+    if (!methodPool) {
+      methodPool = new Map();
+      if (!this.cacheKeyPool) {
+        this.cacheKeyPool = new Map();
+      }
+      this.cacheKeyPool.set(method as number, methodPool);
+    }
+    const existing = methodPool.get(normalized);
+    if (existing) {
+      return existing;
+    }
     let prefix = this.cacheKeyPrefixes[method as number];
     if (!prefix) {
       prefix = `${method} `;
       this.cacheKeyPrefixes[method as number] = prefix;
     }
-    return prefix + normalized;
+    const key = prefix + normalized;
+    if (methodPool.size >= this.cacheKeyPoolLimit) {
+      methodPool.clear();
+    }
+    methodPool.set(normalized, key);
+    return key;
   }
 }
 
