@@ -25,27 +25,28 @@ export class BunnerRequest {
   readonly isTrustedProxy: boolean;
   readonly subdomains: string[];
 
-  constructor(ffiReq: FfiBunnerRequest) {
-    this.requestId = ffiReq.requestId;
-    this.httpMethod = ffiReq.httpMethod;
-    this.url = ffiReq.url;
-    this.path = ffiReq.path;
-    this.headers = new Headers(ffiReq.headers);
-    this.cookies = new CookieMap(ffiReq.cookies);
-    this.protocol = ffiReq.protocol ?? null;
-    this.host = ffiReq.host ?? null;
-    this.hostname = ffiReq.hostname ?? null;
-    this.port = ffiReq.port ?? null;
-    this.queryString = ffiReq.queryString ?? null;
-    this.contentType = ffiReq.contentType ?? null;
-    this.contentLength = ffiReq.contentLength ?? null;
-    this.charset = ffiReq.charset ?? null;
-    this.params = ffiReq.params;
-    this.queryParams = ffiReq.queryParams;
-    this.body = ffiReq.body ?? null;
-    this.isTrustedProxy = ffiReq.isTrustedProxy;
-    this.subdomains = ffiReq.subdomains;
-    this.ip = ffiReq.ip ?? null;
-    this.ips = ffiReq.ips;
+  constructor(_req: Request) {
+    /*     this.requestId = req.requestId;
+    this.httpMethod = req.httpMethod;
+    this.url = req.url;
+    this.path = req.path;
+    this.headers = new Headers(req.headers);
+    this.cookies = new CookieMap(req.cookies);
+    this.protocol = req.protocol ?? null;
+    this.host = req.host ?? null;
+    this.hostname = req.hostname ?? null;
+    this.port = req.port ?? null;
+    this.queryString = req.queryString ?? null;
+    this.contentType = req.contentType ?? null;
+    this.contentLength = req.contentLength ?? null;
+    this.charset = req.charset ?? null;
+    this.params = req.params;
+    this.queryParams = req.queryParams;
+    this.body = req.body ?? null;
+    this.isTrustedProxy = req.isTrustedProxy;
+    this.subdomains = req.subdomains;
+    this.ip = req.ip ?? null;
+    this.ips = req.ips;
+ */
   }
 }

@@ -1,23 +1,11 @@
 import type { AnyFunction, RootModuleFile } from '@bunner/core';
 
-import type { BunnerRequest } from './bunner-request';
-import type { BunnerResponse } from './bunner-response';
-import type { RouteHandlerParamType } from './decorators/types';
+import type { RouteHandlerParamType } from './decorators';
 
 export interface BunnerHttpServerOptions {
   port?: number;
   bodyLimit?: number;
   trustProxy?: boolean;
-}
-
-/**
- * Find Handler Result
- * @description The result of finding a handler
- */
-export interface FindHandlerResult {
-  handler: HandlerFunction;
-  request: BunnerRequest;
-  response: BunnerResponse;
 }
 
 /**
@@ -33,7 +21,7 @@ export interface WorkerInitParams {
  * Worker Options
  * @description The options for the worker
  */
-export interface WorkerOptions extends FfiOptions {}
+export interface WorkerOptions {}
 
 /**
  * HTTP Worker Response

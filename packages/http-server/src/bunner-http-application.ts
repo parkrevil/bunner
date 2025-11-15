@@ -47,7 +47,6 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
     await this.workerPool.init({
       rootModuleFile: this.rootModuleFile,
       options: {
-        appName: this.options.name,
         logLevel: this.options.logLevel,
         workers: this.options.workers,
         queueCapacity: this.options.queueCapacity,

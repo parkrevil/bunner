@@ -14,13 +14,13 @@ export class BunnerResponse {
   private _statusText: string;
   private _workerResponse: HttpWorkerResponse;
 
-  constructor(req: BunnerRequest, ffiRes: FfiBunnerResponse) {
+  constructor(req: BunnerRequest, res: Response) {
     this.req = req;
-    this._headers = new Headers(ffiRes.headers);
-    this._cookies = new CookieMap(ffiRes.headers[HeaderField.SetCookie] ?? {});
+    this._headers = new Headers(res.headers);
+    this._cookies = new CookieMap(res.headers.get(HeaderField.SetCookie) ?? {});
 
-    if (ffiRes.status) {
-      this.setStatus(ffiRes.status).end();
+    if (res.status) {
+      this.setStatus(res.status).end();
     }
   }
 

@@ -1,10 +1,8 @@
-import { SchemaManager } from './preprocessor';
-
 export class Transformer {
-  private schemaManager: SchemaManager;
+  //  private _schemaManager: SchemaManager;
 
   constructor() {
-    this.schemaManager = new SchemaManager();
+    //  this._schemaManager = new SchemaManager();
   }
 
   toInstance() {}

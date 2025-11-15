@@ -1,5 +1,4 @@
 import { BaseWorker, BunnerError, Container, type WorkerId } from '@bunner/core';
-import { Logger } from '@bunner/core-logger';
 import { expose } from 'comlink';
 import { StatusCodes } from 'http-status-codes';
 
@@ -10,7 +9,6 @@ import type { HttpWorkerResponse, RouteHandlerEntry, WorkerInitParams } from './
 import { RouteHandler } from './route-handler';
 
 export class BunnerHttpWorker extends BaseWorker {
-  private readonly logger = new Logger();
   private container: Container;
   private routeHandler: RouteHandler;
 
@@ -40,9 +38,9 @@ export class BunnerHttpWorker extends BaseWorker {
     console.log(`🚀 Bunner HTTP Worker #${this.id} is bootstrapping...`);
   }
 
-  async handleRequest(params: HandleRequestParams): Promise<HttpWorkerResponse> {
+  async handleRequest(_params: any): Promise<HttpWorkerResponse> {
     try {
-      const { request: ffiReq, response: ffiRes, routeKey } = await this.ffi.handleRequest(params);
+      const { request: ffiReq, response: ffiRes, routeKey } = {} as any;
       const req = new BunnerRequest(ffiReq);
       const res = new BunnerResponse(req, ffiRes);
 
@@ -70,9 +68,7 @@ export class BunnerHttpWorker extends BaseWorker {
     } catch (e: any) {
       console.log(e);
 
-      if (e instanceof BunnerFfiError) {
-        //
-      } else if (e instanceof BunnerError) {
+      if (e instanceof BunnerError) {
         //
       } else if (e instanceof HttpError) {
         //

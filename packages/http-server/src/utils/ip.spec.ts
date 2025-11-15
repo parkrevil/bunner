@@ -14,7 +14,7 @@ function buildRequest(headers: Record<string, string | undefined>): Request {
 }
 
 function mockServer(ip?: string | null): {
-  server: Server;
+  server: Server<unknown>;
   calls: { request: number };
 } {
   const calls = { request: 0 };
@@ -30,7 +30,7 @@ function mockServer(ip?: string | null): {
           }
         : null;
     },
-  } as unknown as Server;
+  } as unknown as Server<unknown>;
 
   return { server, calls };
 }

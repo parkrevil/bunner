@@ -57,10 +57,10 @@ export class RouteHandler {
         addRoutesParams.push([httpMethod, fullPath]);
       });
     });
-
+    /* 
     const addRoutesResult = this.ffi.addRoutes(addRoutesParams);
 
-    this.handlers = new Map<RouteKey, RouteHandlerEntry>(addRoutesResult.map((routeKey, index) => [routeKey, entries[index]!]));
+    this.handlers = new Map<RouteKey, RouteHandlerEntry>(addRoutesResult.map((routeKey, index) => [routeKey, entries[index]!])); */
   }
 
   /**
