@@ -1,8 +1,25 @@
+import type { HttpMethod } from '../enums';
 import type { RouteKey } from '../types';
 
 export interface RouteMatch {
   key: RouteKey;
   params: Record<string, string>;
+}
+
+export type StaticProbeResult = { kind: 'hit'; match: RouteMatch } | { kind: 'static-miss' } | { kind: 'fallback' };
+
+export interface DynamicMatcherConfig {
+  method: HttpMethod;
+  segments: string[];
+  decodeParams: boolean;
+  hasWildcardRoutes: boolean;
+  captureSnapshot: boolean;
+}
+
+export interface DynamicMatchResult {
+  key: RouteKey;
+  params: Record<string, string>;
+  snapshot?: Array<[string, string]>;
 }
 
 export interface RouterOptions {

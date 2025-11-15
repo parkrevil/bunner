@@ -101,49 +101,6 @@ export function normalizeAndSplit(path: string, opts: RouterOptions): Normalized
   };
 }
 
-export function normalizePath(path: string, opts: RouterOptions): string {
-  return normalizeAndSplit(path, opts).normalized;
-}
-
-export function splitSegments(path: string): string[] {
-  if (path === '/') {
-    return [];
-  }
-
-  const hasLeadingSlash = path.charCodeAt(0) === 47;
-  const startIndex = hasLeadingSlash ? 1 : 0;
-  const segments: string[] = [];
-  let segment = '';
-  let allowEmpty = hasLeadingSlash;
-  let sawChar = false;
-
-  for (let i = startIndex; i < path.length; i++) {
-    sawChar = true;
-    const code = path.charCodeAt(i);
-    if (code === 47) {
-      if (segment.length) {
-        segments.push(segment);
-        segment = '';
-      } else if (allowEmpty) {
-        segments.push('');
-      }
-      allowEmpty = true;
-      continue;
-    }
-
-    segment += String.fromCharCode(code);
-    allowEmpty = false;
-  }
-
-  if (segment.length) {
-    segments.push(segment);
-  } else if (allowEmpty && sawChar && (segments.length || hasLeadingSlash)) {
-    segments.push('');
-  }
-
-  return segments;
-}
-
 export function decodeURIComponentSafe(val: string): string {
   const firstPercent = val.indexOf('%');
   if (firstPercent === -1) {

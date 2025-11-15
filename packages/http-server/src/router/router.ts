@@ -1,11 +1,15 @@
 import { HttpMethod } from '../enums';
 import type { RouteKey } from '../types';
 
+import { hydrateParams } from './cache-helpers';
 import { NodeKind } from './enums';
 import type { Router } from './interfaces';
+import { DynamicMatcher } from './match-walker';
 import { RouterNode } from './node';
-import type { RouterOptions, RouteMatch } from './types';
-import { normalizeAndSplit, decodeURIComponentSafe, type NormalizedPathSegments } from './utils';
+import { buildPatternTester } from './pattern-tester';
+import { matchStaticParts, splitStaticChain } from './tree-utils';
+import type { DynamicMatchResult, RouterOptions, RouteMatch, StaticProbeResult } from './types';
+import { normalizeAndSplit, type NormalizedPathSegments } from './utils';
 
 type CacheEntry = { key: RouteKey; params?: Array<[string, string]> };
 
@@ -41,26 +45,16 @@ export class RadixRouter implements Router {
   }
 
   addAll(entries: Array<[HttpMethod, string]>): RouteKey[] {
-    const out: RouteKey[] = new Array(entries.length);
+    const keys: RouteKey[] = new Array(entries.length);
     for (let i = 0; i < entries.length; i++) {
-      const [m, p] = entries[i]!;
-      const prepared = normalizeAndSplit(p, this.options);
-      const norm = prepared.normalized;
-      out[i] = this._addSingle(m, p, prepared);
-      if (p.indexOf(':') === -1 && p.indexOf('*') === -1) {
-        let by = this.staticFast.get(norm);
-        if (!by) {
-          by = new Map();
-          this.staticFast.set(norm, by);
-        }
-        by.set(m, out[i]!);
-      }
+      const [method, path] = entries[i]!;
+      const prepared = normalizeAndSplit(path, this.options);
+      const key = this.insertRoute(method, path, prepared);
+      keys[i] = key;
+      this.registerStaticFastRoute(method, prepared.normalized, path, key);
     }
-    this.needsCompression = true;
-    if (this.cache) {
-      this.cache.clear();
-    }
-    return out;
+    this.markDirty();
+    return keys;
   }
 
   add(method: HttpMethod | HttpMethod[] | '*', path: string): RouteKey | RouteKey[] {
@@ -72,234 +66,132 @@ export class RadixRouter implements Router {
       return this.addAll(method.map(m => [m, path]));
     }
     const prepared = normalizeAndSplit(path, this.options);
-    const norm = prepared.normalized;
-    const k = this._addSingle(method, path, prepared);
-    if (path.indexOf(':') === -1 && path.indexOf('*') === -1) {
-      let by = this.staticFast.get(norm);
-      if (!by) {
-        by = new Map();
-        this.staticFast.set(norm, by);
-      }
-      by.set(method, k);
-    }
-    this.needsCompression = true;
-    if (this.cache) {
-      this.cache.clear();
-    }
-    return k;
+    const key = this.insertRoute(method, path, prepared);
+    this.registerStaticFastRoute(method, prepared.normalized, path, key);
+    this.markDirty();
+    return key;
   }
 
   match(method: HttpMethod, path: string): RouteMatch | null {
     this.ensureCompressed();
-    if (path.length && path.charCodeAt(0) === 47) {
-      const rawKey = this.ensureCaseNormalized(path);
-      let direct = this.matchStaticEntry(this.staticFast.get(rawKey), method);
-      if (direct) {
-        return direct;
-      }
-      let trimmed: string | undefined;
-      if (this.options.ignoreTrailingSlash && rawKey.length > 1) {
-        const candidate = this.trimTrailingSlashes(rawKey);
-        if (candidate !== rawKey) {
-          trimmed = candidate;
-          direct = this.matchStaticEntry(this.staticFast.get(candidate), method);
-          if (direct) {
-            return direct;
-          }
-        }
-      }
-      const evalKey = trimmed ?? rawKey;
-      if (!this.hasDynamicRoutes && !this.hasWildcardRoutes && this.isSimpleStaticPath(evalKey, !this.options.caseSensitive)) {
-        return null;
-      }
+
+    const staticProbe = this.tryStaticFastMatch(method, path);
+    if (staticProbe.kind === 'hit') {
+      return staticProbe.match;
     }
 
     const prepared = normalizeAndSplit(path, this.options);
     const normalized = prepared.normalized;
-    const segments = prepared.segments;
-    const fast = this.staticFast.get(normalized);
-    if (fast) {
-      const k = fast.get(method);
-      if (k !== undefined) {
-        return { key: k, params: Object.create(null) };
-      }
+
+    if (staticProbe.kind === 'static-miss') {
+      this.cacheNullMiss(method, normalized);
+      return null;
     }
-
-    const shouldDecode = this.options.decodeParams;
-    let decodedSegmentCache: Array<string | undefined> | undefined;
-    let suffixCache: string[] | undefined;
-    let decodedSuffixCache: Array<string | undefined> | undefined;
-
-    const ensureSuffixCache = () => {
-      if (suffixCache || !this.hasWildcardRoutes || !segments.length) {
-        return;
-      }
-      suffixCache = new Array(segments.length);
-      let suffix = '';
-      for (let i = segments.length - 1; i >= 0; i--) {
-        suffix = suffix ? `${segments[i]!}/${suffix}` : segments[i]!;
-        suffixCache[i] = suffix;
-      }
-    };
-
-    const getDecodedSegment = (index: number): string => {
-      if (!shouldDecode) {
-        return segments[index]!;
-      }
-      decodedSegmentCache ??= new Array<string | undefined>(segments.length);
-      const cached = decodedSegmentCache[index];
-      if (cached !== undefined) {
-        return cached;
-      }
-      const value = decodeURIComponentSafe(segments[index]!);
-      decodedSegmentCache[index] = value;
-      return value;
-    };
-
-    const getSuffixValue = (index: number): string => {
-      if (!this.hasWildcardRoutes) {
-        return '';
-      }
-      ensureSuffixCache();
-      const raw = (suffixCache && suffixCache[index]) || '';
-      if (!shouldDecode) {
-        return raw;
-      }
-      decodedSuffixCache ??= new Array<string | undefined>(segments.length);
-      const cached = decodedSuffixCache[index];
-      if (cached !== undefined) {
-        return cached;
-      }
-      const value = decodeURIComponentSafe(raw);
-      decodedSuffixCache[index] = value;
-      return value;
-    };
-
-    const paramNames: string[] = [];
-    const paramValues: string[] = [];
-    let paramCount = 0;
-    const pushParam = (name: string, value: string) => {
-      paramNames[paramCount] = name;
-      paramValues[paramCount] = value;
-      paramCount++;
-    };
+    const directBucket = this.staticFast.get(normalized);
+    const fastHit = this.matchStaticEntry(directBucket, method);
+    if (fastHit) {
+      return fastHit;
+    }
 
     const cacheKey = this.cache ? this.getCacheKey(method, normalized) : undefined;
     if (cacheKey && this.cache && this.cache.has(cacheKey)) {
-      const hit = this.cache.get(cacheKey);
-      if (hit === null) {
+      const entry = this.cache.get(cacheKey);
+      if (entry === null) {
         return null;
       }
-      if (hit) {
-        return { key: hit.key, params: hydrateParams(hit.params) };
+      if (entry) {
+        return { key: entry.key, params: hydrateParams(entry.params) };
       }
     }
 
-    const matchDfs = (node: RouterNode, idx: number): RouteKey | null => {
-      if (idx === segments.length) {
-        const key = node.methods.byMethod.get(method);
-        if (key !== undefined) {
-          return key;
-        }
-        return null;
-      }
-      const seg = segments[idx]!;
-      if (node.staticChildren.size) {
-        const child = node.staticChildren.get(seg);
-        if (child) {
-          const parts = child.segmentParts;
-          if (parts && parts.length > 1) {
-            const matched = matchStaticParts(parts, segments, idx);
-            if (matched === parts.length) {
-              const k = matchDfs(child, idx + matched);
-              if (k !== null) {
-                return k;
-              }
-            }
-          } else {
-            const k = matchDfs(child, idx + 1);
-            if (k !== null) {
-              return k;
-            }
-          }
-        }
-      }
-      if (node.paramChildren.length) {
-        for (const c of node.paramChildren) {
-          if (c.pattern) {
-            continue;
-          }
-          const prevCount = paramCount;
-          pushParam(c.segment, getDecodedSegment(idx));
-          const k = matchDfs(c, idx + 1);
-          if (k !== null) {
-            return k;
-          }
-          paramCount = prevCount;
-        }
-        for (const c of node.paramChildren) {
-          if (!c.pattern || !c.patternTester!(seg)) {
-            continue;
-          }
-          const prevCount = paramCount;
-          pushParam(c.segment, getDecodedSegment(idx));
-          const k = matchDfs(c, idx + 1);
-          if (k !== null) {
-            return k;
-          }
-          paramCount = prevCount;
-        }
-      }
-      if (node.wildcardChild) {
-        const wname = node.wildcardChild.segment || '*';
-        const joined = getSuffixValue(idx);
-        const prevCount = paramCount;
-        pushParam(wname, joined);
-        const key = node.wildcardChild.methods.byMethod.get(method);
-        if (key !== undefined) {
-          return key;
-        }
-        paramCount = prevCount;
-      }
-      return null;
-    };
-
-    const key = matchDfs(this.root, 0);
-    if (key === null) {
-      if (cacheKey && this.cache) {
-        this.setCache(cacheKey, null);
-      }
+    const captureSnapshot = Boolean(cacheKey && this.cache);
+    const dynamicMatch = this.findDynamicMatch(method, prepared.segments, captureSnapshot);
+    if (!dynamicMatch) {
+      this.cacheNullMiss(method, normalized, cacheKey);
       return null;
     }
 
-    let snapshotEntries: Array<[string, string]> | undefined;
-    const paramsBag =
-      paramCount > 0
-        ? (() => {
-            const bag = Object.create(null) as Record<string, string>;
-            if (cacheKey && this.cache) {
-              snapshotEntries = new Array(paramCount);
-            }
-            for (let i = 0; i < paramCount; i++) {
-              const name = paramNames[i]!;
-              const value = paramValues[i]!;
-              bag[name] = value;
-              if (snapshotEntries) {
-                snapshotEntries[i] = [name, value];
-              }
-            }
-            return bag;
-          })()
-        : Object.create(null);
-
-    const res: RouteMatch = { key, params: paramsBag };
+    const resolved: RouteMatch = { key: dynamicMatch.key, params: dynamicMatch.params };
     if (cacheKey && this.cache) {
-      this.setCache(cacheKey, res, snapshotEntries);
+      this.setCache(cacheKey, resolved, dynamicMatch.snapshot);
     }
-    return res;
+    return resolved;
   }
 
-  private _addSingle(method: HttpMethod, path: string, prepared?: NormalizedPathSegments): RouteKey {
+  private tryStaticFastMatch(method: HttpMethod, path: string): StaticProbeResult {
+    if (!path.length || path.charCodeAt(0) !== 47) {
+      return { kind: 'fallback' };
+    }
+    const normalized = this.ensureCaseNormalized(path);
+    const direct = this.matchStaticEntry(this.staticFast.get(normalized), method);
+    if (direct) {
+      return { kind: 'hit', match: direct };
+    }
+    let trimmed: string | undefined;
+    if (this.options.ignoreTrailingSlash && normalized.length > 1) {
+      const candidate = this.trimTrailingSlashes(normalized);
+      if (candidate !== normalized) {
+        trimmed = candidate;
+        const trimmedHit = this.matchStaticEntry(this.staticFast.get(candidate), method);
+        if (trimmedHit) {
+          return { kind: 'hit', match: trimmedHit };
+        }
+      }
+    }
+    const probeKey = trimmed ?? normalized;
+    if (!this.hasDynamicRoutes && !this.hasWildcardRoutes && this.isSimpleStaticPath(probeKey, !this.options.caseSensitive)) {
+      return { kind: 'static-miss' };
+    }
+    return { kind: 'fallback' };
+  }
+
+  private findDynamicMatch(method: HttpMethod, segments: string[], captureSnapshot: boolean): DynamicMatchResult | null {
+    const matcher = new DynamicMatcher({
+      method,
+      segments,
+      decodeParams: this.options.decodeParams,
+      hasWildcardRoutes: this.hasWildcardRoutes,
+      captureSnapshot,
+    });
+    return matcher.match(this.root);
+  }
+
+  private registerStaticFastRoute(method: HttpMethod, normalizedPath: string, sourcePath: string, key: RouteKey): void {
+    if (this.pathContainsDynamicTokens(sourcePath)) {
+      return;
+    }
+    let bucket = this.staticFast.get(normalizedPath);
+    if (!bucket) {
+      bucket = new Map();
+      this.staticFast.set(normalizedPath, bucket);
+    }
+    bucket.set(method, key);
+  }
+
+  private pathContainsDynamicTokens(path: string): boolean {
+    return path.indexOf(':') !== -1 || path.indexOf('*') !== -1;
+  }
+
+  private markDirty(): void {
+    this.needsCompression = true;
+    this.clearCache();
+  }
+
+  private clearCache(): void {
+    if (this.cache) {
+      this.cache.clear();
+    }
+  }
+
+  private cacheNullMiss(method: HttpMethod, normalized: string, existingKey?: string): void {
+    if (!this.cache) {
+      return;
+    }
+    const key = existingKey ?? this.getCacheKey(method, normalized);
+    this.setCache(key, null);
+  }
+
+  private insertRoute(method: HttpMethod, path: string, prepared?: NormalizedPathSegments): RouteKey {
     const preparedPath = prepared ?? normalizeAndSplit(path, this.options);
     const { segments } = preparedPath;
     let firstKey: RouteKey | null = null;
@@ -602,7 +494,7 @@ export class RadixRouter implements Router {
     }
     let prefix = this.cacheKeyPrefixes[method as number];
     if (!prefix) {
-      prefix = `${method}|`;
+      prefix = `${method} `;
       this.cacheKeyPrefixes[method as number] = prefix;
     }
     const key = prefix + normalizedKey;
@@ -614,115 +506,3 @@ export class RadixRouter implements Router {
 }
 
 export default RadixRouter;
-
-const DIGIT_PATTERNS = new Set(['\\d+', '\\d{1,}', '[0-9]+', '[0-9]{1,}']);
-const ALPHA_PATTERNS = new Set(['[a-zA-Z]+', '[A-Za-z]+']);
-const ALPHANUM_PATTERNS = new Set(['[A-Za-z0-9_\\-]+', '[A-Za-z0-9_-]+', '\\w+', '\\w{1,}']);
-
-function matchStaticParts(parts: string[], segments: string[], startIdx: number): number {
-  let matched = 0;
-  const limit = Math.min(parts.length, segments.length - startIdx);
-  while (matched < limit && segments[startIdx + matched] === parts[matched]) {
-    matched++;
-  }
-  return matched;
-}
-
-function splitStaticChain(node: RouterNode, splitIndex: number): void {
-  const parts = node.segmentParts;
-  if (!parts || splitIndex <= 0 || splitIndex >= parts.length) {
-    return;
-  }
-  const prefixParts = parts.slice(0, splitIndex);
-  const suffixParts = parts.slice(splitIndex);
-  const suffixNode = new RouterNode(NodeKind.Static, suffixParts.length > 1 ? suffixParts.join('/') : suffixParts[0]!);
-  if (suffixParts.length > 1) {
-    suffixNode.segmentParts = [...suffixParts];
-  }
-  suffixNode.staticChildren = node.staticChildren;
-  suffixNode.paramChildren = node.paramChildren;
-  suffixNode.wildcardChild = node.wildcardChild;
-  suffixNode.methods = node.methods;
-
-  node.staticChildren = new Map([[suffixParts[0]!, suffixNode]]);
-  node.paramChildren = [];
-  node.wildcardChild = undefined;
-  node.methods = { byMethod: new Map(), version: 0 };
-  node.segment = prefixParts.length > 1 ? prefixParts.join('/') : prefixParts[0]!;
-  node.segmentParts = prefixParts.length > 1 ? prefixParts : undefined;
-}
-
-function hydrateParams(entries?: Array<[string, string]>): Record<string, string> {
-  if (!entries || !entries.length) {
-    return Object.create(null);
-  }
-  const bag = Object.create(null) as Record<string, string>;
-  for (let i = 0; i < entries.length; i++) {
-    const pair = entries[i]!;
-    bag[pair[0]] = pair[1];
-  }
-  return bag;
-}
-
-function buildPatternTester(source: string | undefined, compiled: RegExp): (value: string) => boolean {
-  if (!source) {
-    return value => compiled.test(value);
-  }
-  if (DIGIT_PATTERNS.has(source)) {
-    return isAllDigits;
-  }
-  if (ALPHA_PATTERNS.has(source)) {
-    return isAlpha;
-  }
-  if (ALPHANUM_PATTERNS.has(source)) {
-    return isAlphaNumericDash;
-  }
-  if (source === '[^/]+') {
-    return value => value.length > 0 && value.indexOf('/') === -1;
-  }
-  return value => compiled.test(value);
-}
-
-function isAllDigits(value: string): boolean {
-  if (!value.length) {
-    return false;
-  }
-  for (let i = 0; i < value.length; i++) {
-    const code = value.charCodeAt(i);
-    if (code < 48 || code > 57) {
-      return false;
-    }
-  }
-  return true;
-}
-
-function isAlpha(value: string): boolean {
-  if (!value.length) {
-    return false;
-  }
-  for (let i = 0; i < value.length; i++) {
-    const code = value.charCodeAt(i);
-    const upper = code >= 65 && code <= 90;
-    const lower = code >= 97 && code <= 122;
-    if (!upper && !lower) {
-      return false;
-    }
-  }
-  return true;
-}
-
-function isAlphaNumericDash(value: string): boolean {
-  if (!value.length) {
-    return false;
-  }
-  for (let i = 0; i < value.length; i++) {
-    const code = value.charCodeAt(i);
-    const upper = code >= 65 && code <= 90;
-    const lower = code >= 97 && code <= 122;
-    const digit = code >= 48 && code <= 57;
-    if (!upper && !lower && !digit && code !== 45 && code !== 95) {
-      return false;
-    }
-  }
-  return true;
-}
