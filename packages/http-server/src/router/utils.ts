@@ -5,66 +5,148 @@ export function normalizePath(path: string, opts: RouterOptions): string {
     return '/';
   }
 
+  if (path === '/') {
+    return '/';
+  }
+
   const collapseSlashes = opts.collapseSlashes !== false;
   const ignoreTrailingSlash = opts.ignoreTrailingSlash !== false;
   const blockTraversal = opts.blockTraversal !== false;
   const caseSensitive = opts.caseSensitive !== false;
   const trackTrailingSlash = !ignoreTrailingSlash;
+  const hadTrailing = trackTrailingSlash && path.length > 1 && path.charCodeAt(path.length - 1) === 47;
 
-  const defaultsApplied = collapseSlashes && ignoreTrailingSlash && blockTraversal && caseSensitive;
-  if (defaultsApplied && path.charCodeAt(0) === 47) {
-    const trailingSlash = path.length > 1 && path.charCodeAt(path.length - 1) === 47;
-    if (
-      !trailingSlash &&
-      path.indexOf('//') === -1 &&
-      path.indexOf('/.') === -1 &&
-      path.indexOf('./') === -1 &&
-      path.indexOf('..') === -1
-    ) {
-      return path;
+  const hasLeadingSlash = path.charCodeAt(0) === 47;
+  const startIndex = hasLeadingSlash ? 1 : 0;
+
+  const segments: string[] = [];
+  let segment = '';
+  let allowEmpty = hasLeadingSlash;
+  let sawChar = false;
+  let needsDotHandling = false;
+
+  // Emits the current segment while honoring collapse and traversal rules.
+  const emitSegment = () => {
+    if (segment.length) {
+      segments.push(segment);
+      if (blockTraversal && (segment === '.' || segment === '..')) {
+        needsDotHandling = true;
+      }
+      segment = '';
+      allowEmpty = true;
+      return;
     }
+
+    if (!collapseSlashes && allowEmpty) {
+      segments.push('');
+    }
+    allowEmpty = true;
+  };
+
+  for (let i = startIndex; i < path.length; i++) {
+    sawChar = true;
+    let code = path.charCodeAt(i);
+
+    if (code === 47) {
+      emitSegment();
+      continue;
+    }
+
+    if (!caseSensitive && code >= 65 && code <= 90) {
+      code |= 32;
+    }
+
+    segment += String.fromCharCode(code);
+    allowEmpty = false;
   }
 
-  let p = path;
-  const hadTrailing = trackTrailingSlash && p.length > 1 && p.charCodeAt(p.length - 1) === 47;
-
-  if (!caseSensitive && hasUpperCase(p)) {
-    p = p.toLowerCase();
+  if (segment.length) {
+    segments.push(segment);
+    if (blockTraversal && (segment === '.' || segment === '..')) {
+      needsDotHandling = true;
+    }
+  } else if (!collapseSlashes && allowEmpty && sawChar) {
+    segments.push('');
   }
 
-  if (collapseSlashes && p.indexOf('//') !== -1) {
-    p = collapseDuplicateSlashes(p);
+  let normalizedSegments = segments;
+
+  if (blockTraversal && needsDotHandling) {
+    const stack: string[] = [];
+    for (const part of segments) {
+      if (!part || part === '.') {
+        continue;
+      }
+      if (part === '..') {
+        if (stack.length) {
+          stack.pop();
+        }
+        continue;
+      }
+      stack.push(part);
+    }
+    normalizedSegments = stack;
   }
 
-  if (p.charCodeAt(0) !== 47) {
-    p = '/' + p;
+  let normalized = normalizedSegments.length ? '/' + normalizedSegments.join('/') : '/';
+
+  if (ignoreTrailingSlash && normalized.length > 1 && normalized.charCodeAt(normalized.length - 1) === 47) {
+    normalized = normalized.slice(0, -1);
+  } else if (trackTrailingSlash && hadTrailing && normalized.length > 1 && normalized.charCodeAt(normalized.length - 1) !== 47) {
+    normalized += '/';
   }
 
-  const shouldStripTraversal = blockTraversal && (p.indexOf('/.') !== -1 || p.indexOf('..') !== -1 || p.indexOf('./') !== -1);
-  if (shouldStripTraversal) {
-    p = stripDotSegments(p, trackTrailingSlash && hadTrailing);
-  } else if (trackTrailingSlash && hadTrailing && p.length > 1 && p.charCodeAt(p.length - 1) !== 47) {
-    p += '/';
-  }
-
-  if (ignoreTrailingSlash && p.length > 1 && p.charCodeAt(p.length - 1) === 47) {
-    p = p.slice(0, -1);
-  }
-
-  return p.length ? p : '/';
+  return normalized.length ? normalized : '/';
 }
 
+// Manual splitting avoids String.split allocations on hot paths.
 export function splitSegments(path: string): string[] {
   if (path === '/') {
     return [];
   }
-  const s = path.charCodeAt(0) === 47 ? path.slice(1) : path;
-  return s.split('/');
+
+  const hasLeadingSlash = path.charCodeAt(0) === 47;
+  const startIndex = hasLeadingSlash ? 1 : 0;
+  const segments: string[] = [];
+  let segment = '';
+  let allowEmpty = hasLeadingSlash;
+  let sawChar = false;
+
+  for (let i = startIndex; i < path.length; i++) {
+    sawChar = true;
+    const code = path.charCodeAt(i);
+    if (code === 47) {
+      if (segment.length) {
+        segments.push(segment);
+        segment = '';
+      } else if (allowEmpty) {
+        segments.push('');
+      }
+      allowEmpty = true;
+      continue;
+    }
+
+    segment += String.fromCharCode(code);
+    allowEmpty = false;
+  }
+
+  if (segment.length) {
+    segments.push(segment);
+  } else if (allowEmpty && sawChar && (segments.length || hasLeadingSlash)) {
+    segments.push('');
+  }
+
+  return segments;
 }
 
 export function decodeURIComponentSafe(val: string): string {
-  if (val.indexOf('%') === -1) {
+  const firstPercent = val.indexOf('%');
+  if (firstPercent === -1) {
     return val;
+  }
+  const asciiDecoded = decodeAsciiPercents(val, firstPercent);
+  if (asciiDecoded !== null) {
+    return asciiDecoded;
   }
   try {
     return decodeURIComponent(val);
@@ -73,60 +155,50 @@ export function decodeURIComponentSafe(val: string): string {
   }
 }
 
-function collapseDuplicateSlashes(value: string): string {
-  let prevSlash = false;
-  const out: string[] = [];
-  for (let i = 0; i < value.length; i++) {
-    const ch = value.charAt(i);
-    const isSlash = ch === '/';
-    if (!isSlash || !prevSlash) {
-      out.push(ch);
+function decodeAsciiPercents(value: string, startIdx: number): string | null {
+  const chunks: string[] = [];
+  let lastPos = 0;
+  for (let i = startIdx; i < value.length; i++) {
+    if (value.charCodeAt(i) !== 37 /* % */) {
+      continue;
     }
-    prevSlash = isSlash;
+    if (i + 2 >= value.length) {
+      return null;
+    }
+    const hi = fromHex(value.charCodeAt(i + 1));
+    const lo = fromHex(value.charCodeAt(i + 2));
+    if (hi === -1 || lo === -1) {
+      return null;
+    }
+    const byte = (hi << 4) | lo;
+    if (byte >= 0x80) {
+      return null;
+    }
+    if (i > lastPos) {
+      chunks.push(value.slice(lastPos, i));
+    }
+    chunks.push(String.fromCharCode(byte));
+    i += 2;
+    lastPos = i + 1;
   }
-  return out.join('');
+  if (!chunks.length) {
+    return null;
+  }
+  if (lastPos < value.length) {
+    chunks.push(value.slice(lastPos));
+  }
+  return chunks.join('');
 }
 
-function stripDotSegments(path: string, preserveTrailingSlash: boolean): string {
-  const stack: string[] = [];
-  let segmentStart = 0;
-  const len = path.length;
-
-  const pushSegment = (segment: string) => {
-    if (!segment || segment === '.') {
-      return;
-    }
-    if (segment === '..') {
-      if (stack.length) {
-        stack.pop();
-      }
-      return;
-    }
-    stack.push(segment);
-  };
-
-  for (let i = 1; i <= len; i++) {
-    if (i === len || path.charCodeAt(i) === 47) {
-      const segment = path.slice(segmentStart + 1, i);
-      pushSegment(segment);
-      segmentStart = i;
-    }
+function fromHex(code: number): number {
+  if (code >= 48 && code <= 57) {
+    return code - 48;
   }
-
-  let normalized = '/' + stack.join('/');
-  if (normalized.length > 1 && preserveTrailingSlash && normalized.charCodeAt(normalized.length - 1) !== 47) {
-    normalized += '/';
+  if (code >= 65 && code <= 70) {
+    return code - 55;
   }
-
-  return normalized.length ? normalized : '/';
-}
-
-function hasUpperCase(value: string): boolean {
-  for (let i = 0; i < value.length; i++) {
-    const code = value.charCodeAt(i);
-    if (code >= 65 && code <= 90) {
-      return true;
-    }
+  if (code >= 97 && code <= 102) {
+    return code - 87;
   }
-  return false;
+  return -1;
 }

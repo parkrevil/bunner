@@ -16,11 +16,10 @@ export class RadixRouter implements Router {
   private staticFast: Map<string, Map<HttpMethod, RouteKey>> = new Map();
   private needsCompression = false;
   private cacheKeyPrefixes: Record<number, string> = Object.create(null);
-  private cacheKeyPool?: Map<number, Map<string, string>>;
-  private cacheKeyPoolLimit: number;
   private lastCacheKeyMethod?: HttpMethod;
   private lastCacheKeyPath?: string;
   private lastCacheKeyValue?: string;
+  private hasWildcardRoutes = false;
 
   constructor(options?: RouterOptions) {
     this.options = {
@@ -33,7 +32,6 @@ export class RadixRouter implements Router {
       cacheSize: options?.cacheSize ?? 1024,
     };
     this.root = new RouterNode(NodeKind.Static, '');
-    this.cacheKeyPoolLimit = Math.max(512, this.options.cacheSize * 2);
     if (this.options.enableCache) {
       this.cache = new Map();
     }
@@ -43,9 +41,8 @@ export class RadixRouter implements Router {
     const out: RouteKey[] = new Array(entries.length);
     for (let i = 0; i < entries.length; i++) {
       const [m, p] = entries[i]!;
-      out[i] = this._addSingle(m, p);
-      // static fast-path table update
       const norm = normalizePath(p, this.options);
+      out[i] = this._addSingle(m, p, norm);
       if (!this.options.caseSensitive) {
         // fast table uses normalized, case-processed key same as match
         const keyPath = norm.toLowerCase();
@@ -83,9 +80,9 @@ export class RadixRouter implements Router {
     if (Array.isArray(method)) {
       return this.addAll(method.map(m => [m, path]));
     }
-    const k = this._addSingle(method, path);
+    const norm = normalizePath(path, this.options);
+    const k = this._addSingle(method, path, norm);
     if (path.indexOf(':') === -1 && path.indexOf('*') === -1) {
-      const norm = normalizePath(path, this.options);
       const keyPath = this.options.caseSensitive ? norm : norm.toLowerCase();
       let by = this.staticFast.get(keyPath);
       if (!by) {
@@ -113,16 +110,23 @@ export class RadixRouter implements Router {
       }
     }
     const segments = splitSegments(normalized);
-    const suffixCache: string[] = [];
-    if (segments.length) {
+    const decodedSegmentCache = this.options.decodeParams ? new Array<string | undefined>(segments.length) : undefined;
+    let suffixCache: string[] | null = null;
+    let decodedSuffixCache: Array<string | undefined> | null = null;
+    const ensureSuffixCache = () => {
+      if (suffixCache || !this.hasWildcardRoutes) {
+        return;
+      }
+      suffixCache = new Array(segments.length);
+      if (!segments.length) {
+        return;
+      }
       let suffix = '';
       for (let i = segments.length - 1; i >= 0; i--) {
         suffix = suffix ? `${segments[i]!}/${suffix}` : segments[i]!;
         suffixCache[i] = suffix;
       }
-    }
-    const decodedSegmentCache = this.options.decodeParams ? new Array<string | undefined>(segments.length) : undefined;
-    const decodedSuffixCache = this.options.decodeParams ? new Array<string | undefined>(segments.length) : undefined;
+    };
     const getDecodedSegment = (index: number): string => {
       if (!this.options.decodeParams) {
         return segments[index]!;
@@ -136,24 +140,32 @@ export class RadixRouter implements Router {
       return value;
     };
     const getSuffixValue = (index: number): string => {
-      const raw = suffixCache[index] ?? '';
-      if (!this.options.decodeParams || index >= segments.length) {
+      if (!this.hasWildcardRoutes) {
+        return '';
+      }
+      ensureSuffixCache();
+      const raw = (suffixCache && suffixCache[index]) || '';
+      if (!this.options.decodeParams) {
         return raw;
       }
-      const cached = decodedSuffixCache![index];
+      if (!decodedSuffixCache) {
+        decodedSuffixCache = new Array<string | undefined>(segments.length);
+      }
+      const cached = decodedSuffixCache[index];
       if (cached !== undefined) {
         return cached;
       }
       const value = decodeURIComponentSafe(raw);
-      decodedSuffixCache![index] = value;
+      decodedSuffixCache[index] = value;
       return value;
     };
-    let params: Record<string, string> | null = null;
-    const ensureParams = (): Record<string, string> => {
-      if (params === null) {
-        params = Object.create(null);
-      }
-      return params as Record<string, string>;
+    const paramNames: string[] = [];
+    const paramValues: string[] = [];
+    let paramCount = 0;
+    const pushParam = (name: string, value: string) => {
+      paramNames[paramCount] = name;
+      paramValues[paramCount] = value;
+      paramCount++;
     };
     const cacheKey = this.cache ? this.getCacheKey(method, normalized) : undefined;
     if (cacheKey && this.cache && this.cache.has(cacheKey)) {
@@ -202,26 +214,28 @@ export class RadixRouter implements Router {
       }
       if (node.paramChildren.length) {
         for (const c of node.paramChildren) {
-          if (c.pattern && !c.pattern.test(seg)) {
+          if (c.pattern && !c.patternTester!(seg)) {
             continue;
           }
+          const prevCount = paramCount;
+          pushParam(c.segment, getDecodedSegment(idx));
           const k = matchDfs(c, idx + 1);
           if (k !== null) {
-            const bag = ensureParams();
-            bag[c.segment] = getDecodedSegment(idx);
             return k;
           }
+          paramCount = prevCount;
         }
       }
       if (node.wildcardChild) {
         const wname = node.wildcardChild.segment || '*';
         const joined = getSuffixValue(idx);
-        const bag = ensureParams();
-        bag[wname] = joined;
+        const prevCount = paramCount;
+        pushParam(wname, joined);
         const key = node.wildcardChild.methods.byMethod.get(method);
         if (key !== undefined) {
           return key;
         }
+        paramCount = prevCount;
       }
       return null;
     };
@@ -233,16 +247,24 @@ export class RadixRouter implements Router {
       }
       return null;
     }
-    const finalParams = params ?? Object.create(null);
-    const res: RouteMatch = { key, params: finalParams };
+    const paramsBag = paramCount
+      ? (() => {
+          const bag = Object.create(null) as Record<string, string>;
+          for (let i = 0; i < paramCount; i++) {
+            bag[paramNames[i]!] = paramValues[i]!;
+          }
+          return bag;
+        })()
+      : Object.create(null);
+    const res: RouteMatch = { key, params: paramsBag };
     if (cacheKey && this.cache) {
       this.setCache(cacheKey, res);
     }
     return res;
   }
 
-  private _addSingle(method: HttpMethod, path: string): RouteKey {
-    const normalized = normalizePath(path, this.options);
+  private _addSingle(method: HttpMethod, path: string, normalizedOverride?: string): RouteKey {
+    const normalized = normalizedOverride ?? normalizePath(path, this.options);
     const segments = splitSegments(normalized);
     let firstKey: RouteKey | null = null;
     const addSegments = (node: RouterNode, idx: number): void => {
@@ -272,6 +294,7 @@ export class RadixRouter implements Router {
         if (!node.wildcardChild) {
           node.wildcardChild = new RouterNode(NodeKind.Wildcard, name);
         }
+        this.hasWildcardRoutes = true;
         addSegments(node.wildcardChild, idx + 1);
         return;
       }
@@ -312,6 +335,7 @@ export class RadixRouter implements Router {
           if (!node.wildcardChild) {
             node.wildcardChild = new RouterNode(NodeKind.Wildcard, name || '*');
           }
+          this.hasWildcardRoutes = true;
           addSegments(node.wildcardChild, idx + 1);
           return;
         }
@@ -340,6 +364,7 @@ export class RadixRouter implements Router {
           if (patternSrc) {
             child.pattern = new RegExp(`^(?:${patternSrc})$`);
             child.patternSource = patternSrc;
+            child.patternTester = buildPatternTester(patternSrc, child.pattern);
           }
           node.paramChildren.push(child);
         }
@@ -353,10 +378,23 @@ export class RadixRouter implements Router {
           `Conflict: adding static segment '${seg}' under existing wildcard at '${segments.slice(0, idx).join('/')}'`,
         );
       }
-      if (!child) {
-        child = new RouterNode(NodeKind.Static, seg);
-        node.staticChildren.set(seg, child);
+      if (child) {
+        const parts = child.segmentParts;
+        if (parts && parts.length > 1) {
+          const matched = matchStaticParts(parts, segments, idx);
+          if (matched < parts.length) {
+            splitStaticChain(child, matched);
+          }
+          if (matched > 1) {
+            addSegments(child, idx + matched);
+            return;
+          }
+        }
+        addSegments(child, idx + 1);
+        return;
       }
+      child = new RouterNode(NodeKind.Static, seg);
+      node.staticChildren.set(seg, child);
       addSegments(child, idx + 1);
     };
     addSegments(this.root, 0);
@@ -429,34 +467,12 @@ export class RadixRouter implements Router {
     if (this.lastCacheKeyMethod === method && this.lastCacheKeyPath === normalizedKey && this.lastCacheKeyValue) {
       return this.lastCacheKeyValue;
     }
-    let methodPool: Map<string, string> | undefined;
-    if (this.cacheKeyPool) {
-      methodPool = this.cacheKeyPool.get(method as number);
-    }
-    if (!methodPool) {
-      methodPool = new Map();
-      if (!this.cacheKeyPool) {
-        this.cacheKeyPool = new Map();
-      }
-      this.cacheKeyPool.set(method as number, methodPool);
-    }
-    const existing = methodPool.get(normalizedKey);
-    if (existing) {
-      this.lastCacheKeyMethod = method;
-      this.lastCacheKeyPath = normalizedKey;
-      this.lastCacheKeyValue = existing;
-      return existing;
-    }
     let prefix = this.cacheKeyPrefixes[method as number];
     if (!prefix) {
-      prefix = `${method} `;
+      prefix = `${method}|`;
       this.cacheKeyPrefixes[method as number] = prefix;
     }
     const key = prefix + normalizedKey;
-    if (methodPool.size >= this.cacheKeyPoolLimit) {
-      methodPool.clear();
-    }
-    methodPool.set(normalizedKey, key);
     this.lastCacheKeyMethod = method;
     this.lastCacheKeyPath = normalizedKey;
     this.lastCacheKeyValue = key;
@@ -465,3 +481,103 @@ export class RadixRouter implements Router {
 }
 
 export default RadixRouter;
+
+const DIGIT_PATTERNS = new Set(['\\d+', '\\d{1,}', '[0-9]+', '[0-9]{1,}']);
+const ALPHA_PATTERNS = new Set(['[a-zA-Z]+', '[A-Za-z]+']);
+const ALPHANUM_PATTERNS = new Set(['[A-Za-z0-9_\\-]+', '[A-Za-z0-9_-]+', '\\w+', '\\w{1,}']);
+
+function matchStaticParts(parts: string[], segments: string[], startIdx: number): number {
+  let matched = 0;
+  const limit = Math.min(parts.length, segments.length - startIdx);
+  while (matched < limit && segments[startIdx + matched] === parts[matched]) {
+    matched++;
+  }
+  return matched;
+}
+
+function splitStaticChain(node: RouterNode, splitIndex: number): void {
+  const parts = node.segmentParts;
+  if (!parts || splitIndex <= 0 || splitIndex >= parts.length) {
+    return;
+  }
+  const prefixParts = parts.slice(0, splitIndex);
+  const suffixParts = parts.slice(splitIndex);
+  const suffixNode = new RouterNode(NodeKind.Static, suffixParts.length > 1 ? suffixParts.join('/') : suffixParts[0]!);
+  if (suffixParts.length > 1) {
+    suffixNode.segmentParts = [...suffixParts];
+  }
+  suffixNode.staticChildren = node.staticChildren;
+  suffixNode.paramChildren = node.paramChildren;
+  suffixNode.wildcardChild = node.wildcardChild;
+  suffixNode.methods = node.methods;
+
+  node.staticChildren = new Map([[suffixParts[0]!, suffixNode]]);
+  node.paramChildren = [];
+  node.wildcardChild = undefined;
+  node.methods = { byMethod: new Map(), version: 0 };
+  node.segment = prefixParts.length > 1 ? prefixParts.join('/') : prefixParts[0]!;
+  node.segmentParts = prefixParts.length > 1 ? prefixParts : undefined;
+}
+
+function buildPatternTester(source: string | undefined, compiled: RegExp): (value: string) => boolean {
+  if (!source) {
+    return value => compiled.test(value);
+  }
+  if (DIGIT_PATTERNS.has(source)) {
+    return isAllDigits;
+  }
+  if (ALPHA_PATTERNS.has(source)) {
+    return isAlpha;
+  }
+  if (ALPHANUM_PATTERNS.has(source)) {
+    return isAlphaNumericDash;
+  }
+  if (source === '[^/]+') {
+    return value => value.length > 0 && value.indexOf('/') === -1;
+  }
+  return value => compiled.test(value);
+}
+
+function isAllDigits(value: string): boolean {
+  if (!value.length) {
+    return false;
+  }
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    if (code < 48 || code > 57) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function isAlpha(value: string): boolean {
+  if (!value.length) {
+    return false;
+  }
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    const upper = code >= 65 && code <= 90;
+    const lower = code >= 97 && code <= 122;
+    if (!upper && !lower) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function isAlphaNumericDash(value: string): boolean {
+  if (!value.length) {
+    return false;
+  }
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    const upper = code >= 65 && code <= 90;
+    const lower = code >= 97 && code <= 122;
+    const digit = code >= 48 && code <= 57;
+    if (!upper && !lower && !digit && code !== 45 && code !== 95) {
+      return false;
+    }
+  }
+  return true;
+}

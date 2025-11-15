@@ -22,6 +22,7 @@ export class RouterNode {
   // For Param nodes: optional compiled regex constraint
   pattern?: RegExp;
   patternSource?: string;
+  patternTester?: (value: string) => boolean;
   // For Static nodes: optional precomputed parts when compressed (e.g., 'a/b/c' -> ['a','b','c'])
   segmentParts?: string[];
 
