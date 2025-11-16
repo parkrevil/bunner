@@ -13,14 +13,19 @@ import { normalizeAndSplit, type NormalizedPathSegments } from './utils';
 
 type CacheEntry = { key: RouteKey; params?: Array<[string, string]> };
 
+type CacheInvalidationScope = { kind: 'all' } | { kind: 'exact'; pathKey: string } | { kind: 'prefix'; pathKey: string };
+
 let GLOBAL_ROUTE_KEY_SEQ = 1 as RouteKey;
 
 export class RadixRouter implements Router {
   private root: RouterNode;
   private options: Required<RouterOptions>;
   private cache?: Map<string, CacheEntry | null>;
+  private cacheEntryIndex?: Map<string, Set<string>>;
+  private cacheKeyToPath?: Map<string, string>;
   private staticFast: Map<string, Map<HttpMethod, RouteKey>> = new Map();
   private needsCompression = false;
+  private pendingCompression: Set<RouterNode> = new Set();
   private cacheKeyPrefixes: Record<number, string> = Object.create(null);
   private lastCacheKeyMethod?: HttpMethod;
   private lastCacheKeyPath?: string;
@@ -41,6 +46,8 @@ export class RadixRouter implements Router {
     this.root = new RouterNode(NodeKind.Static, '');
     if (this.options.enableCache) {
       this.cache = new Map();
+      this.cacheEntryIndex = new Map();
+      this.cacheKeyToPath = new Map();
     }
   }
 
@@ -52,8 +59,8 @@ export class RadixRouter implements Router {
       const key = this.insertRoute(method, path, prepared);
       keys[i] = key;
       this.registerStaticFastRoute(method, prepared.normalized, path, key);
+      this.afterRouteInsertion(method, prepared);
     }
-    this.markDirty();
     return keys;
   }
 
@@ -68,7 +75,7 @@ export class RadixRouter implements Router {
     const prepared = normalizeAndSplit(path, this.options);
     const key = this.insertRoute(method, path, prepared);
     this.registerStaticFastRoute(method, prepared.normalized, path, key);
-    this.markDirty();
+    this.afterRouteInsertion(method, prepared);
     return key;
   }
 
@@ -80,13 +87,17 @@ export class RadixRouter implements Router {
       return staticProbe.match;
     }
 
-    const prepared = normalizeAndSplit(path, this.options);
-    const normalized = prepared.normalized;
-
     if (staticProbe.kind === 'static-miss') {
-      this.cacheNullMiss(method, normalized);
+      const normalizedMiss = staticProbe.normalized;
+      const missPath = this.toCachePath(normalizedMiss);
+      this.cacheNullMiss(method, normalizedMiss, missPath);
       return null;
     }
+
+    const prepared = normalizeAndSplit(path, this.options);
+    const normalized = prepared.normalized;
+    const cachePath = this.toCachePath(normalized);
+
     const directBucket = this.staticFast.get(normalized);
     const fastHit = this.matchStaticEntry(directBucket, method);
     if (fastHit) {
@@ -107,13 +118,13 @@ export class RadixRouter implements Router {
     const captureSnapshot = Boolean(cacheKey && this.cache);
     const dynamicMatch = this.findDynamicMatch(method, prepared.segments, captureSnapshot);
     if (!dynamicMatch) {
-      this.cacheNullMiss(method, normalized, cacheKey);
+      this.cacheNullMiss(method, normalized, cachePath, cacheKey);
       return null;
     }
 
     const resolved: RouteMatch = { key: dynamicMatch.key, params: dynamicMatch.params };
     if (cacheKey && this.cache) {
-      this.setCache(cacheKey, resolved, dynamicMatch.snapshot);
+      this.setCache(cacheKey, resolved, cachePath, dynamicMatch.snapshot);
     }
     return resolved;
   }
@@ -140,7 +151,7 @@ export class RadixRouter implements Router {
     }
     const probeKey = trimmed ?? normalized;
     if (!this.hasDynamicRoutes && !this.hasWildcardRoutes && this.isSimpleStaticPath(probeKey, !this.options.caseSensitive)) {
-      return { kind: 'static-miss' };
+      return { kind: 'static-miss', normalized: probeKey };
     }
     return { kind: 'fallback' };
   }
@@ -168,27 +179,119 @@ export class RadixRouter implements Router {
     bucket.set(method, key);
   }
 
-  private pathContainsDynamicTokens(path: string): boolean {
-    return path.indexOf(':') !== -1 || path.indexOf('*') !== -1;
+  private afterRouteInsertion(method: HttpMethod, prepared: NormalizedPathSegments): void {
+    this.invalidateCacheForRoute(method, prepared);
   }
 
-  private markDirty(): void {
-    this.needsCompression = true;
-    this.clearCache();
+  private invalidateCacheForRoute(method: HttpMethod, prepared: NormalizedPathSegments): void {
+    if (!this.cache || !this.cacheEntryIndex || !this.cacheEntryIndex.size) {
+      return;
+    }
+    const scope = this.computeInvalidationScope(prepared);
+    this.applyCacheInvalidation(scope, method);
+  }
+
+  private computeInvalidationScope(prepared: NormalizedPathSegments): CacheInvalidationScope {
+    const { segments, normalized } = prepared;
+    if (!segments.length) {
+      return { kind: 'exact', pathKey: this.toCachePath(normalized) };
+    }
+    const staticParts: string[] = [];
+    let dynamicEncountered = false;
+    for (const segment of segments) {
+      if (!segment.length) {
+        staticParts.push(segment);
+        continue;
+      }
+      const code = segment.charCodeAt(0);
+      if (code === 58 /* ':' */ || code === 42 /* '*' */) {
+        dynamicEncountered = true;
+        break;
+      }
+      staticParts.push(segment);
+    }
+    if (!staticParts.length) {
+      return { kind: 'all' };
+    }
+    if (!dynamicEncountered && staticParts.length === segments.length) {
+      return { kind: 'exact', pathKey: this.toCachePath(normalized) };
+    }
+    return { kind: 'prefix', pathKey: staticParts.join('/') };
+  }
+
+  private applyCacheInvalidation(scope: CacheInvalidationScope, method: HttpMethod): void {
+    if (!this.cache || !this.cacheEntryIndex) {
+      return;
+    }
+    if (scope.kind === 'all') {
+      this.clearCache();
+      return;
+    }
+    const targets: string[] = [];
+    if (scope.kind === 'exact') {
+      this.collectKeysForPath(scope.pathKey, method, targets);
+    } else {
+      for (const [pathKey, cacheKeys] of this.cacheEntryIndex.entries()) {
+        if (this.pathMatchesPrefix(pathKey, scope.pathKey)) {
+          this.collectKeysFromBucket(cacheKeys, method, targets);
+        }
+      }
+    }
+    for (const key of targets) {
+      this.deleteCacheEntry(key);
+    }
+  }
+
+  private collectKeysForPath(pathKey: string, method: HttpMethod, acc: string[]): void {
+    if (!this.cacheEntryIndex) {
+      return;
+    }
+    const bucket = this.cacheEntryIndex.get(pathKey);
+    if (!bucket) {
+      return;
+    }
+    this.collectKeysFromBucket(bucket, method, acc);
+  }
+
+  private collectKeysFromBucket(bucket: Set<string>, method: HttpMethod, acc: string[]): void {
+    const prefix = this.getCacheMethodPrefix(method);
+    for (const key of bucket) {
+      if (key.startsWith(prefix)) {
+        acc.push(key);
+      }
+    }
+  }
+
+  private pathMatchesPrefix(candidate: string, prefix: string): boolean {
+    if (candidate === prefix) {
+      return true;
+    }
+    const normalizedPrefix = prefix.endsWith('/') ? prefix : `${prefix}/`;
+    return candidate.startsWith(normalizedPrefix);
+  }
+
+  private pathContainsDynamicTokens(path: string): boolean {
+    return path.indexOf(':') !== -1 || path.indexOf('*') !== -1;
   }
 
   private clearCache(): void {
     if (this.cache) {
       this.cache.clear();
     }
+    if (this.cacheEntryIndex) {
+      this.cacheEntryIndex.clear();
+    }
+    if (this.cacheKeyToPath) {
+      this.cacheKeyToPath.clear();
+    }
   }
 
-  private cacheNullMiss(method: HttpMethod, normalized: string, existingKey?: string): void {
+  private cacheNullMiss(method: HttpMethod, normalized: string, cachePath: string, existingKey?: string): void {
     if (!this.cache) {
       return;
     }
     const key = existingKey ?? this.getCacheKey(method, normalized);
-    this.setCache(key, null);
+    this.setCache(key, null, cachePath);
   }
 
   private insertRoute(method: HttpMethod, path: string, prepared?: NormalizedPathSegments): RouteKey {
@@ -213,7 +316,6 @@ export class RadixRouter implements Router {
         }
         const key = GLOBAL_ROUTE_KEY_SEQ++ as unknown as RouteKey;
         node.methods.byMethod.set(method, key);
-        node.methods.version = (node.methods.version ?? 0) + 1;
         if (firstKey === null) {
           firstKey = key;
         }
@@ -345,6 +447,8 @@ export class RadixRouter implements Router {
           const matched = matchStaticParts(parts, segments, idx);
           if (matched < parts.length) {
             splitStaticChain(child, matched);
+            this.requestCompression(node);
+            this.requestCompression(child);
           }
           if (matched > 1) {
             addSegments(child, idx + matched, activeParams);
@@ -356,6 +460,7 @@ export class RadixRouter implements Router {
       }
       child = new RouterNode(NodeKind.Static, seg);
       node.staticChildren.set(seg, child);
+      this.requestCompression(node);
       addSegments(child, idx + 1, activeParams);
     };
     addSegments(this.root, 0, new Set());
@@ -462,56 +567,77 @@ export class RadixRouter implements Router {
     return false;
   }
 
-  private compressStaticPaths(): void {
-    const compressFrom = (parent: RouterNode) => {
-      const children = Array.from(parent.staticChildren.values());
-      for (const child of children) {
-        compressFrom(child);
-        let cursor = child;
-        const parts: string[] = child.segmentParts ? [...child.segmentParts] : [child.segment];
-        while (
-          cursor.kind === NodeKind.Static &&
-          cursor.methods.byMethod.size === 0 &&
-          cursor.paramChildren.length === 0 &&
-          !cursor.wildcardChild &&
-          cursor.staticChildren.size === 1
-        ) {
-          const next = cursor.staticChildren.values().next().value as RouterNode;
-          if (next.kind !== NodeKind.Static) {
-            break;
-          }
-          const nextParts = next.segmentParts ?? [next.segment];
-          parts.push(...nextParts);
-          cursor = next;
-        }
-        if (parts.length > 1) {
-          child.segment = parts.join('/');
-          child.segmentParts = parts;
-          child.staticChildren = cursor.staticChildren;
-          child.paramChildren = cursor.paramChildren;
-          child.wildcardChild = cursor.wildcardChild;
-          child.methods = cursor.methods;
-        }
-      }
-    };
-    compressFrom(this.root);
-  }
-
   private ensureCompressed(): void {
-    if (!this.needsCompression) {
+    if (!this.needsCompression || !this.pendingCompression.size) {
       return;
     }
-    this.compressStaticPaths();
+    for (const node of this.pendingCompression) {
+      this.compressStaticSubtree(node);
+    }
+    this.pendingCompression.clear();
     this.needsCompression = false;
   }
 
-  private setCache(key: string, value: RouteMatch | null, paramsEntries?: Array<[string, string]>): void {
+  private requestCompression(node: RouterNode): void {
+    this.pendingCompression.add(node);
+    this.needsCompression = true;
+  }
+
+  private compressStaticSubtree(entry: RouterNode): void {
+    const stack: RouterNode[] = [entry];
+    const seen = new Set<RouterNode>();
+    while (stack.length) {
+      const current = stack.pop()!;
+      if (seen.has(current)) {
+        continue;
+      }
+      seen.add(current);
+      for (const child of current.staticChildren.values()) {
+        stack.push(child);
+        this.collapseStaticNode(child);
+      }
+    }
+  }
+
+  private collapseStaticNode(node: RouterNode): void {
+    if (node.kind !== NodeKind.Static) {
+      return;
+    }
+    let cursor = node;
+    const parts: string[] = node.segmentParts ? [...node.segmentParts] : [node.segment];
+    while (
+      cursor.kind === NodeKind.Static &&
+      cursor.methods.byMethod.size === 0 &&
+      cursor.paramChildren.length === 0 &&
+      !cursor.wildcardChild &&
+      cursor.staticChildren.size === 1
+    ) {
+      const next = cursor.staticChildren.values().next().value as RouterNode;
+      if (next.kind !== NodeKind.Static) {
+        break;
+      }
+      const nextParts = next.segmentParts ?? [next.segment];
+      parts.push(...nextParts);
+      cursor = next;
+    }
+    if (parts.length > 1) {
+      node.segment = parts.join('/');
+      node.segmentParts = parts;
+      node.staticChildren = cursor.staticChildren;
+      node.paramChildren = cursor.paramChildren;
+      node.wildcardChild = cursor.wildcardChild;
+      node.methods = cursor.methods;
+    }
+  }
+
+  private setCache(key: string, value: RouteMatch | null, cachePath: string, paramsEntries?: Array<[string, string]>): void {
     if (!this.cache) {
       return;
     }
     // LRU discipline via delete+set
     if (this.cache.has(key)) {
       this.cache.delete(key);
+      this.unlinkCacheKey(key);
     }
     if (value === null) {
       this.cache.set(key, null);
@@ -530,29 +656,79 @@ export class RadixRouter implements Router {
       const snapshot: CacheEntry = entries && entries.length ? { key: value.key, params: entries } : { key: value.key };
       this.cache.set(key, snapshot);
     }
+    this.indexCacheKey(cachePath, key);
     if (this.cache.size > this.options.cacheSize) {
       const first = this.cache.keys().next().value;
       if (first !== undefined) {
-        this.cache.delete(first);
+        this.deleteCacheEntry(first);
       }
     }
   }
 
   private getCacheKey(method: HttpMethod, normalized: string): string {
-    const normalizedKey = normalized.length > 1 && normalized.charCodeAt(0) === 47 ? normalized.slice(1) : normalized;
+    const normalizedKey = this.toCachePath(normalized);
     if (this.lastCacheKeyMethod === method && this.lastCacheKeyPath === normalizedKey && this.lastCacheKeyValue) {
       return this.lastCacheKeyValue;
     }
-    let prefix = this.cacheKeyPrefixes[method as number];
-    if (!prefix) {
-      prefix = `${method} `;
-      this.cacheKeyPrefixes[method as number] = prefix;
-    }
+    const prefix = this.getCacheMethodPrefix(method);
     const key = prefix + normalizedKey;
     this.lastCacheKeyMethod = method;
     this.lastCacheKeyPath = normalizedKey;
     this.lastCacheKeyValue = key;
     return key;
+  }
+
+  private getCacheMethodPrefix(method: HttpMethod): string {
+    let prefix = this.cacheKeyPrefixes[method as number];
+    if (!prefix) {
+      prefix = `${method} `;
+      this.cacheKeyPrefixes[method as number] = prefix;
+    }
+    return prefix;
+  }
+
+  private toCachePath(normalized: string): string {
+    if (normalized.length > 1 && normalized.charCodeAt(0) === 47) {
+      return normalized.slice(1);
+    }
+    return normalized;
+  }
+
+  private indexCacheKey(cachePath: string, cacheKey: string): void {
+    if (!this.cacheEntryIndex) {
+      return;
+    }
+    let bucket = this.cacheEntryIndex.get(cachePath);
+    if (!bucket) {
+      bucket = new Set();
+      this.cacheEntryIndex.set(cachePath, bucket);
+    }
+    bucket.add(cacheKey);
+    this.cacheKeyToPath?.set(cacheKey, cachePath);
+  }
+
+  private unlinkCacheKey(cacheKey: string): void {
+    const path = this.cacheKeyToPath?.get(cacheKey);
+    if (!path || !this.cacheEntryIndex) {
+      this.cacheKeyToPath?.delete(cacheKey);
+      return;
+    }
+    const bucket = this.cacheEntryIndex.get(path);
+    if (bucket) {
+      bucket.delete(cacheKey);
+      if (!bucket.size) {
+        this.cacheEntryIndex.delete(path);
+      }
+    }
+    this.cacheKeyToPath?.delete(cacheKey);
+  }
+
+  private deleteCacheEntry(key: string): void {
+    if (!this.cache || !this.cache.has(key)) {
+      return;
+    }
+    this.cache.delete(key);
+    this.unlinkCacheKey(key);
   }
 }
 

@@ -6,7 +6,10 @@ export interface RouteMatch {
   params: Record<string, string>;
 }
 
-export type StaticProbeResult = { kind: 'hit'; match: RouteMatch } | { kind: 'static-miss' } | { kind: 'fallback' };
+export type StaticProbeResult =
+  | { kind: 'hit'; match: RouteMatch }
+  | { kind: 'static-miss'; normalized: string }
+  | { kind: 'fallback' };
 
 export interface DynamicMatcherConfig {
   method: HttpMethod;

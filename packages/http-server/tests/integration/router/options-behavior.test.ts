@@ -134,5 +134,35 @@ describe('RadixRouter :: options', () => {
       expect(internal.cache?.has(secondKey)).toBe(true);
       expect(internal.cache?.has(thirdKey)).toBe(true);
     });
+
+    it('should keep unrelated cached hits after registering other routes', () => {
+      const router = new RadixRouter({ enableCache: true });
+      router.add(HttpMethod.Get, '/users/:id');
+      router.add(HttpMethod.Get, '/reports/:name');
+
+      expect(router.match(HttpMethod.Get, '/users/alpha')).not.toBeNull();
+      const internal = router as unknown as { cache?: Map<string, unknown> };
+      const alphaKey = `${HttpMethod.Get} users/alpha`;
+      expect(internal.cache?.has(alphaKey)).toBe(true);
+
+      router.add(HttpMethod.Get, '/products/static');
+      expect(internal.cache?.has(alphaKey)).toBe(true);
+    });
+
+    it('should invalidate cached misses when a new route overlaps them', () => {
+      const router = new RadixRouter({ enableCache: true });
+      expect(router.match(HttpMethod.Get, '/users/42')).toBeNull();
+
+      const internal = router as unknown as { cache?: Map<string, unknown> };
+      const missKey = `${HttpMethod.Get} users/42`;
+      expect(internal.cache?.get(missKey)).toBeNull();
+
+      router.add(HttpMethod.Get, '/users/:id');
+
+      expect(internal.cache?.has(missKey)).toBe(false);
+
+      const resolved = router.match(HttpMethod.Get, '/users/42');
+      expect(resolved?.params.id).toBe('42');
+    });
   });
 });

@@ -12,8 +12,6 @@ export interface Router {
 export interface RouteMethods {
   /** Per-method registered route keys at this node (leaf) */
   byMethod: Map<HttpMethod, RouteKey>;
-  /** Incremented whenever byMethod mutates to invalidate caches */
-  version: number;
 }
 
 export interface RouterConstructor<T extends Router = Router> {

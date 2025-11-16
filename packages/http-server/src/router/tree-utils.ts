@@ -29,7 +29,7 @@ export function splitStaticChain(node: RouterNode, splitIndex: number): void {
   node.staticChildren = new Map([[suffixParts[0]!, suffixNode]]);
   node.paramChildren = [];
   node.wildcardChild = undefined;
-  node.methods = { byMethod: new Map(), version: 0 };
+  node.methods = { byMethod: new Map() };
   node.segment = prefixParts.length > 1 ? prefixParts.join('/') : prefixParts[0]!;
   node.segmentParts = prefixParts.length > 1 ? prefixParts : undefined;
 }

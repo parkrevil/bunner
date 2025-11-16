@@ -17,7 +17,7 @@ export class RouterNode {
   wildcardChild?: RouterNode; // "*" catch-all (must be terminal)
 
   // Methods assigned at this exact path (leaf)
-  methods: RouteMethods = { byMethod: new Map(), version: 0 };
+  methods: RouteMethods = { byMethod: new Map() };
 
   // For Param nodes: optional compiled regex constraint
   pattern?: RegExp;

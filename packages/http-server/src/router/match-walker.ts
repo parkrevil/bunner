@@ -34,8 +34,10 @@ export class DynamicMatcher {
   private paramValues: string[] = [];
   private paramCount = 0;
   private decodedSegmentCache?: Array<string | undefined>;
-  private suffixCache?: string[];
+  private suffixCache?: Array<string | undefined>;
   private decodedSuffixCache?: Array<string | undefined>;
+  private suffixOffsets?: number[];
+  private suffixSource?: string;
 
   constructor(config: DynamicMatcherConfig) {
     this.method = config.method;
@@ -197,7 +199,14 @@ export class DynamicMatcher {
       return '';
     }
     this.ensureSuffixCache();
-    const raw = (this.suffixCache && this.suffixCache[index]) || '';
+    if (!this.suffixCache || !this.suffixOffsets || !this.suffixSource) {
+      return '';
+    }
+    let raw = this.suffixCache[index];
+    if (raw === undefined) {
+      raw = this.suffixSource.slice(this.suffixOffsets[index]);
+      this.suffixCache[index] = raw;
+    }
     if (!this.decodeParams || !raw) {
       return raw;
     }
@@ -212,15 +221,20 @@ export class DynamicMatcher {
   }
 
   private ensureSuffixCache(): void {
-    if (this.suffixCache || !this.hasWildcardRoutes || !this.segments.length) {
+    if (this.suffixOffsets || !this.hasWildcardRoutes || !this.segments.length) {
       return;
     }
     this.suffixCache = new Array(this.segments.length);
-    let suffix = '';
-    for (let i = this.segments.length - 1; i >= 0; i--) {
-      suffix = suffix ? `${this.segments[i]!}/${suffix}` : this.segments[i]!;
-      this.suffixCache[i] = suffix;
+    this.suffixOffsets = new Array(this.segments.length);
+    let offset = 0;
+    for (let i = 0; i < this.segments.length; i++) {
+      this.suffixOffsets[i] = offset;
+      offset += this.segments[i]!.length;
+      if (i !== this.segments.length - 1) {
+        offset++;
+      }
     }
+    this.suffixSource = this.segments.join('/');
   }
 
   private buildParams(): { params: Record<string, string>; snapshot?: Array<[string, string]> } {
