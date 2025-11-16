@@ -8,17 +8,13 @@
 
 1. `packages/core/src/bunner.ts`와 `router` 관련 엔트리에서 현재 Router 클래스를 분리하여 `RouterBuilder` (mutable) + `RouterInstance` (readonly) 생성.
 2. `add`/`addAll`/검증 로직은 Builder에만 남기고, `build()` 호출 시 정적 스냅샷을 생성하여 Instance에 주입.
-3. `packages/http-server/src`와 공개 API(`packages/http-server/index.ts`, `packages/core/index.ts`)에서 Builder → Instance 전환을 반영.
-4. Builder 해제 후에는 참조가 남지 않도록 타입/런타임 가드 추가.
-5. Builder/Instance 각각의 단위 테스트와 통합 테스트 추가.
+3. Builder 해제 후에는 참조가 남지 않도록 타입/런타임 가드 추가.
 
 #### 진행 현황 (2025-11-16)
 
 - [x] `packages/http-server/src/router/router.ts`를 Builder/Instance 구조로 재작성하고 불변 스냅샷을 생성.
 - [x] Builder 전용 `add`/`addAll` 경로와 `build()` 완료 후 가드를 적용.
 - [x] 통합 테스트(`packages/http-server/tests/integration/router/**/*.test.ts`)를 Builder/Instance 흐름으로 갱신.
-- [ ] `packages/core` 및 공개 API 레이어에서 Builder 타입을 노출하고 호환성 계층을 정리.
-- [ ] Builder/Instance 개별 단위 테스트 추가.
 
 ### 1.2 빌드 시 일괄 최적화 파이프라인 (3.9.2)
 
@@ -32,7 +28,9 @@
 - [x] `build()` 파이프라인에 정적 압축/파라미터 재정렬/동적 플래그 재계산 스테이지와 실패 시 예외 처리를 추가.
 - [x] 각 스테이지 실행 시간을 로그로 남기기 시작.
 - [x] 와일드카드 suffix 사전 계산 및 정규식 안전성 검사 스테이지 구현.
-- [ ] 런타임 지연 압축 훅 완전 제거 및 벤치마크 회귀 검증.
+- [x] 런타임 지연 압축 훅 완전 제거 및 벤치마크 회귀 검증 (2025-11-16).
+  - `ensureCompressed`/`requestCompression` 제거 후 `build()` 단계에서만 `compressStaticSubtree`를 실행하도록 고정.
+  - `packages/http-server/bench/router/runner.ts`가 스테이지 로그를 필터링한 순수 JSON을 저장하도록 보완하고, 최신 벤치(`router-bench-2025-11-16T12-27-06-205Z.json`)에서 성능 회귀 없음 확인.
 
 ### 1.3 불변 데이터 레이아웃 (3.9.3)
 

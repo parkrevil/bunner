@@ -56,8 +56,6 @@ class RadixRouterCore {
   private cacheIndex?: CacheIndex;
   private cacheKeyToPath?: Map<string, string>;
   private staticFast: Map<string, Map<HttpMethod, RouteKey>> = new Map();
-  private needsCompression = false;
-  private pendingCompression: Set<RouterNode> = new Set();
   private patternTesterOptions?: PatternTesterOptions;
   private readonly paramUsageHook: (parent: RouterNode, child: RouterNode) => void;
   private cacheKeyPrefixes: Record<number, string> = Object.create(null);
@@ -132,8 +130,6 @@ class RadixRouterCore {
   }
 
   match(method: HttpMethod, path: string): RouteMatch | null {
-    this.ensureCompressed();
-
     const staticProbe = this.tryStaticFastMatch(method, path);
     if (staticProbe.kind === 'hit') {
       return staticProbe.match;
@@ -486,8 +482,6 @@ class RadixRouterCore {
           const matched = matchStaticParts(parts, segments, idx);
           if (matched < parts.length) {
             splitStaticChain(child, matched);
-            this.requestCompression(node);
-            this.requestCompression(child);
           }
           if (matched > 1) {
             addSegments(child, idx + matched, activeParams);
@@ -499,7 +493,6 @@ class RadixRouterCore {
       }
       child = new RouterNode(NodeKind.Static, seg);
       node.staticChildren.set(seg, child);
-      this.requestCompression(node);
       addSegments(child, idx + 1, activeParams);
     };
     addSegments(this.root, 0, new Set());
@@ -608,22 +601,6 @@ class RadixRouterCore {
       return true;
     }
     return false;
-  }
-
-  private ensureCompressed(): void {
-    if (!this.needsCompression || !this.pendingCompression.size) {
-      return;
-    }
-    for (const node of this.pendingCompression) {
-      this.compressStaticSubtree(node);
-    }
-    this.pendingCompression.clear();
-    this.needsCompression = false;
-  }
-
-  private requestCompression(node: RouterNode): void {
-    this.pendingCompression.add(node);
-    this.needsCompression = true;
   }
 
   private assertMutable(): void {
@@ -811,7 +788,7 @@ class RadixRouterCore {
 
   private runBuildPipeline(): void {
     const stages: Array<{ name: string; execute: () => void }> = [
-      { name: 'compress-static', execute: () => this.ensureCompressed() },
+      { name: 'compress-static', execute: () => this.compressStaticSubtree(this.root) },
       { name: 'param-priority', execute: () => this.sortAllParamChildren() },
       { name: 'wildcard-suffix', execute: () => this.precomputeWildcardSuffixMetadata() },
       { name: 'regex-safety', execute: () => this.validateRoutePatterns() },

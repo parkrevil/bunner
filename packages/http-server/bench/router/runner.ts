@@ -61,7 +61,11 @@ async function runJsonBench(outputPath: string, env: Record<string, string | und
   if (exitCode !== 0) {
     throw new Error(`router bench (json) failed with exit code ${exitCode}`);
   }
-  writeFileSync(outputPath, stdout);
+  const payload = extractJsonPayload(stdout);
+  if (!payload) {
+    throw new Error('router bench (json) did not emit valid JSON payload');
+  }
+  writeFileSync(outputPath, payload);
 }
 
 async function runCpuProfile(profileFile: string, env: Record<string, string | undefined>): Promise<void> {
@@ -167,7 +171,11 @@ function compareCpuProfiles(currentProfilePath: string): void {
 
 function loadBenchmarks(filePath: string): BenchmarkEntry[] {
   const raw = readFileSync(filePath, 'utf8');
-  const parsed = JSON.parse(raw) as BenchmarkFile | BenchmarkEntry[];
+  const payload = extractJsonPayload(raw);
+  if (!payload) {
+    throw new Error(`[router bench] ${makePrettyPath(filePath)} has no JSON payload to parse.`);
+  }
+  const parsed = JSON.parse(payload) as BenchmarkFile | BenchmarkEntry[];
   if (Array.isArray(parsed)) {
     return parsed;
   }
@@ -267,4 +275,16 @@ function formatMetricCell(prevValue?: number, currValue?: number): string {
 function colorize(value: string, variant: ColorVariant): string {
   const color = variant === 'increase' ? COLORS.red : variant === 'decrease' ? COLORS.brightGreenBold : COLORS.gold;
   return `${color}${value}${COLORS.reset}`;
+}
+
+function extractJsonPayload(raw: string): string | null {
+  const start = raw.indexOf('{');
+  if (start === -1) {
+    return null;
+  }
+  const end = raw.lastIndexOf('}');
+  if (end === -1 || end < start) {
+    return null;
+  }
+  return raw.slice(start, end + 1);
 }
