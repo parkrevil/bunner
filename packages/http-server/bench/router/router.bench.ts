@@ -18,6 +18,7 @@ const NUMERIC_CHARS = '0123456789';
 const HEX_CHARS = '0123456789abcdef';
 
 const hasManualGc = typeof Bun.gc === 'function';
+const exposedGlobalGc = (globalThis as { gc?: () => void }).gc;
 let sinkPrimary = 0;
 let sinkSecondary = 0;
 let buildSequence = 0;
@@ -48,6 +49,8 @@ const methodLabels = httpMethods.map(method => ({ method, label: HttpMethod[meth
 const benchFilterPattern = process.env.ROUTER_BENCH_FILTER;
 const benchFormat = process.env.ROUTER_BENCH_FORMAT;
 const benchUnits = process.env.ROUTER_BENCH_UNITS !== '0';
+const benchGcEnabled = process.env.ROUTER_BENCH_GC !== '0';
+const benchLayoutStats = process.env.ROUTER_BENCH_LAYOUT === '0' ? false : benchFormat !== 'json';
 
 const mitataOptions: RunOptions = {
   avg: true,
@@ -110,6 +113,12 @@ const routerPriorityStaticParam = buildRouterFromEntries([
 ]);
 const routerPriorityWildcard = buildRouterFromEntries([{ methods: HttpMethod.Get, path: '/priority/*rest' }]);
 const routerStarMethod = buildRouterFromEntries(static1kPatterns.map(path => ({ methods: '*', path })));
+
+if (benchLayoutStats) {
+  reportLayoutFootprint('static-10k', routerStatic10k);
+  reportLayoutFootprint('param-heavy', routerParamHeavy);
+  reportLayoutFootprint('cache-warm', routerCacheWarm);
+}
 
 const static10kMissSamples = static10kSamples.map(sample => `${sample}-miss`);
 const dynamicParamMissSamples = dynamicParamSamples.map(sample => `${sample}-404`);
@@ -368,6 +377,11 @@ group('match / extremes', () => {
   );
 });
 
+if (benchGcEnabled) {
+  measureLayoutGc('layout-match/param-heavy', routerParamHeavy, dynamicParamSamples, 20000);
+  measureLayoutGc('layout-match/static-10k', routerStatic10k, static10kSamples, 20000);
+}
+
 if (hasManualGc) {
   Bun.gc(true);
 }
@@ -523,6 +537,35 @@ function makeRoundRobin<T>(items: T[]): () => T {
   };
 }
 
+function measureLayoutGc(
+  label: string,
+  router: RouterInstance,
+  samples: string[],
+  iterations: number,
+  method: HttpMethod = HttpMethod.Get,
+): void {
+  const sampler = makeRoundRobin(samples);
+  const runOptionalGc = (): void => {
+    if (hasManualGc) {
+      Bun.gc(true);
+      return;
+    }
+    if (typeof exposedGlobalGc === 'function') {
+      exposedGlobalGc();
+    }
+  };
+  runOptionalGc();
+  const before = process.memoryUsage().heapUsed;
+  for (let i = 0; i < iterations; i++) {
+    consumeMatchResult(router.match(method, sampler()));
+  }
+  runOptionalGc();
+  const after = process.memoryUsage().heapUsed;
+  const deltaKb = (after - before) / 1024;
+  const trend = deltaKb === 0 ? '±' : deltaKb > 0 ? '+' : '';
+  console.log(`[router gc] ${label}: ${trend}${deltaKb.toFixed(2)} KB over ${iterations} matches`);
+}
+
 function consumeMatchResult(result: RouteMatch | null): void {
   if (!result) {
     sinkPrimary ^= 0xffffffff;
@@ -547,4 +590,38 @@ function flushSink(): void {
   } else {
     console.log(sinkLine);
   }
+}
+
+const NODE_RECORD_BYTES = 32;
+const STATIC_CHILD_BYTES = 16;
+const PARAM_CHILD_BYTES = 8;
+const METHOD_ENTRY_BYTES = 12;
+const PATTERN_ENTRY_BYTES = 24;
+
+function reportLayoutFootprint(label: string, router: RouterInstance): void {
+  const layout = router.getLayoutSnapshot();
+  if (!layout) {
+    console.warn(`[router layout] ${label}: no snapshot available`);
+    return;
+  }
+  let segmentChars = 0;
+  for (const node of layout.nodes) {
+    segmentChars += node.segment.length;
+  }
+  for (const chain of layout.segmentChains) {
+    for (const part of chain) {
+      segmentChars += part.length;
+    }
+  }
+  const approxBytes =
+    segmentChars * 2 +
+    layout.nodes.length * NODE_RECORD_BYTES +
+    layout.staticChildren.length * STATIC_CHILD_BYTES +
+    layout.paramChildren.length * PARAM_CHILD_BYTES +
+    layout.methods.length * METHOD_ENTRY_BYTES +
+    layout.patterns.length * PATTERN_ENTRY_BYTES;
+  const wildcardNodes = layout.nodes.reduce((count, node) => (node.wildcardChild === -1 ? count : count + 1), 0);
+  console.log(
+    `[router layout] ${label}: nodes=${layout.nodes.length} static=${layout.staticChildren.length} params=${layout.paramChildren.length} methods=${layout.methods.length} wildcards=${wildcardNodes} segmentChars=${segmentChars} approx=${(approxBytes / 1024).toFixed(2)}KB`,
+  );
 }

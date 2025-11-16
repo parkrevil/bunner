@@ -1,6 +1,17 @@
 import type { HttpMethod } from '../enums';
 import type { RouteKey } from '../types';
 
+import type { ImmutableRouterLayout } from './immutable-layout';
+
+export type PatternTesterFn = (value: string) => boolean;
+
+export type EncodedSlashBehavior = 'decode' | 'preserve' | 'reject';
+
+export interface NormalizedPathSegments {
+  normalized: string;
+  segments: string[];
+}
+
 export interface RouteMatch {
   key: RouteKey;
   params: Record<string, string>;
@@ -9,7 +20,7 @@ export interface RouteMatch {
 export type StaticProbeResult =
   | { kind: 'hit'; match: RouteMatch }
   | { kind: 'static-miss'; normalized: string }
-  | { kind: 'fallback' };
+  | { kind: 'fallback'; prepared?: NormalizedPathSegments };
 
 export interface DynamicMatcherConfig {
   method: HttpMethod;
@@ -18,6 +29,15 @@ export interface DynamicMatcherConfig {
   hasWildcardRoutes: boolean;
   captureSnapshot: boolean;
   suffixSource?: string;
+  layout: ImmutableRouterLayout;
+  patternTesters: ReadonlyArray<PatternTesterFn | undefined>;
+  paramOrders?: ReadonlyArray<Uint16Array | null>;
+  observer?: MatchObserverHooks;
+  encodedSlashBehavior: EncodedSlashBehavior;
+}
+
+export interface MatchObserverHooks {
+  onParamBranch?: (nodeIndex: number, localOffset: number) => void;
 }
 
 export interface DynamicMatchResult {
@@ -35,6 +55,10 @@ export interface RouterOptions {
   caseSensitive?: boolean;
   /** Decode percent-encoded params (default: true). If false, params remain raw */
   decodeParams?: boolean;
+  /** Keep %2F sequences encoded instead of decoding to '/' */
+  preserveEncodedSlashes?: boolean;
+  /** Fine-grained control over how encoded slash ("/" or "\\") sequences are handled in params */
+  encodedSlashBehavior?: EncodedSlashBehavior;
   /** Block dot-segment traversal like '/../' and '/./' (default: true) */
   blockTraversal?: boolean;
   /** Enable LRU cache for match results (default: false) */

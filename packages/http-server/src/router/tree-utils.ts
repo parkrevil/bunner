@@ -1,7 +1,7 @@
 import { NodeKind } from './enums';
 import { RouterNode } from './node';
 
-export function matchStaticParts(parts: string[], segments: string[], startIdx: number): number {
+export function matchStaticParts(parts: readonly string[], segments: readonly string[], startIdx: number): number {
   let matched = 0;
   const limit = Math.min(parts.length, segments.length - startIdx);
   while (matched < limit && segments[startIdx + matched] === parts[matched]) {

@@ -2,9 +2,12 @@ const DIGIT_PATTERNS = new Set(['\\d+', '\\d{1,}', '[0-9]+', '[0-9]{1,}']);
 const ALPHA_PATTERNS = new Set(['[a-zA-Z]+', '[A-Za-z]+']);
 const ALPHANUM_PATTERNS = new Set(['[A-Za-z0-9_\\-]+', '[A-Za-z0-9_-]+', '\\w+', '\\w{1,}']);
 
+export const ROUTE_REGEX_TIMEOUT = Symbol('bunner.route-regex-timeout');
+type RouteRegexTimeoutError = Error & { [ROUTE_REGEX_TIMEOUT]?: true };
+
 export interface PatternTesterOptions {
   maxExecutionMs?: number;
-  onTimeout?: (pattern: string, durationMs: number) => void;
+  onTimeout?: (pattern: string, durationMs: number) => boolean | void;
 }
 
 const now: () => number = (() => {
@@ -33,8 +36,15 @@ export function buildPatternTester(
       const result = tester(value);
       const duration = now() - start;
       if (duration > limit) {
-        options.onTimeout?.(raw, duration);
-        throw new Error(`Route parameter regex '${raw}' exceeded ${limit}ms (took ${duration.toFixed(3)}ms)`);
+        const shouldThrow = options.onTimeout?.(raw, duration);
+        if (shouldThrow === false) {
+          return false;
+        }
+        const timeoutError: RouteRegexTimeoutError = new Error(
+          `Route parameter regex '${raw}' exceeded ${limit}ms (took ${duration.toFixed(3)}ms)`,
+        );
+        timeoutError[ROUTE_REGEX_TIMEOUT] = true;
+        throw timeoutError;
       }
       return result;
     };

@@ -94,10 +94,10 @@ export class CacheIndex {
         }
       }
     }
-    const noKeys = !node.keys || node.keys.size === 0;
     if (node.keys && node.keys.size === 0) {
       node.keys = undefined;
     }
+    const noKeys = !node.keys;
     return noKeys && node.children.size === 0;
   }
 }

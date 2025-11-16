@@ -113,6 +113,31 @@ describe('RadixRouter :: options', () => {
     });
   });
 
+  describe('encodedSlashBehavior', () => {
+    it('should preserve encoded slashes when configured', () => {
+      const router = buildRouter(
+        builder => {
+          builder.add(HttpMethod.Get, '/files/:name');
+        },
+        { encodedSlashBehavior: 'preserve' },
+      );
+
+      const match = router.match(HttpMethod.Get, '/files/foo%2Fbar%5Cbaz');
+      expect(match?.params.name).toBe('foo%2Fbar%5Cbaz');
+    });
+
+    it('should reject encoded slashes when configured', () => {
+      const router = buildRouter(
+        builder => {
+          builder.add(HttpMethod.Get, '/files/:name');
+        },
+        { encodedSlashBehavior: 'reject' },
+      );
+
+      expect(() => router.match(HttpMethod.Get, '/files/foo%2Fbar')).toThrow(/encoded slash/i);
+    });
+  });
+
   describe('blockTraversal', () => {
     it('should remove dot segments when enabled', () => {
       let key!: RouteKey;
@@ -136,12 +161,40 @@ describe('RadixRouter :: options', () => {
 
       expect(router.match(HttpMethod.Get, '/foo/../safe/path')).toBeNull();
     });
+
+    it('should treat encoded dot segments as traversal attempts when enabled', () => {
+      let key!: RouteKey;
+      const router = buildRouter(
+        builder => {
+          key = builder.add(HttpMethod.Get, '/secure/area') as RouteKey;
+        },
+        { blockTraversal: true },
+      );
+
+      expect(router.match(HttpMethod.Get, '/tmp/%2e%2e/secure/area')?.key).toBe(key);
+      expect(router.match(HttpMethod.Get, '/tmp/%2E%2E/secure/area')?.key).toBe(key);
+    });
+
+    it('should keep encoded dot segments literal when blocking is disabled', () => {
+      const router = buildRouter(
+        builder => {
+          builder.add(HttpMethod.Get, '/secure/area');
+        },
+        { blockTraversal: false },
+      );
+
+      expect(router.match(HttpMethod.Get, '/tmp/%2e%2e/secure/area')).toBeNull();
+    });
   });
 
   describe('enableCache & cacheSize', () => {
     const getCache = (router: RouterInstance): Map<string, unknown> | undefined => {
       const internal = router as unknown as { core?: { cache?: Map<string, unknown> } };
       return internal.core?.cache;
+    };
+    const formatCacheKey = (method: HttpMethod, path: string): string => {
+      const normalized = path.startsWith('/') ? path.slice(1) : path;
+      return `${method}\u0000${normalized}`;
     };
 
     it('should clone params when returning cached hits', () => {
@@ -169,8 +222,9 @@ describe('RadixRouter :: options', () => {
 
       expect(router.match(HttpMethod.Get, '/cache/beta/extra')).toBeNull();
 
-      const cacheKey = `${HttpMethod.Get} cache/beta/extra`;
-      expect(getCache(router)?.get(cacheKey)).toBeNull();
+      const cacheKey = formatCacheKey(HttpMethod.Get, '/cache/beta/extra');
+      const missRecord = getCache(router)?.get(cacheKey) as { entry?: unknown } | undefined;
+      expect(missRecord?.entry).toBeNull();
     });
 
     it('should evict oldest entries when cacheSize is exceeded', () => {
@@ -185,9 +239,9 @@ describe('RadixRouter :: options', () => {
       router.match(HttpMethod.Get, '/cache/b');
       router.match(HttpMethod.Get, '/cache/c');
 
-      const firstKey = `${HttpMethod.Get} cache/a`;
-      const secondKey = `${HttpMethod.Get} cache/b`;
-      const thirdKey = `${HttpMethod.Get} cache/c`;
+      const firstKey = formatCacheKey(HttpMethod.Get, '/cache/a');
+      const secondKey = formatCacheKey(HttpMethod.Get, '/cache/b');
+      const thirdKey = formatCacheKey(HttpMethod.Get, '/cache/c');
 
       const cache = getCache(router);
       expect(cache?.has(firstKey)).toBe(false);
@@ -208,8 +262,8 @@ describe('RadixRouter :: options', () => {
       expect(router.match(HttpMethod.Get, '/reports/earnings')).not.toBeNull();
 
       const cache = getCache(router);
-      expect(cache?.has(`${HttpMethod.Get} users/alpha`)).toBe(true);
-      expect(cache?.has(`${HttpMethod.Get} reports/earnings`)).toBe(true);
+      expect(cache?.has(formatCacheKey(HttpMethod.Get, '/users/alpha'))).toBe(true);
+      expect(cache?.has(formatCacheKey(HttpMethod.Get, '/reports/earnings'))).toBe(true);
     });
 
     it('should not reuse stale miss entries across builds', () => {
@@ -221,7 +275,8 @@ describe('RadixRouter :: options', () => {
       );
       expect(missOnly.match(HttpMethod.Get, '/users/42')).toBeNull();
       const missCache = getCache(missOnly);
-      expect(missCache?.get(`${HttpMethod.Get} users/42`)).toBeNull();
+      const missRecord = missCache?.get(formatCacheKey(HttpMethod.Get, '/users/42')) as { entry?: unknown } | undefined;
+      expect(missRecord?.entry).toBeNull();
 
       const routed = buildRouter(
         builder => {

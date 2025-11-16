@@ -1,9 +1,4 @@
-import type { RouterOptions } from './types';
-
-export interface NormalizedPathSegments {
-  normalized: string;
-  segments: string[];
-}
+import type { EncodedSlashBehavior, NormalizedPathSegments, RouterOptions } from './types';
 
 export function normalizeAndSplit(path: string, opts: RouterOptions): NormalizedPathSegments {
   if (!path || path === '/') {
@@ -30,6 +25,12 @@ export function normalizeAndSplit(path: string, opts: RouterOptions): Normalized
   const pushSegment = (endIdx: number) => {
     if (endIdx > segmentStart) {
       let part = path.slice(segmentStart, endIdx);
+      if (blockTraversal) {
+        const decodedDot = decodeEncodedDotSegment(part);
+        if (decodedDot) {
+          part = decodedDot;
+        }
+      }
       if (!caseSensitive && segmentSawUpper) {
         part = part.toLowerCase();
       }
@@ -101,19 +102,27 @@ export function normalizeAndSplit(path: string, opts: RouterOptions): Normalized
   };
 }
 
-export function decodeURIComponentSafe(val: string): string {
-  const firstPercent = val.indexOf('%');
-  if (firstPercent === -1) {
-    return val;
+const ENCODED_SLASH_PATTERN = /%(?:2f|5c)/i;
+
+export function decodeURIComponentSafe(val: string, slashBehavior: EncodedSlashBehavior = 'decode'): string {
+  let input = val;
+  if (slashBehavior === 'preserve' && input.length) {
+    input = input.replace(/%2f/gi, '%252F').replace(/%5c/gi, '%255C');
+  } else if (slashBehavior === 'reject' && ENCODED_SLASH_PATTERN.test(input)) {
+    throw new Error('Encoded slash sequences (%2F or %5C) are not allowed in this router configuration');
   }
-  const asciiDecoded = decodeAsciiPercents(val, firstPercent);
+  const firstPercent = input.indexOf('%');
+  if (firstPercent === -1) {
+    return input;
+  }
+  const asciiDecoded = decodeAsciiPercents(input, firstPercent);
   if (asciiDecoded !== null) {
     return asciiDecoded;
   }
   try {
-    return decodeURIComponent(val);
+    return decodeURIComponent(input);
   } catch {
-    return val;
+    return input;
   }
 }
 
@@ -150,6 +159,17 @@ function decodeAsciiPercents(value: string, startIdx: number): string | null {
     chunks.push(value.slice(lastPos));
   }
   return chunks.join('');
+}
+
+function decodeEncodedDotSegment(part: string): string | null {
+  if (!part || part.indexOf('%') === -1) {
+    return null;
+  }
+  const normalized = part.replace(/%2e/gi, '.');
+  if (normalized === '.' || normalized === '..') {
+    return normalized;
+  }
+  return null;
 }
 
 function fromHex(code: number): number {
