@@ -1,3 +1,5 @@
+import { ROUTER_SNAPSHOT_METADATA } from '@bunner/core';
+
 import { HttpMethod } from '../enums';
 import type { RouteKey } from '../types';
 
@@ -10,7 +12,14 @@ import { RouterNode } from './node';
 import { buildPatternTester, type PatternTesterOptions } from './pattern-tester';
 import { assessRegexSafety } from './regex-guard';
 import { matchStaticParts, splitStaticChain } from './tree-utils';
-import type { RegexSafetyOptions, DynamicMatchResult, RouterOptions, RouteMatch, StaticProbeResult } from './types';
+import type {
+  RegexSafetyOptions,
+  DynamicMatchResult,
+  RouterOptions,
+  RouteMatch,
+  StaticProbeResult,
+  RouterSnapshotMetadata,
+} from './types';
 import { normalizeAndSplit, type NormalizedPathSegments } from './utils';
 
 type CacheEntry = { key: RouteKey; params?: Array<[string, string]> };
@@ -55,9 +64,20 @@ class RadixRouterCore {
   private lastCacheKeyMethod?: HttpMethod;
   private lastCacheKeyPath?: string;
   private lastCacheKeyValue?: string;
+  private wildcardMethodsByMethod: Record<number, true> | null = null;
+  private wildcardRouteCount = 0;
   private hasWildcardRoutes = false;
   private hasDynamicRoutes = false;
   private sealed = false;
+  private routeCount = 0;
+  private metadata: RouterSnapshotMetadata = Object.freeze({
+    totalRoutes: 0,
+    hasDynamicRoutes: false,
+    hasWildcardRoutes: false,
+    wildcardRouteCount: 0,
+    methodsWithWildcard: [],
+    builtAt: 0,
+  });
 
   constructor(options?: RouterOptions) {
     const regexSafety = this.normalizeRegexSafety(options?.regexSafety);
@@ -148,8 +168,9 @@ class RadixRouterCore {
     }
 
     const captureSnapshot = Boolean(cacheKey && this.cache);
-    const suffixSource = normalized.length > 1 ? normalized.slice(1) : '';
-    const dynamicMatch = this.findDynamicMatch(method, prepared.segments, captureSnapshot, suffixSource);
+    const methodHasWildcard = this.methodHasWildcard(method);
+    const suffixSource = methodHasWildcard && normalized.length > 1 ? normalized.slice(1) : undefined;
+    const dynamicMatch = this.findDynamicMatch(method, prepared.segments, captureSnapshot, suffixSource, methodHasWildcard);
     if (!dynamicMatch) {
       this.cacheNullMiss(method, normalized, cachePath, cacheKey);
       return null;
@@ -168,6 +189,10 @@ class RadixRouterCore {
     }
     this.runBuildPipeline();
     this.sealed = true;
+  }
+
+  getMetadata(): RouterSnapshotMetadata {
+    return this.metadata;
   }
 
   private tryStaticFastMatch(method: HttpMethod, path: string): StaticProbeResult {
@@ -201,14 +226,15 @@ class RadixRouterCore {
     method: HttpMethod,
     segments: string[],
     captureSnapshot: boolean,
-    suffixSource: string,
+    suffixSource: string | undefined,
+    methodHasWildcard: boolean,
   ): DynamicMatchResult | null {
     const matcher = new DynamicMatcher(
       {
         method,
         segments,
         decodeParams: this.options.decodeParams,
-        hasWildcardRoutes: this.hasWildcardRoutes,
+        hasWildcardRoutes: methodHasWildcard,
         captureSnapshot,
         suffixSource,
       },
@@ -332,6 +358,7 @@ class RadixRouterCore {
         }
         const key = GLOBAL_ROUTE_KEY_SEQ++ as unknown as RouteKey;
         node.methods.byMethod.set(method, key);
+        this.routeCount++;
         if (firstKey === null) {
           firstKey = key;
         }
@@ -356,8 +383,6 @@ class RadixRouterCore {
           node.wildcardChild = new RouterNode(NodeKind.Wildcard, name);
           node.wildcardChild.wildcardOrigin = 'star';
         }
-        this.hasWildcardRoutes = true;
-        this.hasDynamicRoutes = true;
         const release = registerParamName(name, activeParams);
         try {
           addSegments(node.wildcardChild, idx + 1, activeParams);
@@ -367,7 +392,6 @@ class RadixRouterCore {
         return;
       }
       if (seg.charCodeAt(0) === 58 /* ':' */) {
-        this.hasDynamicRoutes = true;
         let optional = false;
         let core = seg;
         if (seg.endsWith('?')) {
@@ -410,8 +434,6 @@ class RadixRouterCore {
               `Conflict: multi-parameter ':${name}+' cannot reuse wildcard '${node.wildcardChild.segment}' at '${describeContext(idx)}'`,
             );
           }
-          this.hasWildcardRoutes = true;
-          this.hasDynamicRoutes = true;
           try {
             addSegments(node.wildcardChild, idx + 1, activeParams);
           } finally {
@@ -674,6 +696,25 @@ class RadixRouterCore {
     safety.validator?.(patternSrc);
   }
 
+  private validateRoutePatterns(): void {
+    const stack: RouterNode[] = [this.root];
+    while (stack.length) {
+      const node = stack.pop()!;
+      if (node.patternSource) {
+        this.ensureRegexSafe(node.patternSource);
+      }
+      if (node.wildcardChild) {
+        stack.push(node.wildcardChild);
+      }
+      for (const child of node.paramChildren) {
+        stack.push(child);
+      }
+      for (const child of node.staticChildren.values()) {
+        stack.push(child);
+      }
+    }
+  }
+
   private noteParamMatch(parent: RouterNode, child: RouterNode): void {
     if (parent.paramChildren.length < 2) {
       return;
@@ -772,7 +813,10 @@ class RadixRouterCore {
     const stages: Array<{ name: string; execute: () => void }> = [
       { name: 'compress-static', execute: () => this.ensureCompressed() },
       { name: 'param-priority', execute: () => this.sortAllParamChildren() },
-      { name: 'wildcard-flags', execute: () => this.recalculateRouteFlags() },
+      { name: 'wildcard-suffix', execute: () => this.precomputeWildcardSuffixMetadata() },
+      { name: 'regex-safety', execute: () => this.validateRoutePatterns() },
+      { name: 'route-flags', execute: () => this.recalculateRouteFlags() },
+      { name: 'snapshot-metadata', execute: () => this.updateSnapshotMetadata() },
     ];
     for (const stage of stages) {
       const start = typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
@@ -847,6 +891,54 @@ class RadixRouterCore {
     this.hasDynamicRoutes = hasDynamic;
   }
 
+  private updateSnapshotMetadata(): void {
+    const methodsWithWildcard: HttpMethod[] = this.wildcardMethodsByMethod
+      ? Object.keys(this.wildcardMethodsByMethod)
+          .map(code => Number(code) as HttpMethod)
+          .sort((a, b) => a - b)
+      : [];
+    this.metadata = Object.freeze({
+      totalRoutes: this.routeCount,
+      hasDynamicRoutes: this.hasDynamicRoutes,
+      hasWildcardRoutes: this.hasWildcardRoutes,
+      wildcardRouteCount: this.wildcardRouteCount,
+      methodsWithWildcard,
+      builtAt: Date.now(),
+    });
+  }
+
+  private precomputeWildcardSuffixMetadata(): void {
+    const perMethod: Record<number, true> = Object.create(null);
+    let wildcardRouteCount = 0;
+    const stack: RouterNode[] = [this.root];
+    while (stack.length) {
+      const node = stack.pop()!;
+      const wildcard = node.wildcardChild;
+      if (wildcard) {
+        for (const method of wildcard.methods.byMethod.keys()) {
+          perMethod[method as number] = true;
+          wildcardRouteCount++;
+        }
+        stack.push(wildcard);
+      }
+      for (const child of node.paramChildren) {
+        stack.push(child);
+      }
+      for (const child of node.staticChildren.values()) {
+        stack.push(child);
+      }
+    }
+    this.wildcardRouteCount = wildcardRouteCount;
+    this.wildcardMethodsByMethod = wildcardRouteCount ? perMethod : null;
+  }
+
+  private methodHasWildcard(method: HttpMethod): boolean {
+    if (!this.wildcardMethodsByMethod) {
+      return this.wildcardRouteCount > 0 ? this.hasWildcardRoutes : false;
+    }
+    return Boolean(this.wildcardMethodsByMethod[method as number]);
+  }
+
   private getCacheMethodPrefix(method: HttpMethod): string {
     let prefix = this.cacheKeyPrefixes[method as number];
     if (!prefix) {
@@ -891,10 +983,21 @@ class RadixRouterCore {
 }
 
 export class RadixRouterInstance implements RouterInstance {
-  constructor(private readonly core: RadixRouterCore) {}
+  constructor(private readonly core: RadixRouterCore) {
+    Reflect.defineProperty(this, ROUTER_SNAPSHOT_METADATA, {
+      value: core.getMetadata(),
+      enumerable: false,
+      configurable: false,
+      writable: false,
+    });
+  }
 
   match(method: HttpMethod, path: string): RouteMatch | null {
     return this.core.match(method, path);
+  }
+
+  getMetadata(): RouterSnapshotMetadata {
+    return this.core.getMetadata();
   }
 }
 

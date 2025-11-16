@@ -59,3 +59,12 @@ export interface RegexSafetyOptions {
   /** 사용자 정의 검증 훅 */
   validator?: (pattern: string) => void;
 }
+
+export interface RouterSnapshotMetadata {
+  readonly totalRoutes: number;
+  readonly hasDynamicRoutes: boolean;
+  readonly hasWildcardRoutes: boolean;
+  readonly wildcardRouteCount: number;
+  readonly methodsWithWildcard: readonly HttpMethod[];
+  readonly builtAt: number;
+}

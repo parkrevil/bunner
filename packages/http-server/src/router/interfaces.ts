@@ -1,10 +1,14 @@
+import { ROUTER_SNAPSHOT_METADATA } from '@bunner/core';
+
 import type { HttpMethod } from '../enums';
 import type { RouteKey } from '../types';
 
-import type { RouterOptions, RouteMatch } from './types';
+import type { RouterOptions, RouteMatch, RouterSnapshotMetadata } from './types';
 
 export interface RouterInstance {
   match(method: HttpMethod, path: string): RouteMatch | null;
+  getMetadata(): RouterSnapshotMetadata;
+  [ROUTER_SNAPSHOT_METADATA]?: RouterSnapshotMetadata;
 }
 
 export interface RouterBuilder {

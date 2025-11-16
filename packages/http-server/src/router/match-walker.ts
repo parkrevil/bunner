@@ -156,16 +156,14 @@ export class DynamicMatcher {
             continue;
           }
           this.paramCount = frame.paramBase;
+          const key = wildcard.methods.byMethod.get(this.method);
+          if (key === undefined) {
+            continue;
+          }
           const wildcardName = wildcard.segment || '*';
           const wildcardValue = this.getSuffixValue(frame.idx);
-          const prev = this.paramCount;
           this.pushParam(wildcardName, wildcardValue);
-          const key = wildcard.methods.byMethod.get(this.method);
-          if (key !== undefined) {
-            return key;
-          }
-          this.paramCount = prev;
-          continue;
+          return key;
         }
         case FrameStage.Exit: {
           this.paramCount = frame.paramBase;
