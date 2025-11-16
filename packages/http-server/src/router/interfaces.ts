@@ -3,10 +3,14 @@ import type { RouteKey } from '../types';
 
 import type { RouterOptions, RouteMatch } from './types';
 
-export interface Router {
+export interface RouterInstance {
+  match(method: HttpMethod, path: string): RouteMatch | null;
+}
+
+export interface RouterBuilder {
   add(method: HttpMethod | HttpMethod[] | '*', path: string): RouteKey | RouteKey[];
   addAll(entries: Array<[HttpMethod, string]>): RouteKey[];
-  match(method: HttpMethod, path: string): RouteMatch | null;
+  build(): RouterInstance;
 }
 
 export interface RouteMethods {
@@ -14,6 +18,6 @@ export interface RouteMethods {
   byMethod: Map<HttpMethod, RouteKey>;
 }
 
-export interface RouterConstructor<T extends Router = Router> {
+export interface RouterBuilderConstructor<T extends RouterBuilder = RouterBuilder> {
   new (options?: RouterOptions): T;
 }

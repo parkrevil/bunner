@@ -4,7 +4,7 @@ import type { RouteKey } from '../types';
 import { hydrateParams } from './cache-helpers';
 import { CacheIndex } from './cache-index';
 import { NodeKind } from './enums';
-import type { Router } from './interfaces';
+import type { RouterBuilder, RouterInstance } from './interfaces';
 import { DynamicMatcher } from './match-walker';
 import { RouterNode } from './node';
 import { buildPatternTester, type PatternTesterOptions } from './pattern-tester';
@@ -40,7 +40,7 @@ const DEFAULT_REGEX_SAFETY: NormalizedRegexSafetyOptions = {
 
 const PARAM_RESORT_THRESHOLD = 16;
 
-export class RadixRouter implements Router {
+class RadixRouterCore {
   private root: RouterNode;
   private options: NormalizedRouterOptions;
   private cache?: Map<string, CacheEntry | null>;
@@ -57,6 +57,7 @@ export class RadixRouter implements Router {
   private lastCacheKeyValue?: string;
   private hasWildcardRoutes = false;
   private hasDynamicRoutes = false;
+  private sealed = false;
 
   constructor(options?: RouterOptions) {
     const regexSafety = this.normalizeRegexSafety(options?.regexSafety);
@@ -81,6 +82,7 @@ export class RadixRouter implements Router {
   }
 
   addAll(entries: Array<[HttpMethod, string]>): RouteKey[] {
+    this.assertMutable();
     const keys: RouteKey[] = new Array(entries.length);
     for (let i = 0; i < entries.length; i++) {
       const [method, path] = entries[i]!;
@@ -94,6 +96,7 @@ export class RadixRouter implements Router {
   }
 
   add(method: HttpMethod | HttpMethod[] | '*', path: string): RouteKey | RouteKey[] {
+    this.assertMutable();
     if (method === '*') {
       const methods = Object.values(HttpMethod).filter(v => typeof v === 'number') as HttpMethod[];
       return this.addAll(methods.map(m => [m, path]));
@@ -157,6 +160,14 @@ export class RadixRouter implements Router {
       this.setCache(cacheKey, resolved, cachePath, dynamicMatch.snapshot);
     }
     return resolved;
+  }
+
+  finalizeBuild(): void {
+    if (this.sealed) {
+      return;
+    }
+    this.runBuildPipeline();
+    this.sealed = true;
   }
 
   private tryStaticFastMatch(method: HttpMethod, path: string): StaticProbeResult {
@@ -593,6 +604,12 @@ export class RadixRouter implements Router {
     this.needsCompression = true;
   }
 
+  private assertMutable(): void {
+    if (this.sealed) {
+      throw new Error('Router has already been sealed. Instantiate a new builder to add more routes.');
+    }
+  }
+
   private compressStaticSubtree(entry: RouterNode): void {
     const stack: RouterNode[] = [entry];
     const seen = new Set<RouterNode>();
@@ -751,6 +768,85 @@ export class RadixRouter implements Router {
     return key;
   }
 
+  private runBuildPipeline(): void {
+    const stages: Array<{ name: string; execute: () => void }> = [
+      { name: 'compress-static', execute: () => this.ensureCompressed() },
+      { name: 'param-priority', execute: () => this.sortAllParamChildren() },
+      { name: 'wildcard-flags', execute: () => this.recalculateRouteFlags() },
+    ];
+    for (const stage of stages) {
+      const start = typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
+      try {
+        stage.execute();
+      } catch (error) {
+        throw new Error(`[bunner/router] Build stage '${stage.name}' failed: ${(error as Error).message}`);
+      } finally {
+        const end = typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
+        const duration = (end - start).toFixed(3);
+        console.info(`[bunner/router] stage:${stage.name} ${duration}ms`);
+      }
+    }
+  }
+
+  private sortAllParamChildren(): void {
+    const stack: RouterNode[] = [this.root];
+    while (stack.length) {
+      const node = stack.pop()!;
+      if (node.paramChildren.length > 1) {
+        node.paramChildren.sort((a, b) => this.scoreParamNode(b) - this.scoreParamNode(a));
+      }
+      for (const child of node.staticChildren.values()) {
+        stack.push(child);
+      }
+      for (const paramChild of node.paramChildren) {
+        stack.push(paramChild);
+      }
+      if (node.wildcardChild) {
+        stack.push(node.wildcardChild);
+      }
+    }
+  }
+
+  private scoreParamNode(node: RouterNode): number {
+    let score = 0;
+    if (node.pattern) {
+      score += 2;
+    }
+    if (node.wildcardChild) {
+      score -= 1;
+    }
+    if (node.methods.byMethod.size) {
+      score += 1;
+    }
+    const len = node.segment.length;
+    return score + (len ? 1 / len : 0);
+  }
+
+  private recalculateRouteFlags(): void {
+    let hasWildcard = false;
+    let hasDynamic = false;
+    const stack: RouterNode[] = [this.root];
+    while (stack.length) {
+      const node = stack.pop()!;
+      if (node.paramChildren.length) {
+        hasDynamic = true;
+      }
+      if (node.wildcardChild) {
+        hasWildcard = true;
+        hasDynamic = true;
+        stack.push(node.wildcardChild);
+      }
+      for (const child of node.paramChildren) {
+        stack.push(child);
+      }
+      for (const child of node.staticChildren.values()) {
+        stack.push(child);
+      }
+    }
+    this.hasWildcardRoutes = hasWildcard;
+    this.hasDynamicRoutes = hasDynamic;
+  }
+
   private getCacheMethodPrefix(method: HttpMethod): string {
     let prefix = this.cacheKeyPrefixes[method as number];
     if (!prefix) {
@@ -794,4 +890,47 @@ export class RadixRouter implements Router {
   }
 }
 
-export default RadixRouter;
+export class RadixRouterInstance implements RouterInstance {
+  constructor(private readonly core: RadixRouterCore) {}
+
+  match(method: HttpMethod, path: string): RouteMatch | null {
+    return this.core.match(method, path);
+  }
+}
+
+export class RadixRouterBuilder implements RouterBuilder {
+  private core: RadixRouterCore | null;
+
+  constructor(options?: RouterOptions) {
+    this.core = new RadixRouterCore(options);
+  }
+
+  add(method: HttpMethod | HttpMethod[] | '*', path: string): RouteKey | RouteKey[] {
+    this.assertActive();
+    return this.core!.add(method, path);
+  }
+
+  addAll(entries: Array<[HttpMethod, string]>): RouteKey[] {
+    this.assertActive();
+    return this.core!.addAll(entries);
+  }
+
+  build(): RouterInstance {
+    this.assertActive();
+    const core = this.core!;
+    core.finalizeBuild();
+    this.core = null;
+    return new RadixRouterInstance(core);
+  }
+
+  private assertActive(): void {
+    if (!this.core) {
+      throw new Error('RouterBuilder has already been finalized. Instantiate a new builder for additional routes.');
+    }
+  }
+}
+
+export const RadixRouter = RadixRouterBuilder;
+export type RadixRouter = RadixRouterInstance;
+
+export default RadixRouterBuilder;

@@ -1,7 +1,8 @@
-import { beforeAll, afterAll, beforeEach, afterEach, describe, it, expect } from 'bun:test';
+import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'bun:test';
 
 import { HttpMethod } from '../../../src/enums';
-import { RadixRouter } from '../../../src/router/router';
+import type { RouterInstance } from '../../../src/router/interfaces';
+import { RadixRouterBuilder } from '../../../src/router/router';
 import type { RouteKey } from '../../../src/types';
 
 const METHOD_ENTRIES: Array<[string, HttpMethod]> = [];
@@ -19,50 +20,59 @@ afterAll(() => {
 });
 
 describe('RadixRouter :: basic routing', () => {
-  let router: RadixRouter;
-
-  beforeEach(() => {
-    router = new RadixRouter();
-  });
-
-  afterEach(() => {
-    router = undefined as unknown as RadixRouter;
-  });
+  const buildRouter = (configure: (builder: RadixRouterBuilder) => void): RouterInstance => {
+    const builder = new RadixRouterBuilder();
+    configure(builder);
+    return builder.build();
+  };
 
   it('should match a static route for the registered method', () => {
-    const key = router.add(HttpMethod.Get, '/users') as RouteKey;
+    let key!: RouteKey;
+    const router = buildRouter(builder => {
+      key = builder.add(HttpMethod.Get, '/users') as RouteKey;
+    });
     const match = router.match(HttpMethod.Get, '/users');
 
     expect(match).toEqual({ key, params: {} });
   });
 
   it('should reject requests registered for another method', () => {
-    router.add(HttpMethod.Post, '/users');
+    const router = buildRouter(builder => {
+      builder.add(HttpMethod.Post, '/users');
+    });
 
     expect(router.match(HttpMethod.Get, '/users')).toBeNull();
   });
 
   it('should support registering the root path', () => {
-    const key = router.add(HttpMethod.Get, '/') as RouteKey;
+    let key!: RouteKey;
+    const router = buildRouter(builder => {
+      key = builder.add(HttpMethod.Get, '/') as RouteKey;
+    });
 
     expect(router.match(HttpMethod.Get, '/')).toEqual({ key, params: {} });
   });
 
   it('should normalize paths that omit the leading slash', () => {
-    const key = router.add(HttpMethod.Get, 'settings') as RouteKey;
+    let key!: RouteKey;
+    const router = buildRouter(builder => {
+      key = builder.add(HttpMethod.Get, 'settings') as RouteKey;
+    });
 
     expect(router.match(HttpMethod.Get, '/settings')?.key).toBe(key);
   });
 
   describe('addAll()', () => {
+    let router: RouterInstance;
     let keys: RouteKey[];
 
     beforeEach(() => {
-      router = new RadixRouter();
-      keys = router.addAll([
+      const builder = new RadixRouterBuilder();
+      keys = builder.addAll([
         [HttpMethod.Get, '/health'],
         [HttpMethod.Post, '/health'],
       ]);
+      router = builder.build();
     });
 
     it('should register the first tuple as GET', () => {
@@ -75,11 +85,13 @@ describe('RadixRouter :: basic routing', () => {
   });
 
   describe('method array registration', () => {
+    let router: RouterInstance;
     let keys: RouteKey[];
 
     beforeEach(() => {
-      router = new RadixRouter();
-      keys = router.add([HttpMethod.Get, HttpMethod.Delete], '/bulk') as RouteKey[];
+      const builder = new RadixRouterBuilder();
+      keys = builder.add([HttpMethod.Get, HttpMethod.Delete], '/bulk') as RouteKey[];
+      router = builder.build();
     });
 
     it('should handle the first method in the array', () => {
@@ -94,18 +106,23 @@ describe('RadixRouter :: basic routing', () => {
   describe('method wildcard registration', () => {
     for (const [label, method] of METHOD_ENTRIES) {
       it(`should respond to ${label} when registered with '*'`, () => {
-        const wildcardRouter = new RadixRouter();
-        wildcardRouter.add('*', '/wildcard');
+        const router = buildRouter(builder => {
+          builder.add('*', '/wildcard');
+        });
 
-        expect(wildcardRouter.match(method, '/wildcard')).not.toBeNull();
+        expect(router.match(method, '/wildcard')).not.toBeNull();
       });
     }
   });
 
   it('should cache pure static routes in the fast-path table', () => {
-    const key = router.add(HttpMethod.Get, '/fast/path') as RouteKey;
-    const internal = router as unknown as { staticFast: Map<string, Map<HttpMethod, RouteKey>> };
+    let key!: RouteKey;
+    const router = buildRouter(builder => {
+      key = builder.add(HttpMethod.Get, '/fast/path') as RouteKey;
+    });
+    const internal = router as unknown as { core?: { staticFast: Map<string, Map<HttpMethod, RouteKey>> } };
+    const staticFast = internal.core?.staticFast ?? new Map();
 
-    expect(internal.staticFast.get('/fast/path')?.get(HttpMethod.Get)).toBe(key);
+    expect(staticFast.get('/fast/path')?.get(HttpMethod.Get)).toBe(key);
   });
 });

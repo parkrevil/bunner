@@ -1,7 +1,8 @@
 import { bench, group, run } from 'mitata';
 
 import { HttpMethod } from '../../src/enums';
-import RadixRouter from '../../src/router/router';
+import type { RouterInstance } from '../../src/router/interfaces';
+import { RadixRouterBuilder } from '../../src/router/router';
 import type { RouteMatch, RouterOptions } from '../../src/router/types';
 
 type RouteSpec = {
@@ -167,7 +168,7 @@ group('build / registration', () => {
   bench('build: add deep 10k static routes', () => consumeBuildResult(buildRouter(deepStaticPatterns)));
   bench('build: add 12k param-heavy routes', () => consumeBuildResult(buildRouter(dynamicParamPatterns)));
   bench('build: addAll multi-method 1k routes', () => {
-    const router = new RadixRouter();
+    const router = new RadixRouterBuilder();
     const entries: Array<[HttpMethod, string]> = [];
     for (const path of static1kPatterns) {
       for (const method of httpMethods) {
@@ -175,14 +176,14 @@ group('build / registration', () => {
       }
     }
     router.addAll(entries);
-    return consumeBuildResult(router);
+    return consumeBuildResult(router.build());
   });
   bench("build: add '*' multi-method 1k routes", () => {
-    const router = new RadixRouter();
+    const router = new RadixRouterBuilder();
     for (const path of static1kPatterns) {
       router.add('*', path);
     }
-    return consumeBuildResult(router);
+    return consumeBuildResult(router.build());
   });
 });
 
@@ -374,22 +375,22 @@ if (hasManualGc) {
 await run(mitataOptions);
 flushSink();
 
-function buildRouter(paths: string[], options?: Partial<RouterOptions>): RadixRouter {
-  const router = new RadixRouter(options);
+function buildRouter(paths: string[], options?: Partial<RouterOptions>): RouterInstance {
+  const router = new RadixRouterBuilder(options);
   for (const path of paths) {
     router.add(HttpMethod.Get, path);
   }
-  return router;
+  return router.build();
 }
 
 type RouterEntry = { path: string; methods: HttpMethod | HttpMethod[] | '*' };
 
-function buildRouterFromEntries(entries: RouterEntry[], options?: Partial<RouterOptions>): RadixRouter {
-  const router = new RadixRouter(options);
+function buildRouterFromEntries(entries: RouterEntry[], options?: Partial<RouterOptions>): RouterInstance {
+  const router = new RadixRouterBuilder(options);
   for (const entry of entries) {
     router.add(entry.methods, entry.path);
   }
-  return router;
+  return router.build();
 }
 
 function generateStaticRouteSpecs(count: number, depth: number, segmentLength: number): RouteSpec[] {
@@ -531,7 +532,7 @@ function consumeMatchResult(result: RouteMatch | null): void {
   sinkSecondary ^= Object.keys(result.params).length & 0xffff;
 }
 
-function consumeBuildResult(router: RadixRouter): RadixRouter {
+function consumeBuildResult(router: RouterInstance): RouterInstance {
   sinkPrimary ^= ++buildSequence & 0xffff;
   return router;
 }

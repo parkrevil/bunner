@@ -1,18 +1,18 @@
 import { describe, it, expect } from 'bun:test';
 
 import { HttpMethod } from '../../../src/enums';
-import { RadixRouter } from '../../../src/router/router';
+import { RadixRouterBuilder } from '../../../src/router/router';
 
 describe('RadixRouter :: validation and conflicts', () => {
   it('should throw when registering the same method and path twice', () => {
-    const router = new RadixRouter();
+    const router = new RadixRouterBuilder();
     router.add(HttpMethod.Get, '/users');
 
     expect(() => router.add(HttpMethod.Get, '/users')).toThrow('Route already exists for method at path: /users');
   });
 
   it('should reject a wildcard when a static child already exists', () => {
-    const router = new RadixRouter();
+    const router = new RadixRouterBuilder();
     router.add(HttpMethod.Get, '/files/static');
 
     expect(() => router.add(HttpMethod.Get, '/files/*')).toThrow(
@@ -21,7 +21,7 @@ describe('RadixRouter :: validation and conflicts', () => {
   });
 
   it('should reject a wildcard when a param child already exists', () => {
-    const router = new RadixRouter();
+    const router = new RadixRouterBuilder();
     router.add(HttpMethod.Get, '/users/:id');
 
     expect(() => router.add(HttpMethod.Get, '/users/*')).toThrow(
@@ -30,7 +30,7 @@ describe('RadixRouter :: validation and conflicts', () => {
   });
 
   it('should reject parameters with the same name but different regexes', () => {
-    const router = new RadixRouter();
+    const router = new RadixRouterBuilder();
     router.add(HttpMethod.Get, '/orders/:id{[0-9]+}');
 
     expect(() => router.add(HttpMethod.Get, '/orders/:id{[a-z]+}')).toThrow(
@@ -39,7 +39,7 @@ describe('RadixRouter :: validation and conflicts', () => {
   });
 
   it('should reject adding a parameter beneath an existing wildcard', () => {
-    const router = new RadixRouter();
+    const router = new RadixRouterBuilder();
     router.add(HttpMethod.Get, '/proxy/*rest');
 
     expect(() => router.add(HttpMethod.Get, '/proxy/:id')).toThrow(
@@ -48,14 +48,14 @@ describe('RadixRouter :: validation and conflicts', () => {
   });
 
   it('should reject registering multiple wildcard names at the same branch', () => {
-    const router = new RadixRouter();
+    const router = new RadixRouterBuilder();
     router.add(HttpMethod.Get, '/files/*rest');
 
     expect(() => router.add(HttpMethod.Get, '/files/*other')).toThrow("Conflict: wildcard 'rest' already exists at 'files'");
   });
 
   it('should reject mixing wildcard segments with multi-parameter routes', () => {
-    const router = new RadixRouter();
+    const router = new RadixRouterBuilder();
     router.add(HttpMethod.Get, '/files/*rest');
 
     expect(() => router.add(HttpMethod.Get, '/files/:rest+')).toThrow(
@@ -64,21 +64,21 @@ describe('RadixRouter :: validation and conflicts', () => {
   });
 
   it('should reject adding a wildcard after a multi-parameter route already exists', () => {
-    const router = new RadixRouter();
+    const router = new RadixRouterBuilder();
     router.add(HttpMethod.Get, '/files/:rest+');
 
     expect(() => router.add(HttpMethod.Get, '/files/*rest')).toThrow("Conflict: wildcard 'rest' already exists at 'files'");
   });
 
   it('should allow multiple methods to share the same wildcard path definition', () => {
-    const router = new RadixRouter();
+    const router = new RadixRouterBuilder();
     router.add(HttpMethod.Get, '/files/*rest');
 
     expect(() => router.add(HttpMethod.Post, '/files/*rest')).not.toThrow();
   });
 
   it('should reject duplicate parameter names within the same path', () => {
-    const router = new RadixRouter();
+    const router = new RadixRouterBuilder();
 
     expect(() => router.add(HttpMethod.Get, '/teams/:id/members/:id')).toThrow(
       "Duplicate parameter name ':id' detected in path: /teams/:id/members/:id",
@@ -86,7 +86,7 @@ describe('RadixRouter :: validation and conflicts', () => {
   });
 
   it('should reject adding a static segment beneath an existing wildcard', () => {
-    const router = new RadixRouter();
+    const router = new RadixRouterBuilder();
     router.add(HttpMethod.Get, '/proxy/*rest');
 
     expect(() => router.add(HttpMethod.Get, '/proxy/static')).toThrow(
@@ -95,19 +95,19 @@ describe('RadixRouter :: validation and conflicts', () => {
   });
 
   it('should require every parameter segment to declare a name', () => {
-    const router = new RadixRouter();
+    const router = new RadixRouterBuilder();
 
     expect(() => router.add(HttpMethod.Get, '/users/:')).toThrow("Parameter segment must have a name, eg ':id'");
   });
 
   it('should enforce closing braces on regex parameters', () => {
-    const router = new RadixRouter();
+    const router = new RadixRouterBuilder();
 
     expect(() => router.add(HttpMethod.Get, '/users/:id{[0-9]+')).toThrow("Parameter regex must close with '}'");
   });
 
   it('should require multi-segment params to be the last segment', () => {
-    const router = new RadixRouter();
+    const router = new RadixRouterBuilder();
 
     expect(() => router.add(HttpMethod.Get, '/files/:rest+/tail')).toThrow(
       "Multi-segment param ':name+' must be the last segment",
@@ -115,7 +115,7 @@ describe('RadixRouter :: validation and conflicts', () => {
   });
 
   it('should require wildcards to reside on the last segment', () => {
-    const router = new RadixRouter();
+    const router = new RadixRouterBuilder();
 
     expect(() => router.add(HttpMethod.Get, '/files/*/tail')).toThrow("Wildcard '*' must be the last segment");
   });
