@@ -6,6 +6,7 @@ import type { RouteKey } from '../types';
 import { hydrateParams } from './cache-helpers';
 import { CacheIndex } from './cache-index';
 import { NodeKind } from './enums';
+import { buildImmutableLayout, type ImmutableRouterLayout } from './immutable-layout';
 import type { RouterBuilder, RouterInstance } from './interfaces';
 import { DynamicMatcher } from './match-walker';
 import { RouterNode } from './node';
@@ -68,6 +69,7 @@ class RadixRouterCore {
   private hasDynamicRoutes = false;
   private sealed = false;
   private routeCount = 0;
+  private layout?: ImmutableRouterLayout;
   private metadata: RouterSnapshotMetadata = Object.freeze({
     totalRoutes: 0,
     hasDynamicRoutes: false,
@@ -184,11 +186,16 @@ class RadixRouterCore {
       return;
     }
     this.runBuildPipeline();
+    this.layout = buildImmutableLayout(this.root);
     this.sealed = true;
   }
 
   getMetadata(): RouterSnapshotMetadata {
     return this.metadata;
+  }
+
+  getLayoutSnapshot(): ImmutableRouterLayout | undefined {
+    return this.layout;
   }
 
   private tryStaticFastMatch(method: HttpMethod, path: string): StaticProbeResult {
@@ -975,6 +982,10 @@ export class RadixRouterInstance implements RouterInstance {
 
   getMetadata(): RouterSnapshotMetadata {
     return this.core.getMetadata();
+  }
+
+  getLayoutSnapshot(): ImmutableRouterLayout | undefined {
+    return this.core.getLayoutSnapshot();
   }
 }
 

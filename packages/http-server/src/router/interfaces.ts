@@ -3,11 +3,13 @@ import { ROUTER_SNAPSHOT_METADATA } from '@bunner/core';
 import type { HttpMethod } from '../enums';
 import type { RouteKey } from '../types';
 
+import type { ImmutableRouterLayout } from './immutable-layout';
 import type { RouterOptions, RouteMatch, RouterSnapshotMetadata } from './types';
 
 export interface RouterInstance {
   match(method: HttpMethod, path: string): RouteMatch | null;
   getMetadata(): RouterSnapshotMetadata;
+  getLayoutSnapshot(): ImmutableRouterLayout | undefined;
   [ROUTER_SNAPSHOT_METADATA]?: RouterSnapshotMetadata;
 }
 

@@ -38,6 +38,12 @@
 2. 런타임 경로 탐색기는 새 레이아웃을 순회하도록 리팩터링하고, 개발 모드에서는 `Object.freeze`로 보호.
 3. GC/성능 영향을 벤치마크(`packages/http-server/bench/router`)로 검증.
 
+#### 진행 현황 (2025-11-16)
+
+- [x] 라우터 트리를 `ImmutableRouterLayout` 스냅샷으로 직렬화하고 `build()` 시점에 고정 길이 배열+오프셋 구조를 생성.
+- [ ] 런타임 매칭기가 새 레이아웃을 직접 순회하도록 리팩터링.
+- [ ] 새 레이아웃 대비 GC/성능 영향 벤치마크 및 회귀 추적.
+
 ### 1.4 동적 라우트 플래그 재계산 (3.8.1)
 
 1. Builder가 전체 트리를 스캔하여 `hasDynamicRoutes`, `hasWildcardRoutes` 등 플래그를 계산하고 Instance에 읽기 전용으로 주입.
