@@ -69,24 +69,13 @@ export class DynamicMatcher {
     }
 
     if (node.paramChildren.length) {
+      const decoded = this.getDecodedSegment(idx);
       for (const child of node.paramChildren) {
-        if (child.pattern) {
+        if (child.pattern && (!child.patternTester || !child.patternTester(decoded))) {
           continue;
         }
         const prev = this.paramCount;
-        this.pushParam(child.segment, this.getDecodedSegment(idx));
-        const key = this.walk(child, idx + 1);
-        if (key !== null) {
-          return key;
-        }
-        this.paramCount = prev;
-      }
-      for (const child of node.paramChildren) {
-        if (!child.pattern || !child.patternTester!(segment)) {
-          continue;
-        }
-        const prev = this.paramCount;
-        this.pushParam(child.segment, this.getDecodedSegment(idx));
+        this.pushParam(child.segment, decoded);
         const key = this.walk(child, idx + 1);
         if (key !== null) {
           return key;

@@ -195,7 +195,16 @@ export class RadixRouter implements Router {
     const preparedPath = prepared ?? normalizeAndSplit(path, this.options);
     const { segments } = preparedPath;
     let firstKey: RouteKey | null = null;
-    const addSegments = (node: RouterNode, idx: number): void => {
+    const registerParamName = (name: string, active: Set<string>): (() => void) => {
+      if (active.has(name)) {
+        throw new Error(`Duplicate parameter name ':${name}' detected in path: ${path}`);
+      }
+      active.add(name);
+      return () => {
+        active.delete(name);
+      };
+    };
+    const addSegments = (node: RouterNode, idx: number, activeParams: Set<string>): void => {
       if (idx === segments.length) {
         const existing = node.methods.byMethod.get(method);
         if (existing !== undefined) {
@@ -224,7 +233,12 @@ export class RadixRouter implements Router {
         }
         this.hasWildcardRoutes = true;
         this.hasDynamicRoutes = true;
-        addSegments(node.wildcardChild, idx + 1);
+        const release = registerParamName(name, activeParams);
+        try {
+          addSegments(node.wildcardChild, idx + 1, activeParams);
+        } finally {
+          release();
+        }
         return;
       }
       if (seg.charCodeAt(0) === 58 /* ':' */) {
@@ -256,8 +270,9 @@ export class RadixRouter implements Router {
           throw new Error("Parameter segment must have a name, eg ':id'");
         }
         if (optional) {
-          addSegments(node, idx + 1);
+          addSegments(node, idx + 1, activeParams);
         }
+        const releaseName = registerParamName(name, activeParams);
         if (multi) {
           if (idx !== segments.length - 1) {
             throw new Error("Multi-segment param ':name+' must be the last segment");
@@ -267,7 +282,11 @@ export class RadixRouter implements Router {
           }
           this.hasWildcardRoutes = true;
           this.hasDynamicRoutes = true;
-          addSegments(node.wildcardChild, idx + 1);
+          try {
+            addSegments(node.wildcardChild, idx + 1, activeParams);
+          } finally {
+            releaseName();
+          }
           return;
         }
         let child: RouterNode | undefined;
@@ -298,8 +317,13 @@ export class RadixRouter implements Router {
             child.patternTester = buildPatternTester(patternSrc, child.pattern);
           }
           node.paramChildren.push(child);
+          this.sortParamChildren(node);
         }
-        addSegments(child, idx + 1);
+        try {
+          addSegments(child, idx + 1, activeParams);
+        } finally {
+          releaseName();
+        }
         return;
       }
       let child = node.staticChildren.get(seg);
@@ -317,18 +341,18 @@ export class RadixRouter implements Router {
             splitStaticChain(child, matched);
           }
           if (matched > 1) {
-            addSegments(child, idx + matched);
+            addSegments(child, idx + matched, activeParams);
             return;
           }
         }
-        addSegments(child, idx + 1);
+        addSegments(child, idx + 1, activeParams);
         return;
       }
       child = new RouterNode(NodeKind.Static, seg);
       node.staticChildren.set(seg, child);
-      addSegments(child, idx + 1);
+      addSegments(child, idx + 1, activeParams);
     };
-    addSegments(this.root, 0);
+    addSegments(this.root, 0, new Set());
     return firstKey!;
   }
 
@@ -341,6 +365,27 @@ export class RadixRouter implements Router {
       return undefined;
     }
     return { key, params: Object.create(null) };
+  }
+
+  private sortParamChildren(node: RouterNode): void {
+    if (node.paramChildren.length < 2) {
+      return;
+    }
+    node.paramChildren.sort((a, b) => {
+      const weight = (child: RouterNode) => (child.pattern ? 0 : 1);
+      const diff = weight(a) - weight(b);
+      if (diff !== 0) {
+        return diff;
+      }
+      if (a.pattern && b.pattern) {
+        const aLen = a.patternSource?.length ?? 0;
+        const bLen = b.patternSource?.length ?? 0;
+        if (aLen !== bLen) {
+          return bLen - aLen;
+        }
+      }
+      return a.segment.localeCompare(b.segment);
+    });
   }
 
   private ensureCaseNormalized(path: string): string {

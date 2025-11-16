@@ -75,4 +75,29 @@ describe('RadixRouter :: params and wildcards', () => {
       expect(router.match(HttpMethod.Get, '/any/path')?.params['*']).toBe('any/path');
     });
   });
+
+  describe('matching priority and decoding', () => {
+    it('should prioritize regex-constrained params over generic ones regardless of registration order', () => {
+      const router = new RadixRouter();
+      const slugKey = router.add(HttpMethod.Get, '/articles/:slug') as RouteKey;
+      const numericKey = router.add(HttpMethod.Get, '/articles/:id{[0-9]+}') as RouteKey;
+
+      expect(router.match(HttpMethod.Get, '/articles/42')?.key).toBe(numericKey);
+      expect(router.match(HttpMethod.Get, '/articles/hello')?.key).toBe(slugKey);
+    });
+
+    it('should evaluate regex constraints against decoded parameter values when decoding is enabled', () => {
+      const router = new RadixRouter();
+      router.add(HttpMethod.Get, '/files/:name{[^\\u002F]+}');
+
+      expect(router.match(HttpMethod.Get, '/files/foo%2Fbar')).toBeNull();
+    });
+
+    it('should allow encoded values to bypass regex checks when decoding is disabled', () => {
+      const router = new RadixRouter({ decodeParams: false });
+      const key = router.add(HttpMethod.Get, '/files/:name{[^\\u002F]+}') as RouteKey;
+
+      expect(router.match(HttpMethod.Get, '/files/foo%2Fbar')?.key).toBe(key);
+    });
+  });
 });

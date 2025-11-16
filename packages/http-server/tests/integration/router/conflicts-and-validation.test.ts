@@ -47,6 +47,14 @@ describe('RadixRouter :: validation and conflicts', () => {
     );
   });
 
+  it('should reject duplicate parameter names within the same path', () => {
+    const router = new RadixRouter();
+
+    expect(() => router.add(HttpMethod.Get, '/teams/:id/members/:id')).toThrow(
+      "Duplicate parameter name ':id' detected in path: /teams/:id/members/:id",
+    );
+  });
+
   it('should reject adding a static segment beneath an existing wildcard', () => {
     const router = new RadixRouter();
     router.add(HttpMethod.Get, '/proxy/*rest');
