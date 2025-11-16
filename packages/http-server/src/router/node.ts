@@ -25,6 +25,8 @@ export class RouterNode {
   patternTester?: (value: string) => boolean;
   // For Static nodes: optional precomputed parts when compressed (e.g., 'a/b/c' -> ['a','b','c'])
   segmentParts?: string[];
+  // For Wildcard nodes: remember whether they originated from '*' or ':name+'
+  wildcardOrigin?: 'star' | 'multi';
 
   constructor(kind: NodeKind, segment: string) {
     this.kind = kind;

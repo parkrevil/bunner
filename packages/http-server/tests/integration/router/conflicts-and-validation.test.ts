@@ -47,6 +47,36 @@ describe('RadixRouter :: validation and conflicts', () => {
     );
   });
 
+  it('should reject registering multiple wildcard names at the same branch', () => {
+    const router = new RadixRouter();
+    router.add(HttpMethod.Get, '/files/*rest');
+
+    expect(() => router.add(HttpMethod.Get, '/files/*other')).toThrow("Conflict: wildcard 'rest' already exists at 'files'");
+  });
+
+  it('should reject mixing wildcard segments with multi-parameter routes', () => {
+    const router = new RadixRouter();
+    router.add(HttpMethod.Get, '/files/*rest');
+
+    expect(() => router.add(HttpMethod.Get, '/files/:rest+')).toThrow(
+      "Conflict: multi-parameter ':rest+' cannot reuse wildcard 'rest' at 'files'",
+    );
+  });
+
+  it('should reject adding a wildcard after a multi-parameter route already exists', () => {
+    const router = new RadixRouter();
+    router.add(HttpMethod.Get, '/files/:rest+');
+
+    expect(() => router.add(HttpMethod.Get, '/files/*rest')).toThrow("Conflict: wildcard 'rest' already exists at 'files'");
+  });
+
+  it('should allow multiple methods to share the same wildcard path definition', () => {
+    const router = new RadixRouter();
+    router.add(HttpMethod.Get, '/files/*rest');
+
+    expect(() => router.add(HttpMethod.Post, '/files/*rest')).not.toThrow();
+  });
+
   it('should reject duplicate parameter names within the same path', () => {
     const router = new RadixRouter();
 

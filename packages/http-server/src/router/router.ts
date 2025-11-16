@@ -195,6 +195,7 @@ export class RadixRouter implements Router {
     const preparedPath = prepared ?? normalizeAndSplit(path, this.options);
     const { segments } = preparedPath;
     let firstKey: RouteKey | null = null;
+    const describeContext = (idx: number): string => segments.slice(0, idx).join('/');
     const registerParamName = (name: string, active: Set<string>): (() => void) => {
       if (active.has(name)) {
         throw new Error(`Duplicate parameter name ':${name}' detected in path: ${path}`);
@@ -222,14 +223,20 @@ export class RadixRouter implements Router {
       if (seg.charCodeAt(0) === 42 /* '*' */) {
         // Conflict: wildcard cannot coexist with other children (would shadow them)
         if (node.staticChildren.size || node.paramChildren.length) {
-          throw new Error(`Conflict: adding wildcard '*' at '${segments.slice(0, idx).join('/')}' would shadow existing routes`);
+          throw new Error(`Conflict: adding wildcard '*' at '${describeContext(idx)}' would shadow existing routes`);
         }
         if (idx !== segments.length - 1) {
           throw new Error("Wildcard '*' must be the last segment");
         }
         const name = seg.length > 1 ? seg.slice(1) : '*';
-        if (!node.wildcardChild) {
+        if (node.wildcardChild) {
+          const existing = node.wildcardChild;
+          if (existing.wildcardOrigin !== 'star' || existing.segment !== name) {
+            throw new Error(`Conflict: wildcard '${existing.segment}' already exists at '${describeContext(idx)}'`);
+          }
+        } else {
           node.wildcardChild = new RouterNode(NodeKind.Wildcard, name);
+          node.wildcardChild.wildcardOrigin = 'star';
         }
         this.hasWildcardRoutes = true;
         this.hasDynamicRoutes = true;
@@ -279,6 +286,11 @@ export class RadixRouter implements Router {
           }
           if (!node.wildcardChild) {
             node.wildcardChild = new RouterNode(NodeKind.Wildcard, name || '*');
+            node.wildcardChild.wildcardOrigin = 'multi';
+          } else if (node.wildcardChild.wildcardOrigin !== 'multi' || node.wildcardChild.segment !== name) {
+            throw new Error(
+              `Conflict: multi-parameter ':${name}+' cannot reuse wildcard '${node.wildcardChild.segment}' at '${describeContext(idx)}'`,
+            );
           }
           this.hasWildcardRoutes = true;
           this.hasDynamicRoutes = true;
@@ -300,15 +312,11 @@ export class RadixRouter implements Router {
           // Conflict: same name with different regex already present
           const dup = node.paramChildren.find(c => c.segment === name && (c.pattern?.source ?? '') !== (patternSrc ?? ''));
           if (dup) {
-            throw new Error(
-              `Conflict: parameter ':${name}' with different regex already exists at '${segments.slice(0, idx).join('/')}'`,
-            );
+            throw new Error(`Conflict: parameter ':${name}' with different regex already exists at '${describeContext(idx)}'`);
           }
           // Conflict: attempting to add param beneath a wildcard sibling
           if (node.wildcardChild) {
-            throw new Error(
-              `Conflict: adding parameter ':${name}' under existing wildcard at '${segments.slice(0, idx).join('/')}'`,
-            );
+            throw new Error(`Conflict: adding parameter ':${name}' under existing wildcard at '${describeContext(idx)}'`);
           }
           child = new RouterNode(NodeKind.Param, name);
           if (patternSrc) {
@@ -329,9 +337,7 @@ export class RadixRouter implements Router {
       let child = node.staticChildren.get(seg);
       if (!child && node.wildcardChild) {
         // Conflict: static segment would be shadowed by existing wildcard
-        throw new Error(
-          `Conflict: adding static segment '${seg}' under existing wildcard at '${segments.slice(0, idx).join('/')}'`,
-        );
+        throw new Error(`Conflict: adding static segment '${seg}' under existing wildcard at '${describeContext(idx)}'`);
       }
       if (child) {
         const parts = child.segmentParts;
