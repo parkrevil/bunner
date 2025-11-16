@@ -23,12 +23,17 @@ interface MatchFrame {
   decoded?: string;
 }
 
+interface DynamicMatcherHooks {
+  onParamMatch?: (parent: RouterNode, child: RouterNode) => void;
+}
+
 export class DynamicMatcher {
   private readonly method: HttpMethod;
   private readonly segments: string[];
   private readonly decodeParams: boolean;
   private readonly hasWildcardRoutes: boolean;
   private readonly captureSnapshot: boolean;
+  private readonly onParamMatch?: (parent: RouterNode, child: RouterNode) => void;
 
   private paramNames: string[] = [];
   private paramValues: string[] = [];
@@ -39,12 +44,14 @@ export class DynamicMatcher {
   private suffixOffsets?: number[];
   private suffixSource?: string;
 
-  constructor(config: DynamicMatcherConfig) {
+  constructor(config: DynamicMatcherConfig, hooks?: DynamicMatcherHooks) {
     this.method = config.method;
     this.segments = config.segments;
     this.decodeParams = config.decodeParams;
     this.hasWildcardRoutes = config.hasWildcardRoutes;
     this.captureSnapshot = config.captureSnapshot;
+    this.suffixSource = config.suffixSource;
+    this.onParamMatch = hooks?.onParamMatch;
   }
 
   match(root: RouterNode): DynamicMatchResult | null {
@@ -131,6 +138,7 @@ export class DynamicMatcher {
           if (child.pattern && (!child.patternTester || !child.patternTester(decoded))) {
             continue;
           }
+          this.onParamMatch?.(frame.node, child);
           this.pushParam(child.segment, decoded);
           stack.push({
             node: child,
@@ -234,7 +242,9 @@ export class DynamicMatcher {
         offset++;
       }
     }
-    this.suffixSource = this.segments.join('/');
+    if (!this.suffixSource) {
+      this.suffixSource = this.segments.join('/');
+    }
   }
 
   private buildParams(): { params: Record<string, string>; snapshot?: Array<[string, string]> } {

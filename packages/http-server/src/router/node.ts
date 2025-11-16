@@ -23,6 +23,7 @@ export class RouterNode {
   pattern?: RegExp;
   patternSource?: string;
   patternTester?: (value: string) => boolean;
+  paramHitCount?: number;
   // For Static nodes: optional precomputed parts when compressed (e.g., 'a/b/c' -> ['a','b','c'])
   segmentParts?: string[];
   // For Wildcard nodes: remember whether they originated from '*' or ':name+'

@@ -2,9 +2,46 @@ const DIGIT_PATTERNS = new Set(['\\d+', '\\d{1,}', '[0-9]+', '[0-9]{1,}']);
 const ALPHA_PATTERNS = new Set(['[a-zA-Z]+', '[A-Za-z]+']);
 const ALPHANUM_PATTERNS = new Set(['[A-Za-z0-9_\\-]+', '[A-Za-z0-9_-]+', '\\w+', '\\w{1,}']);
 
-export function buildPatternTester(source: string | undefined, compiled: RegExp): (value: string) => boolean {
+export interface PatternTesterOptions {
+  maxExecutionMs?: number;
+  onTimeout?: (pattern: string, durationMs: number) => void;
+}
+
+const now: () => number = (() => {
+  if (typeof globalThis !== 'undefined' && globalThis.performance && typeof globalThis.performance.now === 'function') {
+    return () => globalThis.performance.now();
+  }
+  return () => {
+    const [sec, nano] = process.hrtime();
+    return sec * 1000 + nano / 1e6;
+  };
+})();
+
+export function buildPatternTester(
+  source: string | undefined,
+  compiled: RegExp,
+  options?: PatternTesterOptions,
+): (value: string) => boolean {
+  const raw = source ?? '<anonymous>';
+  const wrap = (tester: (value: string) => boolean): ((value: string) => boolean) => {
+    if (!options?.maxExecutionMs || options.maxExecutionMs <= 0) {
+      return tester;
+    }
+    const limit = options.maxExecutionMs;
+    return value => {
+      const start = now();
+      const result = tester(value);
+      const duration = now() - start;
+      if (duration > limit) {
+        options.onTimeout?.(raw, duration);
+        throw new Error(`Route parameter regex '${raw}' exceeded ${limit}ms (took ${duration.toFixed(3)}ms)`);
+      }
+      return result;
+    };
+  };
+
   if (!source) {
-    return value => compiled.test(value);
+    return wrap(value => compiled.test(value));
   }
   if (DIGIT_PATTERNS.has(source)) {
     return isAllDigits;
@@ -18,7 +55,7 @@ export function buildPatternTester(source: string | undefined, compiled: RegExp)
   if (source === '[^/]+') {
     return value => value.length > 0 && value.indexOf('/') === -1;
   }
-  return value => compiled.test(value);
+  return wrap(value => compiled.test(value));
 }
 
 function isAllDigits(value: string): boolean {

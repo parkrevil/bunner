@@ -2,13 +2,15 @@ import { HttpMethod } from '../enums';
 import type { RouteKey } from '../types';
 
 import { hydrateParams } from './cache-helpers';
+import { CacheIndex } from './cache-index';
 import { NodeKind } from './enums';
 import type { Router } from './interfaces';
 import { DynamicMatcher } from './match-walker';
 import { RouterNode } from './node';
-import { buildPatternTester } from './pattern-tester';
+import { buildPatternTester, type PatternTesterOptions } from './pattern-tester';
+import { assessRegexSafety } from './regex-guard';
 import { matchStaticParts, splitStaticChain } from './tree-utils';
-import type { DynamicMatchResult, RouterOptions, RouteMatch, StaticProbeResult } from './types';
+import type { RegexSafetyOptions, DynamicMatchResult, RouterOptions, RouteMatch, StaticProbeResult } from './types';
 import { normalizeAndSplit, type NormalizedPathSegments } from './utils';
 
 type CacheEntry = { key: RouteKey; params?: Array<[string, string]> };
@@ -17,15 +19,38 @@ type CacheInvalidationScope = { kind: 'all' } | { kind: 'exact'; pathKey: string
 
 let GLOBAL_ROUTE_KEY_SEQ = 1 as RouteKey;
 
+type NormalizedRegexSafetyOptions = {
+  mode: 'error' | 'warn';
+  maxLength: number;
+  forbidBacktrackingTokens: boolean;
+  forbidBackreferences: boolean;
+  maxExecutionMs?: number;
+  validator?: (pattern: string) => void;
+};
+
+type NormalizedRouterOptions = Omit<Required<RouterOptions>, 'regexSafety'> & { regexSafety: NormalizedRegexSafetyOptions };
+
+const DEFAULT_REGEX_SAFETY: NormalizedRegexSafetyOptions = {
+  mode: 'error',
+  maxLength: 256,
+  forbidBacktrackingTokens: true,
+  forbidBackreferences: true,
+  maxExecutionMs: undefined,
+};
+
+const PARAM_RESORT_THRESHOLD = 16;
+
 export class RadixRouter implements Router {
   private root: RouterNode;
-  private options: Required<RouterOptions>;
+  private options: NormalizedRouterOptions;
   private cache?: Map<string, CacheEntry | null>;
-  private cacheEntryIndex?: Map<string, Set<string>>;
+  private cacheIndex?: CacheIndex;
   private cacheKeyToPath?: Map<string, string>;
   private staticFast: Map<string, Map<HttpMethod, RouteKey>> = new Map();
   private needsCompression = false;
   private pendingCompression: Set<RouterNode> = new Set();
+  private patternTesterOptions?: PatternTesterOptions;
+  private readonly paramUsageHook: (parent: RouterNode, child: RouterNode) => void;
   private cacheKeyPrefixes: Record<number, string> = Object.create(null);
   private lastCacheKeyMethod?: HttpMethod;
   private lastCacheKeyPath?: string;
@@ -34,6 +59,7 @@ export class RadixRouter implements Router {
   private hasDynamicRoutes = false;
 
   constructor(options?: RouterOptions) {
+    const regexSafety = this.normalizeRegexSafety(options?.regexSafety);
     this.options = {
       ignoreTrailingSlash: options?.ignoreTrailingSlash ?? true,
       collapseSlashes: options?.collapseSlashes ?? true,
@@ -42,11 +68,14 @@ export class RadixRouter implements Router {
       blockTraversal: options?.blockTraversal ?? true,
       enableCache: options?.enableCache ?? false,
       cacheSize: options?.cacheSize ?? 1024,
+      regexSafety,
     };
+    this.paramUsageHook = (parent, child) => this.noteParamMatch(parent, child);
     this.root = new RouterNode(NodeKind.Static, '');
+    this.patternTesterOptions = this.buildPatternTesterOptions();
     if (this.options.enableCache) {
       this.cache = new Map();
-      this.cacheEntryIndex = new Map();
+      this.cacheIndex = new CacheIndex();
       this.cacheKeyToPath = new Map();
     }
   }
@@ -116,7 +145,8 @@ export class RadixRouter implements Router {
     }
 
     const captureSnapshot = Boolean(cacheKey && this.cache);
-    const dynamicMatch = this.findDynamicMatch(method, prepared.segments, captureSnapshot);
+    const suffixSource = normalized.length > 1 ? normalized.slice(1) : '';
+    const dynamicMatch = this.findDynamicMatch(method, prepared.segments, captureSnapshot, suffixSource);
     if (!dynamicMatch) {
       this.cacheNullMiss(method, normalized, cachePath, cacheKey);
       return null;
@@ -156,14 +186,23 @@ export class RadixRouter implements Router {
     return { kind: 'fallback' };
   }
 
-  private findDynamicMatch(method: HttpMethod, segments: string[], captureSnapshot: boolean): DynamicMatchResult | null {
-    const matcher = new DynamicMatcher({
-      method,
-      segments,
-      decodeParams: this.options.decodeParams,
-      hasWildcardRoutes: this.hasWildcardRoutes,
-      captureSnapshot,
-    });
+  private findDynamicMatch(
+    method: HttpMethod,
+    segments: string[],
+    captureSnapshot: boolean,
+    suffixSource: string,
+  ): DynamicMatchResult | null {
+    const matcher = new DynamicMatcher(
+      {
+        method,
+        segments,
+        decodeParams: this.options.decodeParams,
+        hasWildcardRoutes: this.hasWildcardRoutes,
+        captureSnapshot,
+        suffixSource,
+      },
+      { onParamMatch: this.paramUsageHook },
+    );
     return matcher.match(this.root);
   }
 
@@ -184,7 +223,7 @@ export class RadixRouter implements Router {
   }
 
   private invalidateCacheForRoute(method: HttpMethod, prepared: NormalizedPathSegments): void {
-    if (!this.cache || !this.cacheEntryIndex || !this.cacheEntryIndex.size) {
+    if (!this.cache || !this.cacheIndex || !this.cacheKeyToPath || !this.cacheKeyToPath.size) {
       return;
     }
     const scope = this.computeInvalidationScope(prepared);
@@ -220,7 +259,7 @@ export class RadixRouter implements Router {
   }
 
   private applyCacheInvalidation(scope: CacheInvalidationScope, method: HttpMethod): void {
-    if (!this.cache || !this.cacheEntryIndex) {
+    if (!this.cache || !this.cacheIndex) {
       return;
     }
     if (scope.kind === 'all') {
@@ -229,45 +268,13 @@ export class RadixRouter implements Router {
     }
     const targets: string[] = [];
     if (scope.kind === 'exact') {
-      this.collectKeysForPath(scope.pathKey, method, targets);
+      this.cacheIndex.collectExact(scope.pathKey, this.getCacheMethodPrefix(method), targets);
     } else {
-      for (const [pathKey, cacheKeys] of this.cacheEntryIndex.entries()) {
-        if (this.pathMatchesPrefix(pathKey, scope.pathKey)) {
-          this.collectKeysFromBucket(cacheKeys, method, targets);
-        }
-      }
+      this.cacheIndex.collectPrefix(scope.pathKey, this.getCacheMethodPrefix(method), targets);
     }
     for (const key of targets) {
       this.deleteCacheEntry(key);
     }
-  }
-
-  private collectKeysForPath(pathKey: string, method: HttpMethod, acc: string[]): void {
-    if (!this.cacheEntryIndex) {
-      return;
-    }
-    const bucket = this.cacheEntryIndex.get(pathKey);
-    if (!bucket) {
-      return;
-    }
-    this.collectKeysFromBucket(bucket, method, acc);
-  }
-
-  private collectKeysFromBucket(bucket: Set<string>, method: HttpMethod, acc: string[]): void {
-    const prefix = this.getCacheMethodPrefix(method);
-    for (const key of bucket) {
-      if (key.startsWith(prefix)) {
-        acc.push(key);
-      }
-    }
-  }
-
-  private pathMatchesPrefix(candidate: string, prefix: string): boolean {
-    if (candidate === prefix) {
-      return true;
-    }
-    const normalizedPrefix = prefix.endsWith('/') ? prefix : `${prefix}/`;
-    return candidate.startsWith(normalizedPrefix);
   }
 
   private pathContainsDynamicTokens(path: string): boolean {
@@ -278,9 +285,7 @@ export class RadixRouter implements Router {
     if (this.cache) {
       this.cache.clear();
     }
-    if (this.cacheEntryIndex) {
-      this.cacheEntryIndex.clear();
-    }
+    this.cacheIndex?.clear();
     if (this.cacheKeyToPath) {
       this.cacheKeyToPath.clear();
     }
@@ -422,9 +427,10 @@ export class RadixRouter implements Router {
           }
           child = new RouterNode(NodeKind.Param, name);
           if (patternSrc) {
+            this.ensureRegexSafe(patternSrc);
             child.pattern = new RegExp(`^(?:${patternSrc})$`);
             child.patternSource = patternSrc;
-            child.patternTester = buildPatternTester(patternSrc, child.pattern);
+            child.patternTester = buildPatternTester(patternSrc, child.pattern, this.patternTesterOptions);
           }
           node.paramChildren.push(child);
           this.sortParamChildren(node);
@@ -483,6 +489,10 @@ export class RadixRouter implements Router {
       return;
     }
     node.paramChildren.sort((a, b) => {
+      const hotDiff = (b.paramHitCount ?? 0) - (a.paramHitCount ?? 0);
+      if (hotDiff !== 0) {
+        return hotDiff;
+      }
       const weight = (child: RouterNode) => (child.pattern ? 0 : 1);
       const diff = weight(a) - weight(b);
       if (diff !== 0) {
@@ -599,6 +609,69 @@ export class RadixRouter implements Router {
     }
   }
 
+  private normalizeRegexSafety(input?: RegexSafetyOptions): NormalizedRegexSafetyOptions {
+    return {
+      mode: input?.mode ?? DEFAULT_REGEX_SAFETY.mode,
+      maxLength: input?.maxLength ?? DEFAULT_REGEX_SAFETY.maxLength,
+      forbidBacktrackingTokens: input?.forbidBacktrackingTokens ?? DEFAULT_REGEX_SAFETY.forbidBacktrackingTokens,
+      forbidBackreferences: input?.forbidBackreferences ?? DEFAULT_REGEX_SAFETY.forbidBackreferences,
+      maxExecutionMs: input?.maxExecutionMs ?? DEFAULT_REGEX_SAFETY.maxExecutionMs,
+      validator: input?.validator,
+    };
+  }
+
+  private buildPatternTesterOptions(): PatternTesterOptions | undefined {
+    const limit = this.options.regexSafety.maxExecutionMs;
+    if (!limit || limit <= 0) {
+      return undefined;
+    }
+    return {
+      maxExecutionMs: limit,
+      onTimeout: (pattern, duration) => {
+        const base = `Route parameter regex '${pattern}' exceeded ${limit}ms (took ${duration.toFixed(3)}ms)`;
+        if (this.options.regexSafety.mode === 'warn') {
+          console.warn(`[bunner/router] ${base}`);
+          return;
+        }
+        throw new Error(base);
+      },
+    };
+  }
+
+  private ensureRegexSafe(patternSrc: string): void {
+    const safety = this.options.regexSafety;
+    const result = assessRegexSafety(patternSrc, {
+      maxLength: safety.maxLength,
+      forbidBacktrackingTokens: safety.forbidBacktrackingTokens,
+      forbidBackreferences: safety.forbidBackreferences,
+    });
+    if (!result.safe) {
+      const reason = result.reason ? ` (${result.reason})` : '';
+      const message = `Unsafe route regex '${patternSrc}'${reason}`;
+      if (safety.mode === 'warn') {
+        console.warn(`[bunner/router] ${message}`);
+      } else {
+        throw new Error(message);
+      }
+    }
+    safety.validator?.(patternSrc);
+  }
+
+  private noteParamMatch(parent: RouterNode, child: RouterNode): void {
+    if (parent.paramChildren.length < 2) {
+      return;
+    }
+    const hits = (child.paramHitCount ?? 0) + 1;
+    child.paramHitCount = hits;
+    if (hits < PARAM_RESORT_THRESHOLD) {
+      return;
+    }
+    if ((hits & (hits - 1)) !== 0) {
+      return;
+    }
+    this.sortParamChildren(parent);
+  }
+
   private collapseStaticNode(node: RouterNode): void {
     if (node.kind !== NodeKind.Static) {
       return;
@@ -695,31 +768,20 @@ export class RadixRouter implements Router {
   }
 
   private indexCacheKey(cachePath: string, cacheKey: string): void {
-    if (!this.cacheEntryIndex) {
+    if (!this.cacheIndex) {
       return;
     }
-    let bucket = this.cacheEntryIndex.get(cachePath);
-    if (!bucket) {
-      bucket = new Set();
-      this.cacheEntryIndex.set(cachePath, bucket);
-    }
-    bucket.add(cacheKey);
+    this.cacheIndex.add(cachePath, cacheKey);
     this.cacheKeyToPath?.set(cacheKey, cachePath);
   }
 
   private unlinkCacheKey(cacheKey: string): void {
     const path = this.cacheKeyToPath?.get(cacheKey);
-    if (!path || !this.cacheEntryIndex) {
+    if (!path) {
       this.cacheKeyToPath?.delete(cacheKey);
       return;
     }
-    const bucket = this.cacheEntryIndex.get(path);
-    if (bucket) {
-      bucket.delete(cacheKey);
-      if (!bucket.size) {
-        this.cacheEntryIndex.delete(path);
-      }
-    }
+    this.cacheIndex?.remove(path, cacheKey);
     this.cacheKeyToPath?.delete(cacheKey);
   }
 
