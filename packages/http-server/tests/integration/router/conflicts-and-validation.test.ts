@@ -114,6 +114,34 @@ describe('RadixRouter :: validation and conflicts', () => {
     );
   });
 
+  it('should require zero-or-more params to be the last segment', () => {
+    const router = new RadixRouterBuilder();
+
+    expect(() => router.add(HttpMethod.Get, '/files/:rest*/tail')).toThrow(
+      "Zero-or-more param ':name*' must be the last segment",
+    );
+  });
+
+  it('should reject combining zero-or-more params with the optional suffix', () => {
+    const router = new RadixRouterBuilder();
+
+    expect(() => router.add(HttpMethod.Get, '/files/:rest*?')).toThrow(/already allows empty matches/);
+  });
+
+  it('should enforce global parameter name uniqueness when strictParamNames is enabled', () => {
+    const builder = new RadixRouterBuilder({ strictParamNames: true });
+    builder.add(HttpMethod.Get, '/accounts/:id');
+
+    expect(() => builder.add(HttpMethod.Get, '/projects/:id')).toThrow(/already registered/);
+  });
+
+  it('should allow identical paths to reuse names across methods in strict mode', () => {
+    const builder = new RadixRouterBuilder({ strictParamNames: true });
+    builder.add(HttpMethod.Get, '/accounts/:id');
+
+    expect(() => builder.add(HttpMethod.Post, '/accounts/:id')).not.toThrow();
+  });
+
   it('should require wildcards to reside on the last segment', () => {
     const router = new RadixRouterBuilder();
 
@@ -154,6 +182,18 @@ describe('RadixRouter :: validation and conflicts', () => {
         }),
       ).toThrow(/exceeded/i);
     });
+  });
+
+  it('should reject nested quantifiers that may cause catastrophic backtracking', () => {
+    const builder = new RadixRouterBuilder();
+
+    expect(() => builder.add(HttpMethod.Get, '/bad/:slug{(a+)+}')).toThrow(/Nested unlimited quantifiers/i);
+  });
+
+  it('should honor the regex anchor policy when set to error', () => {
+    const builder = new RadixRouterBuilder({ regexAnchorPolicy: 'error' });
+
+    expect(() => builder.add(HttpMethod.Get, '/strict/:id{^\\d+$}')).toThrow(/anchors/i);
   });
 });
 

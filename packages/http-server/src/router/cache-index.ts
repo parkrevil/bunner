@@ -9,7 +9,16 @@ const splitPathKey = (key: string): string[] => {
   if (!key || key === '/') {
     return [];
   }
-  return key.split('/');
+  const rawSegments = key.split('/');
+  const result: string[] = [];
+  for (let i = 0; i < rawSegments.length; i++) {
+    const segment = rawSegments[i]!;
+    if (!segment.length) {
+      continue;
+    }
+    result.push(segment);
+  }
+  return result;
 };
 
 export class CacheIndex {
@@ -44,7 +53,10 @@ export class CacheIndex {
   }
 
   remove(path: string, cacheKey: string): void {
-    this.removeRecursive(this.root, splitPathKey(path), 0, cacheKey);
+    const isTreeEmpty = this.removeRecursive(this.root, splitPathKey(path), 0, cacheKey);
+    if (isTreeEmpty) {
+      this.root = createNode();
+    }
   }
 
   clear(): void {
@@ -99,5 +111,18 @@ export class CacheIndex {
     }
     const noKeys = !node.keys;
     return noKeys && node.children.size === 0;
+  }
+
+  /** @internal - exposed for tests to assert node cleanup */
+  debugStats(): { nodeCount: number } {
+    return { nodeCount: this.countNodes(this.root) };
+  }
+
+  private countNodes(node: CacheIndexNode): number {
+    let total = 1;
+    for (const [, child] of node.children) {
+      total += this.countNodes(child);
+    }
+    return total;
   }
 }

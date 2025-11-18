@@ -7,14 +7,24 @@ export type PatternTesterFn = (value: string) => boolean;
 
 export type EncodedSlashBehavior = 'decode' | 'preserve' | 'reject';
 
+export type OptionalParamBehavior = 'omit' | 'setUndefined' | 'setEmptyString';
+
 export interface NormalizedPathSegments {
   normalized: string;
   segments: string[];
 }
 
+export type RouteParams = Record<string, string | undefined>;
+
 export interface RouteMatch {
   key: RouteKey;
-  params: Record<string, string>;
+  params: RouteParams;
+  meta?: RouteMatchMeta;
+}
+
+export interface RouteMatchMeta {
+  readonly source?: 'static-fast' | 'cache' | 'dynamic' | 'auto-options';
+  readonly allow?: readonly HttpMethod[];
 }
 
 export type StaticProbeResult =
@@ -28,7 +38,7 @@ export interface DynamicMatcherConfig {
   decodeParams: boolean;
   hasWildcardRoutes: boolean;
   captureSnapshot: boolean;
-  suffixSource?: string;
+  suffixPlan?: SuffixPlan;
   layout: ImmutableRouterLayout;
   patternTesters: ReadonlyArray<PatternTesterFn | undefined>;
   paramOrders?: ReadonlyArray<Uint16Array | null>;
@@ -42,8 +52,8 @@ export interface MatchObserverHooks {
 
 export interface DynamicMatchResult {
   key: RouteKey;
-  params: Record<string, string>;
-  snapshot?: Array<[string, string]>;
+  params: RouteParams;
+  snapshot?: Array<[string, string | undefined]>;
 }
 
 export interface RouterOptions {
@@ -65,8 +75,24 @@ export interface RouterOptions {
   enableCache?: boolean;
   /** Max entries for match LRU cache (default: 1024) */
   cacheSize?: number;
+  /** Automatically fall back to GET routes when HEAD is requested (default: true) */
+  headFallbackToGet?: boolean;
+  /** Synthesize OPTIONS responses based on registered methods (default: true) */
+  autoOptions?: boolean;
+  /** Enforce globally unique parameter names when true */
+  strictParamNames?: boolean;
+  /** Control how optional parameters behave when missing */
+  optionalParamBehavior?: OptionalParamBehavior;
   /** Controls validation/execution guards for custom parameter regexes */
   regexSafety?: RegexSafetyOptions;
+  /** Policy for handling user-supplied ^/$ anchors inside parameter regexes */
+  regexAnchorPolicy?: 'warn' | 'error' | 'silent';
+  /** Advanced tuning for parameter branch reordering */
+  paramOrderTuning?: ParamOrderingOptions;
+  /** Hook bundle for router observability */
+  observers?: RouterObserverHooks;
+  /** Stage toggles for build/match pipelines */
+  pipelineStages?: Partial<PipelineStageConfig>;
 }
 
 export interface RegexSafetyOptions {
@@ -91,4 +117,66 @@ export interface RouterSnapshotMetadata {
   readonly wildcardRouteCount: number;
   readonly methodsWithWildcard: readonly HttpMethod[];
   readonly builtAt: number;
+}
+
+export interface ParamOrderingOptions {
+  baseThreshold?: number;
+  reseedProbability?: number;
+  snapshot?: ParamOrderSnapshot;
+}
+
+export interface ParamOrderSnapshot {
+  edgeHits: number[];
+}
+
+export interface SuffixPlan {
+  source: string;
+  offsets: Uint32Array;
+}
+
+export interface RouterObserverHooks {
+  onRouteMatch?: (event: RouteMatchEvent) => void;
+  onCacheHit?: (event: CacheEvent) => void;
+  onCacheMiss?: (event: CacheEvent) => void;
+  onStaticFastHit?: (event: StaticFastEvent) => void;
+  onParamBranchTaken?: (event: ParamBranchEvent) => void;
+  onStageStart?: (event: StageEvent) => void;
+  onStageEnd?: (event: StageEvent & { durationMs: number }) => void;
+}
+
+export interface RouteMatchEvent {
+  method: HttpMethod;
+  path: string;
+  match: RouteMatch;
+  fromCache: boolean;
+}
+
+export interface CacheEvent {
+  key: string;
+  method: HttpMethod;
+  path: string;
+}
+
+export interface StaticFastEvent {
+  method: HttpMethod;
+  path: string;
+  key: RouteKey;
+}
+
+export interface ParamBranchEvent {
+  nodeIndex: number;
+  localOffset: number;
+}
+
+export type BuildStageName = 'compress-static' | 'param-priority' | 'wildcard-suffix' | 'regex-safety' | 'route-flags' | 'snapshot-metadata';
+export type MatchStageName = 'static-fast' | 'cache' | 'dynamic';
+
+export interface StageEvent {
+  stage: `build:${BuildStageName}` | `match:${MatchStageName}`;
+  context: Record<string, unknown>;
+}
+
+export interface PipelineStageConfig {
+  build: Record<BuildStageName, boolean>;
+  match: Record<MatchStageName, boolean>;
 }

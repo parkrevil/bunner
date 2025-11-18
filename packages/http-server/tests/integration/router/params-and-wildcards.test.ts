@@ -31,6 +31,32 @@ describe('RadixRouter :: params and wildcards', () => {
 
       expect(router.match(HttpMethod.Get, '/users/42')?.params.id).toBe('42');
     });
+
+    it('should expose undefined when configured to setUndefined', () => {
+      const router = buildRouter(
+        builder => {
+          builder.add(HttpMethod.Get, '/users/:id?');
+        },
+        { optionalParamBehavior: 'setUndefined' },
+      );
+
+      const match = router.match(HttpMethod.Get, '/users');
+      expect(match).not.toBeNull();
+      expect(match?.params).toHaveProperty('id');
+      expect(match?.params.id).toBeUndefined();
+    });
+
+    it('should expose empty strings when configured to setEmptyString', () => {
+      const router = buildRouter(
+        builder => {
+          builder.add(HttpMethod.Get, '/users/:id?');
+        },
+        { optionalParamBehavior: 'setEmptyString' },
+      );
+
+      const match = router.match(HttpMethod.Get, '/users');
+      expect(match?.params.id).toBe('');
+    });
   });
 
   describe('regex-constrained parameters', () => {
@@ -69,6 +95,24 @@ describe('RadixRouter :: params and wildcards', () => {
     });
   });
 
+  describe('zero-or-more parameters', () => {
+    it('should capture empty remainders as empty strings', () => {
+      const router = buildRouter(builder => {
+        builder.add(HttpMethod.Get, '/logs/:tail*');
+      });
+
+      expect(router.match(HttpMethod.Get, '/logs')?.params.tail).toBe('');
+    });
+
+    it('should capture nested segments when present', () => {
+      const router = buildRouter(builder => {
+        builder.add(HttpMethod.Get, '/logs/:tail*');
+      });
+
+      expect(router.match(HttpMethod.Get, '/logs/2025/nov/17')?.params.tail).toBe('2025/nov/17');
+    });
+  });
+
   describe('wildcards', () => {
     it('should return the remainder under "*" when unnamed', () => {
       const router = buildRouter(builder => {
@@ -92,6 +136,23 @@ describe('RadixRouter :: params and wildcards', () => {
       });
 
       expect(router.match(HttpMethod.Get, '/any/path')?.params['*']).toBe('any/path');
+    });
+
+    it('should emit an empty string when no remainder exists', () => {
+      const router = buildRouter(builder => {
+        builder.add(HttpMethod.Get, '/static/*asset');
+      });
+
+      expect(router.match(HttpMethod.Get, '/static')?.params.asset).toBe('');
+    });
+
+    it('should reuse precomputed suffix metadata across repeated matches', () => {
+      const router = buildRouter(builder => {
+        builder.add(HttpMethod.Get, '/assets/*rest');
+      });
+
+      expect(router.match(HttpMethod.Get, '/assets/img/logo.svg')?.params.rest).toBe('img/logo.svg');
+      expect(router.match(HttpMethod.Get, '/assets/img/logo.svg')?.params.rest).toBe('img/logo.svg');
     });
   });
 
@@ -126,6 +187,31 @@ describe('RadixRouter :: params and wildcards', () => {
       );
 
       expect(router.match(HttpMethod.Get, '/files/foo%2Fbar')?.key).toBe(key);
+    });
+  });
+
+  describe('param ordering snapshots', () => {
+    it('should export and hydrate param edge counters between builds', () => {
+      const firstBuilder = new RadixRouterBuilder({ paramOrderTuning: { baseThreshold: 1, reseedProbability: 1 } });
+      firstBuilder.add(HttpMethod.Get, '/lookup/:id{[0-9]+}');
+      firstBuilder.add(HttpMethod.Get, '/lookup/:slug{[a-z]+}');
+      const firstRouter = firstBuilder.build();
+
+      firstRouter.match(HttpMethod.Get, '/lookup/alpha');
+      firstRouter.match(HttpMethod.Get, '/lookup/beta');
+      const snapshot = firstRouter.exportParamOrderSnapshot();
+
+      expect(snapshot).not.toBeNull();
+      expect(snapshot?.edgeHits.some(count => count > 0)).toBe(true);
+
+      const secondBuilder = new RadixRouterBuilder({
+        paramOrderTuning: { baseThreshold: 4, reseedProbability: 0.5, snapshot: snapshot! },
+      });
+      secondBuilder.add(HttpMethod.Get, '/lookup/:id{[0-9]+}');
+      secondBuilder.add(HttpMethod.Get, '/lookup/:slug{[a-z]+}');
+      const secondRouter = secondBuilder.build();
+
+      expect(secondRouter.exportParamOrderSnapshot()).toEqual(snapshot);
     });
   });
 });

@@ -64,15 +64,31 @@
 3. 기존 `invalidateCacheForRoute`/`applyCacheInvalidation`는 최소화하거나 버전 증가 트리거로 단순화.
 4. 회귀 테스트: 캐시 히트율, 무효화 정확성 시나리오 추가.
 
+#### 진행 현황 (2025-11-17)
+
+- [x] `cacheVersion`과 `CacheRecord.version`을 도입하고, 라우트 추가 시 `bumpCacheVersion()`으로 전역 에폭을 증가.
+- [x] `cacheNullMiss`/`setCache`에서 항상 최신 버전을 기록하고, 조회 시 mismatch면 즉시 제거하도록 구현.
+- [x] `options-behavior.test.ts`에 빌드 간 null miss 재사용 방지 시나리오를 추가해 회귀를 감시.
+
 ### 2.2 LRU 정확성 확보 (3.1.2)
 
 1. 조회 시에도 `delete`+`set` 수행 또는 `lru-cache` 도입해 최근 사용 항목이 유지되도록 수정.
 2. 캐시 크기 제한/슬로우 경로 테스트 추가.
 
+#### 진행 현황 (2025-11-17)
+
+- [x] 캐시 히트 시 `touchCacheEntry`로 항목을 삭제 후 재삽입해 접근 순서를 유지.
+- [x] `cacheSize` 옵션을 활용한 통합 테스트(사이즈 1·64·256 경로)로 LRU 순서 및 히트율을 검증.
+
 ### 2.3 캐시 키 포맷 강화 (3.1.3)
 
 1. `${method}\0${normalizedPath}` 형태 키 도입, 키 생성/조회 지점 업데이트.
 2. 기존 캐시 flush 후 새 포맷만 사용하도록 마이그레이션 코드 작성.
+
+#### 진행 현황 (2025-11-17)
+
+- [x] `getCacheKey`가 `method + '\0' + normalizedPath`를 생성하도록 갱신하고, 캐시 버퍼 재사용을 위한 마지막 키 캐시를 추가.
+- [x] `options-behavior.test.ts`에 새 키 포맷(`\0` 포함)을 단언하는 케이스를 추가해 회귀를 방지.
 
 ### 2.4 CacheIndex 누수 수정 (3.1.4)
 

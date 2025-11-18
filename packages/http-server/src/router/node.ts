@@ -26,8 +26,8 @@ export class RouterNode {
   paramHitCount?: number;
   // For Static nodes: optional precomputed parts when compressed (e.g., 'a/b/c' -> ['a','b','c'])
   segmentParts?: string[];
-  // For Wildcard nodes: remember whether they originated from '*' or ':name+'
-  wildcardOrigin?: 'star' | 'multi';
+  // For Wildcard nodes: remember whether they originated from '*' / ':name+' / ':name*'
+  wildcardOrigin?: 'star' | 'multi' | 'zero';
 
   constructor(kind: NodeKind, segment: string) {
     this.kind = kind;

@@ -10,7 +10,6 @@ export interface RegexSafetyStaticConfig {
 }
 
 const BACKREFERENCE_PATTERN = /\\(?:\d+|k<[^>]+>)/;
-const REPEATED_GROUP_PATTERN = /(\((?:[^()]|\\\(|\\\))*?[+*](?:[^()]|\\\(|\\\))*?\))(?:\{|\*|\+)/;
 
 export function assessRegexSafety(pattern: string, options: RegexSafetyStaticConfig): RegexAssessment {
   if (pattern.length > options.maxLength) {
@@ -19,8 +18,94 @@ export function assessRegexSafety(pattern: string, options: RegexSafetyStaticCon
   if (options.forbidBackreferences && BACKREFERENCE_PATTERN.test(pattern)) {
     return { safe: false, reason: 'Backreferences are not allowed in route params' };
   }
-  if (options.forbidBacktrackingTokens && REPEATED_GROUP_PATTERN.test(pattern)) {
+  if (options.forbidBacktrackingTokens && hasNestedUnlimitedQuantifiers(pattern)) {
     return { safe: false, reason: 'Nested unlimited quantifiers detected' };
   }
   return { safe: true };
+}
+
+type QuantifierFrame = {
+  hadUnlimited: boolean;
+};
+
+function hasNestedUnlimitedQuantifiers(pattern: string): boolean {
+  const stack: QuantifierFrame[] = [];
+  let lastAtomUnlimited = false;
+  for (let i = 0; i < pattern.length; i++) {
+    const char = pattern[i]!;
+    if (char === '\\') {
+      i++;
+      lastAtomUnlimited = false;
+      continue;
+    }
+    if (char === '[') {
+      i = skipCharClass(pattern, i);
+      lastAtomUnlimited = false;
+      continue;
+    }
+    if (char === '(') {
+      stack.push({ hadUnlimited: false });
+      lastAtomUnlimited = false;
+      continue;
+    }
+    if (char === ')') {
+      const frame = stack.pop();
+      const groupUnlimited = Boolean(frame?.hadUnlimited);
+      if (groupUnlimited && stack.length) {
+        stack[stack.length - 1]!.hadUnlimited = true;
+      }
+      lastAtomUnlimited = groupUnlimited;
+      continue;
+    }
+    if (char === '*' || char === '+') {
+      if (lastAtomUnlimited) {
+        return true;
+      }
+      lastAtomUnlimited = true;
+      if (stack.length) {
+        stack[stack.length - 1]!.hadUnlimited = true;
+      }
+      continue;
+    }
+    if (char === '{') {
+      const close = pattern.indexOf('}', i + 1);
+      if (close === -1) {
+        lastAtomUnlimited = false;
+        continue;
+      }
+      const slice = pattern.slice(i + 1, close);
+      const unlimited = slice.includes(',');
+      if (unlimited) {
+        if (lastAtomUnlimited) {
+          return true;
+        }
+        lastAtomUnlimited = true;
+        if (stack.length) {
+          stack[stack.length - 1]!.hadUnlimited = true;
+        }
+      } else {
+        lastAtomUnlimited = false;
+      }
+      i = close;
+      continue;
+    }
+    lastAtomUnlimited = false;
+  }
+  return false;
+}
+
+function skipCharClass(pattern: string, start: number): number {
+  let i = start + 1;
+  while (i < pattern.length) {
+    const char = pattern[i]!;
+    if (char === '\\') {
+      i += 2;
+      continue;
+    }
+    if (char === ']') {
+      return i;
+    }
+    i++;
+  }
+  return pattern.length - 1;
 }

@@ -35,7 +35,7 @@ export interface SerializedNodeRecord {
   readonly methodsRangeCount: number;
   readonly segmentPartsIndex: number;
   readonly patternIndex: number;
-  readonly wildcardOrigin: 'star' | 'multi' | null;
+  readonly wildcardOrigin: 'star' | 'multi' | 'zero' | null;
 }
 
 export interface ImmutableRouterLayout {
@@ -60,7 +60,7 @@ type MutableRecord = {
   methodsRangeCount: number;
   segmentPartsIndex: number;
   patternIndex: number;
-  wildcardOrigin: 'star' | 'multi' | null;
+  wildcardOrigin: 'star' | 'multi' | 'zero' | null;
 };
 
 type MutableStaticChild = {

@@ -4,12 +4,14 @@ import type { HttpMethod } from '../enums';
 import type { RouteKey } from '../types';
 
 import type { ImmutableRouterLayout } from './immutable-layout';
-import type { RouterOptions, RouteMatch, RouterSnapshotMetadata } from './types';
+import type { ParamOrderSnapshot, RouterOptions, RouteMatch, RouterSnapshotMetadata } from './types';
 
 export interface RouterInstance {
   match(method: HttpMethod, path: string): RouteMatch | null;
   getMetadata(): RouterSnapshotMetadata;
   getLayoutSnapshot(): ImmutableRouterLayout | undefined;
+  getAllowedMethods(path: string): HttpMethod[];
+  exportParamOrderSnapshot(): ParamOrderSnapshot | null;
   [ROUTER_SNAPSHOT_METADATA]?: RouterSnapshotMetadata;
 }
 

@@ -10,6 +10,7 @@ import type {
   EncodedSlashBehavior,
   MatchObserverHooks,
   PatternTesterFn,
+  RouteParams,
 } from './types';
 import { decodeURIComponentSafe } from './utils';
 
@@ -30,6 +31,15 @@ type MatchFrame = {
   decodedSegment?: string;
 };
 
+/**
+ * DynamicMatcher walks the immutable router layout using a manual stack-based state machine.
+ * Each frame progresses through the following stages:
+ *
+ * Enter -> Static -> Params -> Wildcard -> Exit
+ *
+ * Splitting the logic into dedicated handlers keeps the main `walk()` loop readable while
+ * preserving the imperative structure required for performance-sensitive routing hot paths.
+ */
 export class DynamicMatcher {
   private readonly method: HttpMethod;
   private readonly segments: string[];
@@ -53,7 +63,7 @@ export class DynamicMatcher {
   private decodedSegmentCache?: Array<string | undefined>;
   private suffixCache?: Array<string | undefined>;
   private decodedSuffixCache?: Array<string | undefined>;
-  private suffixOffsets?: number[];
+  private suffixOffsets?: Uint32Array;
   private suffixSource?: string;
 
   constructor(config: DynamicMatcherConfig) {
@@ -69,10 +79,13 @@ export class DynamicMatcher {
     this.methods = this.layout.methods;
     this.segmentChains = this.layout.segmentChains;
     this.patternTesters = config.patternTesters;
-    this.suffixSource = config.suffixSource;
     this.paramOrders = config.paramOrders;
     this.observer = config.observer;
     this.encodedSlashBehavior = config.encodedSlashBehavior;
+    if (config.suffixPlan) {
+      this.suffixOffsets = config.suffixPlan.offsets;
+      this.suffixSource = config.suffixPlan.source;
+    }
     if (this.hasWildcardRoutes) {
       this.ensureSuffixCache();
     }
@@ -84,7 +97,7 @@ export class DynamicMatcher {
       return null;
     }
     if (!this.paramCount) {
-      return { key, params: Object.create(null) };
+      return { key, params: Object.create(null) as RouteParams };
     }
     const { params, snapshot } = this.buildParams();
     return { key, params, snapshot };
@@ -97,124 +110,155 @@ export class DynamicMatcher {
 
     while (stack.length) {
       const frame = stack[stack.length - 1]!;
-      const node = this.nodes[frame.nodeIndex]!;
+      let result: RouteKey | undefined;
       switch (frame.stage) {
-        case FrameStage.Enter: {
-          if (frame.segmentIndex === this.segments.length) {
-            const found = this.lookupMethodKey(node);
-            if (found !== null) {
-              return found;
-            }
-            frame.stage = FrameStage.Exit;
-            continue;
-          }
-          frame.stage = FrameStage.Static;
-          continue;
-        }
-        case FrameStage.Static: {
-          if (frame.segmentIndex >= this.segments.length || node.staticRangeCount === 0) {
-            frame.stage = FrameStage.Params;
-            continue;
-          }
-          const childIndex = this.findStaticChild(node, this.segments[frame.segmentIndex]!);
-          frame.stage = FrameStage.Params;
-          if (childIndex === -1) {
-            continue;
-          }
-          const child = this.nodes[childIndex]!;
-          const chain = this.getSegmentParts(child);
-          if (chain && chain.length > 1) {
-            const matched = matchStaticParts(chain, this.segments, frame.segmentIndex);
-            if (matched !== chain.length) {
-              continue;
-            }
-            stack.push({
-              nodeIndex: childIndex,
-              segmentIndex: frame.segmentIndex + matched,
-              stage: FrameStage.Enter,
-              paramBase: this.paramCount,
-              paramCursor: 0,
-            });
-            continue;
-          }
-          stack.push({
-            nodeIndex: childIndex,
-            segmentIndex: frame.segmentIndex + 1,
-            stage: FrameStage.Enter,
-            paramBase: this.paramCount,
-            paramCursor: 0,
-          });
-          continue;
-        }
-        case FrameStage.Params: {
-          if (frame.segmentIndex >= this.segments.length || node.paramRangeCount === 0) {
-            frame.stage = FrameStage.Wildcard;
-            frame.decodedSegment = undefined;
-            continue;
-          }
-          if (frame.paramCursor >= node.paramRangeCount) {
-            frame.stage = FrameStage.Wildcard;
-            frame.decodedSegment = undefined;
-            continue;
-          }
-          this.paramCount = frame.paramBase;
-          frame.decodedSegment ??= this.getDecodedSegment(frame.segmentIndex);
-          const decoded = frame.decodedSegment;
-          const order = this.paramOrders ? this.paramOrders[frame.nodeIndex] : null;
-          const orderedOffset = order ? order[frame.paramCursor] : frame.paramCursor;
-          if (orderedOffset === undefined || orderedOffset >= node.paramRangeCount) {
-            frame.stage = FrameStage.Wildcard;
-            frame.decodedSegment = undefined;
-            continue;
-          }
-          frame.paramCursor++;
-          const edge = this.paramChildren[node.paramRangeStart + orderedOffset]!;
-          const childIndex = edge.target;
-          const child = this.nodes[childIndex]!;
-          if (!this.testParamPattern(child.patternIndex, decoded)) {
-            continue;
-          }
-          this.observer?.onParamBranch?.(frame.nodeIndex, orderedOffset);
-          this.pushParam(child.segment, decoded);
-          stack.push({
-            nodeIndex: childIndex,
-            segmentIndex: frame.segmentIndex + 1,
-            stage: FrameStage.Enter,
-            paramBase: this.paramCount,
-            paramCursor: 0,
-          });
-          continue;
-        }
-        case FrameStage.Wildcard: {
-          frame.stage = FrameStage.Exit;
-          const wildcardIndex = node.wildcardChild;
-          if (wildcardIndex === -1) {
-            continue;
-          }
-          this.paramCount = frame.paramBase;
-          const wildcard = this.nodes[wildcardIndex]!;
-          const key = this.lookupMethodKey(wildcard);
-          if (key === null) {
-            continue;
-          }
-          const wildcardName = wildcard.segment || '*';
-          const wildcardValue = this.getSuffixValue(frame.segmentIndex);
-          this.pushParam(wildcardName, wildcardValue);
-          return key;
-        }
-        case FrameStage.Exit: {
-          this.paramCount = frame.paramBase;
+        case FrameStage.Enter:
+          result = this.handleEnterStage(frame);
+          break;
+        case FrameStage.Static:
+          result = this.handleStaticStage(frame, stack);
+          break;
+        case FrameStage.Params:
+          result = this.handleParamStage(frame, stack);
+          break;
+        case FrameStage.Wildcard:
+          result = this.handleWildcardStage(frame);
+          break;
+        case FrameStage.Exit:
+          this.handleExitStage(stack);
+          break;
+        default:
           stack.pop();
-          continue;
-        }
-        default: {
-          stack.pop();
-          continue;
-        }
+          break;
+      }
+      if (result !== undefined) {
+        return result;
       }
     }
 
     return null;
+  }
+
+  private handleEnterStage(frame: MatchFrame): RouteKey | undefined {
+    if (frame.segmentIndex === this.segments.length) {
+      const current = this.nodes[frame.nodeIndex]!;
+      const found = this.lookupMethodKey(current);
+      if (found !== null) {
+        return found;
+      }
+      frame.stage = FrameStage.Wildcard;
+      return undefined;
+    }
+    frame.stage = FrameStage.Static;
+    return undefined;
+  }
+
+  private handleStaticStage(frame: MatchFrame, stack: MatchFrame[]): RouteKey | undefined {
+    const node = this.nodes[frame.nodeIndex]!;
+    if (frame.segmentIndex >= this.segments.length || node.staticRangeCount === 0) {
+      frame.stage = FrameStage.Params;
+      return undefined;
+    }
+    const childIndex = this.findStaticChild(node, this.segments[frame.segmentIndex]!);
+    frame.stage = FrameStage.Params;
+    if (childIndex === -1) {
+      return undefined;
+    }
+    const child = this.nodes[childIndex]!;
+    const chain = this.getSegmentParts(child);
+    if (chain && chain.length > 1) {
+      const matched = matchStaticParts(chain, this.segments, frame.segmentIndex);
+      if (matched !== chain.length) {
+        return undefined;
+      }
+      stack.push({
+        nodeIndex: childIndex,
+        segmentIndex: frame.segmentIndex + matched,
+        stage: FrameStage.Enter,
+        paramBase: this.paramCount,
+        paramCursor: 0,
+      });
+      return undefined;
+    }
+    stack.push({
+      nodeIndex: childIndex,
+      segmentIndex: frame.segmentIndex + 1,
+      stage: FrameStage.Enter,
+      paramBase: this.paramCount,
+      paramCursor: 0,
+    });
+    return undefined;
+  }
+
+  private handleParamStage(frame: MatchFrame, stack: MatchFrame[]): RouteKey | undefined {
+    const node = this.nodes[frame.nodeIndex]!;
+    if (frame.segmentIndex >= this.segments.length || node.paramRangeCount === 0) {
+      frame.stage = FrameStage.Wildcard;
+      frame.decodedSegment = undefined;
+      return undefined;
+    }
+    if (frame.paramCursor >= node.paramRangeCount) {
+      frame.stage = FrameStage.Wildcard;
+      frame.decodedSegment = undefined;
+      return undefined;
+    }
+    this.paramCount = frame.paramBase;
+    frame.decodedSegment ??= this.getDecodedSegment(frame.segmentIndex);
+    const decoded = frame.decodedSegment;
+    const order = this.paramOrders ? this.paramOrders[frame.nodeIndex] : null;
+    const orderedOffset = order ? order[frame.paramCursor] : frame.paramCursor;
+    if (orderedOffset === undefined || orderedOffset >= node.paramRangeCount) {
+      frame.stage = FrameStage.Wildcard;
+      frame.decodedSegment = undefined;
+      return undefined;
+    }
+    frame.paramCursor++;
+    const edge = this.paramChildren[node.paramRangeStart + orderedOffset]!;
+    const childIndex = edge.target;
+    const child = this.nodes[childIndex]!;
+    if (!this.testParamPattern(child.patternIndex, decoded)) {
+      return undefined;
+    }
+    this.observer?.onParamBranch?.(frame.nodeIndex, orderedOffset);
+    this.pushParam(child.segment, decoded);
+    stack.push({
+      nodeIndex: childIndex,
+      segmentIndex: frame.segmentIndex + 1,
+      stage: FrameStage.Enter,
+      paramBase: this.paramCount,
+      paramCursor: 0,
+    });
+    return undefined;
+  }
+
+  private handleWildcardStage(frame: MatchFrame): RouteKey | undefined {
+    const node = this.nodes[frame.nodeIndex]!;
+    frame.stage = FrameStage.Exit;
+    const wildcardIndex = node.wildcardChild;
+    if (wildcardIndex === -1) {
+      return undefined;
+    }
+    this.paramCount = frame.paramBase;
+    const wildcard = this.nodes[wildcardIndex]!;
+    const key = this.lookupMethodKey(wildcard);
+    if (key === null) {
+      return undefined;
+    }
+    if (wildcard.wildcardOrigin === 'multi' && frame.segmentIndex >= this.segments.length) {
+      return undefined;
+    }
+    const wildcardName = wildcard.segment || '*';
+    const wildcardValue = this.getSuffixValue(frame.segmentIndex);
+    this.pushParam(wildcardName, wildcardValue);
+    return key;
+  }
+
+  private handleExitStage(stack: MatchFrame[]): void {
+    const frame = stack.pop();
+    if (!frame) {
+      return;
+    }
+    this.paramCount = frame.paramBase;
   }
 
   private lookupMethodKey(node: SerializedNodeRecord): RouteKey | null {
@@ -306,6 +350,9 @@ export class DynamicMatcher {
     if (!this.suffixCache || !this.suffixOffsets || !this.suffixSource) {
       return '';
     }
+    if (index < 0 || index >= this.suffixOffsets.length) {
+      return '';
+    }
     let raw = this.suffixCache[index];
     if (raw === undefined) {
       raw = this.suffixSource.slice(this.suffixOffsets[index]);
@@ -325,27 +372,30 @@ export class DynamicMatcher {
   }
 
   private ensureSuffixCache(): void {
-    if (this.suffixOffsets || !this.hasWildcardRoutes || !this.segments.length) {
+    if (!this.hasWildcardRoutes || !this.segments.length) {
       return;
     }
-    this.suffixCache = new Array(this.segments.length);
-    this.suffixOffsets = new Array(this.segments.length);
-    let offset = 0;
-    for (let i = 0; i < this.segments.length; i++) {
-      this.suffixOffsets[i] = offset;
-      offset += this.segments[i]!.length;
-      if (i !== this.segments.length - 1) {
-        offset++;
+    this.suffixCache ??= new Array(this.segments.length + 1);
+    if (!this.suffixOffsets) {
+      this.suffixOffsets = new Uint32Array(this.segments.length + 1);
+      let offset = 0;
+      for (let i = 0; i < this.segments.length; i++) {
+        this.suffixOffsets[i] = offset;
+        offset += this.segments[i]!.length;
+        if (i !== this.segments.length - 1) {
+          offset++;
+        }
       }
+      this.suffixOffsets[this.segments.length] = offset;
     }
     if (!this.suffixSource) {
       this.suffixSource = this.segments.join('/');
     }
   }
 
-  private buildParams(): { params: Record<string, string>; snapshot?: Array<[string, string]> } {
-    const bag = Object.create(null) as Record<string, string>;
-    let snapshot: Array<[string, string]> | undefined;
+  private buildParams(): { params: RouteParams; snapshot?: Array<[string, string | undefined]> } {
+    const bag = Object.create(null) as RouteParams;
+    let snapshot: Array<[string, string | undefined]> | undefined;
     if (this.captureSnapshot) {
       snapshot = new Array(this.paramCount);
     }

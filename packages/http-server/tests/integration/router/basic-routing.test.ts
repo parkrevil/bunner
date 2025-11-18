@@ -127,6 +127,24 @@ describe('RadixRouter :: basic routing', () => {
     expect(staticFast.get('/fast/path')?.get(HttpMethod.Get)).toBe(key);
   });
 
+  it('should normalize redundant slashes and dot segments on the static fast path', () => {
+    const builder = new RadixRouterBuilder();
+    builder.add(HttpMethod.Get, '/static/assets/logo');
+    const router = builder.build();
+
+    expect(router.match(HttpMethod.Get, '//static//./assets/logo/')).not.toBeNull();
+  });
+
+  it('should reuse case-insensitive static caches without repeated folding', () => {
+    let key!: RouteKey;
+    const builder = new RadixRouterBuilder({ caseSensitive: false });
+    key = builder.add(HttpMethod.Get, '/MiXeD/Path') as RouteKey;
+    const router = builder.build();
+
+    expect(router.match(HttpMethod.Get, '/mixed/path')).toEqual({ key, params: {} });
+    expect(router.match(HttpMethod.Get, '/MIXED/PATH')).toEqual({ key, params: {} });
+  });
+
   it('should expose a frozen metadata snapshot with wildcard details', () => {
     const router = buildRouter(builder => {
       builder.add(HttpMethod.Get, '/static');
@@ -143,5 +161,14 @@ describe('RadixRouter :: basic routing', () => {
     expect(metadata.wildcardRouteCount).toBe(1);
     expect(Object.isFrozen(metadata)).toBe(true);
     expect((router as any)[ROUTER_SNAPSHOT_METADATA]).toBe(metadata);
+  });
+
+  it('should enumerate allowed methods for a given path', () => {
+    const router = buildRouter(builder => {
+      builder.add(HttpMethod.Get, '/multi');
+      builder.add(HttpMethod.Post, '/multi');
+    });
+
+    expect(router.getAllowedMethods('/multi')).toEqual([HttpMethod.Get, HttpMethod.Post, HttpMethod.Head]);
   });
 });
