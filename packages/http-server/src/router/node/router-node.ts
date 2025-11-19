@@ -1,5 +1,5 @@
-import { NodeKind } from './enums';
-import type { RouteMethods } from './interfaces';
+import { NodeKind } from '../enums';
+import type { RouteMethods } from '../interfaces';
 
 export class RouterNode {
   kind: NodeKind;

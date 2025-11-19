@@ -63,6 +63,11 @@ export class CacheIndex {
     this.root = createNode();
   }
 
+  /** @internal - exposed for tests to assert node cleanup */
+  debugStats(): { nodeCount: number } {
+    return { nodeCount: this.countNodes(this.root) };
+  }
+
   private traverse(path: string, create: boolean): CacheIndexNode | undefined {
     const segments = splitPathKey(path);
     let node = this.root;
@@ -111,11 +116,6 @@ export class CacheIndex {
     }
     const noKeys = !node.keys;
     return noKeys && node.children.size === 0;
-  }
-
-  /** @internal - exposed for tests to assert node cleanup */
-  debugStats(): { nodeCount: number } {
-    return { nodeCount: this.countNodes(this.root) };
   }
 
   private countNodes(node: CacheIndexNode): number {

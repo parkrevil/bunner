@@ -1,9 +1,8 @@
+import type { RouteKey } from '../../types';
 import type { HttpMethod } from '../enums';
-import type { RouteKey } from '../types';
-
-import type { ImmutableRouterLayout, SerializedNodeRecord } from './immutable-layout';
-import { ROUTE_REGEX_TIMEOUT } from './pattern-tester';
-import { matchStaticParts } from './tree-utils';
+import type { ImmutableRouterLayout, SerializedNodeRecord } from '../layout/immutable-router-layout';
+import { ROUTE_REGEX_TIMEOUT } from '../pattern/pattern-tester';
+import { matchStaticParts } from '../tree/tree-utils';
 import type {
   DynamicMatchResult,
   DynamicMatcherConfig,
@@ -11,8 +10,8 @@ import type {
   MatchObserverHooks,
   PatternTesterFn,
   RouteParams,
-} from './types';
-import { decodeURIComponentSafe } from './utils';
+} from '../types';
+import { decodeURIComponentSafe } from '../utils/path-utils';
 
 const enum FrameStage {
   Enter,

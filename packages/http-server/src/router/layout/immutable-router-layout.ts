@@ -1,8 +1,7 @@
 import type { HttpMethod } from '../enums';
+import { NodeKind } from '../enums';
+import type { RouterNode } from '../node/router-node';
 import type { RouteKey } from '../types';
-
-import { NodeKind } from './enums';
-import type { RouterNode } from './node';
 
 export interface SerializedStaticChild {
   readonly segment: string;

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 
-import { CacheIndex } from '../../src/router/cache-index';
+import { CacheIndex } from '../../src/router/cache/cache-index';
 
 describe('CacheIndex cleanup semantics', () => {
   it('removes all orphaned nodes once the last key for a branch is deleted', () => {

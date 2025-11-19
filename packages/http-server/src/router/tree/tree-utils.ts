@@ -1,5 +1,5 @@
-import { NodeKind } from './enums';
-import { RouterNode } from './node';
+import { NodeKind } from '../enums';
+import { RouterNode } from '../node/router-node';
 
 export function matchStaticParts(parts: readonly string[], segments: readonly string[], startIdx: number): number {
   let matched = 0;

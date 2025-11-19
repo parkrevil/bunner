@@ -1,4 +1,4 @@
-import type { RouteParams } from './types';
+import type { RouteParams } from '../types';
 
 export function hydrateParams(entries?: Array<[string, string | undefined]>): RouteParams {
   if (!entries || !entries.length) {

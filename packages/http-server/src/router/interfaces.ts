@@ -3,7 +3,7 @@ import { ROUTER_SNAPSHOT_METADATA } from '@bunner/core';
 import type { HttpMethod } from '../enums';
 import type { RouteKey } from '../types';
 
-import type { ImmutableRouterLayout } from './immutable-layout';
+import type { ImmutableRouterLayout } from './layout/immutable-router-layout';
 import type { ParamOrderSnapshot, RouterOptions, RouteMatch, RouterSnapshotMetadata } from './types';
 
 export interface RouterInstance {

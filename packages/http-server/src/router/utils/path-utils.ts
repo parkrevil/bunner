@@ -1,4 +1,4 @@
-import type { EncodedSlashBehavior, NormalizedPathSegments, RouterOptions } from './types';
+import type { EncodedSlashBehavior, NormalizedPathSegments, RouterOptions } from '../types';
 
 export function normalizeAndSplit(path: string, opts: RouterOptions): NormalizedPathSegments {
   if (!path || path === '/') {
