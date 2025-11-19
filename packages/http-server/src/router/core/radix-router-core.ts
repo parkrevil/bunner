@@ -1,6 +1,5 @@
 import { HttpMethod } from '../../enums';
 import type { RouteKey } from '../../types';
-import { hydrateParams } from '../cache/cache-helpers';
 import { NodeKind } from '../enums';
 import { buildImmutableLayout, type ImmutableRouterLayout, type SerializedNodeRecord } from '../layout/immutable-router-layout';
 import { DynamicMatcher } from '../matcher/dynamic-matcher';
@@ -9,7 +8,6 @@ import { buildPatternTester, type PatternTesterOptions } from '../pattern/patter
 import { assessRegexSafety } from '../pattern/regex-guard';
 import { matchStaticParts, splitStaticChain } from '../tree/tree-utils';
 import type {
-  RegexSafetyOptions,
   DynamicMatchResult,
   MatchObserverHooks,
   PatternTesterFn,
@@ -21,7 +19,6 @@ import type {
   NormalizedPathSegments,
   EncodedSlashBehavior,
   ParamOrderSnapshot,
-  ParamOrderingOptions,
   SuffixPlan,
   RouterObserverHooks,
   PipelineStageConfig,
@@ -31,62 +28,15 @@ import type {
 } from '../types';
 import { normalizeAndSplit } from '../utils/path-utils';
 
-import { RouterCache, CACHE_NULL_HIT } from './router-cache';
+import { createBuildPipeline } from './build-pipeline';
+import { MatchRunner } from './match-runner';
+import { OptionalParamDefaults } from './optional-param-defaults';
+import { RouterCache } from './router-cache';
+import type { NormalizedRouterOptions } from './router-options';
+import { normalizeParamOrderOptions, normalizePipelineStages, normalizeRegexSafety } from './router-options';
 import { StaticFastRegistry } from './static-fast-registry';
 
 let GLOBAL_ROUTE_KEY_SEQ = 1 as RouteKey;
-
-type NormalizedRegexSafetyOptions = {
-  mode: 'error' | 'warn';
-  maxLength: number;
-  forbidBacktrackingTokens: boolean;
-  forbidBackreferences: boolean;
-  maxExecutionMs?: number;
-  validator?: (pattern: string) => void;
-};
-
-type NormalizedParamOrderingOptions = {
-  baseThreshold: number;
-  reseedProbability: number;
-  snapshot?: ParamOrderSnapshot;
-};
-
-type NormalizedRouterOptions = Omit<
-  Required<RouterOptions>,
-  'regexSafety' | 'encodedSlashBehavior' | 'paramOrderTuning' | 'observers' | 'pipelineStages'
-> & {
-  regexSafety: NormalizedRegexSafetyOptions;
-  encodedSlashBehavior: EncodedSlashBehavior;
-  paramOrderTuning: NormalizedParamOrderingOptions;
-  observers?: RouterObserverHooks;
-  pipelineStages?: Partial<PipelineStageConfig>;
-};
-
-const DEFAULT_REGEX_SAFETY: NormalizedRegexSafetyOptions = {
-  mode: 'error',
-  maxLength: 256,
-  forbidBacktrackingTokens: true,
-  forbidBackreferences: true,
-  maxExecutionMs: undefined,
-};
-
-const PARAM_RESORT_THRESHOLD = 32;
-
-const DEFAULT_PIPELINE_STAGE_CONFIG: PipelineStageConfig = {
-  build: {
-    'compress-static': true,
-    'param-priority': true,
-    'wildcard-suffix': true,
-    'regex-safety': true,
-    'route-flags': true,
-    'snapshot-metadata': true,
-  },
-  match: {
-    'static-fast': true,
-    cache: true,
-    dynamic: true,
-  },
-};
 
 const getTimestamp = (): number =>
   typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
@@ -108,6 +58,7 @@ export class RadixRouterCore {
   private root: RouterNode | null;
   private options: NormalizedRouterOptions;
   private cacheStore: RouterCache;
+  private matchRunner: MatchRunner;
   private staticFastRegistry: StaticFastRegistry;
   private patternTesterOptions?: PatternTesterOptions;
   private wildcardMethodsByMethod: Record<number, true> | null = null;
@@ -119,7 +70,7 @@ export class RadixRouterCore {
   private layout?: ImmutableRouterLayout;
   private patternTesters: ReadonlyArray<PatternTesterFn | undefined> = [];
   private matchObserver: MatchObserverHooks;
-  private optionalParamDefaults: Map<RouteKey, readonly string[]> = new Map();
+  private optionalDefaults: OptionalParamDefaults;
   private observers?: RouterObserverHooks;
   private paramOrders: ReadonlyArray<Uint16Array | null> = [];
   private paramEdgeHitCounts: Uint32Array = new Uint32Array(0);
@@ -136,10 +87,10 @@ export class RadixRouterCore {
   private stageConfig: PipelineStageConfig;
 
   constructor(options?: RouterOptions) {
-    const regexSafety = this.normalizeRegexSafety(options?.regexSafety);
+    const regexSafety = normalizeRegexSafety(options?.regexSafety);
     const encodedSlashBehavior: EncodedSlashBehavior =
       options?.encodedSlashBehavior ?? (options?.preserveEncodedSlashes ? 'preserve' : 'decode');
-    const paramOrderTuning = this.normalizeParamOrderOptions(options?.paramOrderTuning);
+    const paramOrderTuning = normalizeParamOrderOptions(options?.paramOrderTuning);
     this.options = {
       ignoreTrailingSlash: options?.ignoreTrailingSlash ?? true,
       collapseSlashes: options?.collapseSlashes ?? true,
@@ -158,12 +109,14 @@ export class RadixRouterCore {
       regexAnchorPolicy: options?.regexAnchorPolicy ?? 'warn',
       paramOrderTuning,
     };
+    this.stageConfig = normalizePipelineStages(options?.pipelineStages);
     this.cacheStore = new RouterCache(this.options);
     this.staticFastRegistry = new StaticFastRegistry(this.options);
+    this.optionalDefaults = new OptionalParamDefaults(this.options.optionalParamBehavior);
+    this.matchRunner = this.createMatchRunner();
     this.root = new RouterNode(NodeKind.Static, '');
     this.patternTesterOptions = this.buildPatternTesterOptions();
     this.observers = this.options.observers;
-    this.stageConfig = this.normalizePipelineStages(options?.pipelineStages);
     this.matchObserver = {
       onParamBranch: (nodeIndex, offset) => {
         this.recordParamUsage(nodeIndex, offset);
@@ -204,7 +157,7 @@ export class RadixRouterCore {
   }
 
   match(method: HttpMethod, path: string): RouteMatch | null {
-    const direct = this.performMatch(method, path);
+    const direct = this.matchRunner.run(method, path, false, true);
     if (direct) {
       return direct;
     }
@@ -240,119 +193,24 @@ export class RadixRouterCore {
     return { edgeHits: Array.from(this.paramEdgeHitCounts) };
   }
 
-  private performMatch(
-    method: HttpMethod,
-    path: string,
-    skipCache: boolean = false,
-    instrument: boolean = true,
-  ): RouteMatch | null {
-    const observerMethod = method;
-    const finalize = (match: RouteMatch, fromCache: boolean): RouteMatch =>
-      instrument ? this.finalizeMatch(observerMethod, path, match, fromCache) : match;
-    const notifyCache = (kind: 'hit' | 'miss', key?: string): void => {
-      if (!instrument || !key) {
-        return;
-      }
-      this.emitCacheEvent(kind, key, observerMethod, path);
-    };
-    const runStage = <T>(name: MatchStageName, context: Record<string, unknown>, fn: () => T): T => {
-      if (!instrument) {
-        return fn();
-      }
-      return this.withStage('match', name, context, fn);
-    };
-    const staticFastEnabled = this.stageConfig.match['static-fast'];
-    const staticProbe = staticFastEnabled
-      ? runStage('static-fast', { method: observerMethod, path }, () => this.tryStaticFastMatch(method, path))
-      : ({ kind: 'fallback' } as StaticProbeResult);
-    if (staticProbe.kind === 'hit') {
-      if (instrument) {
-        this.emitStaticFastHit(observerMethod, path, staticProbe.match.key);
-      }
-      return finalize(staticProbe.match, false);
-    }
-
-    if (staticProbe.kind === 'static-miss') {
-      if (!skipCache && this.cacheStore.isEnabled() && this.stageConfig.match.cache) {
-        const missKey = this.cacheStore.getKey(method, staticProbe.normalized);
-        this.cacheStore.cacheNullMiss(method, staticProbe.normalized, missKey);
-        notifyCache('miss', missKey);
-      }
-      return null;
-    }
-
-    const prepared = staticProbe.prepared ?? normalizeAndSplit(path, this.options);
-    const normalized = prepared.normalized;
-
-    const fastHit = this.staticFastRegistry.matchNormalized(method, normalized, key => this.buildStaticMatch(key));
-    if (fastHit) {
-      return finalize(fastHit, false);
-    }
-
-    const cacheEnabled = Boolean(!skipCache && this.cacheStore.isEnabled() && this.stageConfig.match.cache);
-    const cacheKey = cacheEnabled ? this.cacheStore.getKey(method, normalized) : undefined;
-    if (cacheEnabled && cacheKey) {
-      const cacheContext = { method: observerMethod, path, key: cacheKey };
-      const cacheResult = runStage('cache', cacheContext, () => {
-        const record = this.cacheStore.get(cacheKey);
-        if (!record) {
-          notifyCache('miss', cacheKey);
-          return null;
-        }
-        if (this.cacheStore.isStale(record)) {
-          this.cacheStore.delete(cacheKey);
-          notifyCache('miss', cacheKey);
-          return null;
-        }
-        this.cacheStore.touch(cacheKey, record);
-        notifyCache('hit', cacheKey);
-        if (record.entry === null) {
-          return CACHE_NULL_HIT;
-        }
-        const params = hydrateParams(record.entry.params);
-        this.applyOptionalParamDefaults(record.entry.key, params);
-        return { key: record.entry.key, params };
-      });
-      if (cacheResult === CACHE_NULL_HIT) {
-        return null;
-      }
-      if (cacheResult) {
-        return finalize(cacheResult, true);
-      }
-    }
-
-    const captureSnapshot = Boolean(cacheEnabled && cacheKey);
-    const methodHasWildcard = this.methodHasWildcard(method);
-    const suffixPlan = methodHasWildcard ? this.buildWildcardSuffixPlan(prepared.segments, normalized) : undefined;
-
-    if (!this.stageConfig.match.dynamic) {
-      if (cacheEnabled && cacheKey) {
-        this.cacheStore.cacheNullMiss(method, normalized, cacheKey);
-      }
-      return null;
-    }
-
-    const dynamicContext = { method: observerMethod, path };
-    const dynamicMatch = runStage('dynamic', dynamicContext, () =>
-      this.findDynamicMatch(method, prepared.segments, captureSnapshot, suffixPlan, methodHasWildcard),
-    );
-    if (!dynamicMatch) {
-      if (cacheEnabled && cacheKey) {
-        this.cacheStore.cacheNullMiss(method, normalized, cacheKey);
-        notifyCache('miss', cacheKey);
-      }
-      return null;
-    }
-
-    const insertedDefaults = this.applyOptionalParamDefaults(dynamicMatch.key, dynamicMatch.params);
-    if (insertedDefaults && dynamicMatch.snapshot) {
-      dynamicMatch.snapshot.push(...insertedDefaults);
-    }
-    const resolved: RouteMatch = { key: dynamicMatch.key, params: dynamicMatch.params };
-    if (cacheEnabled && cacheKey) {
-      this.cacheStore.set(cacheKey, resolved, dynamicMatch.snapshot);
-    }
-    return finalize(resolved, false);
+  private createMatchRunner(): MatchRunner {
+    return new MatchRunner({
+      options: this.options,
+      cache: this.cacheStore,
+      staticRegistry: this.staticFastRegistry,
+      optionalDefaults: this.optionalDefaults,
+      stageConfig: this.stageConfig,
+      runStage: (name, context, fn) => this.withStage('match', name, context, fn),
+      buildStaticMatch: key => this.buildStaticMatch(key),
+      tryStaticFast: (method, path) => this.tryStaticFastMatch(method, path),
+      findDynamicMatch: (method, segments, captureSnapshot, suffixPlan, methodHasWildcard) =>
+        this.findDynamicMatch(method, segments, captureSnapshot, suffixPlan, methodHasWildcard),
+      emitCacheEvent: (kind, key, method, path) => this.emitCacheEvent(kind, key, method, path),
+      emitStaticFastHit: (method, path, key) => this.emitStaticFastHit(method, path, key),
+      buildWildcardSuffixPlan: (segments, normalized) => this.buildWildcardSuffixPlan(segments, normalized),
+      methodHasWildcard: method => this.methodHasWildcard(method),
+      finalizeMatch: (method, path, match, fromCache) => this.finalizeMatch(method, path, match, fromCache),
+    });
   }
 
   private tryStaticFastMatch(method: HttpMethod, path: string): StaticProbeResult {
@@ -391,7 +249,7 @@ export class RadixRouterCore {
 
   private buildStaticMatch(key: RouteKey): RouteMatch {
     const params = Object.create(null) as RouteParams;
-    this.applyOptionalParamDefaults(key, params);
+    this.optionalDefaults.apply(key, params);
     return { key, params };
   }
 
@@ -407,47 +265,6 @@ export class RadixRouterCore {
       throw new Error(`Parameter name ':${name}' is already registered while strictParamNames is enabled`);
     }
     this.globalParamNames.add(name);
-  }
-
-  private applyOptionalParamDefaults(key: RouteKey, params: RouteParams): Array<[string, string | undefined]> | null {
-    const defaults = this.optionalParamDefaults.get(key);
-    if (!defaults || !defaults.length) {
-      return null;
-    }
-    const behavior = this.options.optionalParamBehavior;
-    if (behavior === 'omit') {
-      return null;
-    }
-    const inserted: Array<[string, string | undefined]> = [];
-    for (const name of defaults) {
-      if (Object.prototype.hasOwnProperty.call(params, name)) {
-        continue;
-      }
-      const value = behavior === 'setEmptyString' ? '' : undefined;
-      params[name] = value;
-      inserted.push([name, value]);
-    }
-    return inserted.length ? inserted : null;
-  }
-
-  private normalizePipelineStages(input?: Partial<PipelineStageConfig>): PipelineStageConfig {
-    const build: PipelineStageConfig['build'] = { ...DEFAULT_PIPELINE_STAGE_CONFIG.build };
-    const match: PipelineStageConfig['match'] = { ...DEFAULT_PIPELINE_STAGE_CONFIG.match };
-    if (input?.build) {
-      for (const name of Object.keys(build) as BuildStageName[]) {
-        if (typeof input.build[name] === 'boolean') {
-          build[name] = Boolean(input.build[name]);
-        }
-      }
-    }
-    if (input?.match) {
-      for (const name of Object.keys(match) as MatchStageName[]) {
-        if (typeof input.match[name] === 'boolean') {
-          match[name] = Boolean(input.match[name]);
-        }
-      }
-    }
-    return { build, match };
   }
 
   private withStage<T>(
@@ -532,7 +349,7 @@ export class RadixRouterCore {
           firstKey = key;
         }
         if (omittedOptionals.length) {
-          this.optionalParamDefaults.set(key, omittedOptionals.slice());
+          this.optionalDefaults.record(key, omittedOptionals);
         }
         return;
       }
@@ -761,49 +578,12 @@ export class RadixRouterCore {
     this.root = null;
   }
 
-  private compressStaticSubtree(entry: RouterNode): void {
-    const stack: RouterNode[] = [entry];
-    const seen = new Set<RouterNode>();
-    while (stack.length) {
-      const current = stack.pop()!;
-      if (seen.has(current)) {
-        continue;
-      }
-      seen.add(current);
-      for (const child of current.staticChildren.values()) {
-        stack.push(child);
-        this.collapseStaticNode(child);
-      }
-    }
-  }
-
-  private normalizeRegexSafety(input?: RegexSafetyOptions): NormalizedRegexSafetyOptions {
-    return {
-      mode: input?.mode ?? DEFAULT_REGEX_SAFETY.mode,
-      maxLength: input?.maxLength ?? DEFAULT_REGEX_SAFETY.maxLength,
-      forbidBacktrackingTokens: input?.forbidBacktrackingTokens ?? DEFAULT_REGEX_SAFETY.forbidBacktrackingTokens,
-      forbidBackreferences: input?.forbidBackreferences ?? DEFAULT_REGEX_SAFETY.forbidBackreferences,
-      maxExecutionMs: input?.maxExecutionMs ?? DEFAULT_REGEX_SAFETY.maxExecutionMs,
-      validator: input?.validator,
-    };
-  }
-
   private describeMethod(method: HttpMethod): string {
     const reversed = (HttpMethod as unknown as Record<number, string>)[method as number];
     if (typeof reversed === 'string') {
       return reversed.toUpperCase();
     }
     return String(method);
-  }
-
-  private normalizeParamOrderOptions(input?: ParamOrderingOptions): NormalizedParamOrderingOptions {
-    const baseThreshold = Math.max(1, input?.baseThreshold ?? PARAM_RESORT_THRESHOLD);
-    const reseedProbability = input?.reseedProbability ?? 0.5;
-    return {
-      baseThreshold,
-      reseedProbability: Math.min(1, Math.max(0.1, reseedProbability)),
-      snapshot: input?.snapshot,
-    };
   }
 
   private buildPatternTesterOptions(): PatternTesterOptions | undefined {
@@ -897,75 +677,31 @@ export class RadixRouterCore {
     return normalized;
   }
 
-  private validateRoutePatterns(entry: RouterNode): void {
-    const stack: RouterNode[] = [entry];
-    while (stack.length) {
-      const node = stack.pop()!;
-      if (node.patternSource) {
-        this.ensureRegexSafe(node.patternSource);
-      }
-      if (node.wildcardChild) {
-        stack.push(node.wildcardChild);
-      }
-      for (const child of node.paramChildren) {
-        stack.push(child);
-      }
-      for (const child of node.staticChildren.values()) {
-        stack.push(child);
-      }
-    }
-  }
-
-  private collapseStaticNode(node: RouterNode): void {
-    if (node.kind !== NodeKind.Static) {
-      return;
-    }
-    let cursor = node;
-    const parts: string[] = node.segmentParts ? [...node.segmentParts] : [node.segment];
-    while (
-      cursor.kind === NodeKind.Static &&
-      cursor.methods.byMethod.size === 0 &&
-      cursor.paramChildren.length === 0 &&
-      !cursor.wildcardChild &&
-      cursor.staticChildren.size === 1
-    ) {
-      const next = cursor.staticChildren.values().next().value as RouterNode;
-      if (next.kind !== NodeKind.Static) {
-        break;
-      }
-      const nextParts = next.segmentParts ?? [next.segment];
-      parts.push(...nextParts);
-      cursor = next;
-    }
-    if (parts.length > 1) {
-      node.segment = parts.join('/');
-      node.segmentParts = parts;
-      node.staticChildren = cursor.staticChildren;
-      node.paramChildren = cursor.paramChildren;
-      node.wildcardChild = cursor.wildcardChild;
-      node.methods = cursor.methods;
-    }
-  }
-
   private runBuildPipeline(root: RouterNode): void {
-    const stages: Array<{ name: BuildStageName; execute: () => void }> = [
-      { name: 'compress-static', execute: () => this.compressStaticSubtree(root) },
-      { name: 'param-priority', execute: () => this.sortAllParamChildren(root) },
-      { name: 'wildcard-suffix', execute: () => this.precomputeWildcardSuffixMetadata(root) },
-      { name: 'regex-safety', execute: () => this.validateRoutePatterns(root) },
-      { name: 'route-flags', execute: () => this.recalculateRouteFlags(root) },
-      { name: 'snapshot-metadata', execute: () => this.updateSnapshotMetadata() },
-    ];
-    for (const stage of stages) {
-      if (!this.stageConfig.build[stage.name]) {
-        continue;
-      }
-      try {
-        this.withStage('build', stage.name, { routeCount: this.routeCount }, stage.execute, true);
-      } catch (error) {
-        throw new Error(`[bunner/router] Build stage '${stage.name}' failed: ${(error as Error).message}`);
-      }
-    }
+    const pipeline = createBuildPipeline({
+      stageConfig: this.stageConfig,
+      routeCount: this.routeCount,
+      runStage: (name, context, fn) => {
+        try {
+          return this.withStage('build', name, context, fn, true);
+        } catch (error) {
+          throw new Error(`[bunner/router] Build stage '${name}' failed: ${(error as Error).message}`);
+        }
+      },
+      ensureRegexSafe: pattern => this.ensureRegexSafe(pattern),
+      markRouteHints: (hasDynamic, hasWildcard) => this.staticFastRegistry.markRouteHints(hasDynamic, hasWildcard),
+      initialWildcardRouteCount: this.wildcardRouteCount,
+      initialWildcardMethodsByMethod: this.wildcardMethodsByMethod,
+      initialHasDynamicRoutes: this.hasDynamicRoutes,
+      initialHasWildcardRoutes: this.hasWildcardRoutes,
+      currentMetadata: this.metadata,
+    });
+    const result = pipeline.execute(root);
+    this.wildcardRouteCount = result.wildcardRouteCount;
+    this.wildcardMethodsByMethod = result.wildcardMethodsByMethod;
+    this.hasDynamicRoutes = result.hasDynamicRoutes;
+    this.hasWildcardRoutes = result.hasWildcardRoutes;
+    this.metadata = result.metadata;
   }
 
   private buildLayoutPatternTesters(layout: ImmutableRouterLayout): ReadonlyArray<PatternTesterFn | undefined> {
@@ -1088,107 +824,6 @@ export class RadixRouterCore {
     for (let i = 0; i < count; i++) {
       order[i] = offsets[i]!;
     }
-  }
-
-  private sortAllParamChildren(entry: RouterNode): void {
-    const stack: RouterNode[] = [entry];
-    while (stack.length) {
-      const node = stack.pop()!;
-      if (node.paramChildren.length > 1) {
-        node.paramChildren.sort((a, b) => this.scoreParamNode(b) - this.scoreParamNode(a));
-      }
-      for (const child of node.staticChildren.values()) {
-        stack.push(child);
-      }
-      for (const paramChild of node.paramChildren) {
-        stack.push(paramChild);
-      }
-      if (node.wildcardChild) {
-        stack.push(node.wildcardChild);
-      }
-    }
-  }
-
-  private scoreParamNode(node: RouterNode): number {
-    let score = 0;
-    if (node.pattern) {
-      score += 2;
-    }
-    if (node.wildcardChild) {
-      score -= 1;
-    }
-    if (node.methods.byMethod.size) {
-      score += 1;
-    }
-    const len = node.segment.length;
-    return score + (len ? 1 / len : 0);
-  }
-
-  private recalculateRouteFlags(entry: RouterNode): void {
-    let hasWildcard = false;
-    let hasDynamic = false;
-    const stack: RouterNode[] = [entry];
-    while (stack.length) {
-      const node = stack.pop()!;
-      if (node.paramChildren.length) {
-        hasDynamic = true;
-      }
-      if (node.wildcardChild) {
-        hasWildcard = true;
-        hasDynamic = true;
-        stack.push(node.wildcardChild);
-      }
-      for (const child of node.paramChildren) {
-        stack.push(child);
-      }
-      for (const child of node.staticChildren.values()) {
-        stack.push(child);
-      }
-    }
-    this.hasWildcardRoutes = hasWildcard;
-    this.hasDynamicRoutes = hasDynamic;
-    this.staticFastRegistry.markRouteHints(hasDynamic, hasWildcard);
-  }
-
-  private updateSnapshotMetadata(): void {
-    const methodsWithWildcard: HttpMethod[] = this.wildcardMethodsByMethod
-      ? Object.keys(this.wildcardMethodsByMethod)
-          .map(code => Number(code) as HttpMethod)
-          .sort((a, b) => a - b)
-      : [];
-    this.metadata = Object.freeze({
-      totalRoutes: this.routeCount,
-      hasDynamicRoutes: this.hasDynamicRoutes,
-      hasWildcardRoutes: this.hasWildcardRoutes,
-      wildcardRouteCount: this.wildcardRouteCount,
-      methodsWithWildcard,
-      builtAt: Date.now(),
-    });
-  }
-
-  private precomputeWildcardSuffixMetadata(entry: RouterNode): void {
-    const perMethod: Record<number, true> = Object.create(null);
-    let wildcardRouteCount = 0;
-    const stack: RouterNode[] = [entry];
-    while (stack.length) {
-      const node = stack.pop()!;
-      const wildcard = node.wildcardChild;
-      if (wildcard) {
-        for (const method of wildcard.methods.byMethod.keys()) {
-          perMethod[method as number] = true;
-          wildcardRouteCount++;
-        }
-        stack.push(wildcard);
-      }
-      for (const child of node.paramChildren) {
-        stack.push(child);
-      }
-      for (const child of node.staticChildren.values()) {
-        stack.push(child);
-      }
-    }
-    this.wildcardRouteCount = wildcardRouteCount;
-    this.wildcardMethodsByMethod = wildcardRouteCount ? perMethod : null;
   }
 
   private methodHasWildcard(method: HttpMethod): boolean {

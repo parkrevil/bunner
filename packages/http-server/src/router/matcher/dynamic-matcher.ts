@@ -1,8 +1,6 @@
 import type { RouteKey } from '../../types';
 import type { HttpMethod } from '../enums';
 import type { ImmutableRouterLayout, SerializedNodeRecord } from '../layout/immutable-router-layout';
-import { ROUTE_REGEX_TIMEOUT } from '../pattern/pattern-tester';
-import { matchStaticParts } from '../tree/tree-utils';
 import type {
   DynamicMatchResult,
   DynamicMatcherConfig,
@@ -11,9 +9,12 @@ import type {
   PatternTesterFn,
   RouteParams,
 } from '../types';
-import { decodeURIComponentSafe } from '../utils/path-utils';
 
 import { FrameStage, type MatchFrame } from './match-frame';
+import { ParamDecoder } from './param-decoder';
+import { createParamStage, type ParamStageHandler } from './stage-param';
+import { createStaticStage, type StaticStageHandler } from './stage-static';
+import { createWildcardStage, type WildcardStageHandler } from './stage-wildcard';
 import { WildcardSuffixCache } from './suffix-cache';
 
 /**
@@ -45,8 +46,11 @@ export class DynamicMatcher {
   private paramNames: string[] = [];
   private paramValues: string[] = [];
   private paramCount = 0;
-  private decodedSegmentCache?: Array<string | undefined>;
   private suffixHelper?: WildcardSuffixCache;
+  private paramDecoder: ParamDecoder;
+  private runStaticStage: StaticStageHandler;
+  private runParamStage: ParamStageHandler;
+  private runWildcardStage: WildcardStageHandler;
 
   constructor(config: DynamicMatcherConfig) {
     this.method = config.method;
@@ -72,6 +76,42 @@ export class DynamicMatcher {
         plan: config.suffixPlan,
       });
     }
+    this.paramDecoder = new ParamDecoder({
+      segments: this.segments,
+      decodeParams: this.decodeParams,
+      encodedSlashBehavior: this.encodedSlashBehavior,
+    });
+    this.runStaticStage = createStaticStage({
+      segments: this.segments,
+      nodes: this.nodes,
+      staticChildren: this.staticChildren,
+      segmentChains: this.segmentChains,
+      getParamCount: () => this.paramCount,
+    });
+    this.runParamStage = createParamStage({
+      segmentsLength: this.segments.length,
+      nodes: this.nodes,
+      paramChildren: this.paramChildren,
+      paramOrders: this.paramOrders,
+      observer: this.observer,
+      patternTesters: this.patternTesters,
+      paramDecoder: this.paramDecoder,
+      setParamCount: count => {
+        this.paramCount = count;
+      },
+      getParamCount: () => this.paramCount,
+      pushParam: (name, value) => this.pushParam(name, value),
+    });
+    this.runWildcardStage = createWildcardStage({
+      nodes: this.nodes,
+      segments: this.segments,
+      suffixHelper: this.suffixHelper,
+      lookupMethodKey: node => this.lookupMethodKey(node),
+      pushParam: (name, value) => this.pushParam(name, value),
+      setParamCount: count => {
+        this.paramCount = count;
+      },
+    });
   }
 
   match(): DynamicMatchResult | null {
@@ -99,13 +139,13 @@ export class DynamicMatcher {
           result = this.handleEnterStage(frame);
           break;
         case FrameStage.Static:
-          result = this.handleStaticStage(frame, stack);
+          result = this.runStaticStage(frame, stack);
           break;
         case FrameStage.Params:
-          result = this.handleParamStage(frame, stack);
+          result = this.runParamStage(frame, stack);
           break;
         case FrameStage.Wildcard:
-          result = this.handleWildcardStage(frame);
+          result = this.runWildcardStage(frame);
           break;
         case FrameStage.Exit:
           this.handleExitStage(stack);
@@ -136,106 +176,6 @@ export class DynamicMatcher {
     return undefined;
   }
 
-  private handleStaticStage(frame: MatchFrame, stack: MatchFrame[]): RouteKey | undefined {
-    const node = this.nodes[frame.nodeIndex]!;
-    if (frame.segmentIndex >= this.segments.length || node.staticRangeCount === 0) {
-      frame.stage = FrameStage.Params;
-      return undefined;
-    }
-    const childIndex = this.findStaticChild(node, this.segments[frame.segmentIndex]!);
-    frame.stage = FrameStage.Params;
-    if (childIndex === -1) {
-      return undefined;
-    }
-    const child = this.nodes[childIndex]!;
-    const chain = this.getSegmentParts(child);
-    if (chain && chain.length > 1) {
-      const matched = matchStaticParts(chain, this.segments, frame.segmentIndex);
-      if (matched !== chain.length) {
-        return undefined;
-      }
-      stack.push({
-        nodeIndex: childIndex,
-        segmentIndex: frame.segmentIndex + matched,
-        stage: FrameStage.Enter,
-        paramBase: this.paramCount,
-        paramCursor: 0,
-      });
-      return undefined;
-    }
-    stack.push({
-      nodeIndex: childIndex,
-      segmentIndex: frame.segmentIndex + 1,
-      stage: FrameStage.Enter,
-      paramBase: this.paramCount,
-      paramCursor: 0,
-    });
-    return undefined;
-  }
-
-  private handleParamStage(frame: MatchFrame, stack: MatchFrame[]): RouteKey | undefined {
-    const node = this.nodes[frame.nodeIndex]!;
-    if (frame.segmentIndex >= this.segments.length || node.paramRangeCount === 0) {
-      frame.stage = FrameStage.Wildcard;
-      frame.decodedSegment = undefined;
-      return undefined;
-    }
-    if (frame.paramCursor >= node.paramRangeCount) {
-      frame.stage = FrameStage.Wildcard;
-      frame.decodedSegment = undefined;
-      return undefined;
-    }
-    this.paramCount = frame.paramBase;
-    frame.decodedSegment ??= this.getDecodedSegment(frame.segmentIndex);
-    const decoded = frame.decodedSegment;
-    const order = this.paramOrders ? this.paramOrders[frame.nodeIndex] : null;
-    const orderedOffset = order ? order[frame.paramCursor] : frame.paramCursor;
-    if (orderedOffset === undefined || orderedOffset >= node.paramRangeCount) {
-      frame.stage = FrameStage.Wildcard;
-      frame.decodedSegment = undefined;
-      return undefined;
-    }
-    frame.paramCursor++;
-    const edge = this.paramChildren[node.paramRangeStart + orderedOffset]!;
-    const childIndex = edge.target;
-    const child = this.nodes[childIndex]!;
-    if (!this.testParamPattern(child.patternIndex, decoded)) {
-      return undefined;
-    }
-    this.observer?.onParamBranch?.(frame.nodeIndex, orderedOffset);
-    this.pushParam(child.segment, decoded);
-    stack.push({
-      nodeIndex: childIndex,
-      segmentIndex: frame.segmentIndex + 1,
-      stage: FrameStage.Enter,
-      paramBase: this.paramCount,
-      paramCursor: 0,
-    });
-    return undefined;
-  }
-
-  private handleWildcardStage(frame: MatchFrame): RouteKey | undefined {
-    const node = this.nodes[frame.nodeIndex]!;
-    frame.stage = FrameStage.Exit;
-    const wildcardIndex = node.wildcardChild;
-    if (wildcardIndex === -1) {
-      return undefined;
-    }
-    this.paramCount = frame.paramBase;
-    const wildcard = this.nodes[wildcardIndex]!;
-    const key = this.lookupMethodKey(wildcard);
-    if (key === null) {
-      return undefined;
-    }
-    if (wildcard.wildcardOrigin === 'multi' && frame.segmentIndex >= this.segments.length) {
-      return undefined;
-    }
-    const wildcardName = wildcard.segment || '*';
-    const wildcardValue = this.suffixHelper?.getValue(frame.segmentIndex) ?? '';
-    this.pushParam(wildcardName, wildcardValue);
-    return key;
-  }
-
   private handleExitStage(stack: MatchFrame[]): void {
     const frame = stack.pop();
     if (!frame) {
@@ -259,70 +199,10 @@ export class DynamicMatcher {
     return null;
   }
 
-  private findStaticChild(node: SerializedNodeRecord, segment: string): number {
-    if (!node.staticRangeCount) {
-      return -1;
-    }
-    let lo = node.staticRangeStart;
-    let hi = lo + node.staticRangeCount - 1;
-    while (lo <= hi) {
-      const mid = (lo + hi) >>> 1;
-      const child = this.staticChildren[mid]!;
-      if (child.segment === segment) {
-        return child.target;
-      }
-      if (child.segment < segment) {
-        lo = mid + 1;
-      } else {
-        hi = mid - 1;
-      }
-    }
-    return -1;
-  }
-
-  private getSegmentParts(node: SerializedNodeRecord): readonly string[] | null {
-    if (node.segmentPartsIndex === -1) {
-      return null;
-    }
-    return this.segmentChains[node.segmentPartsIndex] ?? null;
-  }
-
-  private testParamPattern(patternIndex: number, value: string): boolean {
-    if (patternIndex === -1) {
-      return true;
-    }
-    const tester = this.patternTesters[patternIndex];
-    if (!tester) {
-      return true;
-    }
-    try {
-      return tester(value);
-    } catch (error) {
-      if (error && typeof error === 'object' && (error as Record<typeof ROUTE_REGEX_TIMEOUT, boolean>)[ROUTE_REGEX_TIMEOUT]) {
-        throw error;
-      }
-      return false;
-    }
-  }
-
   private pushParam(name: string, value: string): void {
     this.paramNames[this.paramCount] = name;
     this.paramValues[this.paramCount] = value;
     this.paramCount++;
-  }
-
-  private getDecodedSegment(index: number): string {
-    if (!this.decodeParams) {
-      return this.segments[index]!;
-    }
-    this.decodedSegmentCache ??= new Array<string | undefined>(this.segments.length);
-    const cached = this.decodedSegmentCache[index];
-    if (cached !== undefined) {
-      return cached;
-    }
-    const value = decodeURIComponentSafe(this.segments[index]!, this.encodedSlashBehavior);
-    this.decodedSegmentCache[index] = value;
-    return value;
   }
 
   private buildParams(): { params: RouteParams; snapshot?: Array<[string, string | undefined]> } {
