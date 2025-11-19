@@ -136,9 +136,8 @@ describe('RadixRouter :: basic routing', () => {
   });
 
   it('should reuse case-insensitive static caches without repeated folding', () => {
-    let key!: RouteKey;
     const builder = new RadixRouterBuilder({ caseSensitive: false });
-    key = builder.add(HttpMethod.Get, '/MiXeD/Path') as RouteKey;
+    const key = builder.add(HttpMethod.Get, '/MiXeD/Path') as RouteKey;
     const router = builder.build();
 
     expect(router.match(HttpMethod.Get, '/mixed/path')).toEqual({ key, params: {} });
@@ -161,14 +160,5 @@ describe('RadixRouter :: basic routing', () => {
     expect(metadata.wildcardRouteCount).toBe(1);
     expect(Object.isFrozen(metadata)).toBe(true);
     expect((router as any)[ROUTER_SNAPSHOT_METADATA]).toBe(metadata);
-  });
-
-  it('should enumerate allowed methods for a given path', () => {
-    const router = buildRouter(builder => {
-      builder.add(HttpMethod.Get, '/multi');
-      builder.add(HttpMethod.Post, '/multi');
-    });
-
-    expect(router.getAllowedMethods('/multi')).toEqual([HttpMethod.Get, HttpMethod.Post, HttpMethod.Head]);
   });
 });

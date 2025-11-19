@@ -23,8 +23,7 @@ export interface RouteMatch {
 }
 
 export interface RouteMatchMeta {
-  readonly source?: 'static-fast' | 'cache' | 'dynamic' | 'auto-options';
-  readonly allow?: readonly HttpMethod[];
+  readonly source?: 'static-fast' | 'cache' | 'dynamic';
 }
 
 export type StaticProbeResult =
@@ -75,10 +74,6 @@ export interface RouterOptions {
   enableCache?: boolean;
   /** Max entries for match LRU cache (default: 1024) */
   cacheSize?: number;
-  /** Automatically fall back to GET routes when HEAD is requested (default: true) */
-  headFallbackToGet?: boolean;
-  /** Synthesize OPTIONS responses based on registered methods (default: true) */
-  autoOptions?: boolean;
   /** Enforce globally unique parameter names when true */
   strictParamNames?: boolean;
   /** Control how optional parameters behave when missing */
@@ -168,7 +163,13 @@ export interface ParamBranchEvent {
   localOffset: number;
 }
 
-export type BuildStageName = 'compress-static' | 'param-priority' | 'wildcard-suffix' | 'regex-safety' | 'route-flags' | 'snapshot-metadata';
+export type BuildStageName =
+  | 'compress-static'
+  | 'param-priority'
+  | 'wildcard-suffix'
+  | 'regex-safety'
+  | 'route-flags'
+  | 'snapshot-metadata';
 export type MatchStageName = 'static-fast' | 'cache' | 'dynamic';
 
 export interface StageEvent {

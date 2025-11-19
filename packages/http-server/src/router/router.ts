@@ -38,7 +38,6 @@ type CacheEntry = { key: RouteKey; params?: Array<[string, string | undefined]> 
 type CacheRecord = { version: number; entry: CacheEntry | null };
 
 let GLOBAL_ROUTE_KEY_SEQ = 1 as RouteKey;
-const AUTO_OPTIONS_ROUTE_KEY = 0 as RouteKey;
 
 type NormalizedRegexSafetyOptions = {
   mode: 'error' | 'warn';
@@ -189,7 +188,6 @@ class RadixRouterCore {
     methodsWithWildcard: [],
     builtAt: 0,
   });
-  private methodSpace: HttpMethod[];
   private globalParamNames: Set<string> | null;
   private stageConfig: PipelineStageConfig;
 
@@ -208,8 +206,6 @@ class RadixRouterCore {
       blockTraversal: options?.blockTraversal ?? true,
       enableCache: options?.enableCache ?? false,
       cacheSize: options?.cacheSize ?? 1024,
-      headFallbackToGet: options?.headFallbackToGet ?? true,
-      autoOptions: options?.autoOptions ?? true,
       strictParamNames: options?.strictParamNames ?? false,
       optionalParamBehavior: options?.optionalParamBehavior ?? 'omit',
       observers: options?.observers,
@@ -218,7 +214,6 @@ class RadixRouterCore {
       regexAnchorPolicy: options?.regexAnchorPolicy ?? 'warn',
       paramOrderTuning,
     };
-    this.methodSpace = Object.values(HttpMethod).filter((value): value is HttpMethod => typeof value === 'number');
     this.root = new RouterNode(NodeKind.Static, '');
     this.patternTesterOptions = this.buildPatternTesterOptions();
     this.observers = this.options.observers;
@@ -270,16 +265,7 @@ class RadixRouterCore {
     if (direct) {
       return direct;
     }
-    if (method === HttpMethod.Options && this.options.autoOptions) {
-      const synthesized = this.buildAutoOptionsMatch(path);
-      if (synthesized) {
-        return this.finalizeMatch(method, path, synthesized, false);
-      }
-    }
-    if (!this.shouldFallbackToHeadAlias(method)) {
-      return null;
-    }
-    return this.performMatch(HttpMethod.Get, path, false, method);
+    return null;
   }
 
   finalizeBuild(): void {
@@ -311,49 +297,13 @@ class RadixRouterCore {
     return { edgeHits: Array.from(this.paramEdgeHitCounts) };
   }
 
-  getAllowedMethods(path: string): HttpMethod[] {
-    const allowed = new Set<HttpMethod>();
-    for (const candidate of this.methodSpace) {
-      if (candidate === HttpMethod.Options && !this.options.autoOptions) {
-        continue;
-      }
-      if (this.performMatch(candidate, path, true, undefined, false)) {
-        allowed.add(candidate);
-      }
-    }
-    if (this.options.headFallbackToGet && allowed.has(HttpMethod.Get)) {
-      allowed.add(HttpMethod.Head);
-    }
-    return Array.from(allowed).sort((a, b) => a - b);
-  }
-
-  private buildAutoOptionsMatch(path: string): RouteMatch | null {
-    const allowed = this.getAllowedMethods(path);
-    if (!allowed.length) {
-      return null;
-    }
-    if (!allowed.includes(HttpMethod.Options)) {
-      allowed.push(HttpMethod.Options);
-      allowed.sort((a, b) => a - b);
-    }
-    return {
-      key: AUTO_OPTIONS_ROUTE_KEY,
-      params: Object.create(null),
-      meta: {
-        source: 'auto-options',
-        allow: Object.freeze(allowed.slice()),
-      },
-    };
-  }
-
   private performMatch(
     method: HttpMethod,
     path: string,
     skipCache: boolean = false,
-    requestMethod?: HttpMethod,
     instrument: boolean = true,
   ): RouteMatch | null {
-    const observerMethod = requestMethod ?? method;
+    const observerMethod = method;
     const finalize = (match: RouteMatch, fromCache: boolean): RouteMatch =>
       instrument ? this.finalizeMatch(observerMethod, path, match, fromCache) : match;
     const notifyCache = (kind: 'hit' | 'miss', key?: string): void => {
@@ -461,10 +411,6 @@ class RadixRouterCore {
       this.setCache(cacheKey, resolved, dynamicMatch.snapshot);
     }
     return finalize(resolved, false);
-  }
-
-  private shouldFallbackToHeadAlias(method: HttpMethod): boolean {
-    return method === HttpMethod.Head && this.options.headFallbackToGet === true;
   }
 
   private tryStaticFastMatch(method: HttpMethod, path: string): StaticProbeResult {
@@ -670,7 +616,8 @@ class RadixRouterCore {
     fn: () => T,
     logDuration: boolean = false,
   ): T {
-    const stageId = phase === 'build' ? `build:${name as BuildStageName}` : `match:${name as MatchStageName}`;
+    const stageId =
+      phase === 'build' ? (`build:${name as BuildStageName}` as const) : (`match:${name as MatchStageName}` as const);
     const start = getTimestamp();
     this.observers?.onStageStart?.({ stage: stageId, context });
     try {
@@ -1711,10 +1658,6 @@ export class RadixRouterInstance implements RouterInstance {
 
   getLayoutSnapshot(): ImmutableRouterLayout | undefined {
     return this.core.getLayoutSnapshot();
-  }
-
-  getAllowedMethods(path: string): HttpMethod[] {
-    return this.core.getAllowedMethods(path);
   }
 
   exportParamOrderSnapshot(): ParamOrderSnapshot | null {

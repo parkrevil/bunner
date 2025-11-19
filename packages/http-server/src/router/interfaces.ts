@@ -10,7 +10,6 @@ export interface RouterInstance {
   match(method: HttpMethod, path: string): RouteMatch | null;
   getMetadata(): RouterSnapshotMetadata;
   getLayoutSnapshot(): ImmutableRouterLayout | undefined;
-  getAllowedMethods(path: string): HttpMethod[];
   exportParamOrderSnapshot(): ParamOrderSnapshot | null;
   [ROUTER_SNAPSHOT_METADATA]?: RouterSnapshotMetadata;
 }
