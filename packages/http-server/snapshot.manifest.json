@@ -1,0 +1,15 @@
+{
+  "options": {
+    "ignoreTrailingSlash": true,
+    "collapseSlashes": true,
+    "caseSensitive": true,
+    "enableCache": true,
+    "cacheSize": 256
+  },
+  "routes": [
+    { "method": "GET", "path": "/health" },
+    { "method": ["GET", "POST"], "path": "/users" },
+    { "method": "*", "path": "/assets/:file*" }
+  ],
+  "output": "./dist/router-snapshot.json"
+}

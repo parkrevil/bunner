@@ -2,8 +2,12 @@
   "name": "@bunner/http-server",
   "module": "index.ts",
   "type": "module",
+  "bin": {
+    "bunner-http-snapshot": "./bin/generate-snapshot.ts"
+  },
   "scripts": {
-    "bench:router": "bun ./bench/router/runner"
+    "bench:router": "bun ./bench/router/runner",
+    "snapshot": "bun ./bin/generate-snapshot.ts --manifest ./snapshot.manifest.json"
   },
   "devDependencies": {
     "@types/bun": "^1.3.0",

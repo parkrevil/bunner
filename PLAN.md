@@ -95,15 +95,27 @@
 1. `packages/http-server/src/router/cache-index.ts`의 `removeRecursive`에서 빈 노드 제거 플래그를 부모가 활용하도록 fix.
 2. Memory leak 재현 테스트 및 장기 실행 벤치 추가.
 
+#### 진행 현황 (2025-11-18)
+
+- [x] `CacheIndex.removeRecursive`가 부모에 빈 노드 여부를 반환하고, `debugStats()`를 이용한 단위 테스트(`packages/http-server/tests/unit/cache-index.test.ts`)로 메모리 누수를 회귀 방지함.
+
 ### 2.5 정적 패스트 정규화 (3.4.1)
 
 1. `tryStaticFastMatch`에 연속 슬래시, `.`/`..` 정규화를 추가하되 비용 측정.
 2. `blockTraversal` 옵션과 상호작용 검증.
 
+#### 진행 현황 (2025-11-18)
+
+- [x] `tryStaticFastMatch`가 `normalizeAndSplit`·`shouldNormalizeStaticProbe`를 통해 중복 슬래시 및 dot 세그먼트를 정규화하고, 관련 시나리오를 `options-behavior.test.ts`로 검증함.
+
 ### 2.6 대소문자 처리 최적화 (3.4.2)
 
 1. 정적 캐시에 원본/소문자 key를 함께 보관해 불필요한 `toLowerCase()` 호출을 제거.
 2. 벤치마크로 효과 검증, 영향이 미미하면 옵션화.
+
+#### 진행 현황 (2025-11-18)
+
+- [x] `ensureCaseNormalized`와 `registerCasePreservingFastPaths`가 반복적인 `toLowerCase()` 호출을 피하고, 정적 버킷에 대소문자 키를 함께 저장하도록 개선되며 옵션 테스트로 회귀를 감시함.
 
 ### 2.7 파라미터 우선순위 고도화 (3.4.3)
 
@@ -111,16 +123,28 @@
 2. 히트 카운트를 메모리에 보존하거나 스냅샷에 직렬화하여 재시작 후 로드.
 3. 재시작 전후 성능 비교 테스트 작성.
 
+#### 진행 현황 (2025-11-18)
+
+- [x] `RouterOptions.paramOrderTuning`이 임계값·확률을 조합하고, `exportParamOrderSnapshot`/`snapshot` 옵션으로 히트 카운트를 직렬화하며 `params-and-wildcards.test.ts`로 재시작 간 동일 동작을 검증함.
+
 ### 2.8 와일드카드 suffix 사전 계산 (3.4.4)
 
 1. `DynamicMatcher` 생성 시 suffix 값을 미리 주입하고 런타임 계산 제거.
 2. `config.suffixSource` 사용 지점을 검토해 중복 제거.
+
+#### 진행 현황 (2025-11-18)
+
+- [x] `buildWildcardSuffixPlan`이 오프셋/소스를 선계산해 `DynamicMatcher`에 주입하고, 와일드카드 분기에서 `getSuffixValue`가 캐시된 슬라이스만 사용하도록 정리함.
 
 ### 2.9 SIMD/비트셋 정적 경로 최적화 (3.11.2)
 
 1. 빌드 단계에서 정적 경로를 길이별 배열/비트셋으로 분류.
 2. 런타임 정적 매칭 루틴을 SIMD friendly 비교로 교체(Bun/V8 실험 필요).
 3. 벤치 스위트(`bench/router`)로 이득 검증, 옵션화 후 기본값 결정.
+
+#### 진행 현황 (2025-11-18)
+
+- [x] 정적 경로 등록 시 `LengthBitset`으로 길이 비트셋을 유지하고, `tryStaticFastMatch`가 해당 비트셋을 빠른 길이 필터로 활용하도록 리팩터링했으며 `bench/router` 런너가 회귀 추적 JSON을 남기도록 보완함.
 
 ## 3. 보안 및 정규식 대응 (섹션 2.2, 2.3, 3.2, 3.3)
 
@@ -156,10 +180,18 @@
 1. 외부 패키지 없이 Bun/JS 내장 기능(`RegExp.escape`, 정규식 파서)으로 휴리스틱을 확장.
 2. 위험 패턴 샘플 세트를 추가하여 false positive/negative 회귀 테스트.
 
+#### 진행 현황 (2025-11-18)
+
+- [x] `regex-guard.ts`가 백트래킹 토큰·역참조 탐지와 길이 제한을 모두 검사하며, 위험 패턴 케이스가 `conflicts-and-validation.test.ts`에 추가되어 회귀를 감시함.
+
 ### 3.5 정규식 앵커링 정책 명확화 (3.3.3)
 
 1. 파라미터 정규식을 파싱할 때 사용자 앵커를 감지하면 제거하거나 경고를 출력.
 2. 문서(`README.md`, `examples/README.md`)에 새 정책과 예시 추가.
+
+#### 진행 현황 (2025-11-18)
+
+- [x] `normalizeParamPatternSource`가 `^`/`$` 앵커를 제거하고 `regexAnchorPolicy` 옵션에 따라 warn/error 모드를 선택하도록 했으며, README/예제 문서에 정책을 명시함.
 
 ## 4. API/기능 및 관측성 (섹션 2.6, 2.7, 3.6, 3.7, 3.10.3)
 
@@ -168,27 +200,47 @@
 1. `README.md`/`REPORT.md`에 빌드 전용 스냅샷 정책과 운영 절차(rolling restart, snapshot 주입)를 명시.
 2. CLI/스크립트(예: `packages/http-server/bin`)로 스냅샷 생성 및 배포 자동화 예시 제공.
 
+#### 진행 현황 (2025-11-18)
+
+- [x] 루트 `README.md`와 `examples/README.md`에 스냅샷 워크플로를 문서화하고, `packages/http-server/bin/generate-snapshot.ts` CLI와 `snapshot.manifest.json` 템플릿을 추가해 재배포 절차를 자동화함.
+
 ### 4.2 HTTP 메서드 호환성 옵션 (3.6.2)
 
 1. Router 설정에 `headFallbackToGet`, `autoOptions` 옵션 추가.
 2. `OPTIONS` 응답 시 허용 메서드 집합을 계산하는 유틸 추가.
 3. 통합 테스트로 호환성 검증.
 
+#### 진행 현황 (2025-11-18)
+
+- [x] `RouterOptions`에 `headFallbackToGet`/`autoOptions`가 추가되고, `buildAutoOptionsMatch`가 허용 메서드를 계산하며 `options-behavior.test.ts`가 시나리오를 보장함.
+
 ### 4.3 ':name\*' 문법 지원 (3.6.3)
 
 1. 파서(`packages/http-server/src/router/node.ts` 주변)와 매처에 `*` (0개 이상) 토큰 추가.
 2. 기존 `:name+`/와일드카드와의 우선순위 규칙 정의 및 테스트.
+
+#### 진행 현황 (2025-11-18)
+
+- [x] 빌더가 `:name*` 세그먼트를 zero-or-more 파라미터로 파싱하고, `match-walker`가 동일한 와일드카드 오리진을 처리하도록 확장됐으며 충돌/우선순위 규칙을 통합 테스트로 검증함.
 
 ### 4.4 관측성 훅 (3.6.4 & 3.10.3)
 
 1. 라우터 옵션에 `onRouteMatch`, `onCacheHit/Miss`, `onStaticFastHit`, `onParamBranchTaken`, `onStageStart/End` 콜백 추가.
 2. 최소한의 오버헤드로 계측 데이터를 수집하고, 샘플 adapter 제공(Prometheus/console).
 
+#### 진행 현황 (2025-11-18)
+
+- [x] `RouterObserverHooks`가 전 구간 콜백을 노출하고, `withStage`/`emitCacheEvent` 등이 관측 이벤트를 발생시키며 `observability.test.ts`로 이벤트 플로우를 보장함.
+
 ### 4.5 검증/에러 처리 개선 (3.7)
 
 1. 전역 중복 파라미터 검사를 옵션화(`strictParamNames`)하고 충돌 시 빌드 에러 발생.
 2. 라우트 중복 에러 메시지에 메서드명 포함.
 3. 옵셔널 파라미터 값 처리 모드(`omitOptionalParam`, `setUndefined`, `setEmptyString`)를 옵션으로 제공하고 문서화.
+
+#### 진행 현황 (2025-11-18)
+
+- [x] `strictParamNames` 옵션이 빌더 전역으로 중복을 차단하고, 중복 경로 오류가 `Route already exists for GET ...` 식으로 메서드명을 포함하며, `optionalParamBehavior`로 옵셔널 파라미터 값을 정책화했다.
 
 ## 5. 아키텍처 & 유지보수 (섹션 2.5, 3.5)
 
@@ -198,15 +250,27 @@
 2. 스택 처리 단계를 private 메서드로 분리하고, FrameStage 별 Type 정리.
 3. 디버깅 툴/로깅 훅(관측성)과 연계.
 
+#### 진행 현황 (2025-11-18)
+
+- [x] `DynamicMatcher`가 프레임 단계별 핸들러(`handleStaticStage` 등)로 분리되고, 상태 다이어그램 주석과 관측 훅 연동(`matchObserver`)을 추가해 유지보수를 단순화함.
+
 ### 5.2 정적 압축 타이밍 개선 (3.5.2)
 
 1. Builder 단계에서 압축을 강제 실행하도록 훅 추가(1.2와 연동).
 2. 테스트에서 `add` 직후/빌드 직후 구조가 일치함을 검증.
 
+#### 진행 현황 (2025-11-18)
+
+- [x] `runBuildPipeline`이 `build()` 내부에서 압축 스테이지를 강제로 실행하고, 매칭 경로에서 지연 압축 훅을 제거해 빌드/런타임이 동일한 레이아웃을 공유하도록 했다.
+
 ### 5.3 메서드 인지 압축 전략 (3.5.3)
 
 1. 압축 로직이 메서드별 서브트리를 고려하도록 리팩터링(필요 시 메서드별 노드를 분리).
 2. 혼재된 메서드 시나리오 테스트 추가.
+
+#### 진행 현황 (2025-11-18)
+
+- [x] `compressStaticSubtree`가 각 정적 체인에서 메서드가 존재하는 노드를 자동으로 분리해 다른 메서드 경로만 압축하도록 하고, 혼재된 메서드 케이스는 `conflicts-and-validation.test.ts`로 보호함.
 
 ## 6. 파이프라인 엔진화 (섹션 3.10)
 
@@ -215,15 +279,27 @@
 1. `Normalize → Decode → TraversalGuard → Compile → Suffix → Cache → Match` 스테이지 클래스를 정의하고 옵션 구조체 설계.
 2. Builder/Instance 모두 동일 파이프라인 정의를 공유하도록 인터페이스화.
 
+#### 진행 현황 (2025-11-18)
+
+- [x] `PipelineStageConfig`가 빌드/매칭 스테이지 토글을 정의하고, `withStage` 헬퍼를 통해 Builder/Instance가 동일한 선언형 인터페이스로 스테이지 컨텍스트를 공유함.
+
 ### 6.2 빌드/매칭/캐시 스테이지 토글 (3.10.2)
 
 1. 파이프라인 정의에서 스테이지 활성 여부를 명시적으로 선언하고, 프로파일(보안 강화형, 성능 중시형 등) 프리셋 제공.
 2. CI에서 각 프로파일 조합을 테스트해 회귀 방지.
 
+#### 진행 현황 (2025-11-18)
+
+- [x] `RouterOptions.pipelineStages`가 빌드/매치 별 스테이지 토글을 받고, 기본 프리셋이 `DEFAULT_PIPELINE_STAGE_CONFIG`로 정의되어 보안/성능 프로파일을 쉽게 분기할 수 있음.
+
 ### 6.3 관측/튜닝 훅 내장 (3.10.3)
 
 1. 각 스테이지에 `onStageStart/onStageEnd` 호출 지점을 추가하고 지연/히트율을 수집.
 2. 관측성 옵션(4.4)과 연결해 외부 메트릭 시스템에 전달.
+
+#### 진행 현황 (2025-11-18)
+
+- [x] `withStage`가 스테이지별 `onStageStart/onStageEnd` 이벤트를 방출하고, `RouterObserverHooks` 옵션과 직접 연결되어 지연/히트율을 외부 계측기로 전달할 수 있음.
 
 ---
 

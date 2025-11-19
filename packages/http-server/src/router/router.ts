@@ -282,6 +282,51 @@ class RadixRouterCore {
     return this.performMatch(HttpMethod.Get, path, false, method);
   }
 
+  finalizeBuild(): void {
+    if (this.sealed) {
+      return;
+    }
+    const root = this.requireBuilderRoot();
+    this.runBuildPipeline(root);
+    this.layout = buildImmutableLayout(root);
+    this.patternTesters = this.buildLayoutPatternTesters(this.layout);
+    this.initializeParamOrderingStructures();
+    this.hydrateParamOrderingSnapshot();
+    this.sealed = true;
+    this.releaseBuilderState();
+  }
+
+  getMetadata(): RouterSnapshotMetadata {
+    return this.metadata;
+  }
+
+  getLayoutSnapshot(): ImmutableRouterLayout | undefined {
+    return this.layout;
+  }
+
+  exportParamOrderingSnapshot(): ParamOrderSnapshot | null {
+    if (!this.paramEdgeHitCounts.length) {
+      return null;
+    }
+    return { edgeHits: Array.from(this.paramEdgeHitCounts) };
+  }
+
+  getAllowedMethods(path: string): HttpMethod[] {
+    const allowed = new Set<HttpMethod>();
+    for (const candidate of this.methodSpace) {
+      if (candidate === HttpMethod.Options && !this.options.autoOptions) {
+        continue;
+      }
+      if (this.performMatch(candidate, path, true, undefined, false)) {
+        allowed.add(candidate);
+      }
+    }
+    if (this.options.headFallbackToGet && allowed.has(HttpMethod.Get)) {
+      allowed.add(HttpMethod.Head);
+    }
+    return Array.from(allowed).sort((a, b) => a - b);
+  }
+
   private buildAutoOptionsMatch(path: string): RouteMatch | null {
     const allowed = this.getAllowedMethods(path);
     if (!allowed.length) {
@@ -422,51 +467,6 @@ class RadixRouterCore {
     return method === HttpMethod.Head && this.options.headFallbackToGet === true;
   }
 
-  finalizeBuild(): void {
-    if (this.sealed) {
-      return;
-    }
-    const root = this.requireBuilderRoot();
-    this.runBuildPipeline(root);
-    this.layout = buildImmutableLayout(root);
-    this.patternTesters = this.buildLayoutPatternTesters(this.layout);
-    this.initializeParamOrderingStructures();
-    this.hydrateParamOrderingSnapshot();
-    this.sealed = true;
-    this.releaseBuilderState();
-  }
-
-  getMetadata(): RouterSnapshotMetadata {
-    return this.metadata;
-  }
-
-  getLayoutSnapshot(): ImmutableRouterLayout | undefined {
-    return this.layout;
-  }
-
-  exportParamOrderingSnapshot(): ParamOrderSnapshot | null {
-    if (!this.paramEdgeHitCounts.length) {
-      return null;
-    }
-    return { edgeHits: Array.from(this.paramEdgeHitCounts) };
-  }
-
-  getAllowedMethods(path: string): HttpMethod[] {
-    const allowed = new Set<HttpMethod>();
-    for (const candidate of this.methodSpace) {
-      if (candidate === HttpMethod.Options && !this.options.autoOptions) {
-        continue;
-      }
-      if (this.performMatch(candidate, path, true, undefined, false)) {
-        allowed.add(candidate);
-      }
-    }
-    if (this.options.headFallbackToGet && allowed.has(HttpMethod.Get)) {
-      allowed.add(HttpMethod.Head);
-    }
-    return Array.from(allowed).sort((a, b) => a - b);
-  }
-
   private tryStaticFastMatch(method: HttpMethod, path: string): StaticProbeResult {
     if (!path.length || path.charCodeAt(0) !== 47) {
       return { kind: 'fallback' };
@@ -509,7 +509,7 @@ class RadixRouterCore {
       }
     }
 
-    let prepared: NormalizedPathSegments | undefined = this.getNormalizedStaticProbe(path);
+    const prepared: NormalizedPathSegments | undefined = this.getNormalizedStaticProbe(path);
     if (prepared) {
       if (this.staticPathLengths.has(prepared.normalized.length)) {
         const normalizedHit = this.matchStaticEntry(this.staticFast.get(prepared.normalized), method);
@@ -670,10 +670,7 @@ class RadixRouterCore {
     fn: () => T,
     logDuration: boolean = false,
   ): T {
-    const stageId =
-      phase === 'build'
-        ? (`build:${name as BuildStageName}` as `build:${BuildStageName}`)
-        : (`match:${name as MatchStageName}` as `match:${MatchStageName}`);
+    const stageId = phase === 'build' ? `build:${name as BuildStageName}` : `match:${name as MatchStageName}`;
     const start = getTimestamp();
     this.observers?.onStageStart?.({ stage: stageId, context });
     try {
@@ -831,7 +828,7 @@ class RadixRouterCore {
       if (idx === segments.length) {
         const existing = node.methods.byMethod.get(method);
         if (existing !== undefined) {
-          throw new Error(`Route already exists for method at path: ${path}`);
+          throw new Error(`Route already exists for ${this.describeMethod(method)} at path: ${path}`);
         }
         const key = GLOBAL_ROUTE_KEY_SEQ++ as unknown as RouteKey;
         node.methods.byMethod.set(method, key);
@@ -992,8 +989,8 @@ class RadixRouterCore {
           node.paramChildren.push(child);
           this.sortParamChildren(node);
         }
-          try {
-            addSegments(child, idx + 1, activeParams, omittedOptionals);
+        try {
+          addSegments(child, idx + 1, activeParams, omittedOptionals);
         } finally {
           releaseName();
         }
@@ -1189,6 +1186,14 @@ class RadixRouterCore {
     };
   }
 
+  private describeMethod(method: HttpMethod): string {
+    const reversed = (HttpMethod as unknown as Record<number, string>)[method as number];
+    if (typeof reversed === 'string') {
+      return reversed.toUpperCase();
+    }
+    return String(method);
+  }
+
   private normalizeParamOrderOptions(input?: ParamOrderingOptions): NormalizedParamOrderingOptions {
     const baseThreshold = Math.max(1, input?.baseThreshold ?? PARAM_RESORT_THRESHOLD);
     const reseedProbability = input?.reseedProbability ?? 0.5;
@@ -1278,8 +1283,7 @@ class RadixRouterCore {
       removedAnchors = true;
     }
     if (removedAnchors) {
-      const message =
-        `[bunner/router] Parameter regex '${patternSrc}' declares '^' or '$' anchors. Bunner wraps patterns automatically, so anchors are stripped.`;
+      const message = `[bunner/router] Parameter regex '${patternSrc}' declares '^' or '$' anchors. Bunner wraps patterns automatically, so anchors are stripped.`;
       const policy = this.options.regexAnchorPolicy;
       if (policy === 'error') {
         throw new Error(message);

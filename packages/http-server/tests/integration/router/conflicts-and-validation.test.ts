@@ -8,7 +8,7 @@ describe('RadixRouter :: validation and conflicts', () => {
     const router = new RadixRouterBuilder();
     router.add(HttpMethod.Get, '/users');
 
-    expect(() => router.add(HttpMethod.Get, '/users')).toThrow('Route already exists for method at path: /users');
+    expect(() => router.add(HttpMethod.Get, '/users')).toThrow('Route already exists for GET at path: /users');
   });
 
   it('should reject a wildcard when a static child already exists', () => {
