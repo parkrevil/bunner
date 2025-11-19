@@ -188,9 +188,20 @@ describe('RadixRouter :: options', () => {
   });
 
   describe('enableCache & cacheSize', () => {
-    const getCache = (router: RouterInstance): Map<string, unknown> | undefined => {
-      const internal = router as unknown as { core?: { cache?: Map<string, unknown> } };
-      return internal.core?.cache;
+    const getCacheStore = (router: RouterInstance): { get(key: string): unknown } | undefined => {
+      const internal = router as unknown as { core?: { cacheStore?: { isEnabled(): boolean; get(key: string): unknown } } };
+      const cache = internal.core?.cacheStore;
+      if (!cache || !cache.isEnabled()) {
+        return undefined;
+      }
+      return cache;
+    };
+    const hasCacheRecord = (router: RouterInstance, key: string): boolean => {
+      const cache = getCacheStore(router);
+      if (!cache) {
+        return false;
+      }
+      return cache.get(key) !== undefined;
     };
     const formatCacheKey = (method: HttpMethod, path: string): string => {
       const normalized = path.startsWith('/') ? path.slice(1) : path;
@@ -223,7 +234,7 @@ describe('RadixRouter :: options', () => {
       expect(router.match(HttpMethod.Get, '/cache/beta/extra')).toBeNull();
 
       const cacheKey = formatCacheKey(HttpMethod.Get, '/cache/beta/extra');
-      const missRecord = getCache(router)?.get(cacheKey) as { entry?: unknown } | undefined;
+      const missRecord = getCacheStore(router)?.get(cacheKey) as { entry?: unknown } | undefined;
       expect(missRecord?.entry).toBeNull();
     });
 
@@ -243,10 +254,9 @@ describe('RadixRouter :: options', () => {
       const secondKey = formatCacheKey(HttpMethod.Get, '/cache/b');
       const thirdKey = formatCacheKey(HttpMethod.Get, '/cache/c');
 
-      const cache = getCache(router);
-      expect(cache?.has(firstKey)).toBe(false);
-      expect(cache?.has(secondKey)).toBe(true);
-      expect(cache?.has(thirdKey)).toBe(true);
+      expect(hasCacheRecord(router, firstKey)).toBe(false);
+      expect(hasCacheRecord(router, secondKey)).toBe(true);
+      expect(hasCacheRecord(router, thirdKey)).toBe(true);
     });
 
     it('should keep unrelated cached hits warm across different routes', () => {
@@ -261,9 +271,8 @@ describe('RadixRouter :: options', () => {
       expect(router.match(HttpMethod.Get, '/users/alpha')).not.toBeNull();
       expect(router.match(HttpMethod.Get, '/reports/earnings')).not.toBeNull();
 
-      const cache = getCache(router);
-      expect(cache?.has(formatCacheKey(HttpMethod.Get, '/users/alpha'))).toBe(true);
-      expect(cache?.has(formatCacheKey(HttpMethod.Get, '/reports/earnings'))).toBe(true);
+      expect(hasCacheRecord(router, formatCacheKey(HttpMethod.Get, '/users/alpha'))).toBe(true);
+      expect(hasCacheRecord(router, formatCacheKey(HttpMethod.Get, '/reports/earnings'))).toBe(true);
     });
 
     it('should not reuse stale miss entries across builds', () => {
@@ -274,8 +283,9 @@ describe('RadixRouter :: options', () => {
         { enableCache: true },
       );
       expect(missOnly.match(HttpMethod.Get, '/users/42')).toBeNull();
-      const missCache = getCache(missOnly);
-      const missRecord = missCache?.get(formatCacheKey(HttpMethod.Get, '/users/42')) as { entry?: unknown } | undefined;
+      const missRecord = getCacheStore(missOnly)?.get(formatCacheKey(HttpMethod.Get, '/users/42')) as
+        | { entry?: unknown }
+        | undefined;
       expect(missRecord?.entry).toBeNull();
 
       const routed = buildRouter(

@@ -121,10 +121,21 @@ describe('RadixRouter :: basic routing', () => {
     const router = buildRouter(builder => {
       key = builder.add(HttpMethod.Get, '/fast/path') as RouteKey;
     });
-    const internal = router as unknown as { core?: { staticFast: Map<string, Map<HttpMethod, RouteKey>> } };
-    const staticFast = internal.core?.staticFast ?? new Map();
+    const internal = router as unknown as {
+      core?: {
+        staticFastRegistry?: {
+          matchNormalized: (
+            method: HttpMethod,
+            normalized: string,
+            build: (key: RouteKey) => { key: RouteKey },
+          ) => { key: RouteKey } | undefined;
+        };
+      };
+    };
+    const registry = internal.core?.staticFastRegistry;
+    const fastHit = registry?.matchNormalized(HttpMethod.Get, '/fast/path', storedKey => ({ key: storedKey, params: {} }));
 
-    expect(staticFast.get('/fast/path')?.get(HttpMethod.Get)).toBe(key);
+    expect(fastHit?.key).toBe(key);
   });
 
   it('should normalize redundant slashes and dot segments on the static fast path', () => {

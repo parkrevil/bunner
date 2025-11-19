@@ -13,22 +13,8 @@ import type {
 } from '../types';
 import { decodeURIComponentSafe } from '../utils/path-utils';
 
-const enum FrameStage {
-  Enter,
-  Static,
-  Params,
-  Wildcard,
-  Exit,
-}
-
-type MatchFrame = {
-  nodeIndex: number;
-  segmentIndex: number;
-  stage: FrameStage;
-  paramBase: number;
-  paramCursor: number;
-  decodedSegment?: string;
-};
+import { FrameStage, type MatchFrame } from './match-frame';
+import { WildcardSuffixCache } from './suffix-cache';
 
 /**
  * DynamicMatcher walks the immutable router layout using a manual stack-based state machine.
@@ -60,10 +46,7 @@ export class DynamicMatcher {
   private paramValues: string[] = [];
   private paramCount = 0;
   private decodedSegmentCache?: Array<string | undefined>;
-  private suffixCache?: Array<string | undefined>;
-  private decodedSuffixCache?: Array<string | undefined>;
-  private suffixOffsets?: Uint32Array;
-  private suffixSource?: string;
+  private suffixHelper?: WildcardSuffixCache;
 
   constructor(config: DynamicMatcherConfig) {
     this.method = config.method;
@@ -81,12 +64,13 @@ export class DynamicMatcher {
     this.paramOrders = config.paramOrders;
     this.observer = config.observer;
     this.encodedSlashBehavior = config.encodedSlashBehavior;
-    if (config.suffixPlan) {
-      this.suffixOffsets = config.suffixPlan.offsets;
-      this.suffixSource = config.suffixPlan.source;
-    }
     if (this.hasWildcardRoutes) {
-      this.ensureSuffixCache();
+      this.suffixHelper = new WildcardSuffixCache({
+        segments: this.segments,
+        decodeParams: this.decodeParams,
+        encodedSlashBehavior: this.encodedSlashBehavior,
+        plan: config.suffixPlan,
+      });
     }
   }
 
@@ -247,7 +231,7 @@ export class DynamicMatcher {
       return undefined;
     }
     const wildcardName = wildcard.segment || '*';
-    const wildcardValue = this.getSuffixValue(frame.segmentIndex);
+    const wildcardValue = this.suffixHelper?.getValue(frame.segmentIndex) ?? '';
     this.pushParam(wildcardName, wildcardValue);
     return key;
   }
@@ -339,57 +323,6 @@ export class DynamicMatcher {
     const value = decodeURIComponentSafe(this.segments[index]!, this.encodedSlashBehavior);
     this.decodedSegmentCache[index] = value;
     return value;
-  }
-
-  private getSuffixValue(index: number): string {
-    if (!this.hasWildcardRoutes) {
-      return '';
-    }
-    this.ensureSuffixCache();
-    if (!this.suffixCache || !this.suffixOffsets || !this.suffixSource) {
-      return '';
-    }
-    if (index < 0 || index >= this.suffixOffsets.length) {
-      return '';
-    }
-    let raw = this.suffixCache[index];
-    if (raw === undefined) {
-      raw = this.suffixSource.slice(this.suffixOffsets[index]);
-      this.suffixCache[index] = raw;
-    }
-    if (!this.decodeParams || !raw) {
-      return raw;
-    }
-    this.decodedSuffixCache ??= new Array<string | undefined>(this.segments.length);
-    const cached = this.decodedSuffixCache[index];
-    if (cached !== undefined) {
-      return cached;
-    }
-    const value = decodeURIComponentSafe(raw, this.encodedSlashBehavior);
-    this.decodedSuffixCache[index] = value;
-    return value;
-  }
-
-  private ensureSuffixCache(): void {
-    if (!this.hasWildcardRoutes || !this.segments.length) {
-      return;
-    }
-    this.suffixCache ??= new Array(this.segments.length + 1);
-    if (!this.suffixOffsets) {
-      this.suffixOffsets = new Uint32Array(this.segments.length + 1);
-      let offset = 0;
-      for (let i = 0; i < this.segments.length; i++) {
-        this.suffixOffsets[i] = offset;
-        offset += this.segments[i]!.length;
-        if (i !== this.segments.length - 1) {
-          offset++;
-        }
-      }
-      this.suffixOffsets[this.segments.length] = offset;
-    }
-    if (!this.suffixSource) {
-      this.suffixSource = this.segments.join('/');
-    }
   }
 
   private buildParams(): { params: RouteParams; snapshot?: Array<[string, string | undefined]> } {
