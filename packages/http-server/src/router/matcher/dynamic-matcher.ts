@@ -29,6 +29,7 @@ import { WildcardSuffixCache } from './suffix-cache';
 export class DynamicMatcher {
   private readonly method: HttpMethod;
   private readonly segments: string[];
+  private readonly segmentHints?: Uint8Array;
   private readonly decodeParams: boolean;
   private readonly hasWildcardRoutes: boolean;
   private readonly captureSnapshot: boolean;
@@ -55,6 +56,7 @@ export class DynamicMatcher {
   constructor(config: DynamicMatcherConfig) {
     this.method = config.method;
     this.segments = config.segments;
+    this.segmentHints = config.segmentDecodeHints;
     this.decodeParams = config.decodeParams;
     this.hasWildcardRoutes = config.hasWildcardRoutes;
     this.captureSnapshot = config.captureSnapshot;
@@ -74,12 +76,14 @@ export class DynamicMatcher {
         decodeParams: this.decodeParams,
         encodedSlashBehavior: this.encodedSlashBehavior,
         plan: config.suffixPlan,
+        planFactory: config.suffixPlanFactory,
       });
     }
     this.paramDecoder = new ParamDecoder({
       segments: this.segments,
       decodeParams: this.decodeParams,
       encodedSlashBehavior: this.encodedSlashBehavior,
+      decodeHints: this.segmentHints,
     });
     this.runStaticStage = createStaticStage({
       segments: this.segments,
@@ -112,6 +116,17 @@ export class DynamicMatcher {
         this.paramCount = count;
       },
     });
+  }
+
+  private static methodMaskHas(mask: number, method: HttpMethod): boolean {
+    const numeric = Number(method);
+    if (numeric < 0) {
+      return false;
+    }
+    if (numeric >= 31) {
+      return true;
+    }
+    return (mask & (1 << numeric)) !== 0;
   }
 
   match(): DynamicMatchResult | null {
@@ -186,6 +201,9 @@ export class DynamicMatcher {
 
   private lookupMethodKey(node: SerializedNodeRecord): RouteKey | null {
     if (!node.methodsRangeCount) {
+      return null;
+    }
+    if (node.methodMask && !DynamicMatcher.methodMaskHas(node.methodMask, this.method)) {
       return null;
     }
     const start = node.methodsRangeStart;

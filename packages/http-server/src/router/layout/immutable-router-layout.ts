@@ -32,6 +32,7 @@ export interface SerializedNodeRecord {
   readonly wildcardChild: number;
   readonly methodsRangeStart: number;
   readonly methodsRangeCount: number;
+  readonly methodMask: number;
   readonly segmentPartsIndex: number;
   readonly patternIndex: number;
   readonly wildcardOrigin: 'star' | 'multi' | 'zero' | null;
@@ -57,6 +58,7 @@ type MutableRecord = {
   wildcardChild: number;
   methodsRangeStart: number;
   methodsRangeCount: number;
+  methodMask: number;
   segmentPartsIndex: number;
   patternIndex: number;
   wildcardOrigin: 'star' | 'multi' | 'zero' | null;
@@ -88,6 +90,8 @@ export function buildImmutableLayout(root: RouterNode): ImmutableRouterLayout {
   const methods: MutableMethodEntry[] = [];
   const segmentChains: string[][] = [];
   const patterns: MutablePattern[] = [];
+  const staticKeyBuffer: string[] = [];
+  const methodKeyBuffer: HttpMethod[] = [];
 
   const pushSegmentChain = (parts: string[]): number => {
     segmentChains.push(parts.slice());
@@ -110,6 +114,7 @@ export function buildImmutableLayout(root: RouterNode): ImmutableRouterLayout {
       wildcardChild: -1,
       methodsRangeStart: methods.length,
       methodsRangeCount: 0,
+      methodMask: 0,
       segmentPartsIndex: node.segmentParts ? pushSegmentChain(node.segmentParts) : -1,
       patternIndex: node.patternSource ? pushPattern(node.patternSource, node.pattern?.flags ?? '') : -1,
       wildcardOrigin: node.wildcardOrigin ?? null,
@@ -118,9 +123,20 @@ export function buildImmutableLayout(root: RouterNode): ImmutableRouterLayout {
 
     const methodStart = methods.length;
     if (node.methods.byMethod.size) {
-      const sorted = Array.from(node.methods.byMethod.entries()).sort((a, b) => a[0] - b[0]);
-      for (const [method, key] of sorted) {
+      methodKeyBuffer.length = 0;
+      for (const method of node.methods.byMethod.keys()) {
+        methodKeyBuffer.push(method);
+      }
+      if (methodKeyBuffer.length > 1) {
+        methodKeyBuffer.sort((a, b) => a - b);
+      }
+      for (const method of methodKeyBuffer) {
+        const key = node.methods.byMethod.get(method)!;
         methods.push({ method, key });
+        const numericMethod = (method as unknown as number) | 0;
+        if (numericMethod >= 0 && numericMethod < 31) {
+          record.methodMask |= 1 << numericMethod;
+        }
       }
     }
     record.methodsRangeStart = methodStart;
@@ -128,8 +144,15 @@ export function buildImmutableLayout(root: RouterNode): ImmutableRouterLayout {
 
     const staticStart = staticChildren.length;
     if (node.staticChildren.size) {
-      const entries = Array.from(node.staticChildren.entries()).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
-      for (const [segment, child] of entries) {
+      staticKeyBuffer.length = 0;
+      for (const segment of node.staticChildren.keys()) {
+        staticKeyBuffer.push(segment);
+      }
+      if (staticKeyBuffer.length > 1) {
+        staticKeyBuffer.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+      }
+      for (const segment of staticKeyBuffer) {
+        const child = node.staticChildren.get(segment)!;
         const childIndex = visit(child);
         staticChildren.push({ segment, target: childIndex });
       }

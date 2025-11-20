@@ -1,10 +1,10 @@
 import type { HttpMethod } from '../../enums';
 import type { RouteKey } from '../../types';
-import type { NormalizedPathSegments, RouteMatch, RouterOptions, StaticProbeResult } from '../types';
-import { normalizeAndSplit } from '../utils/path-utils';
+import type { NormalizedPathSegments, RouteMatch, StaticProbeResult } from '../types';
+import { lowerAsciiSimd, type PathNormalizer } from '../utils/path-utils';
 
 import { LengthBitset } from './length-bitset';
-import type { NormalizedRouterOptions } from './router-options';
+import type { PathBehaviorProfile } from './path-behavior';
 import { STATIC_NORMALIZATION_CACHE_LIMIT } from './router-options';
 
 type BuildStaticMatch = (key: RouteKey) => RouteMatch;
@@ -12,28 +12,52 @@ type BuildStaticMatch = (key: RouteKey) => RouteMatch;
 type StaticBucket = Map<HttpMethod, RouteKey>;
 
 export class StaticFastRegistry {
-  private readonly buckets: Map<string, StaticBucket> = new Map();
+  private readonly lengthBuckets: Map<number, Record<string, StaticBucket>> = new Map();
   private readonly lengths = new LengthBitset();
   private normalizationCache?: Map<string, NormalizedPathSegments>;
   private lastCaseFoldInput?: string;
   private lastCaseFoldOutput?: string;
+  private lastBucketPath?: string;
+  private lastBucketValue?: StaticBucket;
+  private lastLengthChecked = -1;
+  private lastLengthResult = false;
   private dynamicRoutes = false;
   private wildcardRoutes = false;
+  private readonly normalizePath: PathNormalizer;
+  private readonly literalNormalizer?: PathNormalizer;
+  private readonly requiresNormalization: boolean;
+  private readonly needsCaseNormalization: boolean;
+  private readonly needsTrailingNormalization: boolean;
+  private readonly collapseSlashesEnabled: boolean;
+  private readonly blockTraversalEnabled: boolean;
+  private readonly caseSensitive: boolean;
+  private readonly ignoreTrailingSlash: boolean;
 
-  constructor(private readonly options: NormalizedRouterOptions) {}
+  constructor(behavior: PathBehaviorProfile) {
+    this.normalizePath = behavior.normalizePath;
+    this.literalNormalizer = behavior.literalNormalizer;
+    this.requiresNormalization = behavior.requiresNormalization;
+    this.needsCaseNormalization = behavior.needsCaseNormalization;
+    this.needsTrailingNormalization = behavior.needsTrailingNormalization;
+    this.collapseSlashesEnabled = behavior.collapseSlashesEnabled;
+    this.blockTraversalEnabled = behavior.blockTraversalEnabled;
+    this.caseSensitive = behavior.caseSensitive;
+    this.ignoreTrailingSlash = behavior.ignoreTrailingSlash;
+  }
 
   registerRoute(method: HttpMethod, normalizedPath: string, sourcePath: string, key: RouteKey): void {
     if (this.pathContainsDynamicTokens(sourcePath)) {
       return;
     }
     this.lengths.mark(normalizedPath.length);
-    let bucket = this.buckets.get(normalizedPath);
+    this.lastLengthChecked = -1;
+    let bucket = this.getBucket(normalizedPath);
     if (!bucket) {
       bucket = new Map();
-      this.buckets.set(normalizedPath, bucket);
+      this.setBucket(normalizedPath, bucket);
     }
     bucket.set(method, key);
-    if (!this.options.caseSensitive) {
+    if (this.needsCaseNormalization) {
       this.registerCasePreservingFastPaths(sourcePath, bucket);
     }
   }
@@ -42,15 +66,56 @@ export class StaticFastRegistry {
     if (!path.length || path.charCodeAt(0) !== 47) {
       return { kind: 'fallback' };
     }
-    if (!this.options.caseSensitive) {
-      const literalHit = this.resolveMatch(this.buckets.get(path), method, buildMatch);
+    let normalizedPath: string | undefined;
+    let trimmedNormalized: string | undefined;
+    let preparedSegments: NormalizedPathSegments | undefined;
+
+    const ensureCaseNormalized = (): string => {
+      if (!this.needsCaseNormalization) {
+        normalizedPath = path;
+        return normalizedPath;
+      }
+      if (normalizedPath !== undefined) {
+        return normalizedPath;
+      }
+      normalizedPath = this.ensureCaseNormalized(path);
+      return normalizedPath;
+    };
+
+    const ensureTrimmedNormalized = (): string | undefined => {
+      if (!this.needsTrailingNormalization) {
+        return undefined;
+      }
+      if (trimmedNormalized !== undefined) {
+        return trimmedNormalized;
+      }
+      const normalized = ensureCaseNormalized();
+      if (normalized.length <= 1) {
+        trimmedNormalized = undefined;
+        return undefined;
+      }
+      const candidate = this.trimTrailingSlashes(normalized);
+      trimmedNormalized = candidate === normalized ? undefined : candidate;
+      return trimmedNormalized;
+    };
+
+    const ensurePreparedSegments = (): NormalizedPathSegments => {
+      if (preparedSegments) {
+        return preparedSegments;
+      }
+      preparedSegments = this.getNormalizedStaticProbe(path) ?? this.normalizePath(path);
+      return preparedSegments;
+    };
+
+    if (this.needsCaseNormalization) {
+      const literalHit = this.resolveMatch(this.getBucket(path), method, buildMatch);
       if (literalHit) {
         return { kind: 'hit', match: literalHit };
       }
-      if (this.options.ignoreTrailingSlash && path.length > 1 && path.charCodeAt(path.length - 1) === 47) {
+      if (this.needsTrailingNormalization && path.length > 1 && path.charCodeAt(path.length - 1) === 47) {
         const trimmedLiteral = this.trimTrailingSlashes(path);
         if (trimmedLiteral !== path) {
-          const trimmedLiteralHit = this.resolveMatch(this.buckets.get(trimmedLiteral), method, buildMatch);
+          const trimmedLiteralHit = this.resolveMatch(this.getBucket(trimmedLiteral), method, buildMatch);
           if (trimmedLiteralHit) {
             return { kind: 'hit', match: trimmedLiteralHit };
           }
@@ -58,59 +123,54 @@ export class StaticFastRegistry {
       }
     }
 
-    const normalized = this.ensureCaseNormalized(path);
-    if (this.lengths.has(normalized.length)) {
-      const direct = this.resolveMatch(this.buckets.get(normalized), method, buildMatch);
+    const normalized = ensureCaseNormalized();
+    if (this.lengthExists(normalized.length)) {
+      const direct = this.resolveMatch(this.getBucket(normalized), method, buildMatch);
       if (direct) {
         return { kind: 'hit', match: direct };
       }
     }
 
-    let trimmed: string | undefined;
-    if (this.options.ignoreTrailingSlash && normalized.length > 1) {
-      const candidate = this.trimTrailingSlashes(normalized);
-      if (candidate !== normalized) {
-        trimmed = candidate;
-        if (this.lengths.has(candidate.length)) {
-          const trimmedHit = this.resolveMatch(this.buckets.get(candidate), method, buildMatch);
-          if (trimmedHit) {
-            return { kind: 'hit', match: trimmedHit };
-          }
-        }
+    const trimmed = ensureTrimmedNormalized();
+    if (trimmed && this.lengthExists(trimmed.length)) {
+      const trimmedHit = this.resolveMatch(this.getBucket(trimmed), method, buildMatch);
+      if (trimmedHit) {
+        return { kind: 'hit', match: trimmedHit };
       }
     }
 
     const prepared = this.getNormalizedStaticProbe(path);
     if (prepared) {
-      if (this.lengths.has(prepared.normalized.length)) {
-        const normalizedHit = this.resolveMatch(this.buckets.get(prepared.normalized), method, buildMatch);
+      if (this.lengthExists(prepared.normalized.length)) {
+        const normalizedHit = this.resolveMatch(this.getBucket(prepared.normalized), method, buildMatch);
         if (normalizedHit) {
           return { kind: 'hit', match: normalizedHit };
         }
       }
-      if (!this.options.caseSensitive) {
+      if (this.needsCaseNormalization) {
         const preserved = this.normalizeLiteralStaticPath(path);
-        if (this.lengths.has(preserved.length)) {
-          const preservedHit = this.resolveMatch(this.buckets.get(preserved), method, buildMatch);
+        if (this.lengthExists(preserved.length)) {
+          const preservedHit = this.resolveMatch(this.getBucket(preserved), method, buildMatch);
           if (preservedHit) {
             return { kind: 'hit', match: preservedHit };
           }
         }
       }
+      preparedSegments = prepared;
     }
 
-    const probeKey = trimmed ?? prepared?.normalized ?? normalized;
-    if (!this.hasDynamicRoutes() && !this.hasWildcardRoutes() && this.isSimpleStaticPath(probeKey, !this.options.caseSensitive)) {
+    const probeKey = trimmed ?? normalized ?? ensurePreparedSegments().normalized;
+    if (!this.hasDynamicRoutes() && !this.hasWildcardRoutes() && this.isSimpleStaticPath(probeKey, !this.caseSensitive)) {
       return { kind: 'static-miss', normalized: probeKey };
     }
-    return prepared ? { kind: 'fallback', prepared } : { kind: 'fallback' };
+    return { kind: 'fallback', prepared: ensurePreparedSegments() };
   }
 
   matchNormalized(method: HttpMethod, normalized: string, buildMatch: BuildStaticMatch): RouteMatch | undefined {
-    if (!this.lengths.has(normalized.length)) {
+    if (!this.lengthExists(normalized.length)) {
       return undefined;
     }
-    return this.resolveMatch(this.buckets.get(normalized), method, buildMatch);
+    return this.resolveMatch(this.getBucket(normalized), method, buildMatch);
   }
 
   markRouteHints(hasDynamicRoutes: boolean, hasWildcardRoutes: boolean): void {
@@ -141,32 +201,65 @@ export class StaticFastRegistry {
     return buildMatch(key);
   }
 
+  private getBucket(path: string): StaticBucket | undefined {
+    if (this.lastBucketPath === path) {
+      return this.lastBucketValue;
+    }
+    const table = this.lengthBuckets.get(path.length);
+    const bucket = table ? table[path] : undefined;
+    this.lastBucketPath = path;
+    this.lastBucketValue = bucket;
+    return bucket;
+  }
+
+  private setBucket(path: string, bucket: StaticBucket): void {
+    let table = this.lengthBuckets.get(path.length);
+    if (!table) {
+      table = Object.create(null) as Record<string, StaticBucket>;
+      this.lengthBuckets.set(path.length, table);
+    }
+    table[path] = bucket;
+    this.lastBucketPath = path;
+    this.lastBucketValue = bucket;
+  }
+
+  private lengthExists(len: number): boolean {
+    if (this.lastLengthChecked === len) {
+      return this.lastLengthResult;
+    }
+    const result = this.lengths.has(len);
+    this.lastLengthChecked = len;
+    this.lastLengthResult = result;
+    return result;
+  }
+
   private registerCasePreservingFastPaths(sourcePath: string, bucket: StaticBucket): void {
     const canonical = this.normalizeLiteralStaticPath(sourcePath);
-    if (!this.buckets.has(canonical)) {
-      this.buckets.set(canonical, bucket);
+    if (!this.getBucket(canonical)) {
+      this.setBucket(canonical, bucket);
     }
-    const lowered = canonical.toLowerCase();
-    if (!this.buckets.has(lowered)) {
-      this.buckets.set(lowered, bucket);
+    const lowered = lowerAsciiSimd(canonical);
+    if (!this.getBucket(lowered)) {
+      this.setBucket(lowered, bucket);
     }
-    if (sourcePath !== canonical && !this.buckets.has(sourcePath)) {
-      this.buckets.set(sourcePath, bucket);
+    if (sourcePath !== canonical && !this.getBucket(sourcePath)) {
+      this.setBucket(sourcePath, bucket);
     }
   }
 
   private normalizeLiteralStaticPath(path: string): string {
-    const literalOptions: RouterOptions = {
-      ignoreTrailingSlash: this.options.ignoreTrailingSlash,
-      collapseSlashes: this.options.collapseSlashes,
-      caseSensitive: true,
-      blockTraversal: this.options.blockTraversal,
-    };
-    return normalizeAndSplit(path, literalOptions).normalized;
+    const literal = this.literalNormalizer;
+    if (literal) {
+      return literal(path).normalized;
+    }
+    if (!this.ignoreTrailingSlash) {
+      return path;
+    }
+    return path.length > 1 && path.charCodeAt(path.length - 1) === 47 ? this.trimTrailingSlashes(path) : path;
   }
 
   private ensureCaseNormalized(path: string): string {
-    if (this.options.caseSensitive) {
+    if (this.caseSensitive) {
       return path;
     }
     if (this.lastCaseFoldInput === path && this.lastCaseFoldOutput !== undefined) {
@@ -176,7 +269,7 @@ export class StaticFastRegistry {
     for (let i = 0; i < path.length; i++) {
       const code = path.charCodeAt(i);
       if (code >= 65 && code <= 90) {
-        lowered = path.toLowerCase();
+        lowered = lowerAsciiSimd(path);
         break;
       }
     }
@@ -205,13 +298,13 @@ export class StaticFastRegistry {
     if (!path.length || path.charCodeAt(0) !== 47) {
       return false;
     }
-    if (!this.options.caseSensitive && !allowCaseNormalized) {
+    if (!this.caseSensitive && !allowCaseNormalized) {
       return false;
     }
-    if (this.options.collapseSlashes === false) {
+    if (!this.collapseSlashesEnabled) {
       return false;
     }
-    if (this.options.blockTraversal === false) {
+    if (!this.blockTraversalEnabled) {
       return false;
     }
     let lastSlash = 0;
@@ -246,8 +339,16 @@ export class StaticFastRegistry {
   }
 
   private shouldNormalizeStaticProbe(path: string): boolean {
-    const collapse = this.options.collapseSlashes !== false;
-    const blockTraversal = this.options.blockTraversal !== false;
+    if (!this.requiresNormalization) {
+      return false;
+    }
+    const collapse = this.collapseSlashesEnabled;
+    const blockTraversal = this.blockTraversalEnabled;
+    const needsDotCheck = blockTraversal && path.indexOf('.', 1) !== -1;
+    const needsEncodedCheck = blockTraversal && path.indexOf('%', 1) !== -1;
+    if (!collapse && !needsDotCheck && !needsEncodedCheck) {
+      return false;
+    }
     for (let i = 1; i < path.length; i++) {
       const code = path.charCodeAt(i);
       if (code !== 47) {
@@ -263,8 +364,11 @@ export class StaticFastRegistry {
       if (nextIndex >= path.length) {
         continue;
       }
-      if (this.segmentIsEncodedDot(path, nextIndex)) {
+      if (needsEncodedCheck && this.segmentIsEncodedDot(path, nextIndex)) {
         return true;
+      }
+      if (!needsDotCheck) {
+        continue;
       }
       const next = path.charCodeAt(nextIndex);
       if (next === 46) {
@@ -327,6 +431,9 @@ export class StaticFastRegistry {
   }
 
   private getNormalizedStaticProbe(path: string): NormalizedPathSegments | undefined {
+    if (!this.requiresNormalization) {
+      return undefined;
+    }
     if (!this.shouldNormalizeStaticProbe(path)) {
       return undefined;
     }
@@ -337,7 +444,7 @@ export class StaticFastRegistry {
     if (cached) {
       return cached;
     }
-    const prepared = normalizeAndSplit(path, this.options);
+    const prepared = this.normalizePath(path);
     this.normalizationCache.set(path, prepared);
     if (this.normalizationCache.size > STATIC_NORMALIZATION_CACHE_LIMIT) {
       const first = this.normalizationCache.keys().next().value;

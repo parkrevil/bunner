@@ -1,6 +1,7 @@
 import { bench, group, run } from 'mitata';
 
 import { HttpMethod } from '../../src/enums';
+import { ProbationSketch } from '../../src/router/core/router-cache';
 import type { RouterInstance } from '../../src/router/interfaces';
 import { RadixRouterBuilder } from '../../src/router/router';
 import type { RouteMatch, RouterOptions } from '../../src/router/types';
@@ -51,6 +52,11 @@ const benchFormat = process.env.ROUTER_BENCH_FORMAT;
 const benchUnits = process.env.ROUTER_BENCH_UNITS !== '0';
 const benchGcEnabled = process.env.ROUTER_BENCH_GC !== '0';
 const benchLayoutStats = process.env.ROUTER_BENCH_LAYOUT === '0' ? false : benchFormat !== 'json';
+const NODE_RECORD_BYTES = 32;
+const STATIC_CHILD_BYTES = 16;
+const PARAM_CHILD_BYTES = 8;
+const METHOD_ENTRY_BYTES = 12;
+const PATTERN_ENTRY_BYTES = 24;
 
 const mitataOptions: RunOptions = {
   avg: true,
@@ -113,6 +119,18 @@ const routerPriorityStaticParam = buildRouterFromEntries([
 ]);
 const routerPriorityWildcard = buildRouterFromEntries([{ methods: HttpMethod.Get, path: '/priority/*rest' }]);
 const routerStarMethod = buildRouterFromEntries(static1kPatterns.map(path => ({ methods: '*', path })));
+
+const PROBATION_SAMPLE_SIZE = 1024;
+const PROBATION_HASHES = new Uint32Array(PROBATION_SAMPLE_SIZE);
+for (let i = 0; i < PROBATION_HASHES.length; i++) {
+  const seed = (i + 1) * 0x9e3779b1;
+  PROBATION_HASHES[i] = (seed ^ (seed >>> 13)) >>> 0;
+}
+const PROBATION_MASK = PROBATION_SAMPLE_SIZE - 1;
+const probationMissSketch = new ProbationSketch(10);
+const probationHitSketch = new ProbationSketch(10);
+let probationMissSalt = 1;
+let probationIndex = 0;
 
 if (benchLayoutStats) {
   reportLayoutFootprint('static-10k', routerStatic10k);
@@ -377,6 +395,25 @@ group('match / extremes', () => {
   );
 });
 
+group('micro / cache internals', () => {
+  bench('probation: observe miss', () => {
+    const idx = probationIndex++ & PROBATION_MASK;
+    const salt = probationMissSalt++;
+    const hash = PROBATION_HASHES[idx]! ^ salt;
+    sinkPrimary ^= probationMissSketch.observe(hash) ? 1 : 0;
+  });
+  bench('probation: observe hit', () => {
+    const idx = probationIndex++ & PROBATION_MASK;
+    const hash = PROBATION_HASHES[idx]!;
+    probationHitSketch.observe(hash);
+    sinkSecondary ^= probationHitSketch.observe(hash) ? 1 : 0;
+  });
+  bench('probation: reset', () => {
+    probationMissSketch.reset();
+    probationHitSketch.reset();
+  });
+});
+
 if (benchGcEnabled) {
   measureLayoutGc('layout-match/param-heavy', routerParamHeavy, dynamicParamSamples, 20000);
   measureLayoutGc('layout-match/static-10k', routerStatic10k, static10kSamples, 20000);
@@ -591,12 +628,6 @@ function flushSink(): void {
     console.log(sinkLine);
   }
 }
-
-const NODE_RECORD_BYTES = 32;
-const STATIC_CHILD_BYTES = 16;
-const PARAM_CHILD_BYTES = 8;
-const METHOD_ENTRY_BYTES = 12;
-const PATTERN_ENTRY_BYTES = 24;
 
 function reportLayoutFootprint(label: string, router: RouterInstance): void {
   const layout = router.getLayoutSnapshot();

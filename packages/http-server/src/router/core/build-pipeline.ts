@@ -36,49 +36,41 @@ export const createBuildPipeline = (deps: BuildPipelineDependencies): BuildPipel
       let hasWildcardRoutes = deps.initialHasWildcardRoutes;
       let metadata = deps.currentMetadata;
 
-      const stages: Array<{ name: BuildStageName; execute: () => void }> = [
-        { name: 'compress-static', execute: () => compressStaticSubtree(root) },
-        { name: 'param-priority', execute: () => sortAllParamChildren(root) },
-        {
-          name: 'wildcard-suffix',
-          execute: () => {
-            const stats = precomputeWildcardSuffixMetadata(root);
-            wildcardRouteCount = stats.wildcardRouteCount;
-            wildcardMethodsByMethod = stats.wildcardMethodsByMethod;
-          },
+      const stageExecutors: Record<BuildStageName, () => void> = {
+        'compress-static': () => compressStaticSubtree(root),
+        'param-priority': () => sortAllParamChildren(root),
+        'wildcard-suffix': () => {
+          if (!hasWildcardRoutes && !deps.initialWildcardRouteCount) {
+            return;
+          }
+          const stats = precomputeWildcardSuffixMetadata(root);
+          wildcardRouteCount = stats.wildcardRouteCount;
+          wildcardMethodsByMethod = stats.wildcardMethodsByMethod;
         },
-        { name: 'regex-safety', execute: () => validateRoutePatterns(root, deps.ensureRegexSafe) },
-        {
-          name: 'route-flags',
-          execute: () => {
-            const flags = recalculateRouteFlags(root);
-            hasDynamicRoutes = flags.hasDynamicRoutes;
-            hasWildcardRoutes = flags.hasWildcardRoutes;
-            deps.markRouteHints(flags.hasDynamicRoutes, flags.hasWildcardRoutes);
-          },
+        'regex-safety': () => validateRoutePatterns(root, deps.ensureRegexSafe),
+        'route-flags': () => {
+          const flags = recalculateRouteFlags(root);
+          hasDynamicRoutes = flags.hasDynamicRoutes;
+          hasWildcardRoutes = flags.hasWildcardRoutes;
+          deps.markRouteHints(flags.hasDynamicRoutes, flags.hasWildcardRoutes);
         },
-        {
-          name: 'snapshot-metadata',
-          execute: () => {
-            metadata = buildSnapshotMetadata({
-              routeCount: deps.routeCount,
-              hasDynamicRoutes,
-              hasWildcardRoutes,
-              wildcardRouteCount,
-              wildcardMethodsByMethod,
-            });
-          },
+        'snapshot-metadata': () => {
+          metadata = buildSnapshotMetadata({
+            routeCount: deps.routeCount,
+            hasDynamicRoutes,
+            hasWildcardRoutes,
+            wildcardRouteCount,
+            wildcardMethodsByMethod,
+          });
         },
-      ];
+      };
 
-      for (const stage of stages) {
-        if (!deps.stageConfig.build[stage.name]) {
-          continue;
-        }
+      const enabledStages = (Object.keys(stageExecutors) as BuildStageName[]).filter(name => deps.stageConfig.build[name]);
+      for (const name of enabledStages) {
         try {
-          stage.execute();
+          stageExecutors[name]();
         } catch (error) {
-          throw new Error(`[bunner/router] Build stage '${stage.name}' failed: ${(error as Error).message}`);
+          throw new Error(`[bunner/router] Build stage '${name}' failed: ${(error as Error).message}`);
         }
       }
 
@@ -93,20 +85,36 @@ export const createBuildPipeline = (deps: BuildPipelineDependencies): BuildPipel
   };
 };
 
+const STACK_POOL: RouterNode[][] = [];
+const MAX_STACK_POOL_SIZE = 4;
+
+const acquireNodeStack = (): RouterNode[] => {
+  const stack = STACK_POOL.pop();
+  if (stack) {
+    stack.length = 0;
+    return stack;
+  }
+  return [];
+};
+
+const releaseNodeStack = (stack: RouterNode[]): void => {
+  stack.length = 0;
+  if (STACK_POOL.length < MAX_STACK_POOL_SIZE) {
+    STACK_POOL.push(stack);
+  }
+};
+
 const compressStaticSubtree = (entry: RouterNode): void => {
-  const stack: RouterNode[] = [entry];
-  const seen = new Set<RouterNode>();
+  const stack = acquireNodeStack();
+  stack.push(entry);
   while (stack.length) {
     const current = stack.pop()!;
-    if (seen.has(current)) {
-      continue;
-    }
-    seen.add(current);
     for (const child of current.staticChildren.values()) {
       stack.push(child);
       collapseStaticNode(child);
     }
   }
+  releaseNodeStack(stack);
 };
 
 const collapseStaticNode = (node: RouterNode): void => {
@@ -114,7 +122,7 @@ const collapseStaticNode = (node: RouterNode): void => {
     return;
   }
   let cursor = node;
-  const parts: string[] = node.segmentParts ? [...node.segmentParts] : [node.segment];
+  let combinedParts: string[] | undefined;
   while (
     cursor.kind === NodeKind.Static &&
     cursor.methods.byMethod.size === 0 &&
@@ -126,13 +134,19 @@ const collapseStaticNode = (node: RouterNode): void => {
     if (next.kind !== NodeKind.Static) {
       break;
     }
-    const nextParts = next.segmentParts ?? [next.segment];
-    parts.push(...nextParts);
+    if (!combinedParts) {
+      combinedParts = node.segmentParts ? [...node.segmentParts] : [node.segment];
+    }
+    if (next.segmentParts) {
+      combinedParts.push(...next.segmentParts);
+    } else {
+      combinedParts.push(next.segment);
+    }
     cursor = next;
   }
-  if (parts.length > 1) {
-    node.segment = parts.join('/');
-    node.segmentParts = parts;
+  if (combinedParts && combinedParts.length > 1) {
+    node.segment = combinedParts.join('/');
+    node.segmentParts = combinedParts;
     node.staticChildren = cursor.staticChildren;
     node.paramChildren = cursor.paramChildren;
     node.wildcardChild = cursor.wildcardChild;
@@ -141,21 +155,71 @@ const collapseStaticNode = (node: RouterNode): void => {
 };
 
 const sortAllParamChildren = (entry: RouterNode): void => {
-  const stack: RouterNode[] = [entry];
+  const stack = acquireNodeStack();
+  stack.push(entry);
   while (stack.length) {
     const node = stack.pop()!;
-    if (node.paramChildren.length > 1) {
-      node.paramChildren.sort((a, b) => scoreParamNode(b) - scoreParamNode(a));
+    const paramChildren = node.paramChildren;
+    if (paramChildren.length > 1) {
+      sortParamChildList(paramChildren);
     }
     for (const child of node.staticChildren.values()) {
       stack.push(child);
     }
-    for (const paramChild of node.paramChildren) {
+    for (const paramChild of paramChildren) {
       stack.push(paramChild);
     }
     if (node.wildcardChild) {
       stack.push(node.wildcardChild);
     }
+  }
+  releaseNodeStack(stack);
+};
+
+const compareParamChildren = (a: RouterNode, b: RouterNode): number => {
+  const scoreA = a.paramSortScore ?? 0;
+  const scoreB = b.paramSortScore ?? 0;
+  return scoreB - scoreA;
+};
+
+const PARAM_CHILD_INSERTION_THRESHOLD = 4;
+
+const sortParamChildList = (list: RouterNode[]): void => {
+  if (list.length <= 1) {
+    return;
+  }
+  if (list.length <= PARAM_CHILD_INSERTION_THRESHOLD) {
+    insertionSortParamChildren(list);
+    return;
+  }
+  for (const child of list) {
+    child.paramSortScore = scoreParamNode(child);
+  }
+  list.sort(compareParamChildren);
+  for (const child of list) {
+    child.paramSortScore = undefined;
+  }
+};
+
+const insertionSortParamChildren = (list: RouterNode[]): void => {
+  if (list.length <= 1) {
+    return;
+  }
+  const scores = new Array<number>(list.length);
+  for (let i = 0; i < list.length; i++) {
+    scores[i] = scoreParamNode(list[i]!);
+  }
+  for (let i = 1; i < list.length; i++) {
+    const current = list[i]!;
+    const currentScore = scores[i]!;
+    let j = i - 1;
+    while (j >= 0 && scores[j]! < currentScore) {
+      list[j + 1] = list[j]!;
+      scores[j + 1] = scores[j]!;
+      j--;
+    }
+    list[j + 1] = current;
+    scores[j + 1] = currentScore;
   }
 };
 
@@ -175,7 +239,8 @@ const scoreParamNode = (node: RouterNode): number => {
 };
 
 const validateRoutePatterns = (entry: RouterNode, ensureRegexSafe: (patternSrc: string) => void): void => {
-  const stack: RouterNode[] = [entry];
+  const stack = acquireNodeStack();
+  stack.push(entry);
   while (stack.length) {
     const node = stack.pop()!;
     if (node.patternSource) {
@@ -191,6 +256,7 @@ const validateRoutePatterns = (entry: RouterNode, ensureRegexSafe: (patternSrc: 
       stack.push(child);
     }
   }
+  releaseNodeStack(stack);
 };
 
 const precomputeWildcardSuffixMetadata = (
@@ -198,14 +264,18 @@ const precomputeWildcardSuffixMetadata = (
 ): { wildcardRouteCount: number; wildcardMethodsByMethod: Record<number, true> | null } => {
   const perMethod: Record<number, true> = Object.create(null);
   let wildcardRouteCount = 0;
-  const stack: RouterNode[] = [entry];
+  const stack = acquireNodeStack();
+  stack.push(entry);
   while (stack.length) {
     const node = stack.pop()!;
     const wildcard = node.wildcardChild;
     if (wildcard) {
-      for (const method of wildcard.methods.byMethod.keys()) {
-        perMethod[method as number] = true;
-        wildcardRouteCount++;
+      const methods = wildcard.methods.byMethod;
+      if (methods.size) {
+        wildcardRouteCount += methods.size;
+        for (const method of methods.keys()) {
+          perMethod[method as number] = true;
+        }
       }
       stack.push(wildcard);
     }
@@ -216,6 +286,7 @@ const precomputeWildcardSuffixMetadata = (
       stack.push(child);
     }
   }
+  releaseNodeStack(stack);
   return {
     wildcardRouteCount,
     wildcardMethodsByMethod: wildcardRouteCount ? perMethod : null,
@@ -225,7 +296,8 @@ const precomputeWildcardSuffixMetadata = (
 const recalculateRouteFlags = (entry: RouterNode): { hasWildcardRoutes: boolean; hasDynamicRoutes: boolean } => {
   let hasWildcardRoutes = false;
   let hasDynamicRoutes = false;
-  const stack: RouterNode[] = [entry];
+  const stack = acquireNodeStack();
+  stack.push(entry);
   while (stack.length) {
     const node = stack.pop()!;
     if (node.paramChildren.length) {
@@ -243,6 +315,7 @@ const recalculateRouteFlags = (entry: RouterNode): { hasWildcardRoutes: boolean;
       stack.push(child);
     }
   }
+  releaseNodeStack(stack);
   return { hasWildcardRoutes, hasDynamicRoutes };
 };
 

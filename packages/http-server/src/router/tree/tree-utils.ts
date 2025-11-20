@@ -1,5 +1,6 @@
 import { NodeKind } from '../enums';
 import { RouterNode } from '../node/router-node';
+import { acquireRouterNode } from '../node/router-node-pool';
 
 export function matchStaticParts(parts: readonly string[], segments: readonly string[], startIdx: number): number {
   let matched = 0;
@@ -17,7 +18,7 @@ export function splitStaticChain(node: RouterNode, splitIndex: number): void {
   }
   const prefixParts = parts.slice(0, splitIndex);
   const suffixParts = parts.slice(splitIndex);
-  const suffixNode = new RouterNode(NodeKind.Static, suffixParts.length > 1 ? suffixParts.join('/') : suffixParts[0]!);
+  const suffixNode = acquireRouterNode(NodeKind.Static, suffixParts.length > 1 ? suffixParts.join('/') : suffixParts[0]!);
   if (suffixParts.length > 1) {
     suffixNode.segmentParts = [...suffixParts];
   }

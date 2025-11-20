@@ -4,6 +4,7 @@ import { NodeKind } from '../enums';
 import { buildImmutableLayout, type ImmutableRouterLayout, type SerializedNodeRecord } from '../layout/immutable-router-layout';
 import { DynamicMatcher } from '../matcher/dynamic-matcher';
 import { RouterNode } from '../node/router-node';
+import { acquireRouterNode, releaseRouterSubtree } from '../node/router-node-pool';
 import { buildPatternTester, type PatternTesterOptions } from '../pattern/pattern-tester';
 import { assessRegexSafety } from '../pattern/regex-guard';
 import { matchStaticParts, splitStaticChain } from '../tree/tree-utils';
@@ -22,11 +23,12 @@ import type {
   SuffixPlan,
   PipelineStageConfig,
 } from '../types';
-import { normalizeAndSplit } from '../utils/path-utils';
+import { ensureSegmentOffsets, ensureSuffixSlices, type PathNormalizer } from '../utils/path-utils';
 
 import { createBuildPipeline } from './build-pipeline';
 import { MatchRunner } from './match-runner';
 import { OptionalParamDefaults } from './optional-param-defaults';
+import { createPathBehavior, type PathBehaviorProfile } from './path-behavior';
 import { RouterCache } from './router-cache';
 import type { NormalizedRouterOptions } from './router-options';
 import { normalizeParamOrderOptions, normalizePipelineStages, normalizeRegexSafety } from './router-options';
@@ -66,7 +68,6 @@ export class RadixRouterCore {
   private optionalDefaults: OptionalParamDefaults;
   private paramOrders: ReadonlyArray<Uint16Array | null> = [];
   private paramEdgeHitCounts: Uint32Array = new Uint32Array(0);
-  private paramReseedThresholds: Uint32Array = new Uint32Array(0);
   private metadata: RouterSnapshotMetadata = Object.freeze({
     totalRoutes: 0,
     hasDynamicRoutes: false,
@@ -77,6 +78,8 @@ export class RadixRouterCore {
   });
   private globalParamNames: Set<string> | null;
   private stageConfig: PipelineStageConfig;
+  private normalizePath: PathNormalizer;
+  private pathBehavior: PathBehaviorProfile;
 
   constructor(options?: RouterOptions) {
     const regexSafety = normalizeRegexSafety(options?.regexSafety);
@@ -95,17 +98,18 @@ export class RadixRouterCore {
       cacheSize: options?.cacheSize ?? 1024,
       strictParamNames: options?.strictParamNames ?? false,
       optionalParamBehavior: options?.optionalParamBehavior ?? 'omit',
-      pipelineStages: options?.pipelineStages ?? {},
       regexSafety,
       regexAnchorPolicy: options?.regexAnchorPolicy ?? 'warn',
       paramOrderTuning,
     };
     this.stageConfig = normalizePipelineStages(options?.pipelineStages);
+    this.pathBehavior = createPathBehavior(this.options);
+    this.normalizePath = this.pathBehavior.normalizePath;
     this.cacheStore = new RouterCache(this.options);
-    this.staticFastRegistry = new StaticFastRegistry(this.options);
+    this.staticFastRegistry = new StaticFastRegistry(this.pathBehavior);
     this.optionalDefaults = new OptionalParamDefaults(this.options.optionalParamBehavior);
     this.matchRunner = this.createMatchRunner();
-    this.root = new RouterNode(NodeKind.Static, '');
+    this.root = acquireRouterNode(NodeKind.Static, '');
     this.patternTesterOptions = this.buildPatternTesterOptions();
     this.matchObserver = {
       onParamBranch: (nodeIndex, offset) => {
@@ -120,7 +124,7 @@ export class RadixRouterCore {
     const keys: RouteKey[] = new Array(entries.length);
     for (let i = 0; i < entries.length; i++) {
       const [method, path] = entries[i]!;
-      const prepared = normalizeAndSplit(path, this.options);
+      const prepared = this.normalizePath(path);
       const key = this.insertRoute(method, path, prepared);
       keys[i] = key;
       this.registerStaticFastRoute(method, prepared.normalized, path, key);
@@ -138,7 +142,7 @@ export class RadixRouterCore {
     if (Array.isArray(method)) {
       return this.addAll(method.map(m => [m, path]));
     }
-    const prepared = normalizeAndSplit(path, this.options);
+    const prepared = this.normalizePath(path);
     const key = this.insertRoute(method, path, prepared);
     this.registerStaticFastRoute(method, prepared.normalized, path, key);
     this.afterRouteInsertion();
@@ -146,6 +150,7 @@ export class RadixRouterCore {
   }
 
   match(method: HttpMethod, path: string): RouteMatch | null {
+    this.assertSealed();
     return this.matchRunner.run(method, path);
   }
 
@@ -180,16 +185,16 @@ export class RadixRouterCore {
 
   private createMatchRunner(): MatchRunner {
     return new MatchRunner({
-      options: this.options,
       cache: this.cacheStore,
       staticRegistry: this.staticFastRegistry,
       optionalDefaults: this.optionalDefaults,
       stageConfig: this.stageConfig,
+      normalizePath: (path: string) => this.normalizePath(path),
       buildStaticMatch: key => this.buildStaticMatch(key),
       tryStaticFast: (method, path) => this.tryStaticFastMatch(method, path),
-      findDynamicMatch: (method, segments, captureSnapshot, suffixPlan, methodHasWildcard) =>
-        this.findDynamicMatch(method, segments, captureSnapshot, suffixPlan, methodHasWildcard),
-      buildWildcardSuffixPlan: (segments, normalized) => this.buildWildcardSuffixPlan(segments, normalized),
+      findDynamicMatch: (method, prepared, captureSnapshot, suffixPlanFactory, methodHasWildcard) =>
+        this.findDynamicMatch(method, prepared, captureSnapshot, suffixPlanFactory, methodHasWildcard),
+      buildWildcardSuffixPlan: prepared => this.buildWildcardSuffixPlan(prepared),
       methodHasWildcard: method => this.methodHasWildcard(method),
     });
   }
@@ -200,9 +205,9 @@ export class RadixRouterCore {
 
   private findDynamicMatch(
     method: HttpMethod,
-    segments: string[],
+    prepared: NormalizedPathSegments,
     captureSnapshot: boolean,
-    suffixPlan: SuffixPlan | undefined,
+    suffixPlanFactory: (() => SuffixPlan | undefined) | undefined,
     methodHasWildcard: boolean,
   ): DynamicMatchResult | null {
     if (!this.layout) {
@@ -210,11 +215,12 @@ export class RadixRouterCore {
     }
     const matcher = new DynamicMatcher({
       method,
-      segments,
+      segments: prepared.segments,
+      segmentDecodeHints: prepared.segmentDecodeHints,
       decodeParams: this.options.decodeParams,
       hasWildcardRoutes: methodHasWildcard,
       captureSnapshot,
-      suffixPlan,
+      suffixPlanFactory,
       layout: this.layout,
       patternTesters: this.patternTesters,
       paramOrders: this.paramOrders,
@@ -249,7 +255,7 @@ export class RadixRouterCore {
   }
 
   private insertRoute(method: HttpMethod, path: string, prepared?: NormalizedPathSegments): RouteKey {
-    const preparedPath = prepared ?? normalizeAndSplit(path, this.options);
+    const preparedPath = prepared ?? this.normalizePath(path);
     const { segments } = preparedPath;
     let firstKey: RouteKey | null = null;
     const describeContext = (idx: number): string => segments.slice(0, idx).join('/');
@@ -274,6 +280,9 @@ export class RadixRouterCore {
         if (firstKey === null) {
           firstKey = key;
         }
+        if (node.kind === NodeKind.Wildcard) {
+          this.registerWildcardRoute(method);
+        }
         if (omittedOptionals.length) {
           this.optionalDefaults.record(key, omittedOptionals);
         }
@@ -296,7 +305,7 @@ export class RadixRouterCore {
           }
         } else {
           this.registerGlobalParamName(name);
-          node.wildcardChild = new RouterNode(NodeKind.Wildcard, name);
+          node.wildcardChild = acquireRouterNode(NodeKind.Wildcard, name);
           node.wildcardChild.wildcardOrigin = 'star';
         }
         const release = registerParamName(name, activeParams);
@@ -361,7 +370,7 @@ export class RadixRouterCore {
           }
           if (!node.wildcardChild) {
             this.registerGlobalParamName(name);
-            node.wildcardChild = new RouterNode(NodeKind.Wildcard, name || '*');
+            node.wildcardChild = acquireRouterNode(NodeKind.Wildcard, name || '*');
             node.wildcardChild.wildcardOrigin = 'zero';
           } else if (node.wildcardChild.wildcardOrigin !== 'zero' || node.wildcardChild.segment !== name) {
             throw new Error(
@@ -382,7 +391,7 @@ export class RadixRouterCore {
           }
           if (!node.wildcardChild) {
             this.registerGlobalParamName(name);
-            node.wildcardChild = new RouterNode(NodeKind.Wildcard, name || '*');
+            node.wildcardChild = acquireRouterNode(NodeKind.Wildcard, name || '*');
             node.wildcardChild.wildcardOrigin = 'multi';
           } else if (node.wildcardChild.wildcardOrigin !== 'multi' || node.wildcardChild.segment !== name) {
             throw new Error(
@@ -416,7 +425,7 @@ export class RadixRouterCore {
             throw new Error(`Conflict: adding parameter ':${name}' under existing wildcard at '${describeContext(idx)}'`);
           }
           this.registerGlobalParamName(name);
-          child = new RouterNode(NodeKind.Param, name);
+          child = acquireRouterNode(NodeKind.Param, name);
           if (patternSrc) {
             const normalizedPattern = this.normalizeParamPatternSource(patternSrc);
             this.ensureRegexSafe(normalizedPattern);
@@ -454,7 +463,7 @@ export class RadixRouterCore {
         addSegments(child, idx + 1, activeParams, omittedOptionals);
         return;
       }
-      child = new RouterNode(NodeKind.Static, seg);
+      child = acquireRouterNode(NodeKind.Static, seg);
       node.staticChildren.set(seg, child);
       addSegments(child, idx + 1, activeParams, omittedOptionals);
     };
@@ -467,10 +476,6 @@ export class RadixRouterCore {
       return;
     }
     node.paramChildren.sort((a, b) => {
-      const hotDiff = (b.paramHitCount ?? 0) - (a.paramHitCount ?? 0);
-      if (hotDiff !== 0) {
-        return hotDiff;
-      }
       const weight = (child: RouterNode) => (child.pattern ? 0 : 1);
       const diff = weight(a) - weight(b);
       if (diff !== 0) {
@@ -493,6 +498,12 @@ export class RadixRouterCore {
     }
   }
 
+  private assertSealed(): void {
+    if (!this.sealed) {
+      throw new Error('Router has not been finalized. Call build() before matching.');
+    }
+  }
+
   private requireBuilderRoot(): RouterNode {
     if (!this.root) {
       throw new Error('Router builder state is no longer available. Instantiate a new builder to add routes.');
@@ -501,7 +512,17 @@ export class RadixRouterCore {
   }
 
   private releaseBuilderState(): void {
-    this.root = null;
+    if (this.root) {
+      releaseRouterSubtree(this.root);
+      this.root = null;
+    }
+  }
+
+  private registerWildcardRoute(method: HttpMethod): void {
+    this.wildcardRouteCount++;
+    const store = (this.wildcardMethodsByMethod ??= Object.create(null));
+    store[method as number] = true;
+    this.hasWildcardRoutes = true;
   }
 
   private describeMethod(method: HttpMethod): string {
@@ -551,25 +572,28 @@ export class RadixRouterCore {
     safety.validator?.(patternSrc);
   }
 
-  private buildWildcardSuffixPlan(segments: string[], normalizedPath: string): SuffixPlan | undefined {
+  private buildWildcardSuffixPlan(prepared: NormalizedPathSegments): SuffixPlan | undefined {
+    const segments = prepared.segments;
+    const normalizedPath = prepared.normalized;
     if (!segments.length || normalizedPath.length <= 1) {
       return undefined;
     }
-    const source = normalizedPath.charCodeAt(0) === 47 ? normalizedPath.slice(1) : normalizedPath;
+    const source = prepared.suffixSource ?? (normalizedPath.charCodeAt(0) === 47 ? normalizedPath.slice(1) : normalizedPath);
     if (!source.length) {
       return undefined;
     }
-    const offsets = new Uint32Array(segments.length + 1);
-    let cursor = 0;
-    for (let i = 0; i < segments.length; i++) {
-      offsets[i] = cursor;
-      cursor += segments[i]!.length;
-      if (i !== segments.length - 1) {
-        cursor++;
-      }
+    if (!prepared.suffixSource) {
+      prepared.suffixSource = source;
     }
-    offsets[segments.length] = cursor;
-    return { source, offsets };
+    const cached = prepared.suffixPlan;
+    if (cached && cached.source === source) {
+      return cached;
+    }
+    const offsets = ensureSegmentOffsets(prepared);
+    const slices = ensureSuffixSlices(prepared, offsets, source);
+    const plan: SuffixPlan = { source, offsets, slices };
+    prepared.suffixPlan = plan;
+    return plan;
   }
 
   private normalizeParamPatternSource(patternSrc: string): string {
@@ -646,11 +670,9 @@ export class RadixRouterCore {
     if (!layout) {
       this.paramOrders = [];
       this.paramEdgeHitCounts = new Uint32Array(0);
-      this.paramReseedThresholds = new Uint32Array(0);
       return;
     }
     this.paramEdgeHitCounts = new Uint32Array(layout.paramChildren.length);
-    this.paramReseedThresholds = new Uint32Array(layout.nodes.length);
     const orders: Array<Uint16Array | null> = new Array(layout.nodes.length);
     for (let i = 0; i < layout.nodes.length; i++) {
       const node = layout.nodes[i]!;
@@ -663,7 +685,6 @@ export class RadixRouterCore {
       } else {
         orders[i] = null;
       }
-      this.paramReseedThresholds[i] = this.options.paramOrderTuning.baseThreshold;
     }
     this.paramOrders = orders;
   }
@@ -706,19 +727,7 @@ export class RadixRouterCore {
       return;
     }
     const current = this.paramEdgeHitCounts[edgeIndex] ?? 0;
-    const hits = current + 1;
-    this.paramEdgeHitCounts[edgeIndex] = hits;
-    const tuning = this.options.paramOrderTuning;
-    const threshold = this.paramReseedThresholds[nodeIndex] || tuning.baseThreshold;
-    if (hits < threshold) {
-      return;
-    }
-    if (Math.random() > tuning.reseedProbability) {
-      this.paramReseedThresholds[nodeIndex] = threshold + tuning.baseThreshold;
-      return;
-    }
-    this.resortParamOrder(nodeIndex, node);
-    this.paramReseedThresholds[nodeIndex] = threshold + tuning.baseThreshold;
+    this.paramEdgeHitCounts[edgeIndex] = current + 1;
   }
 
   private resortParamOrder(nodeIndex: number, node: SerializedNodeRecord): void {

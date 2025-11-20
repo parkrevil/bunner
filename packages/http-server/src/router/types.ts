@@ -12,6 +12,11 @@ export type OptionalParamBehavior = 'omit' | 'setUndefined' | 'setEmptyString';
 export interface NormalizedPathSegments {
   normalized: string;
   segments: string[];
+  segmentOffsets?: Uint32Array;
+  segmentDecodeHints?: Uint8Array;
+  suffixSource?: string;
+  suffixSlices?: string[];
+  suffixPlan?: SuffixPlan;
 }
 
 export type RouteParams = Record<string, string | undefined>;
@@ -34,10 +39,12 @@ export type StaticProbeResult =
 export interface DynamicMatcherConfig {
   method: HttpMethod;
   segments: string[];
+  segmentDecodeHints?: Uint8Array;
   decodeParams: boolean;
   hasWildcardRoutes: boolean;
   captureSnapshot: boolean;
   suffixPlan?: SuffixPlan;
+  suffixPlanFactory?: () => SuffixPlan | undefined;
   layout: ImmutableRouterLayout;
   patternTesters: ReadonlyArray<PatternTesterFn | undefined>;
   paramOrders?: ReadonlyArray<Uint16Array | null>;
@@ -82,7 +89,7 @@ export interface RouterOptions {
   regexSafety?: RegexSafetyOptions;
   /** Policy for handling user-supplied ^/$ anchors inside parameter regexes */
   regexAnchorPolicy?: 'warn' | 'error' | 'silent';
-  /** Advanced tuning for parameter branch reordering */
+  /** Import/export parameter hit statistics for build-time ordering */
   paramOrderTuning?: ParamOrderingOptions;
   /** Stage toggles for build/match pipelines */
   pipelineStages?: Partial<PipelineStageConfig>;
@@ -113,8 +120,6 @@ export interface RouterSnapshotMetadata {
 }
 
 export interface ParamOrderingOptions {
-  baseThreshold?: number;
-  reseedProbability?: number;
   snapshot?: ParamOrderSnapshot;
 }
 
@@ -125,6 +130,7 @@ export interface ParamOrderSnapshot {
 export interface SuffixPlan {
   source: string;
   offsets: Uint32Array;
+  slices?: string[];
 }
 
 export type BuildStageName =

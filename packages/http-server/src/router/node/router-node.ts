@@ -23,14 +23,35 @@ export class RouterNode {
   pattern?: RegExp;
   patternSource?: string;
   patternTester?: (value: string) => boolean;
-  paramHitCount?: number;
   // For Static nodes: optional precomputed parts when compressed (e.g., 'a/b/c' -> ['a','b','c'])
   segmentParts?: string[];
   // For Wildcard nodes: remember whether they originated from '*' / ':name+' / ':name*'
   wildcardOrigin?: 'star' | 'multi' | 'zero';
+  // Build-stage hint for cached param sort score
+  paramSortScore?: number;
 
   constructor(kind: NodeKind, segment: string) {
     this.kind = kind;
     this.segment = segment;
+    this.resetState(kind, segment);
+  }
+
+  resetState(kind: NodeKind, segment: string): void {
+    this.kind = kind;
+    this.segment = segment;
+    if (this.staticChildren.size) {
+      this.staticChildren.clear();
+    }
+    if (this.paramChildren.length) {
+      this.paramChildren.length = 0;
+    }
+    this.wildcardChild = undefined;
+    this.methods.byMethod.clear();
+    this.pattern = undefined;
+    this.patternSource = undefined;
+    this.patternTester = undefined;
+    this.segmentParts = undefined;
+    this.wildcardOrigin = undefined;
+    this.paramSortScore = undefined;
   }
 }

@@ -17,8 +17,6 @@ export type NormalizedRegexSafetyOptions = {
 };
 
 export type NormalizedParamOrderingOptions = {
-  baseThreshold: number;
-  reseedProbability: number;
   snapshot?: ParamOrderSnapshot;
 };
 
@@ -40,7 +38,6 @@ export const DEFAULT_REGEX_SAFETY: NormalizedRegexSafetyOptions = {
   maxExecutionMs: undefined,
 };
 
-export const PARAM_RESORT_THRESHOLD = 32;
 export const STATIC_NORMALIZATION_CACHE_LIMIT = 128;
 
 export const DEFAULT_PIPELINE_STAGE_CONFIG: PipelineStageConfig = {
@@ -71,11 +68,7 @@ export function normalizeRegexSafety(input?: RegexSafetyOptions): NormalizedRege
 }
 
 export function normalizeParamOrderOptions(input?: ParamOrderingOptions): NormalizedParamOrderingOptions {
-  const baseThreshold = Math.max(1, input?.baseThreshold ?? PARAM_RESORT_THRESHOLD);
-  const reseedProbability = input?.reseedProbability ?? 0.5;
   return {
-    baseThreshold,
-    reseedProbability: Math.min(1, Math.max(0.1, reseedProbability)),
     snapshot: input?.snapshot,
   };
 }

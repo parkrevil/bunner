@@ -6,12 +6,14 @@ interface WildcardSuffixCacheConfig {
   decodeParams: boolean;
   encodedSlashBehavior: EncodedSlashBehavior;
   plan?: SuffixPlan;
+  planFactory?: () => SuffixPlan | undefined;
 }
 
 export class WildcardSuffixCache {
   private readonly segments: string[];
   private readonly decodeParams: boolean;
   private readonly encodedSlashBehavior: EncodedSlashBehavior;
+  private planFactory?: () => SuffixPlan | undefined;
   private suffixCache?: Array<string | undefined>;
   private decodedSuffixCache?: Array<string | undefined>;
   private suffixOffsets?: Uint32Array;
@@ -21,12 +23,12 @@ export class WildcardSuffixCache {
     this.segments = config.segments;
     this.decodeParams = config.decodeParams;
     this.encodedSlashBehavior = config.encodedSlashBehavior;
+    this.planFactory = config.planFactory;
     if (config.plan) {
-      this.suffixOffsets = config.plan.offsets;
-      this.suffixSource = config.plan.source;
-    }
-    if (this.segments.length && config.plan) {
-      this.ensureSuffixCache();
+      this.applyPlan(config.plan);
+      if (this.segments.length) {
+        this.ensureSuffixCache();
+      }
     }
   }
 
@@ -63,6 +65,13 @@ export class WildcardSuffixCache {
     if (!this.segments.length) {
       return;
     }
+    if ((!this.suffixOffsets || !this.suffixSource) && this.planFactory) {
+      const plan = this.planFactory();
+      if (plan) {
+        this.applyPlan(plan);
+        this.planFactory = undefined;
+      }
+    }
     this.suffixCache ??= new Array(this.segments.length + 1);
     if (!this.suffixOffsets) {
       this.suffixOffsets = new Uint32Array(this.segments.length + 1);
@@ -78,6 +87,14 @@ export class WildcardSuffixCache {
     }
     if (!this.suffixSource) {
       this.suffixSource = this.segments.join('/');
+    }
+  }
+
+  private applyPlan(plan: SuffixPlan): void {
+    this.suffixOffsets = plan.offsets;
+    this.suffixSource = plan.source;
+    if (plan.slices) {
+      this.suffixCache = [...plan.slices];
     }
   }
 }
