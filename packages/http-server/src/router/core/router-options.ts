@@ -4,7 +4,6 @@ import type {
   ParamOrderingOptions,
   PipelineStageConfig,
   RegexSafetyOptions,
-  RouterObserverHooks,
   RouterOptions,
 } from '../types';
 
@@ -25,12 +24,11 @@ export type NormalizedParamOrderingOptions = {
 
 export type NormalizedRouterOptions = Omit<
   Required<RouterOptions>,
-  'regexSafety' | 'encodedSlashBehavior' | 'paramOrderTuning' | 'observers' | 'pipelineStages'
+  'regexSafety' | 'encodedSlashBehavior' | 'paramOrderTuning' | 'pipelineStages'
 > & {
   regexSafety: NormalizedRegexSafetyOptions;
   encodedSlashBehavior: EncodedSlashBehavior;
   paramOrderTuning: NormalizedParamOrderingOptions;
-  observers?: RouterObserverHooks;
   pipelineStages?: Partial<PipelineStageConfig>;
 };
 

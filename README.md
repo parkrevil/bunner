@@ -6,7 +6,7 @@ A Bun-first HTTP router that builds immutable snapshots up front and executes ma
 
 - **Immutable build artifacts** – `RouterBuilder` produces a read-only `RouterInstance` whose static layout can be serialized and shipped between processes.
 - **Deterministic build pipeline** – compression, regex validation, wildcard metadata, and route flag calculation all occur inside `build()` so runtime work is minimal.
-- **Pluggable cache/observability** – versioned match cache with LRU semantics plus hook bundles for cache hits, param branches, and stage timings.
+- **Versioned match cache** – LRU-backed match caching with null-hit tracking that stays consistent across builder rebuilds.
 - **Security-focused decoding** – configurable `%2F` handling, traversal guards, regex safety heuristics, and timeout-aware pattern testers.
 
 ## Workspace overview
@@ -72,7 +72,6 @@ bun run dev
 | 정적 패스트 경로     | 대소문자 정규화 해시 테이블과 `LengthBitset`을 활용해 후행 슬래시 정리, 소문자 미러링을 포함한 O(1) 정적 라우트 조회를 제공합니다.                                                                                   |
 | 동적 매처            | Radix 워커가 `:param`, `:name+`, `:name*`, 선택적 세그먼트, 와일드카드 suffix, 옵셔널 파라미터 기본값을 모두 지원합니다.                                                                                             |
 | 캐시 & LRU           | `cacheSize` 기반 버전형 매치 캐시와 null-hit 추적, `touchCacheEntry` 훅을 통한 LRU 퇴출을 선택적으로 활성화할 수 있습니다.                                                                                           |
-| 관측 훅              | `RouterObserverHooks`로 캐시 히트/미스, 파라미터 브랜치, 스테이지 타이밍, 매치 이벤트를 노출해 메트릭·트레이싱 백엔드와 연계할 수 있습니다.                                                                          |
 | 정규식 안전 가드     | `regexSafety`와 `regexAnchorPolicy`로 길이 제한, 백트래킹/역참조 금지, 앵커 제거, 사용자 검증 훅, 실행 타임아웃을 제어합니다.                                                                                        |
 | 경로 순회 방어       | `blockTraversal`, `collapseSlashes`, `ignoreTrailingSlash`, `encodedSlashBehavior` 조합으로 dot-segment 및 `%2F` 주입 공격을 차단합니다.                                                                             |
 | 파라미터 순서 튜닝   | `paramOrderTuning`이 히트 카운트 임계값과 재시드 확률을 조합하고, `exportParamOrderingSnapshot()`으로 학습된 순서를 재부팅 후 복원합니다.                                                                            |
@@ -91,7 +90,7 @@ A Bun-first HTTP router that builds immutable snapshots up front and executes ma
 
 - **Immutable build artifacts** – `RouterBuilder` produces a read-only `RouterInstance` whose static layout can be serialized and shipped between processes.
 - **Deterministic build pipeline** – compression, regex validation, wildcard metadata, and route flag calculation all occur inside `build()` so runtime work is minimal.
-- **Pluggable cache/observability** – versioned match cache with LRU semantics plus hook bundles for cache hits, param branches, and stage timings.
+- **Versioned match cache** – LRU-backed match caching with null-hit tracking that stays consistent across builder rebuilds.
 - **Security-focused decoding** – configurable `%2F` handling, traversal guards, regex safety heuristics, and timeout-aware pattern testers.
 
 ## Workspace overview

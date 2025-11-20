@@ -7,8 +7,6 @@ import type { NormalizedRouterOptions } from './router-options';
 export type CacheEntry = { key: RouteKey; params?: Array<[string, string | undefined]> };
 export type CacheRecord = { version: number; entry: CacheEntry | null };
 
-export const CACHE_NULL_HIT = Symbol('cache-null-hit');
-
 export class RouterCache {
   private store?: Map<string, CacheRecord>;
   private version = 1;

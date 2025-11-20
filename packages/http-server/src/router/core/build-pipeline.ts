@@ -6,7 +6,6 @@ import type { BuildStageName, PipelineStageConfig, RouterSnapshotMetadata } from
 export interface BuildPipelineDependencies {
   stageConfig: PipelineStageConfig;
   routeCount: number;
-  runStage: <T>(name: BuildStageName, context: Record<string, unknown>, fn: () => T) => T;
   ensureRegexSafe: (patternSrc: string) => void;
   markRouteHints: (hasDynamicRoutes: boolean, hasWildcardRoutes: boolean) => void;
   initialWildcardRouteCount: number;
@@ -76,7 +75,11 @@ export const createBuildPipeline = (deps: BuildPipelineDependencies): BuildPipel
         if (!deps.stageConfig.build[stage.name]) {
           continue;
         }
-        deps.runStage(stage.name, { routeCount: deps.routeCount }, stage.execute);
+        try {
+          stage.execute();
+        } catch (error) {
+          throw new Error(`[bunner/router] Build stage '${stage.name}' failed: ${(error as Error).message}`);
+        }
       }
 
       return {

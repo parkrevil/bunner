@@ -84,8 +84,6 @@ export interface RouterOptions {
   regexAnchorPolicy?: 'warn' | 'error' | 'silent';
   /** Advanced tuning for parameter branch reordering */
   paramOrderTuning?: ParamOrderingOptions;
-  /** Hook bundle for router observability */
-  observers?: RouterObserverHooks;
   /** Stage toggles for build/match pipelines */
   pipelineStages?: Partial<PipelineStageConfig>;
 }
@@ -129,40 +127,6 @@ export interface SuffixPlan {
   offsets: Uint32Array;
 }
 
-export interface RouterObserverHooks {
-  onRouteMatch?: (event: RouteMatchEvent) => void;
-  onCacheHit?: (event: CacheEvent) => void;
-  onCacheMiss?: (event: CacheEvent) => void;
-  onStaticFastHit?: (event: StaticFastEvent) => void;
-  onParamBranchTaken?: (event: ParamBranchEvent) => void;
-  onStageStart?: (event: StageEvent) => void;
-  onStageEnd?: (event: StageEvent & { durationMs: number }) => void;
-}
-
-export interface RouteMatchEvent {
-  method: HttpMethod;
-  path: string;
-  match: RouteMatch;
-  fromCache: boolean;
-}
-
-export interface CacheEvent {
-  key: string;
-  method: HttpMethod;
-  path: string;
-}
-
-export interface StaticFastEvent {
-  method: HttpMethod;
-  path: string;
-  key: RouteKey;
-}
-
-export interface ParamBranchEvent {
-  nodeIndex: number;
-  localOffset: number;
-}
-
 export type BuildStageName =
   | 'compress-static'
   | 'param-priority'
@@ -171,11 +135,6 @@ export type BuildStageName =
   | 'route-flags'
   | 'snapshot-metadata';
 export type MatchStageName = 'static-fast' | 'cache' | 'dynamic';
-
-export interface StageEvent {
-  stage: `build:${BuildStageName}` | `match:${MatchStageName}`;
-  context: Record<string, unknown>;
-}
 
 export interface PipelineStageConfig {
   build: Record<BuildStageName, boolean>;

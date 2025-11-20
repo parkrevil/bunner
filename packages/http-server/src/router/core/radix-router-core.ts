@@ -20,11 +20,7 @@ import type {
   EncodedSlashBehavior,
   ParamOrderSnapshot,
   SuffixPlan,
-  RouterObserverHooks,
   PipelineStageConfig,
-  BuildStageName,
-  MatchStageName,
-  StageEvent,
 } from '../types';
 import { normalizeAndSplit } from '../utils/path-utils';
 
@@ -37,9 +33,6 @@ import { normalizeParamOrderOptions, normalizePipelineStages, normalizeRegexSafe
 import { StaticFastRegistry } from './static-fast-registry';
 
 let GLOBAL_ROUTE_KEY_SEQ = 1 as RouteKey;
-
-const getTimestamp = (): number =>
-  typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
 
 type RegExpConstructorWithEscape = RegExpConstructor & { escape?: (value: string) => string };
 const REGEXP_WITH_ESCAPE = RegExp as RegExpConstructorWithEscape;
@@ -71,7 +64,6 @@ export class RadixRouterCore {
   private patternTesters: ReadonlyArray<PatternTesterFn | undefined> = [];
   private matchObserver: MatchObserverHooks;
   private optionalDefaults: OptionalParamDefaults;
-  private observers?: RouterObserverHooks;
   private paramOrders: ReadonlyArray<Uint16Array | null> = [];
   private paramEdgeHitCounts: Uint32Array = new Uint32Array(0);
   private paramReseedThresholds: Uint32Array = new Uint32Array(0);
@@ -103,7 +95,6 @@ export class RadixRouterCore {
       cacheSize: options?.cacheSize ?? 1024,
       strictParamNames: options?.strictParamNames ?? false,
       optionalParamBehavior: options?.optionalParamBehavior ?? 'omit',
-      observers: options?.observers,
       pipelineStages: options?.pipelineStages ?? {},
       regexSafety,
       regexAnchorPolicy: options?.regexAnchorPolicy ?? 'warn',
@@ -116,11 +107,9 @@ export class RadixRouterCore {
     this.matchRunner = this.createMatchRunner();
     this.root = new RouterNode(NodeKind.Static, '');
     this.patternTesterOptions = this.buildPatternTesterOptions();
-    this.observers = this.options.observers;
     this.matchObserver = {
       onParamBranch: (nodeIndex, offset) => {
         this.recordParamUsage(nodeIndex, offset);
-        this.observers?.onParamBranchTaken?.({ nodeIndex, localOffset: offset });
       },
     };
     this.globalParamNames = this.options.strictParamNames ? new Set() : null;
@@ -157,11 +146,7 @@ export class RadixRouterCore {
   }
 
   match(method: HttpMethod, path: string): RouteMatch | null {
-    const direct = this.matchRunner.run(method, path, false, true);
-    if (direct) {
-      return direct;
-    }
-    return null;
+    return this.matchRunner.run(method, path);
   }
 
   finalizeBuild(): void {
@@ -200,16 +185,12 @@ export class RadixRouterCore {
       staticRegistry: this.staticFastRegistry,
       optionalDefaults: this.optionalDefaults,
       stageConfig: this.stageConfig,
-      runStage: (name, context, fn) => this.withStage('match', name, context, fn),
       buildStaticMatch: key => this.buildStaticMatch(key),
       tryStaticFast: (method, path) => this.tryStaticFastMatch(method, path),
       findDynamicMatch: (method, segments, captureSnapshot, suffixPlan, methodHasWildcard) =>
         this.findDynamicMatch(method, segments, captureSnapshot, suffixPlan, methodHasWildcard),
-      emitCacheEvent: (kind, key, method, path) => this.emitCacheEvent(kind, key, method, path),
-      emitStaticFastHit: (method, path, key) => this.emitStaticFastHit(method, path, key),
       buildWildcardSuffixPlan: (segments, normalized) => this.buildWildcardSuffixPlan(segments, normalized),
       methodHasWildcard: method => this.methodHasWildcard(method),
-      finalizeMatch: (method, path, match, fromCache) => this.finalizeMatch(method, path, match, fromCache),
     });
   }
 
@@ -265,61 +246,6 @@ export class RadixRouterCore {
       throw new Error(`Parameter name ':${name}' is already registered while strictParamNames is enabled`);
     }
     this.globalParamNames.add(name);
-  }
-
-  private withStage<T>(
-    phase: 'build',
-    name: BuildStageName,
-    context: Record<string, unknown>,
-    fn: () => T,
-    logDuration?: boolean,
-  ): T;
-  private withStage<T>(
-    phase: 'match',
-    name: MatchStageName,
-    context: Record<string, unknown>,
-    fn: () => T,
-    logDuration?: boolean,
-  ): T;
-  private withStage<T>(
-    phase: 'build' | 'match',
-    name: BuildStageName | MatchStageName,
-    context: Record<string, unknown>,
-    fn: () => T,
-    logDuration: boolean = false,
-  ): T {
-    const stageId: StageEvent['stage'] =
-      phase === 'build' ? (`build:${name as BuildStageName}` as const) : (`match:${name as MatchStageName}` as const);
-    const start = getTimestamp();
-    this.observers?.onStageStart?.({ stage: stageId, context });
-    try {
-      return fn();
-    } finally {
-      const durationMs = getTimestamp() - start;
-      this.observers?.onStageEnd?.({ stage: stageId, context, durationMs });
-      if (logDuration) {
-        console.info(`[bunner/router] stage:${name} ${durationMs.toFixed(3)}ms`);
-      }
-    }
-  }
-
-  private finalizeMatch(method: HttpMethod | undefined, path: string, match: RouteMatch, fromCache: boolean): RouteMatch {
-    if (method !== undefined && this.observers?.onRouteMatch) {
-      this.observers.onRouteMatch({ method, path, match, fromCache });
-    }
-    return match;
-  }
-
-  private emitCacheEvent(kind: 'hit' | 'miss', key: string, method: HttpMethod, path: string): void {
-    if (kind === 'hit') {
-      this.observers?.onCacheHit?.({ key, method, path });
-    } else {
-      this.observers?.onCacheMiss?.({ key, method, path });
-    }
-  }
-
-  private emitStaticFastHit(method: HttpMethod, path: string, key: RouteKey): void {
-    this.observers?.onStaticFastHit?.({ method, path, key });
   }
 
   private insertRoute(method: HttpMethod, path: string, prepared?: NormalizedPathSegments): RouteKey {
@@ -681,13 +607,6 @@ export class RadixRouterCore {
     const pipeline = createBuildPipeline({
       stageConfig: this.stageConfig,
       routeCount: this.routeCount,
-      runStage: (name, context, fn) => {
-        try {
-          return this.withStage('build', name, context, fn, true);
-        } catch (error) {
-          throw new Error(`[bunner/router] Build stage '${name}' failed: ${(error as Error).message}`);
-        }
-      },
       ensureRegexSafe: pattern => this.ensureRegexSafe(pattern),
       markRouteHints: (hasDynamic, hasWildcard) => this.staticFastRegistry.markRouteHints(hasDynamic, hasWildcard),
       initialWildcardRouteCount: this.wildcardRouteCount,
