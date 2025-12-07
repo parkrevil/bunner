@@ -17,7 +17,10 @@ export type NormalizedRegexSafetyOptions = {
 };
 
 export type NormalizedParamOrderingOptions = {
+  baseThreshold: number;
+  reseedProbability: number;
   snapshot?: ParamOrderSnapshot;
+  sampleRate: number;
 };
 
 export type NormalizedRouterOptions = Omit<
@@ -29,6 +32,9 @@ export type NormalizedRouterOptions = Omit<
   paramOrderTuning: NormalizedParamOrderingOptions;
   pipelineStages?: Partial<PipelineStageConfig>;
 };
+
+export const DEFAULT_MAX_SEGMENT_LENGTH = 8192;
+const MAX_SEGMENT_LENGTH_LIMIT = 65535;
 
 export const DEFAULT_REGEX_SAFETY: NormalizedRegexSafetyOptions = {
   mode: 'error',
@@ -67,10 +73,60 @@ export function normalizeRegexSafety(input?: RegexSafetyOptions): NormalizedRege
   };
 }
 
+const DEFAULT_PARAM_SAMPLE_RATE = 8;
+
 export function normalizeParamOrderOptions(input?: ParamOrderingOptions): NormalizedParamOrderingOptions {
   return {
+    baseThreshold: sanitizeBaseThreshold(input?.baseThreshold),
+    reseedProbability: sanitizeReseedProbability(input?.reseedProbability),
     snapshot: input?.snapshot,
+    sampleRate: sanitizeSampleRate(input?.sampleRate),
   };
+}
+
+const DEFAULT_PARAM_BASE_THRESHOLD = 32;
+
+function sanitizeBaseThreshold(value: number | undefined): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    return DEFAULT_PARAM_BASE_THRESHOLD;
+  }
+  if (value > 1e6) {
+    return 1e6;
+  }
+  return Math.floor(value);
+}
+
+function sanitizeReseedProbability(value: number | undefined): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return 0;
+  }
+  if (value <= 0) {
+    return 0;
+  }
+  if (value >= 1) {
+    return 1;
+  }
+  return value;
+}
+
+function sanitizeSampleRate(value: number | undefined): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 1) {
+    return DEFAULT_PARAM_SAMPLE_RATE;
+  }
+  if (value > 1e6) {
+    return 1e6;
+  }
+  return Math.floor(value);
+}
+
+export function sanitizeMaxSegmentLength(value: number | undefined): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    return DEFAULT_MAX_SEGMENT_LENGTH;
+  }
+  if (value > MAX_SEGMENT_LENGTH_LIMIT) {
+    return MAX_SEGMENT_LENGTH_LIMIT;
+  }
+  return Math.floor(value);
 }
 
 export function normalizePipelineStages(input?: Partial<PipelineStageConfig>): PipelineStageConfig {

@@ -20,6 +20,7 @@ import type {
   NormalizedPathSegments,
   EncodedSlashBehavior,
   ParamOrderSnapshot,
+  RouterCacheSnapshot,
   SuffixPlan,
   PipelineStageConfig,
 } from '../types';
@@ -31,7 +32,12 @@ import { OptionalParamDefaults } from './optional-param-defaults';
 import { createPathBehavior, type PathBehaviorProfile } from './path-behavior';
 import { RouterCache } from './router-cache';
 import type { NormalizedRouterOptions } from './router-options';
-import { normalizeParamOrderOptions, normalizePipelineStages, normalizeRegexSafety } from './router-options';
+import {
+  normalizeParamOrderOptions,
+  normalizePipelineStages,
+  normalizeRegexSafety,
+  sanitizeMaxSegmentLength,
+} from './router-options';
 import { StaticFastRegistry } from './static-fast-registry';
 
 let GLOBAL_ROUTE_KEY_SEQ = 1 as RouteKey;
@@ -56,6 +62,8 @@ export class RadixRouterCore {
   private matchRunner: MatchRunner;
   private staticFastRegistry: StaticFastRegistry;
   private patternTesterOptions?: PatternTesterOptions;
+  private patternTesterCache = new Map<string, PatternTesterFn>();
+  private compiledPatternCache = new Map<string, RegExp>();
   private wildcardMethodsByMethod: Record<number, true> | null = null;
   private wildcardRouteCount = 0;
   private hasWildcardRoutes = false;
@@ -68,6 +76,10 @@ export class RadixRouterCore {
   private optionalDefaults: OptionalParamDefaults;
   private paramOrders: ReadonlyArray<Uint16Array | null> = [];
   private paramEdgeHitCounts: Uint32Array = new Uint32Array(0);
+  private paramOrderHitWindows: Uint32Array = new Uint32Array(0);
+  private paramSamplingEnabled = true;
+  private paramSampleRate: number;
+  private paramSampleCursor = 0;
   private metadata: RouterSnapshotMetadata = Object.freeze({
     totalRoutes: 0,
     hasDynamicRoutes: false,
@@ -96,11 +108,13 @@ export class RadixRouterCore {
       blockTraversal: options?.blockTraversal ?? true,
       enableCache: options?.enableCache ?? false,
       cacheSize: options?.cacheSize ?? 1024,
+      maxSegmentLength: sanitizeMaxSegmentLength(options?.maxSegmentLength),
       strictParamNames: options?.strictParamNames ?? false,
       optionalParamBehavior: options?.optionalParamBehavior ?? 'omit',
       regexSafety,
       regexAnchorPolicy: options?.regexAnchorPolicy ?? 'warn',
       paramOrderTuning,
+      failFastOnBadEncoding: options?.failFastOnBadEncoding ?? false,
     };
     this.stageConfig = normalizePipelineStages(options?.pipelineStages);
     this.pathBehavior = createPathBehavior(this.options);
@@ -109,11 +123,14 @@ export class RadixRouterCore {
     this.staticFastRegistry = new StaticFastRegistry(this.pathBehavior);
     this.optionalDefaults = new OptionalParamDefaults(this.options.optionalParamBehavior);
     this.matchRunner = this.createMatchRunner();
+    this.paramSampleRate = Math.max(1, this.options.paramOrderTuning.sampleRate | 0);
     this.root = acquireRouterNode(NodeKind.Static, '');
     this.patternTesterOptions = this.buildPatternTesterOptions();
     this.matchObserver = {
       onParamBranch: (nodeIndex, offset) => {
-        this.recordParamUsage(nodeIndex, offset);
+        if (this.consumeParamSample()) {
+          this.recordParamUsage(nodeIndex, offset);
+        }
       },
     };
     this.globalParamNames = this.options.strictParamNames ? new Set() : null;
@@ -122,9 +139,18 @@ export class RadixRouterCore {
   addAll(entries: Array<[HttpMethod, string]>): RouteKey[] {
     this.assertMutable();
     const keys: RouteKey[] = new Array(entries.length);
+    let cachedPath: string | null = null;
+    let cachedPrepared: NormalizedPathSegments | null = null;
     for (let i = 0; i < entries.length; i++) {
       const [method, path] = entries[i]!;
-      const prepared = this.normalizePath(path);
+      let prepared: NormalizedPathSegments;
+      if (cachedPath !== null && path === cachedPath && cachedPrepared) {
+        prepared = cachedPrepared;
+      } else {
+        prepared = this.normalizePath(path);
+        cachedPath = path;
+        cachedPrepared = prepared;
+      }
       const key = this.insertRoute(method, path, prepared);
       keys[i] = key;
       this.registerStaticFastRoute(method, prepared.normalized, path, key);
@@ -176,11 +202,34 @@ export class RadixRouterCore {
     return this.layout;
   }
 
+  exportCacheSnapshot(): RouterCacheSnapshot | null {
+    return this.cacheStore.exportSnapshot();
+  }
+
+  hydrateCacheSnapshot(snapshot: RouterCacheSnapshot | null): void {
+    this.cacheStore.hydrateSnapshot(snapshot);
+  }
+
   exportParamOrderingSnapshot(): ParamOrderSnapshot | null {
     if (!this.paramEdgeHitCounts.length) {
       return null;
     }
-    return { edgeHits: Array.from(this.paramEdgeHitCounts) };
+    const edgeHits = Array.from(this.paramEdgeHitCounts);
+    let nodeOrders: ParamOrderSnapshot['nodeOrders'];
+    if (this.paramOrders.length) {
+      const collected: NonNullable<ParamOrderSnapshot['nodeOrders']> = [];
+      for (let i = 0; i < this.paramOrders.length; i++) {
+        const order = this.paramOrders[i];
+        if (!order || order.length === 0) {
+          continue;
+        }
+        collected.push({ nodeIndex: i, order: Array.from(order) });
+      }
+      if (collected.length) {
+        nodeOrders = collected;
+      }
+    }
+    return nodeOrders ? { edgeHits, nodeOrders } : { edgeHits };
   }
 
   private createMatchRunner(): MatchRunner {
@@ -226,6 +275,7 @@ export class RadixRouterCore {
       paramOrders: this.paramOrders,
       observer: this.matchObserver,
       encodedSlashBehavior: this.options.encodedSlashBehavior,
+      failFastOnBadEncoding: this.options.failFastOnBadEncoding,
     });
     return matcher.match();
   }
@@ -236,7 +286,7 @@ export class RadixRouterCore {
 
   private buildStaticMatch(key: RouteKey): RouteMatch {
     const params = Object.create(null) as RouteParams;
-    this.optionalDefaults.apply(key, params);
+    this.optionalDefaults.apply(key, params, false);
     return { key, params };
   }
 
@@ -429,9 +479,11 @@ export class RadixRouterCore {
           if (patternSrc) {
             const normalizedPattern = this.normalizeParamPatternSource(patternSrc);
             this.ensureRegexSafe(normalizedPattern);
-            child.pattern = new RegExp(`^(?:${normalizedPattern})$`);
+            const patternFlags = '';
+            const compiledPattern = this.acquireCompiledPattern(normalizedPattern, patternFlags);
+            child.pattern = compiledPattern;
             child.patternSource = normalizedPattern;
-            child.patternTester = buildPatternTester(normalizedPattern, child.pattern, this.patternTesterOptions);
+            child.patternTester = this.acquirePatternTester(normalizedPattern, patternFlags, compiledPattern);
           }
           node.paramChildren.push(child);
           this.sortParamChildren(node);
@@ -659,10 +711,36 @@ export class RadixRouterCore {
         continue;
       }
       const flags = pattern.flags ?? '';
-      const compiled = new RegExp(`^(?:${pattern.source})$`, flags);
-      testers[i] = buildPatternTester(pattern.source, compiled, this.patternTesterOptions);
+      testers[i] = this.acquirePatternTester(pattern.source, flags);
     }
     return testers;
+  }
+
+  private acquirePatternTester(source: string | undefined, flags: string, compiled?: RegExp): PatternTesterFn {
+    const key = this.buildPatternCacheKey(source, flags);
+    const cached = this.patternTesterCache.get(key);
+    if (cached) {
+      return cached;
+    }
+    const regex = compiled ?? (source ? this.acquireCompiledPattern(source, flags) : new RegExp('^.*$', flags));
+    const tester = buildPatternTester(source, regex, this.patternTesterOptions);
+    this.patternTesterCache.set(key, tester);
+    return tester;
+  }
+
+  private acquireCompiledPattern(source: string, flags: string): RegExp {
+    const key = this.buildPatternCacheKey(source, flags);
+    const cached = this.compiledPatternCache.get(key);
+    if (cached) {
+      return cached;
+    }
+    const compiled = new RegExp(`^(?:${source})$`, flags);
+    this.compiledPatternCache.set(key, compiled);
+    return compiled;
+  }
+
+  private buildPatternCacheKey(source: string | undefined, flags: string | undefined): string {
+    return `${flags ?? ''}|${source ?? '<anon>'}`;
   }
 
   private initializeParamOrderingStructures(): void {
@@ -670,9 +748,11 @@ export class RadixRouterCore {
     if (!layout) {
       this.paramOrders = [];
       this.paramEdgeHitCounts = new Uint32Array(0);
+      this.paramOrderHitWindows = new Uint32Array(0);
       return;
     }
     this.paramEdgeHitCounts = new Uint32Array(layout.paramChildren.length);
+    this.paramOrderHitWindows = new Uint32Array(layout.nodes.length);
     const orders: Array<Uint16Array | null> = new Array(layout.nodes.length);
     for (let i = 0; i < layout.nodes.length; i++) {
       const node = layout.nodes[i]!;
@@ -687,26 +767,80 @@ export class RadixRouterCore {
       }
     }
     this.paramOrders = orders;
+    if (!this.paramEdgeHitCounts.length) {
+      this.paramSamplingEnabled = false;
+    }
   }
 
   private hydrateParamOrderingSnapshot(): void {
     const snapshot = this.options.paramOrderTuning.snapshot;
-    if (!snapshot || !snapshot.edgeHits.length || !this.paramEdgeHitCounts.length) {
+    if (!snapshot) {
       return;
     }
-    const limit = Math.min(snapshot.edgeHits.length, this.paramEdgeHitCounts.length);
-    for (let i = 0; i < limit; i++) {
-      this.paramEdgeHitCounts[i] = snapshot.edgeHits[i]!;
+    const hasEdgeHits = Boolean(snapshot.edgeHits?.length && this.paramEdgeHitCounts.length);
+    if (hasEdgeHits) {
+      const limit = Math.min(snapshot.edgeHits.length, this.paramEdgeHitCounts.length);
+      for (let i = 0; i < limit; i++) {
+        this.paramEdgeHitCounts[i] = snapshot.edgeHits[i]!;
+      }
     }
     if (!this.layout) {
       return;
     }
-    for (let nodeIndex = 0; nodeIndex < this.layout.nodes.length; nodeIndex++) {
-      const node = this.layout.nodes[nodeIndex]!;
-      if (node.paramRangeCount > 1) {
-        this.resortParamOrder(nodeIndex, node);
+    const appliedNodeOrders = !!(snapshot.nodeOrders && snapshot.nodeOrders.length);
+    if (appliedNodeOrders) {
+      this.applyNodeOrderSnapshot(snapshot.nodeOrders!);
+    } else if (hasEdgeHits) {
+      for (let nodeIndex = 0; nodeIndex < this.layout.nodes.length; nodeIndex++) {
+        const node = this.layout.nodes[nodeIndex]!;
+        if (node.paramRangeCount > 1) {
+          this.resortParamOrder(nodeIndex, node);
+        }
+      }
+    } else {
+      return;
+    }
+    this.paramSamplingEnabled = false;
+  }
+
+  private applyNodeOrderSnapshot(entries: NonNullable<ParamOrderSnapshot['nodeOrders']>): void {
+    const layout = this.layout;
+    if (!layout) {
+      return;
+    }
+    for (const entry of entries) {
+      const nodeIndex = entry.nodeIndex;
+      if (nodeIndex < 0 || nodeIndex >= layout.nodes.length) {
+        continue;
+      }
+      const node = layout.nodes[nodeIndex]!;
+      if (node.paramRangeCount <= 1 || node.paramRangeCount !== entry.order.length) {
+        continue;
+      }
+      const targetOrder = this.paramOrders[nodeIndex];
+      if (!targetOrder || targetOrder.length !== entry.order.length) {
+        continue;
+      }
+      for (let i = 0; i < entry.order.length; i++) {
+        const offset = entry.order[i] ?? i;
+        targetOrder[i] = offset >= 0 && offset < entry.order.length ? offset : i;
       }
     }
+  }
+
+  private consumeParamSample(): boolean {
+    if (!this.paramSamplingEnabled) {
+      return false;
+    }
+    if (this.paramSampleRate <= 1) {
+      return true;
+    }
+    this.paramSampleCursor++;
+    if (this.paramSampleCursor >= this.paramSampleRate) {
+      this.paramSampleCursor = 0;
+      return true;
+    }
+    return false;
   }
 
   private recordParamUsage(nodeIndex: number, localOffset: number): void {
@@ -728,6 +862,22 @@ export class RadixRouterCore {
     }
     const current = this.paramEdgeHitCounts[edgeIndex] ?? 0;
     this.paramEdgeHitCounts[edgeIndex] = current + 1;
+    this.bumpParamWindow(nodeIndex, node);
+  }
+
+  private bumpParamWindow(nodeIndex: number, node: SerializedNodeRecord): void {
+    if (!this.paramOrderHitWindows.length) {
+      return;
+    }
+    const window = (this.paramOrderHitWindows[nodeIndex] ?? 0) + 1;
+    this.paramOrderHitWindows[nodeIndex] = window;
+    const threshold = this.computeParamResortThreshold(node.paramRangeCount);
+    if (window < threshold) {
+      return;
+    }
+    this.paramOrderHitWindows[nodeIndex] = 0;
+    this.resortParamOrder(nodeIndex, node);
+    this.applyParamReseedPolicy(nodeIndex, node);
   }
 
   private resortParamOrder(nodeIndex: number, node: SerializedNodeRecord): void {
@@ -751,6 +901,41 @@ export class RadixRouterCore {
     });
     for (let i = 0; i < count; i++) {
       order[i] = offsets[i]!;
+    }
+  }
+
+  private computeParamResortThreshold(variantCount: number): number {
+    const base = this.options.paramOrderTuning.baseThreshold;
+    const clampedVariants = Math.max(1, variantCount | 0);
+    const raw = base * clampedVariants;
+    return raw > 1_000_000 ? 1_000_000 : raw;
+  }
+
+  private applyParamReseedPolicy(nodeIndex: number, node: SerializedNodeRecord): void {
+    const chance = this.options.paramOrderTuning.reseedProbability;
+    if (!chance) {
+      return;
+    }
+    if (Math.random() >= chance) {
+      return;
+    }
+    this.reseedParamNode(nodeIndex, node);
+  }
+
+  private reseedParamNode(nodeIndex: number, _node: SerializedNodeRecord): void {
+    const order = this.paramOrders[nodeIndex];
+    if (!order || order.length < 2) {
+      return;
+    }
+    for (let i = order.length - 1; i > 0; i--) {
+      const swapIndex = Math.floor(Math.random() * (i + 1));
+      if (swapIndex === i) {
+        continue;
+      }
+      const temp = order[i]!;
+      const target = order[swapIndex]!;
+      order[i] = target;
+      order[swapIndex] = temp;
     }
   }
 

@@ -21,6 +21,8 @@ export function createPathBehavior(options: NormalizedRouterOptions): PathBehavi
     collapseSlashes: options.collapseSlashes,
     blockTraversal: options.blockTraversal,
     caseSensitive: options.caseSensitive,
+    failFastOnBadEncoding: options.failFastOnBadEncoding,
+    maxSegmentLength: options.maxSegmentLength,
   };
   const normalizePath = createPathNormalizer(config);
   const requiresNormalization = options.collapseSlashes || options.blockTraversal;
@@ -34,6 +36,8 @@ export function createPathBehavior(options: NormalizedRouterOptions): PathBehavi
       collapseSlashes: options.collapseSlashes,
       blockTraversal: options.blockTraversal,
       caseSensitive: true,
+      failFastOnBadEncoding: options.failFastOnBadEncoding,
+      maxSegmentLength: options.maxSegmentLength,
     };
     literalNormalizer = createPathNormalizer(literalConfig);
   }

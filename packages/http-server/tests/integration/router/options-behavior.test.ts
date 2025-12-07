@@ -113,6 +113,61 @@ describe('RadixRouter :: options', () => {
     });
   });
 
+  describe('failFastOnBadEncoding', () => {
+    it('should throw during match when malformed encoding is detected', () => {
+      const router = buildRouter(
+        builder => {
+          builder.add(HttpMethod.Get, '/files/:name');
+        },
+        { failFastOnBadEncoding: true },
+      );
+
+      expect(() => router.match(HttpMethod.Get, '/files/report%2G')).toThrow(/malformed percent/i);
+    });
+
+    it('should reject malformed route registrations when enabled', () => {
+      const builder = new RadixRouterBuilder({ failFastOnBadEncoding: true });
+      expect(() => builder.add(HttpMethod.Get, '/bad%2G/route')).toThrow(/malformed percent/i);
+    });
+
+    it('should continue to tolerate malformed encodings when disabled', () => {
+      const router = buildRouter(builder => {
+        builder.add(HttpMethod.Get, '/files/:name');
+      });
+
+      expect(router.match(HttpMethod.Get, '/files/report%2G')?.params.name).toBe('report%2G');
+    });
+  });
+
+  describe('maxSegmentLength', () => {
+    it('should reject registration when a literal segment exceeds the configured limit', () => {
+      const builder = new RadixRouterBuilder({ maxSegmentLength: 16 });
+      expect(() => builder.add(HttpMethod.Get, `/files/${'a'.repeat(32)}`)).toThrow(/segment length/i);
+    });
+
+    it('should throw during match when incoming segments exceed the configured limit', () => {
+      const router = buildRouter(
+        builder => {
+          builder.add(HttpMethod.Get, '/files/:name');
+        },
+        { maxSegmentLength: 16 },
+      );
+
+      expect(() => router.match(HttpMethod.Get, `/files/${'b'.repeat(64)}`)).toThrow(/segment length/i);
+    });
+
+    it('should allow longer segments when the limit is raised', () => {
+      const router = buildRouter(
+        builder => {
+          builder.add(HttpMethod.Get, `/files/${'a'.repeat(9000)}`);
+        },
+        { maxSegmentLength: 10000 },
+      );
+
+      expect(router.match(HttpMethod.Get, `/files/${'a'.repeat(9000)}`)).not.toBeNull();
+    });
+  });
+
   describe('encodedSlashBehavior', () => {
     it('should preserve encoded slashes when configured', () => {
       const router = buildRouter(

@@ -4,7 +4,7 @@ import { HttpMethod } from '../../enums';
 import type { RadixRouterCore } from '../core/radix-router-core';
 import type { RouterInstance } from '../interfaces';
 import type { ImmutableRouterLayout } from '../layout/immutable-router-layout';
-import type { RouterSnapshotMetadata, ParamOrderSnapshot, RouteMatch } from '../types';
+import type { RouterSnapshotMetadata, ParamOrderSnapshot, RouteMatch, RouterCacheSnapshot } from '../types';
 
 export class RadixRouterInstance implements RouterInstance {
   constructor(private readonly core: RadixRouterCore) {
@@ -30,5 +30,13 @@ export class RadixRouterInstance implements RouterInstance {
 
   exportParamOrderSnapshot(): ParamOrderSnapshot | null {
     return this.core.exportParamOrderingSnapshot();
+  }
+
+  exportCacheSnapshot(): RouterCacheSnapshot | null {
+    return this.core.exportCacheSnapshot();
+  }
+
+  hydrateCacheSnapshot(snapshot: RouterCacheSnapshot | null): void {
+    this.core.hydrateCacheSnapshot(snapshot);
   }
 }

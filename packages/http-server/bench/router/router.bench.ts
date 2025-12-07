@@ -106,11 +106,14 @@ const routerCollapseLoose = buildRouter(['/collapse/slash/check'], { collapseSla
 const longSegmentSample = `/long/${'a'.repeat(1024)}/${'b'.repeat(1024)}`;
 const unicodeSample = '/ユニコード/данные/😀/파일';
 const malformedEncodedSamples = ['/encoded/%ZZ', '/encoded/foo%2'];
+const segmentLimitBreachSample = `/limits/${'x'.repeat(512)}`;
 
 const routerLongSegments = buildRouter([longSegmentSample]);
 const routerUnicodeHeavy = buildRouter([unicodeSample]);
 const routerMalformedDecode = buildRouter(['/encoded/:value'], { decodeParams: true });
 const routerMalformedRaw = buildRouter(['/encoded/:value'], { decodeParams: false });
+const routerFailFastDecode = buildRouter(['/encoded/:value'], { decodeParams: true, failFastOnBadEncoding: true });
+const routerSegmentLimitTight = buildRouter(['/limits/:value'], { maxSegmentLength: 256 });
 
 const routerMultiMethod = buildRouterFromEntries(static1kPatterns.map(path => ({ methods: httpMethods, path })));
 const routerPriorityStaticParam = buildRouterFromEntries([
@@ -175,6 +178,7 @@ const roundParamMiss = makeRoundRobin(dynamicParamMissSamples);
 const roundLongSegments = makeRoundRobin([longSegmentSample]);
 const roundUnicodeHeavy = makeRoundRobin([unicodeSample]);
 const roundMalformedEncoded = makeRoundRobin(malformedEncodedSamples);
+const roundSegmentLimitBreach = makeRoundRobin([segmentLimitBreachSample]);
 const roundMultiMethod = makeRoundRobin(static1kSamples);
 const roundCacheMixed = makeRoundRobin(static10kSamples.slice(0, 32));
 const roundPriorityStatic = makeRoundRobin(['/priority/static']);
@@ -393,6 +397,12 @@ group('match / extremes', () => {
   bench('match: malformed encoded param (raw)', () =>
     consumeMatchResult(routerMalformedRaw.match(HttpMethod.Get, roundMalformedEncoded())),
   );
+  bench('match: malformed encoded param (fail-fast)', () =>
+    consumeMatchResultWithError(() => routerFailFastDecode.match(HttpMethod.Get, roundMalformedEncoded())),
+  );
+  bench('match: segment limit rejection (256)', () =>
+    consumeMatchResultWithError(() => routerSegmentLimitTight.match(HttpMethod.Get, roundSegmentLimitBreach())),
+  );
 });
 
 group('micro / cache internals', () => {
@@ -601,6 +611,19 @@ function measureLayoutGc(
   const deltaKb = (after - before) / 1024;
   const trend = deltaKb === 0 ? '±' : deltaKb > 0 ? '+' : '';
   console.log(`[router gc] ${label}: ${trend}${deltaKb.toFixed(2)} KB over ${iterations} matches`);
+}
+
+function consumeMatchResultWithError(run: () => RouteMatch | null): void {
+  try {
+    consumeMatchResult(run());
+  } catch (error) {
+    sinkPrimary ^= 0xdeadbeef;
+    if (error instanceof Error) {
+      sinkSecondary ^= error.message.length & 0xffff;
+    } else {
+      sinkSecondary ^= 0xffff;
+    }
+  }
 }
 
 function consumeMatchResult(result: RouteMatch | null): void {

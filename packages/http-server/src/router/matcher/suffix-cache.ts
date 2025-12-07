@@ -1,12 +1,16 @@
 import type { EncodedSlashBehavior, SuffixPlan } from '../types';
 import { decodeURIComponentSafe } from '../utils/path-utils';
 
+import type { ParamDecoder } from './param-decoder';
+
 interface WildcardSuffixCacheConfig {
   segments: string[];
   decodeParams: boolean;
   encodedSlashBehavior: EncodedSlashBehavior;
   plan?: SuffixPlan;
   planFactory?: () => SuffixPlan | undefined;
+  paramDecoder?: ParamDecoder;
+  failFastOnBadEncoding: boolean;
 }
 
 export class WildcardSuffixCache {
@@ -18,12 +22,16 @@ export class WildcardSuffixCache {
   private decodedSuffixCache?: Array<string | undefined>;
   private suffixOffsets?: Uint32Array;
   private suffixSource?: string;
+  private paramDecoder?: ParamDecoder;
+  private readonly failFastOnBadEncoding: boolean;
 
   constructor(config: WildcardSuffixCacheConfig) {
     this.segments = config.segments;
     this.decodeParams = config.decodeParams;
     this.encodedSlashBehavior = config.encodedSlashBehavior;
     this.planFactory = config.planFactory;
+    this.paramDecoder = config.paramDecoder;
+    this.failFastOnBadEncoding = config.failFastOnBadEncoding;
     if (config.plan) {
       this.applyPlan(config.plan);
       if (this.segments.length) {
@@ -48,7 +56,7 @@ export class WildcardSuffixCache {
       raw = this.suffixSource.slice(this.suffixOffsets[index]);
       this.suffixCache[index] = raw;
     }
-    if (!this.decodeParams || !raw) {
+    if (!this.decodeParams) {
       return raw;
     }
     this.decodedSuffixCache ??= new Array<string | undefined>(this.segments.length + 1);
@@ -56,9 +64,18 @@ export class WildcardSuffixCache {
     if (cached !== undefined) {
       return cached;
     }
-    const value = decodeURIComponentSafe(raw, this.encodedSlashBehavior);
+    let value: string;
+    if (this.paramDecoder) {
+      value = this.paramDecoder.getSuffix(index);
+    } else {
+      value = raw ? decodeURIComponentSafe(raw, this.encodedSlashBehavior, this.failFastOnBadEncoding) : '';
+    }
     this.decodedSuffixCache[index] = value;
     return value;
+  }
+
+  setParamDecoder(decoder: ParamDecoder): void {
+    this.paramDecoder = decoder;
   }
 
   private ensureSuffixCache(): void {

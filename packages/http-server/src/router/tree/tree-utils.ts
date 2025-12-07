@@ -1,6 +1,7 @@
 import { NodeKind } from '../enums';
 import { RouterNode } from '../node/router-node';
 import { acquireRouterNode } from '../node/router-node-pool';
+import { StaticChildStore } from '../node/static-child-store';
 
 export function matchStaticParts(parts: readonly string[], segments: readonly string[], startIdx: number): number {
   let matched = 0;
@@ -27,7 +28,7 @@ export function splitStaticChain(node: RouterNode, splitIndex: number): void {
   suffixNode.wildcardChild = node.wildcardChild;
   suffixNode.methods = node.methods;
 
-  node.staticChildren = new Map([[suffixParts[0]!, suffixNode]]);
+  node.staticChildren = StaticChildStore.fromEntries([[suffixParts[0]!, suffixNode]]);
   node.paramChildren = [];
   node.wildcardChild = undefined;
   node.methods = { byMethod: new Map() };

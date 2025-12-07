@@ -43,8 +43,8 @@ type MatchRunnerDeps = {
 export class MatchRunner {
   private static readonly WILDCARD_PLAN_CACHE_LIMIT = 256;
   private readonly execute: (method: HttpMethod, path: string) => RouteMatch | null;
-  private wildcardPlanCache?: Map<number, Map<string, SuffixPlan | null>>;
-  private wildcardPlanOrder?: Array<{ method: number; normalized: string }>;
+  private wildcardPlanCache?: Map<string, SuffixPlan | null>;
+  private wildcardPlanOrder?: string[];
   private wildcardPlanEvictIndex = 0;
 
   constructor(private readonly deps: MatchRunnerDeps) {
@@ -56,7 +56,7 @@ export class MatchRunner {
   }
 
   private resolveSuffixPlan(
-    method: HttpMethod,
+    _method: HttpMethod,
     prepared: NormalizedPathSegments,
     planner: WildcardPlanner,
   ): SuffixPlan | undefined {
@@ -71,34 +71,30 @@ export class MatchRunner {
       }
       return plan ?? undefined;
     }
-    const methodKey = this.getMethodKey(method);
-    const cache = this.getMethodPlanCache(methodKey);
+    const cache = this.getPlanCache();
     const cached = cache.get(normalized);
     if (cached !== undefined) {
       return cached === null ? undefined : cached;
     }
     const plan = planner(prepared);
     cache.set(normalized, plan ?? null);
-    this.trackPlanEntry(methodKey, normalized);
+    this.trackPlanEntry(normalized);
     if (plan) {
       prepared.suffixPlan = plan;
     }
     return plan ?? undefined;
   }
 
-  private getMethodPlanCache(methodKey: number): Map<string, SuffixPlan | null> {
-    const stores = (this.wildcardPlanCache ??= new Map());
-    let cache = stores.get(methodKey);
-    if (!cache) {
-      cache = new Map();
-      stores.set(methodKey, cache);
+  private getPlanCache(): Map<string, SuffixPlan | null> {
+    if (!this.wildcardPlanCache) {
+      this.wildcardPlanCache = new Map();
     }
-    return cache;
+    return this.wildcardPlanCache;
   }
 
-  private trackPlanEntry(methodKey: number, normalized: string): void {
+  private trackPlanEntry(normalized: string): void {
     const order = (this.wildcardPlanOrder ??= []);
-    order.push({ method: methodKey, normalized });
+    order.push(normalized);
     if (order.length - this.wildcardPlanEvictIndex > MatchRunner.WILDCARD_PLAN_CACHE_LIMIT) {
       this.evictOldestPlan();
     }
@@ -109,12 +105,8 @@ export class MatchRunner {
     if (!order || this.wildcardPlanEvictIndex >= order.length) {
       return;
     }
-    const oldest = order[this.wildcardPlanEvictIndex++]!;
-    const methodCache = this.wildcardPlanCache?.get(oldest.method);
-    methodCache?.delete(oldest.normalized);
-    if (methodCache && methodCache.size === 0) {
-      this.wildcardPlanCache?.delete(oldest.method);
-    }
+    const normalized = order[this.wildcardPlanEvictIndex++]!;
+    this.wildcardPlanCache?.delete(normalized);
     if (
       order.length > MatchRunner.WILDCARD_PLAN_CACHE_LIMIT * 2 &&
       this.wildcardPlanEvictIndex >= MatchRunner.WILDCARD_PLAN_CACHE_LIMIT
@@ -122,10 +114,6 @@ export class MatchRunner {
       order.splice(0, this.wildcardPlanEvictIndex);
       this.wildcardPlanEvictIndex = 0;
     }
-  }
-
-  private getMethodKey(method: HttpMethod): number {
-    return typeof method === 'number' ? method : (method as unknown as number);
   }
 
   private buildPipeline(): (method: HttpMethod, path: string) => RouteMatch | null {
@@ -160,7 +148,7 @@ export class MatchRunner {
         return null;
       }
       const params = hydrateParams(record.entry.params);
-      optionalDefaults.apply(record.entry.key, params);
+      optionalDefaults.apply(record.entry.key, params, false);
       return { key: record.entry.key, params, meta: { source: 'cache' } };
     };
 
@@ -172,50 +160,34 @@ export class MatchRunner {
       if (cacheEnabled) {
         if (dynamicEnabled) {
           return (method, path) => {
-            let preparedRef: NormalizedPathSegments | undefined;
-            let normalizedRef: string | undefined;
-
-            const ensurePrepared = (): NormalizedPathSegments => {
-              if (!preparedRef) {
-                preparedRef = normalizePath(path);
-                normalizedRef = preparedRef.normalized;
-              } else if (!normalizedRef) {
-                normalizedRef = preparedRef.normalized;
-              }
-              return preparedRef;
-            };
-
-            const usePrepared = (candidate?: NormalizedPathSegments): NormalizedPathSegments => {
-              if (candidate) {
-                preparedRef = candidate;
-                normalizedRef = candidate.normalized;
-                return candidate;
-              }
-              return ensurePrepared();
-            };
-
-            const ensureNormalized = (): string => {
-              if (normalizedRef) {
-                return normalizedRef;
-              }
-              return ensurePrepared().normalized;
-            };
-
             const probe = tryStaticFast(method, path);
             if (probe.kind === 'hit') {
               return probe.match;
             }
+
             if (probe.kind === 'static-miss') {
               cache.cacheNullMiss(method, probe.normalized);
               return null;
             }
-            const prepared = usePrepared(probe.prepared);
-            const fastHit = staticRegistry.matchNormalized(method, prepared.normalized, key => buildStaticMatch(key));
+
+            // Optimization: Unroll lazy getters to avoid closure allocation
+            let prepared: NormalizedPathSegments;
+            let normalized: string;
+
+            // probe is now narrowed to 'fallback'
+            if (probe.prepared) {
+              prepared = probe.prepared;
+              normalized = prepared.normalized;
+            } else {
+              prepared = normalizePath(path);
+              normalized = prepared.normalized;
+            }
+
+            const fastHit = staticRegistry.matchNormalized(method, normalized, key => buildStaticMatch(key));
             if (fastHit) {
               return fastHit;
             }
 
-            const normalized = ensureNormalized();
             const cacheKey = cache.getKey(method, normalized);
             const cached = readCache(cacheKey);
             if (cached !== undefined) {
@@ -234,61 +206,47 @@ export class MatchRunner {
               cache.cacheNullMiss(method, normalized, cacheKey);
               return null;
             }
-            const insertedDefaults = optionalDefaults.apply(dynamicMatch.key, dynamicMatch.params);
+            const insertedDefaults = optionalDefaults.apply(
+              dynamicMatch.key,
+              dynamicMatch.params,
+              Boolean(dynamicMatch.snapshot),
+            );
             if (insertedDefaults && dynamicMatch.snapshot) {
               dynamicMatch.snapshot.push(...insertedDefaults);
             }
             const resolved: RouteMatch = { key: dynamicMatch.key, params: dynamicMatch.params };
-            cache.set(cacheKey, resolved, dynamicMatch.snapshot);
+            cache.set(method, cacheKey, resolved, dynamicMatch.snapshot);
             return resolved;
           };
         }
 
         return (method, path) => {
-          let preparedRef: NormalizedPathSegments | undefined;
-          let normalizedRef: string | undefined;
-
-          const ensurePrepared = (): NormalizedPathSegments => {
-            if (!preparedRef) {
-              preparedRef = normalizePath(path);
-              normalizedRef = preparedRef.normalized;
-            } else if (!normalizedRef) {
-              normalizedRef = preparedRef.normalized;
-            }
-            return preparedRef;
-          };
-
-          const usePrepared = (candidate?: NormalizedPathSegments): NormalizedPathSegments => {
-            if (candidate) {
-              preparedRef = candidate;
-              normalizedRef = candidate.normalized;
-              return candidate;
-            }
-            return ensurePrepared();
-          };
-
-          const ensureNormalized = (): string => {
-            if (normalizedRef) {
-              return normalizedRef;
-            }
-            return ensurePrepared().normalized;
-          };
-
           const probe = tryStaticFast(method, path);
           if (probe.kind === 'hit') {
             return probe.match;
           }
+
           if (probe.kind === 'static-miss') {
             cache.cacheNullMiss(method, probe.normalized);
             return null;
           }
-          const prepared = usePrepared(probe.prepared);
-          const fastHit = staticRegistry.matchNormalized(method, prepared.normalized, key => buildStaticMatch(key));
+
+          let prepared: NormalizedPathSegments;
+          let normalized: string;
+
+          if (probe.prepared) {
+            prepared = probe.prepared;
+            normalized = prepared.normalized;
+          } else {
+            prepared = normalizePath(path);
+            normalized = prepared.normalized;
+          }
+
+          const fastHit = staticRegistry.matchNormalized(method, normalized, key => buildStaticMatch(key));
           if (fastHit) {
             return fastHit;
           }
 
-          const normalized = ensureNormalized();
           const cacheKey = cache.getKey(method, normalized);
           const cached = readCache(cacheKey);
           if (cached !== undefined) {
@@ -305,28 +263,6 @@ export class MatchRunner {
 
       if (dynamicEnabled) {
         return (method, path) => {
-          let preparedRef: NormalizedPathSegments | undefined;
-          let normalizedRef: string | undefined;
-
-          const ensurePrepared = (): NormalizedPathSegments => {
-            if (!preparedRef) {
-              preparedRef = normalizePath(path);
-              normalizedRef = preparedRef.normalized;
-            } else if (!normalizedRef) {
-              normalizedRef = preparedRef.normalized;
-            }
-            return preparedRef;
-          };
-
-          const usePrepared = (candidate?: NormalizedPathSegments): NormalizedPathSegments => {
-            if (candidate) {
-              preparedRef = candidate;
-              normalizedRef = candidate.normalized;
-              return candidate;
-            }
-            return ensurePrepared();
-          };
-
           const probe = tryStaticFast(method, path);
           if (probe.kind === 'hit') {
             return probe.match;
@@ -334,8 +270,19 @@ export class MatchRunner {
           if (probe.kind === 'static-miss') {
             return null;
           }
-          const prepared = usePrepared(probe.prepared);
-          const fastHit = staticRegistry.matchNormalized(method, prepared.normalized, key => buildStaticMatch(key));
+
+          let prepared: NormalizedPathSegments;
+          let normalized: string;
+
+          if (probe.prepared) {
+            prepared = probe.prepared;
+            normalized = prepared.normalized;
+          } else {
+            prepared = normalizePath(path);
+            normalized = prepared.normalized;
+          }
+
+          const fastHit = staticRegistry.matchNormalized(method, normalized, key => buildStaticMatch(key));
           if (fastHit) {
             return fastHit;
           }
@@ -348,7 +295,7 @@ export class MatchRunner {
           if (!dynamicMatch) {
             return null;
           }
-          const insertedDefaults = optionalDefaults.apply(dynamicMatch.key, dynamicMatch.params);
+          const insertedDefaults = optionalDefaults.apply(dynamicMatch.key, dynamicMatch.params, Boolean(dynamicMatch.snapshot));
           if (insertedDefaults && dynamicMatch.snapshot) {
             dynamicMatch.snapshot.push(...insertedDefaults);
           }
@@ -376,28 +323,10 @@ export class MatchRunner {
     if (cacheEnabled) {
       if (dynamicEnabled) {
         return (method, path) => {
-          let preparedRef: NormalizedPathSegments | undefined;
-          let normalizedRef: string | undefined;
+          // No static probe here, so we must normalize manually
+          const prepared = normalizePath(path);
+          const normalized = prepared.normalized;
 
-          const ensurePrepared = (): NormalizedPathSegments => {
-            if (!preparedRef) {
-              preparedRef = normalizePath(path);
-              normalizedRef = preparedRef.normalized;
-            } else if (!normalizedRef) {
-              normalizedRef = preparedRef.normalized;
-            }
-            return preparedRef;
-          };
-
-          const ensureNormalized = (): string => {
-            if (normalizedRef) {
-              return normalizedRef;
-            }
-            return ensurePrepared().normalized;
-          };
-
-          const prepared = ensurePrepared();
-          const normalized = ensureNormalized();
           const cacheKey = cache.getKey(method, normalized);
           const cached = readCache(cacheKey);
           if (cached !== undefined) {
@@ -416,27 +345,20 @@ export class MatchRunner {
             cache.cacheNullMiss(method, normalized, cacheKey);
             return null;
           }
-          const insertedDefaults = optionalDefaults.apply(dynamicMatch.key, dynamicMatch.params);
+          const insertedDefaults = optionalDefaults.apply(dynamicMatch.key, dynamicMatch.params, Boolean(dynamicMatch.snapshot));
           if (insertedDefaults && dynamicMatch.snapshot) {
             dynamicMatch.snapshot.push(...insertedDefaults);
           }
           const resolved: RouteMatch = { key: dynamicMatch.key, params: dynamicMatch.params };
-          cache.set(cacheKey, resolved, dynamicMatch.snapshot);
+          cache.set(method, cacheKey, resolved, dynamicMatch.snapshot);
           return resolved;
         };
       }
 
       return (method, path) => {
-        let normalizedRef: string | undefined;
-        const ensureNormalized = (): string => {
-          if (normalizedRef) {
-            return normalizedRef;
-          }
-          normalizedRef = normalizePath(path).normalized;
-          return normalizedRef;
-        };
+        const prepared = normalizePath(path);
+        const normalized = prepared.normalized;
 
-        const normalized = ensureNormalized();
         const cacheKey = cache.getKey(method, normalized);
         const cached = readCache(cacheKey);
         if (cached !== undefined) {
@@ -459,7 +381,7 @@ export class MatchRunner {
       if (!dynamicMatch) {
         return null;
       }
-      const insertedDefaults = optionalDefaults.apply(dynamicMatch.key, dynamicMatch.params);
+      const insertedDefaults = optionalDefaults.apply(dynamicMatch.key, dynamicMatch.params, Boolean(dynamicMatch.snapshot));
       if (insertedDefaults && dynamicMatch.snapshot) {
         dynamicMatch.snapshot.push(...insertedDefaults);
       }

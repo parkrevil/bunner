@@ -43,6 +43,7 @@ export class DynamicMatcher {
   private readonly paramOrders?: ReadonlyArray<Uint16Array | null>;
   private readonly observer?: MatchObserverHooks;
   private readonly encodedSlashBehavior: EncodedSlashBehavior;
+  private readonly failFastOnBadEncoding: boolean;
 
   private paramNames: string[] = [];
   private paramValues: string[] = [];
@@ -70,6 +71,14 @@ export class DynamicMatcher {
     this.paramOrders = config.paramOrders;
     this.observer = config.observer;
     this.encodedSlashBehavior = config.encodedSlashBehavior;
+    this.failFastOnBadEncoding = config.failFastOnBadEncoding;
+    this.paramDecoder = new ParamDecoder({
+      segments: this.segments,
+      decodeParams: this.decodeParams,
+      encodedSlashBehavior: this.encodedSlashBehavior,
+      decodeHints: this.segmentHints,
+      failFastOnBadEncoding: this.failFastOnBadEncoding,
+    });
     if (this.hasWildcardRoutes) {
       this.suffixHelper = new WildcardSuffixCache({
         segments: this.segments,
@@ -77,14 +86,13 @@ export class DynamicMatcher {
         encodedSlashBehavior: this.encodedSlashBehavior,
         plan: config.suffixPlan,
         planFactory: config.suffixPlanFactory,
+        paramDecoder: this.paramDecoder,
+        failFastOnBadEncoding: this.failFastOnBadEncoding,
       });
     }
-    this.paramDecoder = new ParamDecoder({
-      segments: this.segments,
-      decodeParams: this.decodeParams,
-      encodedSlashBehavior: this.encodedSlashBehavior,
-      decodeHints: this.segmentHints,
-    });
+    if (this.suffixHelper) {
+      this.suffixHelper.setParamDecoder?.(this.paramDecoder);
+    }
     this.runStaticStage = createStaticStage({
       segments: this.segments,
       nodes: this.nodes,

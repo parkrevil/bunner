@@ -1,6 +1,8 @@
 import { NodeKind } from '../enums';
 import type { RouteMethods } from '../interfaces';
 
+import { StaticChildStore } from './static-child-store';
+
 export class RouterNode {
   kind: NodeKind;
   /**
@@ -11,7 +13,7 @@ export class RouterNode {
   segment: string;
 
   // Children: static -> Map for O(1) lookups
-  staticChildren: Map<string, RouterNode> = new Map();
+  staticChildren: StaticChildStore = new StaticChildStore();
   // Multiple param variants at same position (e.g., with different regex constraints)
   paramChildren: RouterNode[] = [];
   wildcardChild?: RouterNode; // "*" catch-all (must be terminal)
@@ -39,9 +41,7 @@ export class RouterNode {
   resetState(kind: NodeKind, segment: string): void {
     this.kind = kind;
     this.segment = segment;
-    if (this.staticChildren.size) {
-      this.staticChildren.clear();
-    }
+    this.staticChildren = new StaticChildStore();
     if (this.paramChildren.length) {
       this.paramChildren.length = 0;
     }

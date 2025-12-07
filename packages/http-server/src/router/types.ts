@@ -17,6 +17,7 @@ export interface NormalizedPathSegments {
   suffixSource?: string;
   suffixSlices?: string[];
   suffixPlan?: SuffixPlan;
+  hadTrailingSlash?: boolean;
 }
 
 export type RouteParams = Record<string, string | undefined>;
@@ -50,6 +51,7 @@ export interface DynamicMatcherConfig {
   paramOrders?: ReadonlyArray<Uint16Array | null>;
   observer?: MatchObserverHooks;
   encodedSlashBehavior: EncodedSlashBehavior;
+  failFastOnBadEncoding: boolean;
 }
 
 export interface MatchObserverHooks {
@@ -81,6 +83,8 @@ export interface RouterOptions {
   enableCache?: boolean;
   /** Max entries for match LRU cache (default: 1024) */
   cacheSize?: number;
+  /** Maximum allowed length for any single normalized path segment (default: 8192) */
+  maxSegmentLength?: number;
   /** Enforce globally unique parameter names when true */
   strictParamNames?: boolean;
   /** Control how optional parameters behave when missing */
@@ -93,6 +97,8 @@ export interface RouterOptions {
   paramOrderTuning?: ParamOrderingOptions;
   /** Stage toggles for build/match pipelines */
   pipelineStages?: Partial<PipelineStageConfig>;
+  /** malformed percent sequences are rejected immediately when true */
+  failFastOnBadEncoding?: boolean;
 }
 
 export interface RegexSafetyOptions {
@@ -120,11 +126,36 @@ export interface RouterSnapshotMetadata {
 }
 
 export interface ParamOrderingOptions {
+  baseThreshold?: number;
+  reseedProbability?: number;
   snapshot?: ParamOrderSnapshot;
+  sampleRate?: number;
+}
+
+export interface ParamNodeOrderSnapshot {
+  nodeIndex: number;
+  order: number[];
 }
 
 export interface ParamOrderSnapshot {
   edgeHits: number[];
+  nodeOrders?: ParamNodeOrderSnapshot[];
+}
+
+export interface RouterCacheEntrySnapshot {
+  key: RouteKey;
+  params?: Array<[string, string | undefined]>;
+}
+
+export interface RouterCacheSnapshotEntry {
+  key: string;
+  method: HttpMethod;
+  entry: RouterCacheEntrySnapshot | null;
+}
+
+export interface RouterCacheSnapshot {
+  version: number;
+  entries: RouterCacheSnapshotEntry[];
 }
 
 export interface SuffixPlan {
