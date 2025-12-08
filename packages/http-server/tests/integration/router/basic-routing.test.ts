@@ -1,4 +1,3 @@
-import { ROUTER_SNAPSHOT_METADATA } from '@bunner/core';
 import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'bun:test';
 
 import { HttpMethod } from '../../../src/enums';
@@ -153,23 +152,5 @@ describe('RadixRouter :: basic routing', () => {
 
     expect(router.match(HttpMethod.Get, '/mixed/path')).toEqual({ key, params: {} });
     expect(router.match(HttpMethod.Get, '/MIXED/PATH')).toEqual({ key, params: {} });
-  });
-
-  it('should expose a frozen metadata snapshot with wildcard details', () => {
-    const router = buildRouter(builder => {
-      builder.add(HttpMethod.Get, '/static');
-      builder.add(HttpMethod.Post, '/users/:id');
-      builder.add(HttpMethod.Delete, '/files/*path');
-    });
-
-    const metadata = router.getMetadata();
-
-    expect(metadata.totalRoutes).toBe(3);
-    expect(metadata.hasDynamicRoutes).toBe(true);
-    expect(metadata.hasWildcardRoutes).toBe(true);
-    expect(metadata.methodsWithWildcard).toEqual([HttpMethod.Delete]);
-    expect(metadata.wildcardRouteCount).toBe(1);
-    expect(Object.isFrozen(metadata)).toBe(true);
-    expect((router as any)[ROUTER_SNAPSHOT_METADATA]).toBe(metadata);
   });
 });

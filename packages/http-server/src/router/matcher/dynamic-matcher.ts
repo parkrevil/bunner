@@ -1,5 +1,5 @@
+import type { HttpMethod } from '../../enums';
 import type { RouteKey } from '../../types';
-import type { HttpMethod } from '../enums';
 import type { ImmutableRouterLayout, SerializedNodeRecord } from '../layout/immutable-router-layout';
 import type {
   DynamicMatchResult,

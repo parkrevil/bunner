@@ -15,12 +15,11 @@ export interface PathNormalizerConfig {
 export type PathNormalizer = (path: string) => NormalizedPathSegments;
 
 const SLASH_CODE = 47;
-const DOT_CODE = 46;
 const PERCENT_CODE = 37;
 const PLUS_CODE = 43;
 const UPPER_A = 65;
 const UPPER_Z = 90;
-const pathNormalizerCache = new Map<number, PathNormalizer>();
+
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const SHORT_LOWER_THRESHOLD = 64;
@@ -39,22 +38,7 @@ export function createPathNormalizer(config: PathNormalizerConfig): PathNormaliz
       return { normalized: '/', segments: [], hadTrailingSlash: false };
     }
 
-    const simpleCandidate = collapseSlashes && path.charCodeAt(0) === SLASH_CODE;
-    if (simpleCandidate) {
-      const summary = scanPathSummary(path);
-      const maybeSimple = trySimpleNormalization(path, summary, {
-        collapseSlashes,
-        blockTraversal,
-        caseSensitive,
-        ignoreTrailingSlash,
-        trackTrailingSlash,
-        lowerSegment,
-        maxSegmentLength,
-      });
-      if (maybeSimple) {
-        return maybeSimple;
-      }
-    }
+    // Simplified path normalization: removed pre-scan optimization overrides.
 
     const hadTrailing = path.length > 1 && path.charCodeAt(path.length - 1) === SLASH_CODE;
     const hasLeadingSlash = path.charCodeAt(0) === SLASH_CODE;
@@ -178,13 +162,7 @@ export function normalizeAndSplit(path: string, opts: RouterOptions): Normalized
     failFastOnBadEncoding: opts.failFastOnBadEncoding ?? false,
     maxSegmentLength: sanitizeMaxSegmentLength(opts.maxSegmentLength),
   };
-  const cacheKey = buildCacheKey(config);
-  let normalizer = pathNormalizerCache.get(cacheKey);
-  if (!normalizer) {
-    normalizer = createPathNormalizer(config);
-    pathNormalizerCache.set(cacheKey, normalizer);
-  }
-  return normalizer(path);
+  return createPathNormalizer(config)(path);
 }
 
 export function computeSegmentOffsets(segments: readonly string[]): Uint32Array {
@@ -222,26 +200,6 @@ export function ensureSuffixSlices(prepared: NormalizedPathSegments, offsets: Ui
   }
   prepared.suffixSlices = slices;
   return slices;
-}
-
-function buildCacheKey(config: PathNormalizerConfig): number {
-  let key = (config.maxSegmentLength & 0xffff) << 5;
-  if (config.ignoreTrailingSlash) {
-    key |= 1 << 0;
-  }
-  if (config.collapseSlashes) {
-    key |= 1 << 1;
-  }
-  if (config.blockTraversal) {
-    key |= 1 << 2;
-  }
-  if (config.caseSensitive) {
-    key |= 1 << 3;
-  }
-  if (config.failFastOnBadEncoding) {
-    key |= 1 << 4;
-  }
-  return key;
 }
 
 export function lowerAsciiSimd(value: string): string {
@@ -463,26 +421,6 @@ function captureRouterErrorStack<T extends Error>(error: T, ctor: Function): T {
   return error;
 }
 
-interface PathScanSummary {
-  hasLeadingSlash: boolean;
-  hasTrailingSlash: boolean;
-  hasDuplicateSlash: boolean;
-  hasEncodedChar: boolean;
-  hasPlusChar: boolean;
-  hasDotChar: boolean;
-  hasUppercase: boolean;
-}
-
-interface SimpleNormalizationConfig {
-  collapseSlashes: boolean;
-  blockTraversal: boolean;
-  caseSensitive: boolean;
-  ignoreTrailingSlash: boolean;
-  trackTrailingSlash: boolean;
-  lowerSegment?: (value: string) => string;
-  maxSegmentLength: number;
-}
-
 interface FinalizeArgs {
   normalizedSegments: string[];
   normalizedHints: number[];
@@ -490,122 +428,6 @@ interface FinalizeArgs {
   trackTrailingSlash: boolean;
   ignoreTrailingSlash: boolean;
   sawEncodedChar: boolean;
-}
-
-function scanPathSummary(path: string): PathScanSummary {
-  const len = path.length;
-  if (!len) {
-    return {
-      hasLeadingSlash: false,
-      hasTrailingSlash: false,
-      hasDuplicateSlash: false,
-      hasEncodedChar: false,
-      hasPlusChar: false,
-      hasDotChar: false,
-      hasUppercase: false,
-    };
-  }
-  const hasLeadingSlash = path.charCodeAt(0) === SLASH_CODE;
-  const hasTrailingSlash = len > 1 && path.charCodeAt(len - 1) === SLASH_CODE;
-  let hasDuplicateSlash = false;
-  let hasEncodedChar = false;
-  let hasPlusChar = false;
-  let hasDotChar = false;
-  let hasUppercase = false;
-  let prevWasSlash = false;
-  for (let i = 0; i < len; i++) {
-    const code = path.charCodeAt(i);
-    if (code === SLASH_CODE) {
-      if (prevWasSlash) {
-        hasDuplicateSlash = true;
-      }
-      prevWasSlash = true;
-      continue;
-    }
-    prevWasSlash = false;
-    if (code === PERCENT_CODE) {
-      hasEncodedChar = true;
-      continue;
-    }
-    if (code === PLUS_CODE) {
-      hasPlusChar = true;
-      continue;
-    }
-    if (code === DOT_CODE) {
-      hasDotChar = true;
-      continue;
-    }
-    if (code >= UPPER_A && code <= UPPER_Z) {
-      hasUppercase = true;
-    }
-  }
-  return {
-    hasLeadingSlash,
-    hasTrailingSlash,
-    hasDuplicateSlash,
-    hasEncodedChar,
-    hasPlusChar,
-    hasDotChar,
-    hasUppercase,
-  };
-}
-
-function trySimpleNormalization(
-  path: string,
-  summary: PathScanSummary,
-  config: SimpleNormalizationConfig,
-): NormalizedPathSegments | undefined {
-  if (!summary.hasLeadingSlash) {
-    return undefined;
-  }
-  if (!config.collapseSlashes || summary.hasDuplicateSlash) {
-    return undefined;
-  }
-  if (summary.hasEncodedChar || summary.hasPlusChar) {
-    return undefined;
-  }
-  if (config.blockTraversal && summary.hasDotChar) {
-    return undefined;
-  }
-
-  let workingPath = path;
-  if (!config.caseSensitive && summary.hasUppercase && config.lowerSegment) {
-    workingPath = lowerAsciiSimd(path);
-  }
-
-  const segments: string[] = [];
-  let segmentStart = 1;
-  for (let i = 1; i < workingPath.length; i++) {
-    if (workingPath.charCodeAt(i) === SLASH_CODE) {
-      if (i > segmentStart) {
-        const segmentLength = i - segmentStart;
-        if (segmentLength > config.maxSegmentLength) {
-          throw createSegmentTooLongError(segmentLength, config.maxSegmentLength);
-        }
-        const part = workingPath.slice(segmentStart, i);
-        segments.push(part);
-      }
-      segmentStart = i + 1;
-    }
-  }
-  if (segmentStart < workingPath.length) {
-    const segmentLength = workingPath.length - segmentStart;
-    if (segmentLength > config.maxSegmentLength) {
-      throw createSegmentTooLongError(segmentLength, config.maxSegmentLength);
-    }
-    const last = workingPath.slice(segmentStart);
-    segments.push(last);
-  }
-
-  const hints = segments.length ? new Array<number>(segments.length).fill(0) : [];
-  return finalizeNormalizedSegments({
-    normalizedSegments: segments,
-    normalizedHints: hints,
-    hadTrailing: summary.hasTrailingSlash,
-    trackTrailingSlash: config.trackTrailingSlash,
-    ignoreTrailingSlash: config.ignoreTrailingSlash,
-    sawEncodedChar: false,
-  });
 }
 
 function finalizeNormalizedSegments(args: FinalizeArgs): NormalizedPathSegments {

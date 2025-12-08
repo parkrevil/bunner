@@ -1,7 +1,6 @@
 import { bench, group, run } from 'mitata';
 
 import { HttpMethod } from '../../src/enums';
-import { ProbationSketch } from '../../src/router/core/router-cache';
 import type { RouterInstance } from '../../src/router/interfaces';
 import { RadixRouterBuilder } from '../../src/router/router';
 import type { RouteMatch, RouterOptions } from '../../src/router/types';
@@ -51,12 +50,6 @@ const benchFilterPattern = process.env.ROUTER_BENCH_FILTER;
 const benchFormat = process.env.ROUTER_BENCH_FORMAT;
 const benchUnits = process.env.ROUTER_BENCH_UNITS !== '0';
 const benchGcEnabled = process.env.ROUTER_BENCH_GC !== '0';
-const benchLayoutStats = process.env.ROUTER_BENCH_LAYOUT === '0' ? false : benchFormat !== 'json';
-const NODE_RECORD_BYTES = 32;
-const STATIC_CHILD_BYTES = 16;
-const PARAM_CHILD_BYTES = 8;
-const METHOD_ENTRY_BYTES = 12;
-const PATTERN_ENTRY_BYTES = 24;
 
 const mitataOptions: RunOptions = {
   avg: true,
@@ -122,24 +115,6 @@ const routerPriorityStaticParam = buildRouterFromEntries([
 ]);
 const routerPriorityWildcard = buildRouterFromEntries([{ methods: HttpMethod.Get, path: '/priority/*rest' }]);
 const routerStarMethod = buildRouterFromEntries(static1kPatterns.map(path => ({ methods: '*', path })));
-
-const PROBATION_SAMPLE_SIZE = 1024;
-const PROBATION_HASHES = new Uint32Array(PROBATION_SAMPLE_SIZE);
-for (let i = 0; i < PROBATION_HASHES.length; i++) {
-  const seed = (i + 1) * 0x9e3779b1;
-  PROBATION_HASHES[i] = (seed ^ (seed >>> 13)) >>> 0;
-}
-const PROBATION_MASK = PROBATION_SAMPLE_SIZE - 1;
-const probationMissSketch = new ProbationSketch(10);
-const probationHitSketch = new ProbationSketch(10);
-let probationMissSalt = 1;
-let probationIndex = 0;
-
-if (benchLayoutStats) {
-  reportLayoutFootprint('static-10k', routerStatic10k);
-  reportLayoutFootprint('param-heavy', routerParamHeavy);
-  reportLayoutFootprint('cache-warm', routerCacheWarm);
-}
 
 const static10kMissSamples = static10kSamples.map(sample => `${sample}-miss`);
 const dynamicParamMissSamples = dynamicParamSamples.map(sample => `${sample}-404`);
@@ -405,25 +380,6 @@ group('match / extremes', () => {
   );
 });
 
-group('micro / cache internals', () => {
-  bench('probation: observe miss', () => {
-    const idx = probationIndex++ & PROBATION_MASK;
-    const salt = probationMissSalt++;
-    const hash = PROBATION_HASHES[idx]! ^ salt;
-    sinkPrimary ^= probationMissSketch.observe(hash) ? 1 : 0;
-  });
-  bench('probation: observe hit', () => {
-    const idx = probationIndex++ & PROBATION_MASK;
-    const hash = PROBATION_HASHES[idx]!;
-    probationHitSketch.observe(hash);
-    sinkSecondary ^= probationHitSketch.observe(hash) ? 1 : 0;
-  });
-  bench('probation: reset', () => {
-    probationMissSketch.reset();
-    probationHitSketch.reset();
-  });
-});
-
 if (benchGcEnabled) {
   measureLayoutGc('layout-match/param-heavy', routerParamHeavy, dynamicParamSamples, 20000);
   measureLayoutGc('layout-match/static-10k', routerStatic10k, static10kSamples, 20000);
@@ -650,32 +606,4 @@ function flushSink(): void {
   } else {
     console.log(sinkLine);
   }
-}
-
-function reportLayoutFootprint(label: string, router: RouterInstance): void {
-  const layout = router.getLayoutSnapshot();
-  if (!layout) {
-    console.warn(`[router layout] ${label}: no snapshot available`);
-    return;
-  }
-  let segmentChars = 0;
-  for (const node of layout.nodes) {
-    segmentChars += node.segment.length;
-  }
-  for (const chain of layout.segmentChains) {
-    for (const part of chain) {
-      segmentChars += part.length;
-    }
-  }
-  const approxBytes =
-    segmentChars * 2 +
-    layout.nodes.length * NODE_RECORD_BYTES +
-    layout.staticChildren.length * STATIC_CHILD_BYTES +
-    layout.paramChildren.length * PARAM_CHILD_BYTES +
-    layout.methods.length * METHOD_ENTRY_BYTES +
-    layout.patterns.length * PATTERN_ENTRY_BYTES;
-  const wildcardNodes = layout.nodes.reduce((count, node) => (node.wildcardChild === -1 ? count : count + 1), 0);
-  console.log(
-    `[router layout] ${label}: nodes=${layout.nodes.length} static=${layout.staticChildren.length} params=${layout.paramChildren.length} methods=${layout.methods.length} wildcards=${wildcardNodes} segmentChars=${segmentChars} approx=${(approxBytes / 1024).toFixed(2)}KB`,
-  );
 }

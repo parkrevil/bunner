@@ -189,32 +189,4 @@ describe('RadixRouter :: params and wildcards', () => {
       expect(router.match(HttpMethod.Get, '/files/foo%2Fbar')?.key).toBe(key);
     });
   });
-
-  describe('param ordering snapshots', () => {
-    it('should export and hydrate param edge counters between builds', () => {
-      const firstBuilder = new RadixRouterBuilder({
-        paramOrderTuning: { baseThreshold: 1, reseedProbability: 1, sampleRate: 2 },
-      });
-      firstBuilder.add(HttpMethod.Get, '/lookup/:id{[0-9]+}');
-      firstBuilder.add(HttpMethod.Get, '/lookup/:slug{[a-z]+}');
-      const firstRouter = firstBuilder.build();
-
-      firstRouter.match(HttpMethod.Get, '/lookup/alpha');
-      firstRouter.match(HttpMethod.Get, '/lookup/beta');
-      const snapshot = firstRouter.exportParamOrderSnapshot();
-
-      expect(snapshot).not.toBeNull();
-      expect(snapshot?.edgeHits.some(count => count > 0)).toBe(true);
-      expect(snapshot?.nodeOrders && snapshot.nodeOrders.length > 0).toBe(true);
-
-      const secondBuilder = new RadixRouterBuilder({
-        paramOrderTuning: { baseThreshold: 4, reseedProbability: 0.5, sampleRate: 2, snapshot: snapshot! },
-      });
-      secondBuilder.add(HttpMethod.Get, '/lookup/:id{[0-9]+}');
-      secondBuilder.add(HttpMethod.Get, '/lookup/:slug{[a-z]+}');
-      const secondRouter = secondBuilder.build();
-
-      expect(secondRouter.exportParamOrderSnapshot()).toEqual(snapshot);
-    });
-  });
 });

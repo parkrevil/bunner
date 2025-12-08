@@ -325,30 +325,6 @@ describe('RadixRouter :: options', () => {
       expect(missRecord?.entry).toBeNull();
     });
 
-    it('should evict oldest entries when cacheSize is exceeded', () => {
-      const router = buildRouter(
-        builder => {
-          builder.add(HttpMethod.Get, '/cache/:id');
-        },
-        { enableCache: true, cacheSize: 2 },
-      );
-
-      router.match(HttpMethod.Get, '/cache/a');
-      router.match(HttpMethod.Get, '/cache/a');
-      router.match(HttpMethod.Get, '/cache/b');
-      router.match(HttpMethod.Get, '/cache/b');
-      router.match(HttpMethod.Get, '/cache/c');
-      router.match(HttpMethod.Get, '/cache/c');
-
-      const firstKey = formatCacheKey(HttpMethod.Get, '/cache/a');
-      const secondKey = formatCacheKey(HttpMethod.Get, '/cache/b');
-      const thirdKey = formatCacheKey(HttpMethod.Get, '/cache/c');
-
-      expect(hasCacheRecord(router, firstKey)).toBe(false);
-      expect(hasCacheRecord(router, secondKey)).toBe(true);
-      expect(hasCacheRecord(router, thirdKey)).toBe(true);
-    });
-
     it('should keep unrelated cached hits warm across different routes', () => {
       const router = buildRouter(
         builder => {
@@ -363,32 +339,6 @@ describe('RadixRouter :: options', () => {
 
       expect(hasCacheRecord(router, formatCacheKey(HttpMethod.Get, '/users/alpha'))).toBe(true);
       expect(hasCacheRecord(router, formatCacheKey(HttpMethod.Get, '/reports/earnings'))).toBe(true);
-    });
-
-    it('should require repeated hits for new cache entries after warm-up', () => {
-      const router = buildRouter(
-        builder => {
-          builder.add(HttpMethod.Get, '/cache/:id');
-        },
-        { enableCache: true, cacheSize: 16 },
-      );
-
-      // Fill warm target (cacheSize/4 = 4) with distinct hot keys
-      const stablePaths = ['/cache/a', '/cache/b', '/cache/c', '/cache/d'];
-      for (const path of stablePaths) {
-        expect(router.match(HttpMethod.Get, path)).not.toBeNull();
-      }
-
-      const probationKey = '/cache/probation';
-      expect(router.match(HttpMethod.Get, probationKey)).not.toBeNull();
-      expect(hasCacheRecord(router, formatCacheKey(HttpMethod.Get, probationKey))).toBe(false);
-
-      expect(router.match(HttpMethod.Get, probationKey)).not.toBeNull();
-      expect(hasCacheRecord(router, formatCacheKey(HttpMethod.Get, probationKey))).toBe(true);
-
-      const oneOffKey = '/cache/unique-1';
-      expect(router.match(HttpMethod.Get, oneOffKey)).not.toBeNull();
-      expect(hasCacheRecord(router, formatCacheKey(HttpMethod.Get, oneOffKey))).toBe(false);
     });
 
     it('should not reuse stale miss entries across builds', () => {

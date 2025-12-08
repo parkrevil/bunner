@@ -1,19 +1,10 @@
-import { ROUTER_SNAPSHOT_METADATA } from '@bunner/core';
-
 import type { HttpMethod } from '../enums';
 import type { RouteKey } from '../types';
 
-import type { ImmutableRouterLayout } from './layout/immutable-router-layout';
-import type { ParamOrderSnapshot, RouterCacheSnapshot, RouterOptions, RouteMatch, RouterSnapshotMetadata } from './types';
+import type { RouterOptions, RouteMatch } from './types';
 
 export interface RouterInstance {
   match(method: HttpMethod, path: string): RouteMatch | null;
-  getMetadata(): RouterSnapshotMetadata;
-  getLayoutSnapshot(): ImmutableRouterLayout | undefined;
-  exportParamOrderSnapshot(): ParamOrderSnapshot | null;
-  exportCacheSnapshot(): RouterCacheSnapshot | null;
-  hydrateCacheSnapshot(snapshot: RouterCacheSnapshot | null): void;
-  [ROUTER_SNAPSHOT_METADATA]?: RouterSnapshotMetadata;
 }
 
 export interface RouterBuilder {

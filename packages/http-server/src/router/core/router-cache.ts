@@ -1,5 +1,5 @@
 import type { HttpMethod } from '../../enums';
-import type { RouteMatch, RouterCacheEntrySnapshot, RouterCacheSnapshot, RouterCacheSnapshotEntry } from '../types';
+import type { RouteMatch, RouterCacheEntrySnapshot } from '../types';
 
 import type { NormalizedRouterOptions } from './router-options';
 
@@ -12,34 +12,7 @@ type CacheRecord = {
   ticket: number;
 };
 
-export class ProbationSketch {
-  private readonly mask: number;
-  private readonly slots: Uint32Array;
-
-  constructor(sizePower: number) {
-    this.mask = (1 << sizePower) - 1;
-    this.slots = new Uint32Array(this.mask + 1);
-  }
-
-  observe(hash: number): boolean {
-    const normalized = hash === 0 ? 1 : hash;
-    const index = normalized & this.mask;
-    if (this.slots[index] === normalized) {
-      this.slots[index] = 0;
-      return true;
-    }
-    this.slots[index] = normalized;
-    return false;
-  }
-
-  reset(): void {
-    this.slots.fill(0);
-  }
-}
-
 export class RouterCache {
-  private static readonly PROBATION_TRIGGER_FLOOR = 8;
-  private static readonly PROBATION_SCORE_CLAMP = 128;
   private static readonly METHOD_BASE = 0x10;
   private static readonly METHOD_TOKENS: string[] = [];
   private store?: Map<string, CacheRecord>;
@@ -47,11 +20,6 @@ export class RouterCache {
   private version = 1;
   private readonly capacity: number;
   private readonly missCapacity: number;
-  private readonly admissionWarmTarget: number;
-  private readonly probationTrigger: number;
-  private admissionSketch?: ProbationSketch;
-  private probationActive = false;
-  private probationScore = 0;
   private lastKeyMethod?: HttpMethod;
   private lastKeyPath?: string;
   private lastKeyValue?: string;
@@ -70,9 +38,7 @@ export class RouterCache {
     }
     this.capacity = Math.max(1, options.cacheSize);
     this.missCapacity = RouterCache.computeMissCapacity(this.capacity);
-    this.admissionWarmTarget = RouterCache.computeWarmTarget(this.capacity);
-    this.probationTrigger = RouterCache.computeProbationTrigger(this.capacity, this.admissionWarmTarget);
-    this.admissionSketch = undefined;
+    // Probation sketch removed
   }
 
   private static resolveMethodToken(method: HttpMethod): string {
@@ -86,45 +52,9 @@ export class RouterCache {
     return token;
   }
 
-  private static computeWarmTarget(capacity: number): number {
-    const quarter = Math.floor(capacity / 4);
-    const target = quarter > 0 ? quarter : 1;
-    return Math.min(capacity, Math.min(target, 256));
-  }
-
   private static computeMissCapacity(capacity: number): number {
     const quarter = Math.max(1, Math.floor(capacity / 4));
     return Math.max(4, Math.min(quarter, 64));
-  }
-
-  private static computeProbationTrigger(capacity: number, warmTarget: number): number {
-    const half = Math.max(1, Math.floor(capacity / 2));
-    return Math.max(RouterCache.PROBATION_TRIGGER_FLOOR, Math.min(half, Math.max(half, warmTarget)));
-  }
-
-  private static createProbationSketch(capacity: number): ProbationSketch {
-    const desiredSize = Math.max(2, Math.min(1 << 16, RouterCache.nextPowerOfTwo(capacity * 2)));
-    const power = Math.max(8, Math.min(16, Math.round(Math.log2(desiredSize))));
-    return new ProbationSketch(power);
-  }
-
-  private static nextPowerOfTwo(value: number): number {
-    let v = value - 1;
-    v |= v >> 1;
-    v |= v >> 2;
-    v |= v >> 4;
-    v |= v >> 8;
-    v |= v >> 16;
-    return v + 1;
-  }
-
-  private static hashKey(key: string): number {
-    let hash = 0x811c9dc5;
-    for (let i = 0; i < key.length; i++) {
-      hash ^= key.charCodeAt(i);
-      hash = (hash >>> 0) * 0x01000193;
-    }
-    return hash >>> 0;
   }
 
   isEnabled(): boolean {
@@ -137,7 +67,6 @@ export class RouterCache {
     }
     this.store.clear();
     this.missStore?.clear();
-    this.resetAdmission();
     this.resetEvictionRing();
     this.methodGenerations.length = 0;
     this.methodMissCounters.length = 0;
@@ -212,49 +141,6 @@ export class RouterCache {
     this.missStore?.delete(key);
   }
 
-  exportSnapshot(): RouterCacheSnapshot | null {
-    if (!this.store) {
-      return null;
-    }
-    const entries: RouterCacheSnapshotEntry[] = [];
-    for (const [key, record] of this.store) {
-      entries.push({ key, method: record.method, entry: record.entry });
-      if (entries.length >= this.capacity) {
-        break;
-      }
-    }
-    if (this.missStore) {
-      for (const [key, record] of this.missStore) {
-        entries.push({ key, method: record.method, entry: null });
-        if (entries.length >= this.capacity + this.missCapacity) {
-          break;
-        }
-      }
-    }
-    return { version: this.version, entries };
-  }
-
-  hydrateSnapshot(snapshot: RouterCacheSnapshot | null): void {
-    if (!this.store || !snapshot || snapshot.version !== this.version) {
-      return;
-    }
-    this.clear();
-    for (const entry of snapshot.entries) {
-      const record: CacheRecord = {
-        version: this.version,
-        method: entry.method,
-        methodGeneration: this.getMethodGeneration(entry.method),
-        entry: entry.entry,
-        ticket: this.nextTicket(),
-      };
-      if (entry.entry) {
-        this.writeHitRecord(entry.key, record, false);
-      } else {
-        this.writeMissRecord(entry.method, entry.key, record);
-      }
-    }
-  }
-
   set(method: HttpMethod, key: string, value: RouteMatch | null, paramsEntries?: Array<[string, string | undefined]>): void {
     if (!this.store) {
       return;
@@ -272,7 +158,7 @@ export class RouterCache {
       return;
     }
     const hasExisting = this.store.has(key);
-    if (!hasExisting && !this.shouldAdmitHit(key, false)) {
+    if (!hasExisting && this.store.size >= this.capacity) {
       return;
     }
     this.missStore?.delete(key);
@@ -297,12 +183,6 @@ export class RouterCache {
       ticket: this.nextTicket(),
     };
     this.writeHitRecord(key, record, hasExisting);
-  }
-
-  private resetAdmission(): void {
-    this.admissionSketch?.reset();
-    this.probationActive = false;
-    this.probationScore = 0;
   }
 
   private resetEvictionRing(): void {
@@ -371,36 +251,6 @@ export class RouterCache {
         this.store.delete(first);
       }
     }
-  }
-
-  private shouldAdmitHit(key: string, hasExistingRecord: boolean): boolean {
-    if (!this.store) {
-      return false;
-    }
-    if (hasExistingRecord) {
-      return true;
-    }
-    if (this.store.size < this.admissionWarmTarget) {
-      return true;
-    }
-    if (!this.probationActive) {
-      if (this.store.size >= this.admissionWarmTarget) {
-        this.enableProbation();
-      }
-      if (!this.probationActive) {
-        return true;
-      }
-    }
-    if (this.store.size < this.admissionWarmTarget) {
-      this.disableProbation();
-      return true;
-    }
-    this.coolProbationScore();
-    const sketch = (this.admissionSketch ??= RouterCache.createProbationSketch(this.capacity));
-    const hash = RouterCache.hashKey(key);
-    const admitted = sketch.observe(hash);
-    this.adjustProbationScore(admitted);
-    return admitted;
   }
 
   private getMethodIndex(method: HttpMethod): number {
@@ -477,52 +327,6 @@ export class RouterCache {
       if (first !== undefined) {
         this.missStore.delete(first);
       }
-    }
-  }
-
-  private enableProbation(): void {
-    if (this.probationActive) {
-      return;
-    }
-    this.probationActive = true;
-    this.probationScore = 0;
-    if (this.admissionSketch) {
-      this.admissionSketch.reset();
-    } else {
-      this.admissionSketch = RouterCache.createProbationSketch(this.capacity);
-    }
-  }
-
-  private disableProbation(): void {
-    if (!this.probationActive) {
-      return;
-    }
-    this.probationActive = false;
-    this.probationScore = 0;
-    this.admissionSketch?.reset();
-  }
-
-  private adjustProbationScore(admitted: boolean): void {
-    if (!this.probationActive) {
-      return;
-    }
-    this.probationScore += admitted ? -1 : 1;
-    if (this.probationScore > RouterCache.PROBATION_SCORE_CLAMP) {
-      this.probationScore = RouterCache.PROBATION_SCORE_CLAMP;
-    }
-    if (this.probationScore <= -this.probationTrigger) {
-      this.disableProbation();
-    }
-  }
-
-  private coolProbationScore(): void {
-    if (!this.probationActive || this.probationScore === 0) {
-      return;
-    }
-    if (this.probationScore > 0) {
-      this.probationScore--;
-    } else {
-      this.probationScore++;
     }
   }
 }

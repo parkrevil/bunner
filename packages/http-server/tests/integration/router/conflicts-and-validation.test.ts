@@ -148,42 +148,6 @@ describe('RadixRouter :: validation and conflicts', () => {
     expect(() => router.add(HttpMethod.Get, '/files/*/tail')).toThrow("Wildcard '*' must be the last segment");
   });
 
-  describe('regex safety timeouts', () => {
-    const slowTokenPattern = 'SLOW_TOKEN';
-    const routePath = `/slow/:token{${slowTokenPattern}}`;
-    const targetSource = `^(?:${slowTokenPattern})$`;
-
-    const buildSlowRouter = (mode: 'warn' | 'error') => {
-      const builder = new RadixRouterBuilder({ regexSafety: { mode, maxExecutionMs: 1 } });
-      builder.add(HttpMethod.Get, routePath);
-      return builder.build();
-    };
-
-    it('should warn and continue when mode is set to warn', () => {
-      const router = buildSlowRouter('warn');
-      const warnings: string[] = [];
-      const restoreWarn = interceptConsole('warn', warnings);
-      try {
-        const result = withPatchedRegexTest(targetSource, () => {
-          return router.match(HttpMethod.Get, '/slow/SLOW_TOKEN');
-        });
-        expect(result).toBeNull();
-      } finally {
-        restoreWarn();
-      }
-      expect(warnings.some(message => message.includes('exceeded'))).toBe(true);
-    });
-
-    it('should throw when mode is set to error', () => {
-      const router = buildSlowRouter('error');
-      expect(() =>
-        withPatchedRegexTest(targetSource, () => {
-          return router.match(HttpMethod.Get, '/slow/SLOW_TOKEN');
-        }),
-      ).toThrow(/exceeded/i);
-    });
-  });
-
   it('should reject nested quantifiers that may cause catastrophic backtracking', () => {
     const builder = new RadixRouterBuilder();
 
@@ -196,31 +160,3 @@ describe('RadixRouter :: validation and conflicts', () => {
     expect(() => builder.add(HttpMethod.Get, '/strict/:id{^\\d+$}')).toThrow(/anchors/i);
   });
 });
-
-function withPatchedRegexTest<T>(source: string, run: () => T): T {
-  const originalTest = RegExp.prototype.test;
-  (RegExp.prototype as unknown as { test: (value: string) => boolean }).test = function (this: RegExp, value: string) {
-    if (this.source === source) {
-      const start = Date.now();
-      while (Date.now() - start < 5) {
-        // busy loop to exceed regexSafety threshold
-      }
-    }
-    return originalTest.call(this, value);
-  };
-  try {
-    return run();
-  } finally {
-    (RegExp.prototype as unknown as { test: (value: string) => boolean }).test = originalTest;
-  }
-}
-
-function interceptConsole(level: 'warn' | 'error', sink: string[]): () => void {
-  const original = console[level];
-  (console as unknown as Record<typeof level, (...args: unknown[]) => void>)[level] = (...args: unknown[]) => {
-    sink.push(args.map(arg => String(arg)).join(' '));
-  };
-  return () => {
-    (console as unknown as Record<typeof level, (...args: unknown[]) => void>)[level] = original;
-  };
-}

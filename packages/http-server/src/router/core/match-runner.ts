@@ -148,7 +148,7 @@ export class MatchRunner {
         return null;
       }
       const params = hydrateParams(record.entry.params);
-      optionalDefaults.apply(record.entry.key, params, false);
+      optionalDefaults.apply(record.entry.key, params);
       return { key: record.entry.key, params, meta: { source: 'cache' } };
     };
 
@@ -206,14 +206,7 @@ export class MatchRunner {
               cache.cacheNullMiss(method, normalized, cacheKey);
               return null;
             }
-            const insertedDefaults = optionalDefaults.apply(
-              dynamicMatch.key,
-              dynamicMatch.params,
-              Boolean(dynamicMatch.snapshot),
-            );
-            if (insertedDefaults && dynamicMatch.snapshot) {
-              dynamicMatch.snapshot.push(...insertedDefaults);
-            }
+            optionalDefaults.apply(dynamicMatch.key, dynamicMatch.params);
             const resolved: RouteMatch = { key: dynamicMatch.key, params: dynamicMatch.params };
             cache.set(method, cacheKey, resolved, dynamicMatch.snapshot);
             return resolved;
@@ -295,10 +288,7 @@ export class MatchRunner {
           if (!dynamicMatch) {
             return null;
           }
-          const insertedDefaults = optionalDefaults.apply(dynamicMatch.key, dynamicMatch.params, Boolean(dynamicMatch.snapshot));
-          if (insertedDefaults && dynamicMatch.snapshot) {
-            dynamicMatch.snapshot.push(...insertedDefaults);
-          }
+          optionalDefaults.apply(dynamicMatch.key, dynamicMatch.params);
           return { key: dynamicMatch.key, params: dynamicMatch.params };
         };
       }
@@ -345,10 +335,7 @@ export class MatchRunner {
             cache.cacheNullMiss(method, normalized, cacheKey);
             return null;
           }
-          const insertedDefaults = optionalDefaults.apply(dynamicMatch.key, dynamicMatch.params, Boolean(dynamicMatch.snapshot));
-          if (insertedDefaults && dynamicMatch.snapshot) {
-            dynamicMatch.snapshot.push(...insertedDefaults);
-          }
+          optionalDefaults.apply(dynamicMatch.key, dynamicMatch.params);
           const resolved: RouteMatch = { key: dynamicMatch.key, params: dynamicMatch.params };
           cache.set(method, cacheKey, resolved, dynamicMatch.snapshot);
           return resolved;
@@ -381,10 +368,7 @@ export class MatchRunner {
       if (!dynamicMatch) {
         return null;
       }
-      const insertedDefaults = optionalDefaults.apply(dynamicMatch.key, dynamicMatch.params, Boolean(dynamicMatch.snapshot));
-      if (insertedDefaults && dynamicMatch.snapshot) {
-        dynamicMatch.snapshot.push(...insertedDefaults);
-      }
+      optionalDefaults.apply(dynamicMatch.key, dynamicMatch.params);
       return { key: dynamicMatch.key, params: dynamicMatch.params };
     };
   }
