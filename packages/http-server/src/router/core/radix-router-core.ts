@@ -1,8 +1,9 @@
 import { HttpMethod } from '../../enums';
 import type { RouteKey } from '../../types';
 import { NodeKind } from '../enums';
-import { buildImmutableLayout, type ImmutableRouterLayout } from '../layout/immutable-router-layout';
-import { DynamicMatcher } from '../matcher/dynamic-matcher';
+import type { BinaryRouterLayout } from '../layout/binary-router-layout';
+import { compileToBinary } from '../layout/layout-compiler';
+import { BinaryMatcher } from '../matcher/binary-matcher';
 import { RouterNode } from '../node/router-node';
 import { acquireRouterNode, releaseRouterSubtree } from '../node/router-node-pool';
 import { buildPatternTester, type PatternTesterOptions } from '../pattern/pattern-tester';
@@ -68,11 +69,11 @@ export class RadixRouterCore {
   private hasDynamicRoutes = false;
   private sealed = false;
   private routeCount = 0;
-  private layout?: ImmutableRouterLayout;
+  private layout?: BinaryRouterLayout;
+  private binaryMatcher?: BinaryMatcher;
   private patternTesters: ReadonlyArray<PatternTesterFn | undefined> = [];
   private matchObserver: MatchObserverHooks;
   private optionalDefaults: OptionalParamDefaults;
-  private paramOrders: ReadonlyArray<Uint16Array | null> = [];
 
   private metadata: RouterSnapshotMetadata = Object.freeze({
     totalRoutes: 0,
@@ -177,9 +178,25 @@ export class RadixRouterCore {
     }
     const root = this.requireBuilderRoot();
     this.runBuildPipeline(root);
-    this.layout = buildImmutableLayout(root);
+    // Serialize to Binary Layout
+    this.layout = compileToBinary(root);
+
+    // Pattern Testers (Must be built after compilation to match IDs, or before?)
+    // LayoutCompiler generates `patterns` array.
+    // We need to build testers from it.
+    // Reusing buildLayoutPatternTesters but adapted for BinaryRouterLayout?
+    // BinaryRouterLayout has `patterns` (SerializedPattern[]).
+    // ImmutableRouterLayout had `patterns` too.
+    // The signature matches `ReadonlyArray<SerializedPattern>`.
     this.patternTesters = this.buildLayoutPatternTesters(this.layout);
-    this.initializeParamOrderingStructures();
+
+    // Initialize Binary Matcher
+    this.binaryMatcher = new BinaryMatcher(this.layout, {
+      patternTesters: this.patternTesters,
+      encodedSlashBehavior: this.options.encodedSlashBehavior,
+      failFastOnBadEncoding: this.options.failFastOnBadEncoding,
+    });
+
     this.releaseBuilderState();
     this.sealed = true;
   }
@@ -209,27 +226,19 @@ export class RadixRouterCore {
     prepared: NormalizedPathSegments,
     captureSnapshot: boolean,
     suffixPlanFactory: (() => SuffixPlan | undefined) | undefined,
-    methodHasWildcard: boolean,
   ): DynamicMatchResult | null {
-    if (!this.layout) {
+    if (!this.binaryMatcher) {
       throw new Error('Router has not been finalized. Call build() before matching.');
     }
-    const matcher = new DynamicMatcher({
+    // Reuse binary matcher
+    return this.binaryMatcher.exec(
       method,
-      segments: prepared.segments,
-      segmentDecodeHints: prepared.segmentDecodeHints,
-      decodeParams: this.options.decodeParams,
-      hasWildcardRoutes: methodHasWildcard,
+      prepared.segments,
+      prepared.segmentDecodeHints,
+      this.options.decodeParams,
       captureSnapshot,
       suffixPlanFactory,
-      layout: this.layout,
-      patternTesters: this.patternTesters,
-      paramOrders: this.paramOrders,
-      observer: this.matchObserver,
-      encodedSlashBehavior: this.options.encodedSlashBehavior,
-      failFastOnBadEncoding: this.options.failFastOnBadEncoding,
-    });
-    return matcher.match();
+    );
   }
 
   private registerStaticFastRoute(method: HttpMethod, normalizedPath: string, sourcePath: string, key: RouteKey): void {
@@ -636,7 +645,7 @@ export class RadixRouterCore {
     this.metadata = result.metadata;
   }
 
-  private buildLayoutPatternTesters(layout: ImmutableRouterLayout): ReadonlyArray<PatternTesterFn | undefined> {
+  private buildLayoutPatternTesters(layout: { patterns: ReadonlyArray<any> }): ReadonlyArray<PatternTesterFn | undefined> {
     if (!layout.patterns.length) {
       return [];
     }
@@ -678,30 +687,6 @@ export class RadixRouterCore {
 
   private buildPatternCacheKey(source: string | undefined, flags: string | undefined): string {
     return `${flags ?? ''}| ${source ?? '<anon>'} `;
-  }
-
-  private initializeParamOrderingStructures(): void {
-    // Dynamic parameter re-ordering disabled for predictable performance
-    this.paramOrders = [];
-
-    // Initialize static order
-    const layout = this.layout;
-    if (layout) {
-      const orders: Array<Uint16Array | null> = new Array(layout.nodes.length);
-      for (let i = 0; i < layout.nodes.length; i++) {
-        const node = layout.nodes[i]!;
-        if (node.paramRangeCount > 1) {
-          const order = new Uint16Array(node.paramRangeCount);
-          for (let j = 0; j < node.paramRangeCount; j++) {
-            order[j] = j; // Default static order
-          }
-          orders[i] = order;
-        } else {
-          orders[i] = null;
-        }
-      }
-      this.paramOrders = orders;
-    }
   }
 
   /* Parameter-tuning related methods removed for static performance stability */

@@ -1,6 +1,6 @@
 import type { PathNormalizer, PathNormalizerConfig } from '../utils/path-utils';
-import { createPathNormalizer } from '../utils/path-utils';
 
+import { PathNormalizerFactory } from './path-normalizer-factory';
 import type { NormalizedRouterOptions } from './router-options';
 
 export interface PathBehaviorProfile {
@@ -24,7 +24,7 @@ export function createPathBehavior(options: NormalizedRouterOptions): PathBehavi
     failFastOnBadEncoding: options.failFastOnBadEncoding,
     maxSegmentLength: options.maxSegmentLength,
   };
-  const normalizePath = createPathNormalizer(config);
+  const normalizePath = PathNormalizerFactory.create(config);
   const requiresNormalization = options.collapseSlashes || options.blockTraversal;
   const needsCaseNormalization = !options.caseSensitive;
   const needsTrailingNormalization = options.ignoreTrailingSlash;
@@ -39,7 +39,7 @@ export function createPathBehavior(options: NormalizedRouterOptions): PathBehavi
       failFastOnBadEncoding: options.failFastOnBadEncoding,
       maxSegmentLength: options.maxSegmentLength,
     };
-    literalNormalizer = createPathNormalizer(literalConfig);
+    literalNormalizer = PathNormalizerFactory.create(literalConfig);
   }
 
   return {

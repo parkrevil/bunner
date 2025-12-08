@@ -342,7 +342,7 @@ function decodeAsciiPercents(value: string, startIdx: number, failFastOnBadEncod
   return chunks.join('');
 }
 
-function decodeEncodedDotSegment(part: string): string | null {
+export function decodeEncodedDotSegment(part: string): string | null {
   if (!part || part.indexOf('%') === -1 || !containsEncodedDot(part)) {
     return null;
   }
@@ -380,7 +380,7 @@ function fromHex(code: number): number {
   return -1;
 }
 
-function readPercentByte(value: string, index: number): number {
+export function readPercentByte(value: string, index: number): number {
   if (index + 2 >= value.length) {
     return -1;
   }
@@ -394,13 +394,13 @@ function readPercentByte(value: string, index: number): number {
 
 const MAX_SNIPPET_LENGTH = 48;
 
-function createBadEncodingError(value: string, index?: number): RangeError {
+export function createBadEncodingError(value: string, index?: number): RangeError {
   const snippet = formatSnippet(value);
   const context = typeof index === 'number' ? `near offset ${index}` : 'in path';
   return captureRouterErrorStack(new RangeError(`Malformed percent-encoding ${context}: ${snippet}`), createBadEncodingError);
 }
 
-function createSegmentTooLongError(length: number, limit: number): RangeError {
+export function createSegmentTooLongError(length: number, limit: number): RangeError {
   return captureRouterErrorStack(
     new RangeError(`Path segment length ${length} exceeds configured max ${limit}`),
     createSegmentTooLongError,
