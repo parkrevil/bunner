@@ -1,7 +1,7 @@
-import { HttpMethod } from '../../enums';
-import type { RouteKey } from '../../types';
-import type { BinaryRouterLayout } from '../layout/binary-router-layout';
+import { decodeURIComponentSafe } from './processor';
+import type { BinaryRouterLayout } from './schema';
 import {
+  HttpMethod,
   NODE_OFFSET_META,
   NODE_OFFSET_METHOD_MASK,
   NODE_OFFSET_MATCH_FUNC,
@@ -18,9 +18,8 @@ import {
   NODE_SHIFT_WILDCARD_ORIGIN,
   NODE_STRIDE,
   PARAM_ENTRY_STRIDE,
-} from '../layout/binary-router-layout';
-import type { DynamicMatchResult, EncodedSlashBehavior, PatternTesterFn, RouteParams, SuffixPlan } from '../types';
-import { decodeURIComponentSafe } from '../utils/path-utils';
+} from './schema';
+import type { RouteKey, DynamicMatchResult, EncodedSlashBehavior, PatternTesterFn, RouteParams, SuffixPlan } from './types';
 
 // Constants
 const STAGE_ENTER = 0;
@@ -38,7 +37,7 @@ const FRAME_OFFSET_ITERATOR = 4;
 const MAX_STACK_DEPTH = 64;
 const MAX_PARAMS = 32;
 
-export class BinaryMatcher {
+export class Matcher {
   // Layout Buffers
   private readonly nodeBuffer: Uint32Array;
   private readonly staticChildrenBuffer: Uint32Array;
