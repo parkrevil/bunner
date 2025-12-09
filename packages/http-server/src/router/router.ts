@@ -53,7 +53,16 @@ export class Router {
       return method.map(m => this.addOne(m, path));
     }
     if (method === '*') {
-      throw new Error("Wildcard method '*' not implemented in Facade yet. Pass explicit methods.");
+      const allMethods = [
+        HttpMethod.Get,
+        HttpMethod.Post,
+        HttpMethod.Put,
+        HttpMethod.Patch,
+        HttpMethod.Delete,
+        HttpMethod.Options,
+        HttpMethod.Head,
+      ];
+      return allMethods.map(m => this.addOne(m, path));
     }
     return this.addOne(method, path);
   }
@@ -88,9 +97,7 @@ export class Router {
       this.build();
     }
     const { segments, segmentDecodeHints, suffixPlan } = this.processor.normalize(path);
-    if (this.options.ignoreTrailingSlash && segments.length > 0 && segments[segments.length - 1] === '') {
-      segments.pop();
-    }
+    // Trailing slash handled by processor (collapseSlashes checks ignoreTrailingSlash)
 
     const execResult = this.matcher!.exec(
       method,
@@ -161,9 +168,7 @@ export class Router {
     const key = this.routeSeq++;
     // Pass stripQuery=false to preserve param modifiers like '?' in patterns
     const { segments } = this.processor.normalize(path, false);
-    if (this.options.ignoreTrailingSlash && segments.length > 0 && segments[segments.length - 1] === '') {
-      segments.pop();
-    }
+    // Trailing slash handled by processor
     this.builder.add(method, segments, key);
     return key;
   }

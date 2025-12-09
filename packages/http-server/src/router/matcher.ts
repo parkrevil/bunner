@@ -104,7 +104,7 @@ export class Matcher {
 
     // Clear Cache
     for (let i = 0; i < segments.length; i++) {
-      this.paramCache[i] = undefined as any;
+      this.paramCache[i] = undefined as unknown as string;
     }
 
     const key = this.walk(decodeParams, suffixPlanFactory);
@@ -209,17 +209,44 @@ export class Matcher {
         const staticCount = this.nodeBuffer[base + NODE_OFFSET_STATIC_CHILD_COUNT]!;
         if (staticCount > 0) {
           const staticPtr = this.nodeBuffer[base + NODE_OFFSET_STATIC_CHILD_PTR]!;
-          const segment = this.segments[segIdx];
-          let ptr = staticPtr;
+          const segment = this.segments[segIdx]!;
+
           let childPtr = -1;
-          // Look for match
-          for (let i = 0; i < staticCount; i++) {
-            const sID = this.staticChildrenBuffer[ptr]!;
-            if (this.stringTable[sID] === segment) {
-              childPtr = this.staticChildrenBuffer[ptr + 1]!;
-              break;
+
+          // Optimization: Binary Search for static children
+          // Threshold: 8 items. Below 8, linear scan is often faster due to locality/branch prediction.
+          if (staticCount < 8) {
+            let ptr = staticPtr;
+            for (let i = 0; i < staticCount; i++) {
+              const sID = this.staticChildrenBuffer[ptr]!;
+              // Direct string comparison is fast in JS engine (interned strings)
+              if (this.stringTable[sID] === segment) {
+                childPtr = this.staticChildrenBuffer[ptr + 1]!;
+                break;
+              }
+              ptr += 2;
             }
-            ptr += 2;
+          } else {
+            let low = 0;
+            let high = staticCount - 1;
+
+            while (low <= high) {
+              const mid = (low + high) >>> 1;
+              const ptr = staticPtr + (mid << 1);
+              const sID = this.staticChildrenBuffer[ptr]!;
+              const midVal = this.stringTable[sID]!;
+
+              if (midVal === segment) {
+                childPtr = this.staticChildrenBuffer[ptr + 1]!;
+                break;
+              }
+
+              if (midVal < segment) {
+                low = mid + 1;
+              } else {
+                high = mid - 1;
+              }
+            }
           }
 
           if (childPtr !== -1) {

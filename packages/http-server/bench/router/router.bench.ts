@@ -393,7 +393,7 @@ await run(mitataOptions);
 flushSink();
 
 function buildRouter(paths: string[], options?: Partial<RouterOptions>): RouterInstance {
-  const router = new RadixRouterBuilder(options);
+  const router = new RadixRouterBuilder({ maxSegmentLength: 5000, ...options });
   for (const path of paths) {
     router.add(HttpMethod.Get, path);
   }

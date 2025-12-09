@@ -412,6 +412,9 @@ export class Builder {
   }
 
   build(): BinaryRouterLayout {
+    // Compression temporarily disabled as it breaks segment-based matcher without layout support for multi-segment skipping
+    // this.compressTree(this.root);
+
     // 1. Linearize Nodes (BFS)
     const nodes: Node[] = [];
     const nodeToIndex = new Map<Node, number>();
@@ -425,10 +428,13 @@ export class Builder {
       nodeToIndex.set(node, nodes.length);
       nodes.push(node);
 
-      if (node.staticChildren.size) {
-        for (const child of node.staticChildren.values()) {
-          queue.push(child);
-        }
+      // Important: For Binary Search to work in Matcher, children MUST be sorted by segment.
+      // StaticChildStore might be in inline (insertion) order. We must sort here.
+      const staticEntries = Array.from(node.staticChildren.entries());
+      staticEntries.sort((a, b) => (a[0] < b[0] ? -1 : 1));
+
+      for (const [, child] of staticEntries) {
+        queue.push(child);
       }
       for (const child of node.paramChildren) {
         queue.push(child);
@@ -517,11 +523,17 @@ export class Builder {
       }
       nodeBuffer[base + NODE_OFFSET_METHOD_MASK] = methodMask;
 
-      // Static Children
+      // Static Children (Sorted)
       if (node.staticChildren.size > 0) {
         nodeBuffer[base + NODE_OFFSET_STATIC_CHILD_PTR] = staticChildrenList.length;
         nodeBuffer[base + NODE_OFFSET_STATIC_CHILD_COUNT] = node.staticChildren.size;
-        for (const [seg, child] of node.staticChildren.entries()) {
+
+        // Re-get entries and sort again to ensure buffer logic matches queue logic
+        // (Performance note: could cache this sorted list on the node temporarily if needed, but for build time this is fine)
+        const staticEntries = Array.from(node.staticChildren.entries());
+        staticEntries.sort((a, b) => (a[0] < b[0] ? -1 : 1));
+
+        for (const [seg, child] of staticEntries) {
           staticChildrenList.push(getStringId(seg));
           staticChildrenList.push(nodeToIndex.get(child)!);
         }
@@ -937,6 +949,83 @@ export class Builder {
     node.methods = { byMethod: new Map() };
     node.segment = prefixParts.length > 1 ? prefixParts.join('/') : prefixParts[0]!;
     node.segmentParts = prefixParts.length > 1 ? prefixParts : undefined;
+  }
+
+  private compressTree(node: Node): void {
+    // 1. Compress children first (DFS)
+    for (const child of node.staticChildren.values()) {
+      this.compressTree(child);
+    }
+    for (const child of node.paramChildren) {
+      this.compressTree(child);
+    }
+    if (node.wildcardChild) {
+      this.compressTree(node.wildcardChild);
+    }
+
+    // 2. Attempt to merge with child
+    // Logic: If I am a Static node, have EXACTLY ONE static child, NO params, NO wildcard, NO methods (not an endpoint)
+    // Then merge with that child.
+
+    // Exception: Root node ('/') is usually separate context, but technically can compress if it has no handler.
+    // However, keeping root simple is usually safer for debugging. Let's allow root compression if logic permits.
+
+    if (node.kind !== NodeKind.Static) {
+      return;
+    }
+    if (node.methods.byMethod.size > 0) {
+      return; // I am an endpoint, cannot merge
+    }
+    if (node.paramChildren.length > 0 || node.wildcardChild) {
+      return; // Have complex children
+    }
+    if (node.staticChildren.size !== 1) {
+      return; // Need exactly one child to merge
+    }
+
+    const [childSegment, childNode] = node.staticChildren.entries().next().value!;
+
+    // Cannot merge if child is not Static? (e.g. child is Param? But staticChildren only holds Static?)
+    // Wait, staticChildren values are Node, but are they Guaranteed Static kind?
+    // Builder logic puts acquireNode(NodeKind.Static, ...) into staticChildren. Yes.
+    // Double check child node kind just in case.
+    if (childNode.kind !== NodeKind.Static) {
+      return;
+    }
+
+    // Merge!
+    // My segment becomes "mySegment/childSegment"
+    // I adopt child's children and methods.
+
+    // NOTE: If node is Root ('/'), merging needs care.
+    // If root is '/', child is 'api'. Combined: '/api'. Correct.
+
+    // Handle segment composition
+    const mySeg = node.segment;
+    const newSeg = mySeg === '/' ? `/${childSegment}` : `${mySeg}/${childSegment}`;
+
+    node.segment = newSeg;
+
+    // Transfer children/handlers
+    node.staticChildren = childNode.staticChildren;
+    node.paramChildren = childNode.paramChildren;
+    node.wildcardChild = childNode.wildcardChild;
+    node.methods = childNode.methods; // Transfer endpoints
+
+    // Transfer patterns/parts? Static nodes usually don't have patterns.
+    // segmentParts need updates?
+    if (node.segmentParts || childNode.segmentParts) {
+      // Re-calculate parts if we were tracking them.
+      // But splitStaticChain splits them.
+      // Merging suggests we should combine them.
+      // Simple approach: standard path string is enough for flattened router?
+      // Wait, Builder uses segmentParts for `matchStaticParts` during insertion.
+      // If we compress AFTER all insertions (which we do, in build()), we don't strictly need segmentParts for further insertions?
+      // `build()` only uses `node.segment`.
+      // BUT if `add()` is called *after* `compressTree` (which shouldn't happen as build seals it), it would be issue.
+      // `build()` creates Matcher and effectively seals (Router throws if adding after match/build).
+      // So we don't need to maintain `segmentParts` perfectly for insertion logic anymore.
+    }
   }
 }
 
