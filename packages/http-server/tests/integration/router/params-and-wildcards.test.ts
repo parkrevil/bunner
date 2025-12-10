@@ -1,46 +1,46 @@
 import { describe, it, expect } from 'bun:test';
 
-import { HttpMethod } from '../../../src/enums';
-import { RadixRouterBuilder } from '../../../src/router/router';
-import type { RouteKey } from '../../../src/types';
+import { Router } from '../../../src/router/router';
 
-describe('RadixRouter :: params and wildcards', () => {
-  const buildRouter = (
-    configure: (builder: RadixRouterBuilder) => void,
-    options?: ConstructorParameters<typeof RadixRouterBuilder>[0],
-  ): ReturnType<RadixRouterBuilder['build']> => {
-    const builder = new RadixRouterBuilder(options);
+describe('Router :: params and wildcards', () => {
+  const buildRouter = (configure: (builder: Router) => void, options?: ConstructorParameters<typeof Router>[0]): Router => {
+    const builder = new Router(options);
     configure(builder);
     return builder.build();
   };
 
   describe('optional parameters', () => {
-    it('should match the base route even without a value', () => {
-      let key!: RouteKey;
-      const router = buildRouter(builder => {
-        key = builder.add(HttpMethod.Get, '/users/:id?') as RouteKey;
-      });
+    it('should match simple named parameters', () => {
+      const builder = new Router();
+      builder.add('GET', '/product/:id', params => ({ handler: 'h1', params }));
+      const router = builder.build();
 
-      expect(router.match(HttpMethod.Get, '/users')).toEqual({ key, params: {} });
+      const result = router.match('GET', '/product/123');
+      expect(result).toEqual({
+        handler: 'h1',
+        params: { id: '123' },
+      });
     });
 
-    it('should store a provided value in params', () => {
-      const router = buildRouter(builder => {
-        builder.add(HttpMethod.Get, '/users/:id?');
+    it('should match multiple named parameters', () => {
+      const builder = new Router();
+      builder.add('GET', '/:category/:id', params => ({ handler: 'h1', params }));
+      const router = builder.build();
+
+      expect(router.match('GET', '/books/abc')?.params).toEqual({
+        category: 'books',
+        id: 'abc',
       });
-
-      expect(router.match(HttpMethod.Get, '/users/42')?.params.id).toBe('42');
     });
-
     it('should expose undefined when configured to setUndefined', () => {
       const router = buildRouter(
         builder => {
-          builder.add(HttpMethod.Get, '/users/:id?');
+          builder.add('GET', '/users/:id?', params => ({ params }));
         },
         { optionalParamBehavior: 'setUndefined' },
       );
 
-      const match = router.match(HttpMethod.Get, '/users');
+      const match = router.match('GET', '/users');
       expect(match).not.toBeNull();
       expect(match?.params).toHaveProperty('id');
       expect(match?.params.id).toBeUndefined();
@@ -49,12 +49,12 @@ describe('RadixRouter :: params and wildcards', () => {
     it('should expose empty strings when configured to setEmptyString', () => {
       const router = buildRouter(
         builder => {
-          builder.add(HttpMethod.Get, '/users/:id?');
+          builder.add('GET', '/users/:id?', params => ({ params }));
         },
         { optionalParamBehavior: 'setEmptyString' },
       );
 
-      const match = router.match(HttpMethod.Get, '/users');
+      const match = router.match('GET', '/users');
       expect(match?.params.id).toBe('');
     });
   });
@@ -62,131 +62,126 @@ describe('RadixRouter :: params and wildcards', () => {
   describe('regex-constrained parameters', () => {
     it('should match when the path satisfies the regex', () => {
       const router = buildRouter(builder => {
-        builder.add(HttpMethod.Get, '/orders/:id{[0-9]+}');
+        builder.add('GET', '/orders/:id{[0-9]+}', params => ({ params }));
       });
 
-      expect(router.match(HttpMethod.Get, '/orders/123')?.params.id).toBe('123');
+      expect(router.match('GET', '/orders/123')?.params.id).toBe('123');
     });
 
     it('should fail when the path violates the regex', () => {
       const router = buildRouter(builder => {
-        builder.add(HttpMethod.Get, '/orders/:id{[0-9]+}');
+        builder.add('GET', '/orders/:id{[0-9]+}', () => 'ok');
       });
 
-      expect(router.match(HttpMethod.Get, '/orders/abc')).toBeNull();
+      expect(router.match('GET', '/orders/abc')).toBeNull();
     });
   });
 
   describe('multi-segment parameters', () => {
-    it('should capture the remaining segments as a single string', () => {
-      const router = buildRouter(builder => {
-        builder.add(HttpMethod.Get, '/files/:rest+');
-      });
+    it('should support multi-segment params (+)', () => {
+      const builder = new Router();
+      builder.add('GET', '/files/:path+', params => ({ params }));
+      const router = builder.build();
 
-      expect(router.match(HttpMethod.Get, '/files/a/b/c')?.params.rest).toBe('a/b/c');
+      expect(router.match('GET', '/files/a/b/c')?.params['path']).toBe('a/b/c');
     });
 
     it('should fail when no additional segment is present', () => {
       const router = buildRouter(builder => {
-        builder.add(HttpMethod.Get, '/files/:rest+');
+        builder.add('GET', '/files/:rest+', () => 'ok');
       });
 
-      expect(router.match(HttpMethod.Get, '/files')).toBeNull();
+      expect(router.match('GET', '/files')).toBeNull();
     });
   });
 
-  describe('zero-or-more parameters', () => {
-    it('should capture empty remainders as empty strings', () => {
-      const router = buildRouter(builder => {
-        builder.add(HttpMethod.Get, '/logs/:tail*');
-      });
+  it('should support zero-or-more params (*)', () => {
+    const builder = new Router();
+    builder.add('GET', '/static/:file*', params => ({ params }));
+    const router = builder.build();
 
-      expect(router.match(HttpMethod.Get, '/logs')?.params.tail).toBe('');
+    expect(router.match('GET', '/static/a/b')?.params['file']).toBe('a/b');
+    expect(router.match('GET', '/static')?.params['file']).toBe('');
+  });
+
+  it('should capture nested segments when present', () => {
+    const router = buildRouter(builder => {
+      builder.add('GET', '/logs/:tail*', params => ({ params }));
     });
-
-    it('should capture nested segments when present', () => {
-      const router = buildRouter(builder => {
-        builder.add(HttpMethod.Get, '/logs/:tail*');
-      });
-
-      expect(router.match(HttpMethod.Get, '/logs/2025/nov/17')?.params.tail).toBe('2025/nov/17');
-    });
+    expect(router.match('GET', '/logs/2025/nov/17')?.params.tail).toBe('2025/nov/17');
   });
 
   describe('wildcards', () => {
     it('should return the remainder under "*" when unnamed', () => {
       const router = buildRouter(builder => {
-        builder.add(HttpMethod.Get, '/static/*');
+        builder.add('GET', '/static/*', params => ({ params }));
       });
 
-      expect(router.match(HttpMethod.Get, '/static/css/app.css')?.params['*']).toBe('css/app.css');
+      expect(router.match('GET', '/static/css/app.css')?.params['*']).toBe('css/app.css');
     });
 
     it('should store the remainder under the provided wildcard name', () => {
       const router = buildRouter(builder => {
-        builder.add(HttpMethod.Get, '/proxy/*path');
+        builder.add('GET', '/proxy/*path', params => ({ params }));
       });
 
-      expect(router.match(HttpMethod.Get, '/proxy/v1/api/users')?.params.path).toBe('v1/api/users');
+      expect(router.match('GET', '/proxy/v1/api/users')?.params.path).toBe('v1/api/users');
     });
 
     it('should capture the entire path when the wildcard sits at the root', () => {
       const router = buildRouter(builder => {
-        builder.add(HttpMethod.Get, '/*');
+        builder.add('GET', '/*', params => ({ params }));
       });
 
-      expect(router.match(HttpMethod.Get, '/any/path')?.params['*']).toBe('any/path');
+      expect(router.match('GET', '/any/path')?.params['*']).toBe('any/path');
     });
 
     it('should emit an empty string when no remainder exists', () => {
       const router = buildRouter(builder => {
-        builder.add(HttpMethod.Get, '/static/*asset');
+        builder.add('GET', '/static/*asset', params => ({ params }));
       });
 
-      expect(router.match(HttpMethod.Get, '/static')?.params.asset).toBe('');
+      expect(router.match('GET', '/static')?.params.asset).toBe('');
     });
 
     it('should reuse precomputed suffix metadata across repeated matches', () => {
       const router = buildRouter(builder => {
-        builder.add(HttpMethod.Get, '/assets/*rest');
+        builder.add('GET', '/assets/*rest', params => ({ params }));
       });
 
-      expect(router.match(HttpMethod.Get, '/assets/img/logo.svg')?.params.rest).toBe('img/logo.svg');
-      expect(router.match(HttpMethod.Get, '/assets/img/logo.svg')?.params.rest).toBe('img/logo.svg');
+      expect(router.match('GET', '/assets/img/logo.svg')?.params.rest).toBe('img/logo.svg');
+      expect(router.match('GET', '/assets/img/logo.svg')?.params.rest).toBe('img/logo.svg');
     });
   });
 
   describe('matching priority and decoding', () => {
     it('should prioritize regex-constrained params over generic ones regardless of registration order', () => {
-      let slugKey!: RouteKey;
-      let numericKey!: RouteKey;
       const router = buildRouter(builder => {
-        slugKey = builder.add(HttpMethod.Get, '/articles/:slug') as RouteKey;
-        numericKey = builder.add(HttpMethod.Get, '/articles/:id{[0-9]+}') as RouteKey;
+        builder.add('GET', '/articles/:slug', () => 'slug');
+        builder.add('GET', '/articles/:id{[0-9]+}', () => 'numeric');
       });
 
-      expect(router.match(HttpMethod.Get, '/articles/42')?.key).toBe(numericKey);
-      expect(router.match(HttpMethod.Get, '/articles/hello')?.key).toBe(slugKey);
+      expect(router.match('GET', '/articles/42')).toBe('numeric');
+      expect(router.match('GET', '/articles/hello')).toBe('slug');
     });
 
     it('should evaluate regex constraints against decoded parameter values when decoding is enabled', () => {
       const router = buildRouter(builder => {
-        builder.add(HttpMethod.Get, '/files/:name{[^\\u002F]+}');
+        builder.add('GET', '/files/:name{[^\\u002F]+}', () => 'ok');
       });
 
-      expect(router.match(HttpMethod.Get, '/files/foo%2Fbar')).toBeNull();
+      expect(router.match('GET', '/files/foo%2Fbar')).toBeNull();
     });
 
     it('should allow encoded values to bypass regex checks when decoding is disabled', () => {
-      let key!: RouteKey;
       const router = buildRouter(
         builder => {
-          key = builder.add(HttpMethod.Get, '/files/:name{[^\\u002F]+}') as RouteKey;
+          builder.add('GET', '/files/:name{[^\\u002F]+}', () => 'ok');
         },
         { decodeParams: false },
       );
 
-      expect(router.match(HttpMethod.Get, '/files/foo%2Fbar')?.key).toBe(key);
+      expect(router.match('GET', '/files/foo%2Fbar')).toBe('ok');
     });
   });
 });

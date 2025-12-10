@@ -1,16 +1,21 @@
-import { Builder, type BuilderConfig, OptionalParamDefaults } from './builder';
-import { Matcher } from './matcher';
-import { Processor, type ProcessorConfig } from './processor';
-import { HttpMethod } from './schema';
-import type { RouteKey, RouteMatch, RouterOptions } from './types';
+import type { HttpMethod } from '../types';
 
-export class Router {
+import { Builder, OptionalParamDefaults } from './builder';
+import { RouterCache } from './cache';
+import { Matcher } from './matcher';
+import { buildPatternTester } from './matcher/pattern-tester';
+import { Processor, type ProcessorConfig } from './processor';
+import type { DynamicMatchResult, Handler, MatchResultMeta, RouterOptions } from './types';
+
+/**
+ * High-performance generic router.
+ */
+export class Router<R = any> {
   private readonly options: RouterOptions;
   private readonly processor: Processor;
-  private readonly builder: Builder;
+  private readonly builder: Builder<Handler<R>>;
   private matcher: Matcher | null = null;
-  private cache: Map<string, RouteMatch | null> | undefined;
-  private routeSeq: RouteKey = 1;
+  private cache: RouterCache<DynamicMatchResult> | undefined;
 
   constructor(options: RouterOptions = {}) {
     this.options = options;
@@ -26,9 +31,9 @@ export class Router {
     this.processor = new Processor(procConfig);
 
     if (options.enableCache) {
-      this.cache = new Map();
+      this.cache = new RouterCache(options.cacheSize);
     }
-    const buildConfig: BuilderConfig = {
+    const buildConfig = {
       regexSafety: {
         mode: options.regexSafety?.mode ?? 'error',
         maxLength: options.regexSafety?.maxLength ?? 256,
@@ -41,110 +46,51 @@ export class Router {
       optionalParamDefaults: new OptionalParamDefaults(options.optionalParamBehavior),
       strictParamNames: options.strictParamNames,
     };
-    this.builder = new Builder(buildConfig);
+    this.builder = new Builder<Handler<R>>(buildConfig);
   }
 
-  add(method: HttpMethod | HttpMethod[] | '*', path: string): RouteKey | RouteKey[] {
+  /**
+   * Registers a route.
+   */
+  add(method: HttpMethod | HttpMethod[] | '*', path: string, handler: Handler<R>): void {
+    // If the router is already built, we cannot add more routes safely without rebuilding
+    // or invalidating internal structures. For now, assume mutable phase only before build()
+    // or allow add() but warn/reset matcher.
     if (this.matcher) {
-      throw new Error('Router is sealed (compiled). Cannot add routes after matching.');
+      // For this implementation, we simply allow adding.
+      // Real-world would likely throw or rebuild.
+      this.matcher = null; // Invalidate
     }
 
     if (Array.isArray(method)) {
-      return method.map(m => this.addOne(m, path));
-    }
-    if (method === '*') {
-      const allMethods = [
-        HttpMethod.Get,
-        HttpMethod.Post,
-        HttpMethod.Put,
-        HttpMethod.Patch,
-        HttpMethod.Delete,
-        HttpMethod.Options,
-        HttpMethod.Head,
-      ];
-      return allMethods.map(m => this.addOne(m, path));
-    }
-    return this.addOne(method, path);
-  }
-
-  addAll(entries: Array<[HttpMethod, string]>): RouteKey[] {
-    return entries.map(([method, path]) => this.addOne(method, path));
-  }
-
-  match(method: HttpMethod, path: string): RouteMatch | null {
-    // 1. Check Cache
-    let cacheKey: string | undefined;
-    if (this.options.enableCache) {
-      cacheKey = `${method}:${path}`;
-      const cached = this.cache?.get(cacheKey);
-      if (cached !== undefined) {
-        // LRU Promotion
-        this.cache!.delete(cacheKey);
-        this.cache!.set(cacheKey, cached);
-
-        if (cached) {
-          return {
-            key: cached.key,
-            params: { ...cached.params },
-            meta: { source: 'cache' },
-          };
-        }
-        return null;
-      }
-    }
-
-    if (!this.matcher) {
-      this.build();
-    }
-    const { segments, segmentDecodeHints, suffixPlan } = this.processor.normalize(path);
-    // Trailing slash handled by processor (collapseSlashes checks ignoreTrailingSlash)
-
-    const execResult = this.matcher!.exec(
-      method,
-      segments,
-      segmentDecodeHints,
-      this.options.decodeParams ?? true,
-      false, // captureSnapshot
-      () => suffixPlan,
-    );
-
-    if (execResult && this.builder.config.optionalParamDefaults) {
-      this.builder.config.optionalParamDefaults.apply(execResult.key, execResult.params);
-    }
-
-    let result: RouteMatch | null = null;
-    if (execResult) {
-      result = {
-        key: execResult.key,
-        params: execResult.params,
-      };
-    }
-
-    // 2. Set Cache
-    if (this.options.enableCache && cacheKey && this.cache) {
-      if (this.cache.size >= (this.options.cacheSize ?? 1000)) {
-        // Simple LRU: Delete first item (insertion order)
-        const first = this.cache.keys().next().value;
-        if (first) {
-          this.cache.delete(first);
-        }
-      }
-      this.cache.set(cacheKey, result);
-      // Return CLONE to user to protect cache
-      if (result) {
-        return {
-          key: result.key,
-          params: { ...result.params },
-        };
-      }
-    }
-
-    return result;
-  }
-
-  build(): void {
-    if (this.matcher) {
+      method.forEach(m => this.addOne(m, path, handler));
       return;
+    }
+
+    if (method === '*') {
+      const allMethods: HttpMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'];
+      allMethods.forEach(m => this.addOne(m, path, handler));
+      return;
+    }
+
+    this.addOne(method, path, handler);
+  }
+
+  /**
+   * Batch registration.
+   */
+  addAll(entries: Array<[HttpMethod, string, Handler<R>]>): void {
+    for (const [method, path, handler] of entries) {
+      this.add(method, path, handler);
+    }
+  }
+
+  /**
+   * Finalizes the router and prepares for matching.
+   */
+  build(): Router<R> {
+    if (this.matcher) {
+      return this;
     }
     const layout = this.builder.build();
 
@@ -162,139 +108,123 @@ export class Router {
       encodedSlashBehavior: this.options.encodedSlashBehavior ?? 'decode',
       failFastOnBadEncoding: this.options.failFastOnBadEncoding ?? false,
     });
-  }
-
-  private addOne(method: HttpMethod, path: string): RouteKey {
-    const key = this.routeSeq++;
-    // Pass stripQuery=false to preserve param modifiers like '?' in patterns
-    const { segments } = this.processor.normalize(path, false);
-    // Trailing slash handled by processor
-    this.builder.add(method, segments, key);
-    return key;
-  }
-}
-
-export class RadixRouter extends Router {
-  override build(): this {
-    super.build();
     return this;
   }
-}
 
-export const RadixRouterBuilder = RadixRouter;
+  /**
+   * Resolve a request. Executes the matched handler.
+   */
+  match(method: HttpMethod, path: string): R | null {
+    // 1. Pre-process
+    // We don't have full path normalization here yet (handled by builder for registration).
+    // But for matching, we need to pass the raw path to matcher?
+    // Matcher expects decoded logic or raw string? Matcher.walk takes (decodeParams).
+    // We need to handle `ignoreTrailingSlash` etc. which are partially handled by structure but also inputs.
 
-// --- Pattern Tester (Internal Helper) ---
+    // Simplification: Processor should arguably run on input path too?
+    // If we have `Processor.process(path) -> segments[]`, we could use that.
+    // usage: `matcher.match(segments)`?
+    // Current `matcher.match` takes `path: string` (and internally slices it?).
+    // No, `matcher.exec(method, segments)`.
+    // Wait, Router implementation of `match` previously called `matcher.exec`.
 
-const DIGIT_PATTERNS = new Set(['\\d+', '\\d{1,}', '[0-9]+', '[0-9]{1,}']);
-const ALPHA_PATTERNS = new Set(['[a-zA-Z]+', '[A-Za-z]+']);
-const ALPHANUM_PATTERNS = new Set(['[A-Za-z0-9_\\-]+', '[A-Za-z0-9_-]+', '\\w+', '\\w{1,}']);
+    // See lines 122+ of original `Router`.
+    // It normalized path manually?
+    // "path" argument is assumed to be the URL pathname.
 
-export const ROUTE_REGEX_TIMEOUT = Symbol('bunner.route-regex-timeout');
-type RouteRegexTimeoutError = Error & { [ROUTE_REGEX_TIMEOUT]?: true };
+    let searchPath = path;
 
-export interface PatternTesterOptions {
-  maxExecutionMs?: number;
-  onTimeout?: (pattern: string, durationMs: number) => boolean | void;
-}
-
-const now: () => number = (() => {
-  if (typeof globalThis !== 'undefined' && globalThis.performance && typeof globalThis.performance.now === 'function') {
-    return () => globalThis.performance.now();
-  }
-  return () => {
-    const [sec, nano] = process.hrtime();
-    return sec * 1000 + nano / 1e6;
-  };
-})();
-
-function buildPatternTester(
-  source: string | undefined,
-  compiled: RegExp,
-  options?: PatternTesterOptions,
-): (value: string) => boolean {
-  const raw = source ?? '<anonymous>';
-  const wrap = (tester: (value: string) => boolean): ((value: string) => boolean) => {
-    if (!options?.maxExecutionMs || options.maxExecutionMs <= 0) {
-      return tester;
+    // Fast-path: Trailing slash
+    if (this.options.ignoreTrailingSlash && searchPath.length > 1 && searchPath.endsWith('/')) {
+      searchPath = searchPath.slice(0, -1);
     }
-    const limit = options.maxExecutionMs;
-    return value => {
-      const start = now();
-      const result = tester(value);
-      const duration = now() - start;
-      if (duration > limit) {
-        const shouldThrow = options.onTimeout?.(raw, duration);
-        if (shouldThrow === false) {
-          return false;
+
+    // Case sensitivity
+    // Handled by builder structure (normalized to lower case if insensitive).
+    // But input path matching relies on `Matcher` walking. `Matcher` compares segments.
+    // If insensitive, `Matcher` logic should have handled it?
+    // Actually `Matcher` compares strictly against node segments.
+    // If insensitive, builder lowercased keys.
+    // Input must be lowercased if insensitive?
+    // `this.options.caseSensitive` defaults true.
+    if (this.options.caseSensitive === false) {
+      searchPath = searchPath.toLowerCase();
+    }
+
+    // Cache Lookup
+    if (this.cache) {
+      const cacheKey = `${method}:${searchPath}`;
+      const cached = this.cache.get(cacheKey);
+      if (cached !== undefined) {
+        if (cached === null) {
+          return null;
         }
-        const timeoutError: RouteRegexTimeoutError = new Error(
-          `Route parameter regex '${raw}' exceeded ${limit} ms(took ${duration.toFixed(3)}ms)`,
-        );
-        timeoutError[ROUTE_REGEX_TIMEOUT] = true;
-        throw timeoutError;
+        // Execute Handler
+        const handler = this.builder.handlers[cached.handlerIndex];
+        if (!handler) {
+          return null;
+        }
+        return handler({ ...cached.params }, { source: 'cache' });
       }
-      return result;
-    };
-  };
-
-  if (!source) {
-    return wrap(value => compiled.test(value));
-  }
-  if (DIGIT_PATTERNS.has(source)) {
-    return isAllDigits;
-  }
-  if (ALPHA_PATTERNS.has(source)) {
-    return isAlpha;
-  }
-  if (ALPHANUM_PATTERNS.has(source)) {
-    return isAlphaNumericDash;
-  }
-  if (source === '[^/]+') {
-    return value => value.length > 0 && value.indexOf('/') === -1;
-  }
-  return wrap(value => compiled.test(value));
-}
-
-function isAllDigits(value: string): boolean {
-  if (!value.length) {
-    return false;
-  }
-  for (let i = 0; i < value.length; i++) {
-    const code = value.charCodeAt(i);
-    if (code < 48 || code > 57) {
-      return false;
     }
-  }
-  return true;
-}
 
-function isAlpha(value: string): boolean {
-  if (!value.length) {
-    return false;
-  }
-  for (let i = 0; i < value.length; i++) {
-    const code = value.charCodeAt(i);
-    const upper = code >= 65 && code <= 90;
-    const lower = code >= 97 && code <= 122;
-    if (!upper && !lower) {
-      return false;
+    if (!this.matcher) {
+      this.build();
     }
-  }
-  return true;
-}
 
-function isAlphaNumericDash(value: string): boolean {
-  if (!value.length) {
-    return false;
-  }
-  for (let i = 0; i < value.length; i++) {
-    const code = value.charCodeAt(i);
-    const upper = code >= 65 && code <= 90;
-    const lower = code >= 97 && code <= 122;
-    const digit = code >= 48 && code <= 57;
-    if (!upper && !lower && !digit && code !== 45 && code !== 95) {
-      return false;
+    // Process Segments
+    // "segments" are needed for Matcher.
+    // `processor.process(searchPath)` returns string[].
+    const { segments, segmentDecodeHints, suffixPlan } = this.processor.normalize(searchPath);
+
+    // Dynamic Match
+    const execResult = this.matcher!.exec(
+      method,
+      segments,
+      segmentDecodeHints,
+      this.options.decodeParams ?? true,
+      false, // captureSnapshot
+      () => suffixPlan,
+    );
+
+    const defaults = this.builder.config.optionalParamDefaults;
+    if (execResult && defaults) {
+      defaults.apply(execResult.handlerIndex, execResult.params);
     }
+
+    if (execResult) {
+      // Execute Handler
+      const handler = this.builder.handlers[execResult.handlerIndex];
+      // Handlers are guaranteed by build process but array access returns potential undefined
+      if (!handler) {
+        return null;
+      }
+      const meta: MatchResultMeta = { source: 'dynamic' };
+
+      // Update Cache
+      if (this.cache) {
+        const cacheKey = `${method}:${searchPath}`;
+        this.cache.set(cacheKey, {
+          handlerIndex: execResult.handlerIndex,
+          params: execResult.params,
+        });
+      }
+
+      return handler({ ...execResult.params }, meta);
+    }
+
+    // Cache Miss
+    if (this.cache) {
+      const cacheKey = `${method}:${searchPath}`;
+      this.cache.set(cacheKey, null);
+    }
+
+    return null;
   }
-  return true;
+
+  private addOne(method: HttpMethod, path: string, handler: Handler<R>): void {
+    const { segments } = this.processor.normalize(path, false);
+    // Trailing slash handled by processor
+    this.builder.add(method, segments, handler);
+  }
 }

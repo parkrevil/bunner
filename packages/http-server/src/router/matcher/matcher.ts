@@ -1,7 +1,7 @@
-import { decodeURIComponentSafe } from './processor';
-import type { BinaryRouterLayout } from './schema';
+import type { HttpMethod } from '../../types';
+import { decodeURIComponentSafe } from '../processor';
+import type { BinaryRouterLayout } from '../schema';
 import {
-  HttpMethod,
   NODE_OFFSET_META,
   NODE_OFFSET_METHOD_MASK,
   NODE_OFFSET_MATCH_FUNC,
@@ -18,24 +18,25 @@ import {
   NODE_SHIFT_WILDCARD_ORIGIN,
   NODE_STRIDE,
   PARAM_ENTRY_STRIDE,
-} from './schema';
-import type { RouteKey, DynamicMatchResult, EncodedSlashBehavior, PatternTesterFn, RouteParams, SuffixPlan } from './types';
+  METHOD_OFFSET,
+} from '../schema';
+import type { DynamicMatchResult, EncodedSlashBehavior, PatternTesterFn, RouteParams, SuffixPlan } from '../types';
 
-// Constants
-const STAGE_ENTER = 0;
-const STAGE_STATIC = 1;
-const STAGE_PARAM = 2;
-const STAGE_WILDCARD = 3;
-
-const FRAME_SIZE = 5;
-const FRAME_OFFSET_NODE = 0;
-const FRAME_OFFSET_SEGMENT = 1;
-const FRAME_OFFSET_STAGE = 2;
-const FRAME_OFFSET_PARAM_BASE = 3;
-const FRAME_OFFSET_ITERATOR = 4;
-
-const MAX_STACK_DEPTH = 64;
-const MAX_PARAMS = 32;
+import {
+  STAGE_ENTER,
+  STAGE_STATIC,
+  STAGE_PARAM,
+  STAGE_WILDCARD,
+  FRAME_SIZE,
+  FRAME_OFFSET_NODE,
+  FRAME_OFFSET_SEGMENT,
+  FRAME_OFFSET_STAGE,
+  FRAME_OFFSET_PARAM_BASE,
+  FRAME_OFFSET_ITERATOR,
+  MAX_STACK_DEPTH,
+  MAX_PARAMS,
+} from './constants';
+import { findStaticChild } from './lookup';
 
 export class Matcher {
   // Layout Buffers
@@ -88,6 +89,15 @@ export class Matcher {
     this.stack = new Int32Array(MAX_STACK_DEPTH * FRAME_SIZE);
   }
 
+  /**
+   * Executes the matching process for a given path.
+   * @param method The HTTP Method code.
+   * @param segments The tokenized path segments.
+   * @param segmentHints Optional encoding hints for segments.
+   * @param decodeParams Whether to decode URL-encoded parameters.
+   * @param captureSnapshot Whether to capture a snapshot of params for debugging/observability.
+   * @param suffixPlanFactory Optional factory for suffix matching strategies (optimization).
+   */
   public exec(
     method: HttpMethod,
     segments: string[],
@@ -97,7 +107,11 @@ export class Matcher {
     suffixPlanFactory?: () => SuffixPlan | undefined,
   ): DynamicMatchResult | null {
     // Reset State
-    this.methodCode = method;
+    const code = METHOD_OFFSET[method];
+    if (code === undefined) {
+      return null; // Unknown method
+    }
+    this.methodCode = code;
     this.segments = segments;
     this.segmentHints = segmentHints;
     this.paramCount = 0;
@@ -107,9 +121,9 @@ export class Matcher {
       this.paramCache[i] = undefined as unknown as string;
     }
 
-    const key = this.walk(decodeParams, suffixPlanFactory);
+    const handlerIndex = this.walk(decodeParams, suffixPlanFactory);
 
-    if (key === null) {
+    if (handlerIndex === null) {
       return null;
     }
 
@@ -128,7 +142,7 @@ export class Matcher {
         snapshot[i] = [name, value];
       }
     }
-    return { key, params: bag, snapshot };
+    return { handlerIndex, params: bag, snapshot };
   }
 
   private decodeAndCache(index: number, decodeParams: boolean): string | undefined {
@@ -154,10 +168,20 @@ export class Matcher {
     return decoded;
   }
 
-  private walk(decodeParams: boolean, suffixPlanFactory?: () => SuffixPlan | undefined): RouteKey | null {
+  /**
+   * The core Stack Machine for traversing the Radix Tree.
+   * Uses a flat Int32Array stack to avoid recursion and object allocation overhead.
+   *
+   * States:
+   * - STAGE_ENTER: Entering a node. Checks for match if path ends, otherwise transitions to STATIC or WILDCARD.
+   * - STAGE_STATIC: Accessing static children table (Binary Search or Linear Scan).
+   * - STAGE_PARAM: Iterating over parameter children.
+   * - STAGE_WILDCARD: Checking wildcard match as last resort.
+   */
+  private walk(decodeParams: boolean, suffixPlanFactory?: () => SuffixPlan | undefined): number | null {
     let sp = 0;
 
-    // Push Root
+    // Push Root Frame
     this.stack[sp + FRAME_OFFSET_NODE] = this.rootIndex;
     this.stack[sp + FRAME_OFFSET_SEGMENT] = 0;
     this.stack[sp + FRAME_OFFSET_STAGE] = STAGE_ENTER;
@@ -172,7 +196,9 @@ export class Matcher {
       const nodeIdx = this.stack[framePtr + FRAME_OFFSET_NODE]!;
       const segIdx = this.stack[framePtr + FRAME_OFFSET_SEGMENT]!;
 
+      // --- 1. ENTRY STAGE ---
       if (stage === STAGE_ENTER) {
+        // Path matches fully?
         if (segIdx === this.segments.length) {
           const base = nodeIdx * NODE_STRIDE;
           const methodsPtr = this.nodeBuffer[base + NODE_OFFSET_METHODS_PTR]!;
@@ -184,22 +210,29 @@ export class Matcher {
               let ptr = methodsPtr;
               for (let i = 0; i < methodCount; i++) {
                 if (this.methodsBuffer[ptr] === this.methodCode) {
-                  return this.methodsBuffer[ptr + 1] as RouteKey;
+                  return this.methodsBuffer[ptr + 1]!;
                 }
                 ptr += 2;
               }
             }
           }
-          this.stack[framePtr + FRAME_OFFSET_STAGE] = STAGE_WILDCARD;
+          // Try Wildcard as fallback if method not found? No, if segments ended, wildcard only matches if it accepts empty,
+          // but wildcard children are distinct from "this node".
+          // Actually, if we are at end of path, we don't traverse children usually.
+          // BUT if the path ends here, and we didn't find a method, we might technically fall through to something else?
+          // In this implementation, if segments ended, we only look at THIS node methods.
+          this.stack[framePtr + FRAME_OFFSET_STAGE] = STAGE_WILDCARD; // This seems to imply we might accept empty wildcard match?
           continue;
         }
         this.stack[framePtr + FRAME_OFFSET_STAGE] = STAGE_STATIC;
         continue;
       } else if (stage === STAGE_STATIC) {
+        // --- 2. STATIC CHILDREN ---
         const base = nodeIdx * NODE_STRIDE;
-        const staticArg = this.stack[framePtr + FRAME_OFFSET_ITERATOR]!;
+        const stateIter = this.stack[framePtr + FRAME_OFFSET_ITERATOR]!;
 
-        if (staticArg > 0) {
+        // Iterator 0: Init, 1: Done
+        if (stateIter > 0) {
           this.stack[framePtr + FRAME_OFFSET_STAGE] = STAGE_PARAM;
           this.stack[framePtr + FRAME_OFFSET_ITERATOR] = 0;
           continue;
@@ -211,45 +244,10 @@ export class Matcher {
           const staticPtr = this.nodeBuffer[base + NODE_OFFSET_STATIC_CHILD_PTR]!;
           const segment = this.segments[segIdx]!;
 
-          let childPtr = -1;
-
-          // Optimization: Binary Search for static children
-          // Threshold: 8 items. Below 8, linear scan is often faster due to locality/branch prediction.
-          if (staticCount < 8) {
-            let ptr = staticPtr;
-            for (let i = 0; i < staticCount; i++) {
-              const sID = this.staticChildrenBuffer[ptr]!;
-              // Direct string comparison is fast in JS engine (interned strings)
-              if (this.stringTable[sID] === segment) {
-                childPtr = this.staticChildrenBuffer[ptr + 1]!;
-                break;
-              }
-              ptr += 2;
-            }
-          } else {
-            let low = 0;
-            let high = staticCount - 1;
-
-            while (low <= high) {
-              const mid = (low + high) >>> 1;
-              const ptr = staticPtr + (mid << 1);
-              const sID = this.staticChildrenBuffer[ptr]!;
-              const midVal = this.stringTable[sID]!;
-
-              if (midVal === segment) {
-                childPtr = this.staticChildrenBuffer[ptr + 1]!;
-                break;
-              }
-
-              if (midVal < segment) {
-                low = mid + 1;
-              } else {
-                high = mid - 1;
-              }
-            }
-          }
+          const childPtr = findStaticChild(staticPtr, staticCount, segment, this.staticChildrenBuffer, this.stringTable);
 
           if (childPtr !== -1) {
+            // Push Child Frame
             this.stack[sp + FRAME_OFFSET_NODE] = childPtr;
             this.stack[sp + FRAME_OFFSET_SEGMENT] = segIdx + 1;
             this.stack[sp + FRAME_OFFSET_STAGE] = STAGE_ENTER;
@@ -259,10 +257,12 @@ export class Matcher {
             continue;
           }
         }
+        // Fallthrough to Params
         this.stack[framePtr + FRAME_OFFSET_STAGE] = STAGE_PARAM;
         this.stack[framePtr + FRAME_OFFSET_ITERATOR] = 0;
         continue;
       } else if (stage === STAGE_PARAM) {
+        // --- 3. PARAM CHILDREN ---
         const base = nodeIdx * NODE_STRIDE;
         const meta = this.nodeBuffer[base + NODE_OFFSET_META]!;
         const paramCount = (meta & NODE_MASK_PARAM_COUNT) >>> NODE_SHIFT_PARAM_COUNT;
@@ -290,6 +290,7 @@ export class Matcher {
           continue;
         }
 
+        // Regex Check
         if (patternID !== 0xffffffff) {
           const tester = this.patternTesters[patternID];
           if (tester && !tester(value)) {
@@ -297,10 +298,12 @@ export class Matcher {
           }
         }
 
+        // Capture Param
         this.paramNames[this.paramCount] = name;
         this.paramValues[this.paramCount] = value;
         this.paramCount++;
 
+        // Push Child Frame
         this.stack[sp + FRAME_OFFSET_NODE] = childIdx;
         this.stack[sp + FRAME_OFFSET_SEGMENT] = segIdx + 1;
         this.stack[sp + FRAME_OFFSET_STAGE] = STAGE_ENTER;
@@ -309,6 +312,7 @@ export class Matcher {
         sp += FRAME_SIZE;
         continue;
       } else if (stage === STAGE_WILDCARD) {
+        // --- 4. WILDCARD CHILD ---
         const base = nodeIdx * NODE_STRIDE;
         const wildcardPtr = this.nodeBuffer[base + NODE_OFFSET_WILDCARD_CHILD_PTR]!;
 
@@ -317,10 +321,12 @@ export class Matcher {
           const nameID = this.nodeBuffer[childBase + NODE_OFFSET_MATCH_FUNC]!;
           const name = this.stringTable[nameID]!;
 
+          // Capture Remainder
           let value: string;
           const suffixPlan = suffixPlanFactory ? suffixPlanFactory() : undefined;
           if (suffixPlan) {
-            value = this.segments.slice(segIdx).join('/'); // Simplified
+            // Optimization for repeating lookups (omitted for clarity)
+            value = this.segments.slice(segIdx).join('/');
           } else {
             value = this.segments.slice(segIdx).join('/');
           }
@@ -333,12 +339,13 @@ export class Matcher {
           if (childMethodsPtr > 0) {
             const mask = this.nodeBuffer[childBase + NODE_OFFSET_METHOD_MASK]!;
             if (this.methodCode < 31 && mask & (1 << this.methodCode)) {
+              // Validate Multi vs Zero Origin
               const meta = this.nodeBuffer[childBase + NODE_OFFSET_META]!;
-
-              // Check Wildcard Origin (Multi vs Zero)
               const origin = (meta & NODE_MASK_WILDCARD_ORIGIN) >>> NODE_SHIFT_WILDCARD_ORIGIN;
+
+              // Origin 1 = Multi (+), requires at least one segment
               if (origin === 1 && value.length === 0) {
-                // Multi (+) requires non-empty
+                // Backtrack local state
                 sp -= FRAME_SIZE;
                 if (sp > 0) {
                   this.paramCount = this.stack[sp - FRAME_SIZE + FRAME_OFFSET_PARAM_BASE]!;
@@ -350,7 +357,7 @@ export class Matcher {
               let ptr = childMethodsPtr;
               for (let i = 0; i < count; i++) {
                 if (this.methodsBuffer[ptr] === this.methodCode) {
-                  return this.methodsBuffer[ptr + 1] as RouteKey;
+                  return this.methodsBuffer[ptr + 1]!;
                 }
                 ptr += 2;
               }
@@ -358,6 +365,7 @@ export class Matcher {
           }
         }
 
+        // Backtrack
         sp -= FRAME_SIZE;
         if (sp > 0) {
           this.paramCount = this.stack[sp - FRAME_SIZE + FRAME_OFFSET_PARAM_BASE]!;

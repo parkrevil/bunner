@@ -1,0 +1,201 @@
+import {
+  NodeKind,
+  NODE_MASK_KIND,
+  NODE_MASK_METHOD_COUNT,
+  NODE_MASK_PARAM_COUNT,
+  NODE_MASK_WILDCARD_ORIGIN,
+  NODE_OFFSET_MATCH_FUNC,
+  NODE_OFFSET_META,
+  NODE_OFFSET_METHODS_PTR,
+  NODE_OFFSET_METHOD_MASK,
+  NODE_OFFSET_PARAM_CHILD_PTR,
+  NODE_OFFSET_STATIC_CHILD_COUNT,
+  NODE_OFFSET_STATIC_CHILD_PTR,
+  NODE_OFFSET_WILDCARD_CHILD_PTR,
+  NODE_SHIFT_METHOD_COUNT,
+  NODE_SHIFT_PARAM_COUNT,
+  NODE_SHIFT_WILDCARD_ORIGIN,
+  NODE_STRIDE,
+  NODE_STRIDE,
+  METHOD_OFFSET,
+  PARAM_ENTRY_STRIDE,
+} from '../schema';
+import type { BinaryRouterLayout, SerializedPattern } from '../schema';
+
+import type { Node } from './node';
+
+export class Flattener {
+  static flatten(root: Node): BinaryRouterLayout {
+    // 1. Linearize Nodes (BFS)
+    const nodes: Node[] = [];
+    const nodeToIndex = new Map<Node, number>();
+    const queue: Node[] = [root];
+
+    while (queue.length) {
+      const node = queue.shift()!;
+      if (nodeToIndex.has(node)) {
+        continue;
+      }
+      nodeToIndex.set(node, nodes.length);
+      nodes.push(node);
+
+      // Important: For Binary Search to work in Matcher, children MUST be sorted by segment.
+      // StaticChildStore might be in inline (insertion) order. We must sort here.
+      const staticEntries = Array.from(node.staticChildren.entries());
+      staticEntries.sort((a, b) => (a[0] < b[0] ? -1 : 1));
+
+      for (const [, child] of staticEntries) {
+        queue.push(child);
+      }
+      for (const child of node.paramChildren) {
+        queue.push(child);
+      }
+      if (node.wildcardChild) {
+        queue.push(node.wildcardChild);
+      }
+    }
+
+    // Buffers and String Tables
+    const nodeBuffer = new Uint32Array(nodes.length * NODE_STRIDE);
+    const staticChildrenList: number[] = [];
+    const paramChildrenList: number[] = [];
+    const paramsList: number[] = [];
+    const methodsList: number[] = [0];
+    const stringList: string[] = [];
+    const stringMap = new Map<string, number>();
+    const patterns: SerializedPattern[] = [];
+    const patternMap = new Map<string, number>();
+
+    const getStringId = (str: string): number => {
+      let id = stringMap.get(str);
+      if (id === undefined) {
+        id = stringList.length;
+        stringList.push(str);
+        stringMap.set(str, id);
+      }
+      return id;
+    };
+
+    const getPatternId = (source: string, flags: string): number => {
+      const key = `${flags}|${source}`;
+      let id = patternMap.get(key);
+      if (id === undefined) {
+        id = patterns.length;
+        patterns.push({ source, flags });
+        patternMap.set(key, id);
+      }
+      return id;
+    };
+
+    // 2. Build Nodes in Buffer
+    for (let i = 0; i < nodes.length; i++) {
+      const node = nodes[i]!;
+      const base = i * NODE_STRIDE;
+
+      // Meta
+      const kindCode = node.kind === NodeKind.Static ? 0 : node.kind === NodeKind.Param ? 1 : 2;
+      let wildcardOriginCode = 0;
+      if (node.wildcardOrigin === 'multi') {
+        wildcardOriginCode = 1;
+      } else if (node.wildcardOrigin === 'zero') {
+        wildcardOriginCode = 2;
+      }
+
+      const paramCount = node.paramChildren.length;
+      const methodCount = node.methods.byMethod.size;
+
+      let meta = kindCode & NODE_MASK_KIND;
+      meta |= (wildcardOriginCode << NODE_SHIFT_WILDCARD_ORIGIN) & NODE_MASK_WILDCARD_ORIGIN;
+      meta |= (paramCount << NODE_SHIFT_PARAM_COUNT) & NODE_MASK_PARAM_COUNT;
+      meta |= (methodCount << NODE_SHIFT_METHOD_COUNT) & NODE_MASK_METHOD_COUNT;
+
+      nodeBuffer[base + NODE_OFFSET_META] = meta;
+
+      // Methods
+      let methodMask = 0;
+      if (methodCount > 0) {
+        const sortedEntries: { code: number; key: number }[] = [];
+        for (const [method, key] of node.methods.byMethod.entries()) {
+          const mCodeNum = METHOD_OFFSET[method];
+          // mCodeNum should be valid as Builder validates it
+          if (mCodeNum !== undefined) {
+            if (mCodeNum < 31) {
+              methodMask |= 1 << mCodeNum;
+            }
+            sortedEntries.push({ code: mCodeNum, key });
+          }
+        }
+        sortedEntries.sort((a, b) => a.code - b.code);
+
+        nodeBuffer[base + NODE_OFFSET_METHODS_PTR] = methodsList.length;
+        for (const entry of sortedEntries) {
+          methodsList.push(entry.code);
+          methodsList.push(entry.key);
+        }
+      } else {
+        nodeBuffer[base + NODE_OFFSET_METHODS_PTR] = 0;
+      }
+      nodeBuffer[base + NODE_OFFSET_METHOD_MASK] = methodMask;
+
+      // Static Children (Sorted)
+      if (node.staticChildren.size > 0) {
+        nodeBuffer[base + NODE_OFFSET_STATIC_CHILD_PTR] = staticChildrenList.length;
+        nodeBuffer[base + NODE_OFFSET_STATIC_CHILD_COUNT] = node.staticChildren.size;
+
+        // Re-get entries and sort again to ensure buffer logic matches queue logic
+        const staticEntries = Array.from(node.staticChildren.entries());
+        staticEntries.sort((a, b) => (a[0] < b[0] ? -1 : 1));
+
+        for (const [seg, child] of staticEntries) {
+          staticChildrenList.push(getStringId(seg));
+          staticChildrenList.push(nodeToIndex.get(child)!);
+        }
+      } else {
+        nodeBuffer[base + NODE_OFFSET_STATIC_CHILD_PTR] = 0;
+        nodeBuffer[base + NODE_OFFSET_STATIC_CHILD_COUNT] = 0;
+      }
+
+      // Param Children
+      if (node.paramChildren.length > 0) {
+        nodeBuffer[base + NODE_OFFSET_PARAM_CHILD_PTR] = paramChildrenList.length;
+        for (const child of node.paramChildren) {
+          paramChildrenList.push(nodeToIndex.get(child)!);
+        }
+      } else {
+        nodeBuffer[base + NODE_OFFSET_PARAM_CHILD_PTR] = 0;
+      }
+
+      // Wildcard
+      if (node.wildcardChild) {
+        nodeBuffer[base + NODE_OFFSET_WILDCARD_CHILD_PTR] = nodeToIndex.get(node.wildcardChild)!;
+      } else {
+        nodeBuffer[base + NODE_OFFSET_WILDCARD_CHILD_PTR] = 0;
+      }
+
+      // Data (Name/Pattern/Segment)
+      if (node.kind === NodeKind.Param) {
+        const paramIdx = paramsList.length / PARAM_ENTRY_STRIDE;
+        paramsList.push(getStringId(node.segment));
+        let patternId = 0xffffffff;
+        if (node.patternSource) {
+          patternId = getPatternId(node.patternSource, node.pattern?.flags ?? '');
+        }
+        paramsList.push(patternId);
+        nodeBuffer[base + NODE_OFFSET_MATCH_FUNC] = paramIdx;
+      } else {
+        nodeBuffer[base + NODE_OFFSET_MATCH_FUNC] = getStringId(node.segment);
+      }
+    }
+
+    return {
+      nodeBuffer,
+      staticChildrenBuffer: Uint32Array.from(staticChildrenList),
+      paramChildrenBuffer: Uint32Array.from(paramChildrenList),
+      paramsBuffer: Uint32Array.from(paramsList),
+      methodsBuffer: Uint32Array.from(methodsList),
+      stringTable: stringList,
+      patterns,
+      rootIndex: 0,
+    };
+  }
+}

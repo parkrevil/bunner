@@ -1,6 +1,15 @@
-import { HttpMethod } from '../enums';
+// Internal Method Mapping for Binary Layout
+export const METHOD_OFFSET = {
+  GET: 0,
+  POST: 1,
+  PUT: 2,
+  PATCH: 3,
+  DELETE: 4,
+  OPTIONS: 5,
+  HEAD: 6,
+} as const;
 
-export { HttpMethod };
+export type InternalMethodId = (typeof METHOD_OFFSET)[keyof typeof METHOD_OFFSET];
 
 export enum NodeKind {
   Static = 'static',
@@ -67,7 +76,7 @@ export interface BinaryRouterLayout {
 
   /**
    * Methods Handler Table.
-   * Format: [MethodEnum, RouteKey, ...]
+   * Format: [MethodEnum, RouteId, ...]
    */
   readonly methodsBuffer: Uint32Array;
 

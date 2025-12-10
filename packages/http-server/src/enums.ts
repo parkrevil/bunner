@@ -1,18 +1,4 @@
 /**
- * Http Method
- * @description The HTTP method
- */
-export enum HttpMethod {
-  Get,
-  Post,
-  Put,
-  Patch,
-  Delete,
-  Options,
-  Head,
-}
-
-/**
  * HTTP Protocol
  * @description The HTTP protocol
  */

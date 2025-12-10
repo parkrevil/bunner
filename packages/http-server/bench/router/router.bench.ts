@@ -1,9 +1,12 @@
 import { bench, group, run } from 'mitata';
 
-import { HttpMethod } from '../../src/enums';
-import type { RouterInstance } from '../../src/router/interfaces';
-import { RadixRouterBuilder } from '../../src/router/router';
-import type { RouteMatch, RouterOptions } from '../../src/router/types';
+import { Router } from '../../src/router/router';
+import type { RouterOptions, Handler } from '../../src/router/types';
+import type { HttpMethod } from '../../src/types';
+
+// Adapting old types for bench
+type RouterInstance = Router<{ key: number | string; params: any }>;
+type RouteMatch = { key: number | string; params: any };
 
 type RouteSpec = {
   pattern: string;
@@ -43,8 +46,8 @@ const static100kSamples = toSamples(staticRoutes100k);
 const deepStaticSamples = toSamples(deepStaticRoutes);
 const dynamicParamSamples = toSamples(dynamicParamRoutes);
 
-const httpMethods = Object.values(HttpMethod).filter((value): value is HttpMethod => typeof value === 'number');
-const methodLabels = httpMethods.map(method => ({ method, label: HttpMethod[method] ?? `M${method}` }));
+const httpMethods: HttpMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'];
+const methodLabels = httpMethods.map(method => ({ method, label: method }));
 
 const benchFilterPattern = process.env.ROUTER_BENCH_FILTER;
 const benchFormat = process.env.ROUTER_BENCH_FORMAT;
@@ -96,7 +99,7 @@ const routerRegexHeavy = buildRouter([
 const routerTraversalLoose = buildRouter(['/files/*path'], { blockTraversal: false });
 const routerCollapseLoose = buildRouter(['/collapse/slash/check'], { collapseSlashes: false });
 
-const longSegmentSample = `/long/${'a'.repeat(1024)}/${'b'.repeat(1024)}`;
+const longSegmentSample = `/ long / ${'a'.repeat(1024)}/${'b'.repeat(1024)}`;
 const unicodeSample = '/ユニコード/данные/😀/파일';
 const malformedEncodedSamples = ['/encoded/%ZZ', '/encoded/foo%2'];
 const segmentLimitBreachSample = `/limits/${'x'.repeat(512)}`;
@@ -108,23 +111,24 @@ const routerMalformedRaw = buildRouter(['/encoded/:value'], { decodeParams: fals
 const routerFailFastDecode = buildRouter(['/encoded/:value'], { decodeParams: true, failFastOnBadEncoding: true });
 const routerSegmentLimitTight = buildRouter(['/limits/:value'], { maxSegmentLength: 256 });
 
-const routerMultiMethod = buildRouterFromEntries(static1kPatterns.map(path => ({ methods: httpMethods, path })));
+const routerMultiMethod = buildRouterFromEntries(static1kPatterns.map((path, i) => ({ methods: httpMethods, path, key: i })));
 const routerPriorityStaticParam = buildRouterFromEntries([
-  { methods: HttpMethod.Get, path: '/priority/static' },
-  { methods: HttpMethod.Get, path: '/priority/:id' },
+  { methods: 'GET', path: '/priority/static', key: 1 },
+  { methods: 'GET', path: '/priority/:id', key: 2 },
 ]);
-const routerPriorityWildcard = buildRouterFromEntries([{ methods: HttpMethod.Get, path: '/priority/*rest' }]);
-const routerStarMethod = buildRouterFromEntries(static1kPatterns.map(path => ({ methods: '*', path })));
+const routerPriorityWildcard = buildRouterFromEntries([{ methods: 'GET', path: '/priority/*rest', key: 3 }]);
+
+const routerStarMethod = buildRouterFromEntries(static1kPatterns.map((path, i) => ({ methods: '*', path, key: i })));
 
 const static10kMissSamples = static10kSamples.map(sample => `${sample}-miss`);
 const dynamicParamMissSamples = dynamicParamSamples.map(sample => `${sample}-404`);
 
 // Warm cache-hit routers so subsequent benches measure steady-state behavior
-consumeMatchResult(routerCacheWarm.match(HttpMethod.Get, static10kSamples[0]!));
+consumeMatchResult(routerCacheWarm.match('GET', static10kSamples[0]!));
 for (let i = 0; i < 32; i++) {
   const sample = static10kSamples[i]!;
-  consumeMatchResult(routerCacheTiny.match(HttpMethod.Get, sample));
-  consumeMatchResult(routerCacheSmall.match(HttpMethod.Get, sample));
+  consumeMatchResult(routerCacheTiny.match('GET', sample));
+  consumeMatchResult(routerCacheSmall.match('GET', sample));
 }
 
 const roundStatic1k = makeRoundRobin(static1kSamples);
@@ -174,50 +178,46 @@ group('build / registration', () => {
   bench('build: add deep 10k static routes', () => consumeBuildResult(buildRouter(deepStaticPatterns)));
   bench('build: add 12k param-heavy routes', () => consumeBuildResult(buildRouter(dynamicParamPatterns)));
   bench('build: addAll multi-method 1k routes', () => {
-    const router = new RadixRouterBuilder();
-    const entries: Array<[HttpMethod, string]> = [];
+    const router = new Router<{ key: number; params: any }>();
+    const entries: Array<[HttpMethod, string, Handler<{ key: number; params: any }>]> = [];
+    let i = 0;
     for (const path of static1kPatterns) {
+      const key = i++;
       for (const method of httpMethods) {
-        entries.push([method, path]);
+        entries.push([method, path, params => ({ key, params })]);
       }
     }
     router.addAll(entries);
     return consumeBuildResult(router.build());
   });
   bench("build: add '*' multi-method 1k routes", () => {
-    const router = new RadixRouterBuilder();
+    const router = new Router<{ key: number; params: any }>();
+    let i = 0;
     for (const path of static1kPatterns) {
-      router.add('*', path);
+      const key = i++;
+      router.add('*', path, params => ({ key, params }));
     }
     return consumeBuildResult(router.build());
   });
 });
 
 group('match / static fast-path', () => {
-  bench('match: static 1k router', () => consumeMatchResult(routerStatic1k.match(HttpMethod.Get, roundStatic1k())));
-  bench('match: static 10k router', () => consumeMatchResult(routerStatic10k.match(HttpMethod.Get, roundStatic10k())));
-  bench('match: static 100k router', () => consumeMatchResult(routerStatic100k.match(HttpMethod.Get, roundStatic100k())));
-  bench('match: deep segments 10k router', () => consumeMatchResult(routerDeepStatic.match(HttpMethod.Get, roundDeepStatic())));
+  bench('match: static 1k router', () => consumeMatchResult(routerStatic1k.match('GET', roundStatic1k())));
+  bench('match: static 10k router', () => consumeMatchResult(routerStatic10k.match('GET', roundStatic10k())));
+  bench('match: static 100k router', () => consumeMatchResult(routerStatic100k.match('GET', roundStatic100k())));
+  bench('match: deep segments 10k router', () => consumeMatchResult(routerDeepStatic.match('GET', roundDeepStatic())));
 });
 
 group('match / normalization & options', () => {
   bench('match: case-insensitive fast-path', () =>
-    consumeMatchResult(routerCaseInsensitive.match(HttpMethod.Get, roundCaseInsensitive())),
+    consumeMatchResult(routerCaseInsensitive.match('GET', roundCaseInsensitive())),
   );
-  bench('match: ignoreTrailingSlash=true', () =>
-    consumeMatchResult(routerTrailingLoose.match(HttpMethod.Get, roundLooseSlash())),
-  );
-  bench('match: ignoreTrailingSlash=false', () =>
-    consumeMatchResult(routerTrailingStrict.match(HttpMethod.Get, roundStrictSlash())),
-  );
-  bench('match: collapseSlashes', () => consumeMatchResult(routerCollapseSlash.match(HttpMethod.Get, roundCollapseSlash())));
-  bench('match: blockTraversal', () => consumeMatchResult(routerTraversalGuard.match(HttpMethod.Get, roundTraversal())));
-  bench('match: collapseSlashes=false', () =>
-    consumeMatchResult(routerCollapseLoose.match(HttpMethod.Get, roundCollapseCanonical())),
-  );
-  bench('match: blockTraversal=false', () =>
-    consumeMatchResult(routerTraversalLoose.match(HttpMethod.Get, roundTraversalDirect())),
-  );
+  bench('match: ignoreTrailingSlash=true', () => consumeMatchResult(routerTrailingLoose.match('GET', roundLooseSlash())));
+  bench('match: ignoreTrailingSlash=false', () => consumeMatchResult(routerTrailingStrict.match('GET', roundStrictSlash())));
+  bench('match: collapseSlashes', () => consumeMatchResult(routerCollapseSlash.match('GET', roundCollapseSlash())));
+  bench('match: blockTraversal', () => consumeMatchResult(routerTraversalGuard.match('GET', roundTraversal())));
+  bench('match: collapseSlashes=false', () => consumeMatchResult(routerCollapseLoose.match('GET', roundCollapseCanonical())));
+  bench('match: blockTraversal=false', () => consumeMatchResult(routerTraversalLoose.match('GET', roundTraversalDirect())));
 });
 
 // Optional competitor benchmarks (find-my-way, trouter). Enable with ROUTER_COMPARE=1
@@ -315,68 +315,60 @@ group('match / method coverage & priority', () => {
   for (const { method, label } of methodLabels) {
     bench(`match: multi-method ${label}`, () => consumeMatchResult(routerMultiMethod.match(method, roundMultiMethod())));
   }
-  bench("match: wildcard '*' registration", () =>
-    consumeMatchResult(routerStarMethod.match(HttpMethod.Patch, roundMultiMethod())),
-  );
-  bench('match: priority static branch', () =>
-    consumeMatchResult(routerPriorityStaticParam.match(HttpMethod.Get, roundPriorityStatic())),
-  );
-  bench('match: priority param branch', () =>
-    consumeMatchResult(routerPriorityStaticParam.match(HttpMethod.Get, roundPriorityParam())),
-  );
+  bench("match: wildcard '*' registration", () => consumeMatchResult(routerStarMethod.match('PATCH', roundMultiMethod())));
+  bench('match: priority static branch', () => consumeMatchResult(routerPriorityStaticParam.match('GET', roundPriorityStatic())));
+  bench('match: priority param branch', () => consumeMatchResult(routerPriorityStaticParam.match('GET', roundPriorityParam())));
   bench('match: priority wildcard branch', () =>
-    consumeMatchResult(routerPriorityWildcard.match(HttpMethod.Get, roundPriorityWildcard())),
+    consumeMatchResult(routerPriorityWildcard.match('GET', roundPriorityWildcard())),
   );
 });
 
 group('match / misses', () => {
-  bench('match: static 10k miss', () => consumeMatchResult(routerStatic10k.match(HttpMethod.Get, roundStaticMiss())));
-  bench('match: param-heavy miss', () => consumeMatchResult(routerParamHeavy.match(HttpMethod.Get, roundParamMiss())));
+  bench('match: static 10k miss', () => consumeMatchResult(routerStatic10k.match('GET', roundStaticMiss())));
+  bench('match: param-heavy miss', () => consumeMatchResult(routerParamHeavy.match('GET', roundParamMiss())));
   bench(`match: param-heavy miss x${HOT_PARAM_ITERATIONS}`, () => {
     for (let i = 0; i < HOT_PARAM_ITERATIONS; i++) {
-      consumeMatchResult(routerParamHeavy.match(HttpMethod.Get, roundParamMiss()));
+      consumeMatchResult(routerParamHeavy.match('GET', roundParamMiss()));
     }
   });
 });
 
 group('match / cache behavior', () => {
-  bench('match: cache warm hits', () => consumeMatchResult(routerCacheWarm.match(HttpMethod.Get, roundCacheWarm())));
-  bench('match: cache size=1 mixed', () => consumeMatchResult(routerCacheTiny.match(HttpMethod.Get, roundCacheMixed())));
-  bench('match: cache size=64 mixed', () => consumeMatchResult(routerCacheSmall.match(HttpMethod.Get, roundCacheMixed())));
-  bench('match: cache thrash misses', () => consumeMatchResult(routerCacheThrash.match(HttpMethod.Get, roundCacheMiss())));
+  bench('match: cache warm hits', () => consumeMatchResult(routerCacheWarm.match('GET', roundCacheWarm())));
+  bench('match: cache size=1 mixed', () => consumeMatchResult(routerCacheTiny.match('GET', roundCacheMixed())));
+  bench('match: cache size=64 mixed', () => consumeMatchResult(routerCacheSmall.match('GET', roundCacheMixed())));
+  bench('match: cache thrash misses', () => consumeMatchResult(routerCacheThrash.match('GET', roundCacheMiss())));
 });
 
 group('match / params & wildcards', () => {
-  bench('match: param heavy (regex + multi)', () =>
-    consumeMatchResult(routerParamHeavy.match(HttpMethod.Get, roundParamHeavy())),
-  );
+  bench('match: param heavy (regex + multi)', () => consumeMatchResult(routerParamHeavy.match('GET', roundParamHeavy())));
   bench(`match: param heavy hot x${HOT_PARAM_ITERATIONS}`, () => {
     for (let i = 0; i < HOT_PARAM_ITERATIONS; i++) {
-      consumeMatchResult(routerParamHeavy.match(HttpMethod.Get, roundParamHeavy()));
+      consumeMatchResult(routerParamHeavy.match('GET', roundParamHeavy()));
     }
   });
-  bench('match: wildcard capture', () => consumeMatchResult(routerWildcard.match(HttpMethod.Get, roundWildcard())));
-  bench('match: optional params', () => consumeMatchResult(routerOptional.match(HttpMethod.Get, roundOptionalMissing())));
-  bench('match: multi-segment + params', () => consumeMatchResult(routerMultiParam.match(HttpMethod.Get, roundMultiParam())));
-  bench('match: decodeParams=true', () => consumeMatchResult(routerDecodeOn.match(HttpMethod.Get, roundDecodeEncoded())));
-  bench('match: decodeParams=false', () => consumeMatchResult(routerDecodeOff.match(HttpMethod.Get, roundDecodeEncoded())));
-  bench('match: regex-heavy route', () => consumeMatchResult(routerRegexHeavy.match(HttpMethod.Get, roundRegexHeavy())));
+  bench('match: wildcard capture', () => consumeMatchResult(routerWildcard.match('GET', roundWildcard())));
+  bench('match: optional params', () => consumeMatchResult(routerOptional.match('GET', roundOptionalMissing())));
+  bench('match: multi-segment + params', () => consumeMatchResult(routerMultiParam.match('GET', roundMultiParam())));
+  bench('match: decodeParams=true', () => consumeMatchResult(routerDecodeOn.match('GET', roundDecodeEncoded())));
+  bench('match: decodeParams=false', () => consumeMatchResult(routerDecodeOff.match('GET', roundDecodeEncoded())));
+  bench('match: regex-heavy route', () => consumeMatchResult(routerRegexHeavy.match('GET', roundRegexHeavy())));
 });
 
 group('match / extremes', () => {
-  bench('match: long segments (2KB)', () => consumeMatchResult(routerLongSegments.match(HttpMethod.Get, roundLongSegments())));
-  bench('match: unicode-heavy path', () => consumeMatchResult(routerUnicodeHeavy.match(HttpMethod.Get, roundUnicodeHeavy())));
+  bench('match: long segments (2KB)', () => consumeMatchResult(routerLongSegments.match('GET', roundLongSegments())));
+  bench('match: unicode-heavy path', () => consumeMatchResult(routerUnicodeHeavy.match('GET', roundUnicodeHeavy())));
   bench('match: malformed encoded param (decode)', () =>
-    consumeMatchResult(routerMalformedDecode.match(HttpMethod.Get, roundMalformedEncoded())),
+    consumeMatchResult(routerMalformedDecode.match('GET', roundMalformedEncoded())),
   );
   bench('match: malformed encoded param (raw)', () =>
-    consumeMatchResult(routerMalformedRaw.match(HttpMethod.Get, roundMalformedEncoded())),
+    consumeMatchResult(routerMalformedRaw.match('GET', roundMalformedEncoded())),
   );
   bench('match: malformed encoded param (fail-fast)', () =>
-    consumeMatchResultWithError(() => routerFailFastDecode.match(HttpMethod.Get, roundMalformedEncoded())),
+    consumeMatchResultWithError(() => routerFailFastDecode.match('GET', roundMalformedEncoded())),
   );
   bench('match: segment limit rejection (256)', () =>
-    consumeMatchResultWithError(() => routerSegmentLimitTight.match(HttpMethod.Get, roundSegmentLimitBreach())),
+    consumeMatchResultWithError(() => routerSegmentLimitTight.match('GET', roundSegmentLimitBreach())),
   );
 });
 
@@ -393,19 +385,22 @@ await run(mitataOptions);
 flushSink();
 
 function buildRouter(paths: string[], options?: Partial<RouterOptions>): RouterInstance {
-  const router = new RadixRouterBuilder({ maxSegmentLength: 5000, ...options });
+  const router = new Router({ maxSegmentLength: 5000, ...options });
+  let i = 0;
   for (const path of paths) {
-    router.add(HttpMethod.Get, path);
+    const key = i++;
+    router.add('GET', path, params => ({ key, params }));
   }
   return router.build();
 }
 
-type RouterEntry = { path: string; methods: HttpMethod | HttpMethod[] | '*' };
+type RouterEntry = { path: string; methods: HttpMethod | HttpMethod[] | '*'; key?: number };
 
 function buildRouterFromEntries(entries: RouterEntry[], options?: Partial<RouterOptions>): RouterInstance {
-  const router = new RadixRouterBuilder(options);
+  const router = new Router(options);
   for (const entry of entries) {
-    router.add(entry.methods, entry.path);
+    const key = entry.key ?? 0;
+    router.add(entry.methods, entry.path, params => ({ key, params }));
   }
   return router.build();
 }
@@ -545,7 +540,7 @@ function measureLayoutGc(
   router: RouterInstance,
   samples: string[],
   iterations: number,
-  method: HttpMethod = HttpMethod.Get,
+  method: HttpMethod = 'GET',
 ): void {
   const sampler = makeRoundRobin(samples);
   const runOptionalGc = (): void => {

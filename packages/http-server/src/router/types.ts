@@ -1,6 +1,6 @@
-import type { HttpMethod } from './schema';
+import type { HttpMethod } from '../types';
 
-export type RouteKey = number;
+// RouteId is internal only now
 
 export interface RouterOptions {
   ignoreTrailingSlash?: boolean;
@@ -86,29 +86,27 @@ export interface SuffixPlan {
 
 export type RouteParams = Record<string, string | undefined>;
 
-export interface RouteMatch {
-  key: RouteKey;
-  params: RouteParams;
-  meta?: RouteMatchMeta;
-}
-
-export interface RouteMatchMeta {
+// Internal Result types
+export interface MatchResultMeta {
   readonly source?: 'static-fast' | 'cache' | 'dynamic';
 }
 
 export interface DynamicMatchResult {
-  key: RouteKey;
+  handlerIndex: number;
   params: RouteParams;
   snapshot?: Array<[string, string | undefined]>;
 }
 
+// Handler Type
+export type Handler<R = any> = (params: RouteParams, meta: MatchResultMeta) => R;
+
 // Router Interfaces
-export interface RouterInstance {
-  match(method: HttpMethod, path: string): RouteMatch | null;
+export interface RouterInstance<R> {
+  match(method: HttpMethod, path: string): R | null;
 }
 
-export interface RouterBuilder {
-  add(method: HttpMethod | HttpMethod[] | '*', path: string): RouteKey | RouteKey[];
-  addAll(entries: Array<[HttpMethod, string]>): RouteKey[];
-  build(): RouterInstance;
+export interface RouterBuilder<R> {
+  add(method: HttpMethod | HttpMethod[] | '*', path: string, handler: Handler<R>): void;
+  addAll(entries: Array<[HttpMethod, string, Handler<R>]>): void;
+  build(): RouterInstance<R>;
 }

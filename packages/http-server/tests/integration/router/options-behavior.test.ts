@@ -1,115 +1,117 @@
 import { describe, it, expect } from 'bun:test';
 
-import { HttpMethod } from '../../../src/enums';
-import type { RouterInstance } from '../../../src/router/interfaces';
-import { RadixRouterBuilder } from '../../../src/router/router';
-import type { RouteKey } from '../../../src/types';
+import { Router } from '../../../src/router/router';
+import type { HttpMethod } from '../../../src/types';
 
-describe('RadixRouter :: options', () => {
-  const buildRouter = (
-    configure: (builder: RadixRouterBuilder) => void,
-    options?: ConstructorParameters<typeof RadixRouterBuilder>[0],
-  ): RouterInstance => {
-    const builder = new RadixRouterBuilder(options);
+describe('Router :: options', () => {
+  const buildRouter = (configure: (builder: Router) => void, options?: ConstructorParameters<typeof Router>[0]): Router => {
+    const builder = new Router(options);
     configure(builder);
     return builder.build();
   };
 
   describe('ignoreTrailingSlash', () => {
-    it('should allow trailing slashes by default', () => {
-      const router = buildRouter(builder => {
-        builder.add(HttpMethod.Get, '/users');
-      });
+    it('should ignore trailing slash by default', () => {
+      const builder = new Router();
+      builder.add('GET', '/foo', () => 'ok');
+      const router = builder.build();
 
-      expect(router.match(HttpMethod.Get, '/users/')).not.toBeNull();
+      expect(router.match('GET', '/foo/')).not.toBeNull();
+      expect(router.match('GET', '/foo')).not.toBeNull();
     });
 
     it('should treat trailing slashes as distinct when disabled', () => {
-      let key!: RouteKey;
       const router = buildRouter(
         builder => {
-          key = builder.add(HttpMethod.Get, '/users') as RouteKey;
+          builder.add('GET', '/users', () => 'user_route');
         },
         { ignoreTrailingSlash: false },
       );
 
-      expect(router.match(HttpMethod.Get, '/users')?.key).toBe(key);
-      expect(router.match(HttpMethod.Get, '/users/')).toBeNull();
+      expect(router.match('GET', '/users')).toBe('user_route');
+      expect(router.match('GET', '/users/')).toBeNull();
+    });
+
+    it('should respect false setting', () => {
+      const builder = new Router({ ignoreTrailingSlash: false });
+      builder.add('GET', '/foo', () => 'ok');
+      const router = builder.build();
+
+      expect(router.match('GET', '/foo/')).toBeNull();
+      expect(router.match('GET', '/foo')).not.toBeNull();
     });
   });
 
   describe('collapseSlashes', () => {
     it('should normalize duplicate slashes by default', () => {
-      let key!: RouteKey;
       const router = buildRouter(builder => {
-        key = builder.add(HttpMethod.Get, '/multi/slash/path') as RouteKey;
+        builder.add('GET', '/multi/slash/path', () => 'multi_slash');
       });
 
-      expect(router.match(HttpMethod.Get, '/multi//slash///path')?.key).toBe(key);
+      expect(router.match('GET', '/multi//slash///path')).toBe('multi_slash');
     });
 
     it('should keep duplicate slashes when disabled', () => {
-      let key!: RouteKey;
       const router = buildRouter(
         builder => {
-          key = builder.add(HttpMethod.Get, '/raw//path') as RouteKey;
+          builder.add('GET', '/raw//path', () => 'raw_path');
         },
         { collapseSlashes: false, blockTraversal: false },
       );
 
-      expect(router.match(HttpMethod.Get, '/raw//path')?.key).toBe(key);
-      expect(router.match(HttpMethod.Get, '/raw/path')).toBeNull();
+      expect(router.match('GET', '/raw//path')).toBe('raw_path');
+      expect(router.match('GET', '/raw/path')).toBeNull();
     });
   });
 
   describe('caseSensitive', () => {
-    it('should distinguish case when enabled', () => {
-      const router = buildRouter(builder => {
-        builder.add(HttpMethod.Get, '/Users');
-      });
+    it('should be case sensitive by default', () => {
+      const builder = new Router();
+      builder.add('GET', '/Foo', () => 'ok');
+      const router = builder.build();
 
-      expect(router.match(HttpMethod.Get, '/users')).toBeNull();
+      expect(router.match('GET', '/foo')).toBeNull();
+      expect(router.match('GET', '/Foo')).not.toBeNull();
     });
 
     it('should ignore case when disabled', () => {
-      let key!: RouteKey;
       const router = buildRouter(
         builder => {
-          key = builder.add(HttpMethod.Get, '/Users') as RouteKey;
+          builder.add('GET', '/Users', () => 'users_route');
         },
         { caseSensitive: false },
       );
 
-      expect(router.match(HttpMethod.Get, '/users')?.key).toBe(key);
+      expect(router.match('GET', '/users')).toBe('users_route');
     });
   });
 
   describe('decodeParams', () => {
     it('should decode percent-encoded values when enabled', () => {
       const router = buildRouter(builder => {
-        builder.add(HttpMethod.Get, '/files/:name');
+        builder.add('GET', '/files/:name', params => ({ params }));
       });
 
-      expect(router.match(HttpMethod.Get, '/files/report%20Q1')?.params.name).toBe('report Q1');
+      expect(router.match('GET', '/files/report%20Q1')?.params.name).toBe('report Q1');
     });
 
     it('should keep raw values when disabled', () => {
       const router = buildRouter(
         builder => {
-          builder.add(HttpMethod.Get, '/files/:name');
+          builder.add('GET', '/files/:name', params => ({ params }));
         },
         { decodeParams: false },
       );
 
-      expect(router.match(HttpMethod.Get, '/files/report%20Q1')?.params.name).toBe('report%20Q1');
+      expect(router.match('GET', '/files/report%20Q1')?.params.name).toBe('report%20Q1');
     });
 
     it('should fall back to the raw string on invalid encoding', () => {
       const router = buildRouter(builder => {
-        builder.add(HttpMethod.Get, '/files/:name');
+        builder.add('GET', '/files/:name', params => ({ params }));
       });
 
-      expect(router.match(HttpMethod.Get, '/files/report%2G')?.params.name).toBe('report%2G');
+      expect(router.match('GET', '/files/report%2G')?.params.name).toBe('report%2G');
     });
   });
 
@@ -117,54 +119,54 @@ describe('RadixRouter :: options', () => {
     it('should throw during match when malformed encoding is detected', () => {
       const router = buildRouter(
         builder => {
-          builder.add(HttpMethod.Get, '/files/:name');
+          builder.add('GET', '/files/:name', () => 'file_route');
         },
         { failFastOnBadEncoding: true },
       );
 
-      expect(() => router.match(HttpMethod.Get, '/files/report%2G')).toThrow(/malformed percent/i);
+      expect(() => router.match('GET', '/files/report%2G')).toThrow(/malformed percent/i);
     });
 
     it('should reject malformed route registrations when enabled', () => {
-      const builder = new RadixRouterBuilder({ failFastOnBadEncoding: true });
-      expect(() => builder.add(HttpMethod.Get, '/bad%2G/route')).toThrow(/malformed percent/i);
+      const builder = new Router({ failFastOnBadEncoding: true });
+      expect(() => builder.add('GET', '/bad%2G/route', () => 'bad_route')).toThrow(/malformed percent/i);
     });
 
     it('should continue to tolerate malformed encodings when disabled', () => {
       const router = buildRouter(builder => {
-        builder.add(HttpMethod.Get, '/files/:name');
+        builder.add('GET', '/files/:name', params => ({ params }));
       });
 
-      expect(router.match(HttpMethod.Get, '/files/report%2G')?.params.name).toBe('report%2G');
+      expect(router.match('GET', '/files/report%2G')?.params.name).toBe('report%2G');
     });
   });
 
   describe('maxSegmentLength', () => {
     it('should reject registration when a literal segment exceeds the configured limit', () => {
-      const builder = new RadixRouterBuilder({ maxSegmentLength: 16 });
-      expect(() => builder.add(HttpMethod.Get, `/files/${'a'.repeat(32)}`)).toThrow(/segment length/i);
+      const builder = new Router({ maxSegmentLength: 16 });
+      expect(() => builder.add('GET', `/files/${'a'.repeat(32)}`, () => 'long_segment')).toThrow(/segment length/i);
     });
 
     it('should throw during match when incoming segments exceed the configured limit', () => {
       const router = buildRouter(
         builder => {
-          builder.add(HttpMethod.Get, '/files/:name');
+          builder.add('GET', '/files/:name', () => 'file_route');
         },
         { maxSegmentLength: 16 },
       );
 
-      expect(() => router.match(HttpMethod.Get, `/files/${'b'.repeat(64)}`)).toThrow(/segment length/i);
+      expect(() => router.match('GET', `/files/${'b'.repeat(64)}`)).toThrow(/segment length/i);
     });
 
     it('should allow longer segments when the limit is raised', () => {
       const router = buildRouter(
         builder => {
-          builder.add(HttpMethod.Get, `/files/${'a'.repeat(9000)}`);
+          builder.add('GET', `/files/${'a'.repeat(9000)}`, () => 'long_segment');
         },
         { maxSegmentLength: 10000 },
       );
 
-      expect(router.match(HttpMethod.Get, `/files/${'a'.repeat(9000)}`)).not.toBeNull();
+      expect(router.match('GET', `/files/${'a'.repeat(9000)}`)).not.toBeNull();
     });
   });
 
@@ -172,99 +174,117 @@ describe('RadixRouter :: options', () => {
     it('should preserve encoded slashes when configured', () => {
       const router = buildRouter(
         builder => {
-          builder.add(HttpMethod.Get, '/files/:name');
+          builder.add('GET', '/files/:name', params => ({ params }));
         },
         { encodedSlashBehavior: 'preserve' },
       );
 
-      const match = router.match(HttpMethod.Get, '/files/foo%2Fbar%5Cbaz');
+      const match = router.match('GET', '/files/foo%2Fbar%5Cbaz');
       expect(match?.params.name).toBe('foo%2Fbar%5Cbaz');
     });
 
     it('should reject encoded slashes when configured', () => {
       const router = buildRouter(
         builder => {
-          builder.add(HttpMethod.Get, '/files/:name');
+          builder.add('GET', '/files/:name', () => 'file_route');
         },
         { encodedSlashBehavior: 'reject' },
       );
 
-      expect(() => router.match(HttpMethod.Get, '/files/foo%2Fbar')).toThrow(/encoded slash/i);
+      expect(() => router.match('GET', '/files/foo%2Fbar')).toThrow(/encoded slash/i);
     });
   });
 
   describe('blockTraversal', () => {
     it('should remove dot segments when enabled', () => {
-      let key!: RouteKey;
       const router = buildRouter(
         builder => {
-          key = builder.add(HttpMethod.Get, '/safe/path') as RouteKey;
+          builder.add('GET', '/safe/path', () => 'safe_path');
         },
         { blockTraversal: true },
       );
 
-      expect(router.match(HttpMethod.Get, '/foo/../safe/path')?.key).toBe(key);
+      expect(router.match('GET', '/foo/../safe/path')).toBe('safe_path');
     });
 
     it('should fail to match when dot segments remain and blocking is disabled', () => {
       const router = buildRouter(
         builder => {
-          builder.add(HttpMethod.Get, '/safe/path');
+          builder.add('GET', '/safe/path', () => 'safe_path');
         },
         { blockTraversal: false },
       );
 
-      expect(router.match(HttpMethod.Get, '/foo/../safe/path')).toBeNull();
+      expect(router.match('GET', '/foo/../safe/path')).toBeNull();
     });
 
     it('should treat encoded dot segments as traversal attempts when enabled', () => {
-      let key!: RouteKey;
       const router = buildRouter(
         builder => {
-          key = builder.add(HttpMethod.Get, '/secure/area') as RouteKey;
+          builder.add('GET', '/secure/area', () => 'secure_area');
         },
         { blockTraversal: true },
       );
 
-      expect(router.match(HttpMethod.Get, '/tmp/%2e%2e/secure/area')?.key).toBe(key);
-      expect(router.match(HttpMethod.Get, '/tmp/%2E%2E/secure/area')?.key).toBe(key);
+      expect(router.match('GET', '/tmp/%2e%2e/secure/area')).toBe('secure_area');
+      expect(router.match('GET', '/tmp/%2E%2E/secure/area')).toBe('secure_area');
     });
 
     it('should keep encoded dot segments literal when blocking is disabled', () => {
       const router = buildRouter(
         builder => {
-          builder.add(HttpMethod.Get, '/secure/area');
+          builder.add('GET', '/secure/area', () => 'secure_area');
         },
         { blockTraversal: false },
       );
 
-      expect(router.match(HttpMethod.Get, '/tmp/%2e%2e/secure/area')).toBeNull();
+      expect(router.match('GET', '/tmp/%2e%2e/secure/area')).toBeNull();
     });
   });
 
   describe('normalization interplay', () => {
     it('should still normalize trailing slashes when other transforms are disabled', () => {
-      let key!: RouteKey;
       const router = buildRouter(
         builder => {
-          key = builder.add(HttpMethod.Get, '/literal/path') as RouteKey;
+          builder.add('GET', '/literal/path', () => 'literal_path');
         },
         { collapseSlashes: false, blockTraversal: false, ignoreTrailingSlash: true },
       );
 
-      expect(router.match(HttpMethod.Get, '/literal/path')?.key).toBe(key);
-      expect(router.match(HttpMethod.Get, '/literal/path/')?.key).toBe(key);
-      expect(router.match(HttpMethod.Get, '/literal//path/')).toBeNull();
+      expect(router.match('GET', '/literal/path')).toBe('literal_path');
+      expect(router.match('GET', '/literal/path/')).toBe('literal_path');
+      expect(router.match('GET', '/literal//path/')).toBeNull();
+    });
+  });
+
+  describe('optionalParamBehavior', () => {
+    it('should set undefined by default', () => {
+      const builder = new Router();
+      builder.add('GET', '/:a/:b?', params => ({ params }));
+      const router = builder.build();
+
+      const match = router.match('GET', '/foo');
+      expect(match?.params['b']).toBeUndefined();
+      expect(Object.keys(match?.params || {}).includes('b')).toBeTrue();
+    });
+
+    it('should omit param when behavior is omit', () => {
+      const builder = new Router({ optionalParamBehavior: 'omit' });
+      builder.add('GET', '/:a/:b?', params => ({ params }));
+      const router = builder.build();
+
+      const match = router.match('GET', '/foo');
+      expect(match?.params).not.toHaveProperty('b');
     });
   });
 
   describe('enableCache & cacheSize', () => {
-    const getCacheStore = (router: RouterInstance): { get(key: string): unknown; delete(key: string): boolean } | undefined => {
+    const getCacheStore = (router: Router<any>): any => {
       // New Architecture: Access private 'cache' field directly
-      // @ts-expect-error: Testing behavior
-      return router.cache;
+
+      return (router as any).cache;
     };
-    const hasCacheRecord = (router: RouterInstance, key: string): boolean => {
+    const hasCacheRecord = (router: Router<any>, key: string): boolean => {
       const cache = getCacheStore(router);
       if (!cache) {
         return false;
@@ -279,47 +299,47 @@ describe('RadixRouter :: options', () => {
     it('should clone params when returning cached hits', () => {
       const router = buildRouter(
         builder => {
-          builder.add(HttpMethod.Get, '/cache/:id');
+          builder.add('GET', '/cache/:id', params => ({ params }));
         },
         { enableCache: true },
       );
 
-      const first = router.match(HttpMethod.Get, '/cache/alpha');
+      const first = router.match('GET', '/cache/alpha');
       first!.params.id = 'mutated';
 
-      const second = router.match(HttpMethod.Get, '/cache/alpha');
+      const second = router.match('GET', '/cache/alpha');
       expect(second?.params.id).toBe('alpha');
     });
 
     it('should expose cache hits via match metadata', () => {
       const router = buildRouter(
         builder => {
-          builder.add(HttpMethod.Get, '/cache/:id');
+          builder.add('GET', '/cache/:id', (params, meta) => ({ params, meta }));
         },
         { enableCache: true },
       );
 
-      const cold = router.match(HttpMethod.Get, '/cache/meta');
-      expect(cold?.meta?.source).toBeUndefined();
+      const cold = router.match('GET', '/cache/meta');
+      expect(cold?.meta?.source).toBe('dynamic');
 
-      const warm = router.match(HttpMethod.Get, '/cache/meta');
+      const warm = router.match('GET', '/cache/meta');
       expect(warm?.meta?.source).toBe('cache');
     });
 
     it('should cache null misses as well', () => {
       const router = buildRouter(
         builder => {
-          builder.add(HttpMethod.Get, '/cache/:id');
+          builder.add('GET', '/cache/:id', () => 'cache_route');
         },
         { enableCache: true, cacheSize: 8 },
       );
 
-      expect(router.match(HttpMethod.Get, '/cache/beta/extra')).toBeNull();
-      expect(router.match(HttpMethod.Get, '/cache/beta/extra')).toBeNull();
-      expect(router.match(HttpMethod.Get, '/cache/beta/extra')).toBeNull();
+      expect(router.match('GET', '/cache/beta/extra')).toBeNull();
+      expect(router.match('GET', '/cache/beta/extra')).toBeNull();
+      expect(router.match('GET', '/cache/beta/extra')).toBeNull();
 
-      const cacheKey = formatCacheKey(HttpMethod.Get, '/cache/beta/extra');
-      // @ts-expect-error: Testing behavior
+      const cacheKey = formatCacheKey('GET', '/cache/beta/extra');
+
       const missRecord = getCacheStore(router)?.get(cacheKey);
       expect(missRecord).toBeNull();
     });
@@ -327,17 +347,17 @@ describe('RadixRouter :: options', () => {
     it('should keep unrelated cached hits warm across different routes', () => {
       const router = buildRouter(
         builder => {
-          builder.add(HttpMethod.Get, '/users/:id');
-          builder.add(HttpMethod.Get, '/reports/:name');
+          builder.add('GET', '/users/:id', () => 'h1');
+          builder.add('GET', '/reports/:name', () => 'h2');
         },
         { enableCache: true },
       );
 
-      expect(router.match(HttpMethod.Get, '/users/alpha')).not.toBeNull();
-      expect(router.match(HttpMethod.Get, '/reports/earnings')).not.toBeNull();
+      expect(router.match('GET', '/users/alpha')).toBe('h1');
+      expect(router.match('GET', '/reports/earnings')).toBe('h2');
 
-      expect(hasCacheRecord(router, formatCacheKey(HttpMethod.Get, '/users/alpha'))).toBe(true);
-      expect(hasCacheRecord(router, formatCacheKey(HttpMethod.Get, '/reports/earnings'))).toBe(true);
+      expect(hasCacheRecord(router, formatCacheKey('GET', '/users/alpha'))).toBe(true);
+      expect(hasCacheRecord(router, formatCacheKey('GET', '/reports/earnings'))).toBe(true);
     });
 
     it('should not reuse stale miss entries across builds', () => {
@@ -347,19 +367,18 @@ describe('RadixRouter :: options', () => {
         },
         { enableCache: true },
       );
-      expect(missOnly.match(HttpMethod.Get, '/users/42')).toBeNull();
-      // @ts-expect-error: Testing behavior
-      const missRecord = getCacheStore(missOnly)?.get(formatCacheKey(HttpMethod.Get, '/users/42'));
+      expect(missOnly.match('GET', '/users/42')).toBeNull();
+      const missRecord = getCacheStore(missOnly)?.get(formatCacheKey('GET', '/users/42'));
       expect(missRecord).toBeNull();
 
       const routed = buildRouter(
         builder => {
-          builder.add(HttpMethod.Get, '/users/:id');
+          builder.add('GET', '/users/:id', params => ({ params }));
         },
         { enableCache: true },
       );
 
-      const resolved = routed.match(HttpMethod.Get, '/users/42');
+      const resolved = routed.match('GET', '/users/42');
       expect(resolved?.params.id).toBe('42');
     });
   });
