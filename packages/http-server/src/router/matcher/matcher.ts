@@ -45,7 +45,8 @@ export class Matcher {
   private readonly paramChildrenBuffer: Uint32Array;
   private readonly paramsBuffer: Uint32Array;
   private readonly methodsBuffer: Uint32Array;
-  private readonly stringTable: ReadonlyArray<string>;
+  private readonly stringTable: Uint8Array;
+  private readonly stringOffsets: Uint32Array;
   private readonly rootIndex: number;
 
   private readonly patternTesters: ReadonlyArray<PatternTesterFn | undefined>;
@@ -58,6 +59,11 @@ export class Matcher {
   private paramValues: string[] = new Array(MAX_PARAMS);
   private paramCache: string[] = new Array(MAX_STACK_DEPTH);
   private paramCount = 0;
+
+  // Native Decoder
+  private readonly decoder = new TextDecoder();
+  private readonly boundGetString: (id: number) => string;
+  private readonly decodedStrings: string[];
 
   // Current Request Context
   private methodCode: number = 0;
@@ -79,6 +85,7 @@ export class Matcher {
     this.paramsBuffer = layout.paramsBuffer;
     this.methodsBuffer = layout.methodsBuffer;
     this.stringTable = layout.stringTable;
+    this.stringOffsets = layout.stringOffsets;
     this.rootIndex = layout.rootIndex;
 
     this.patternTesters = globalConfig.patternTesters;
@@ -87,6 +94,26 @@ export class Matcher {
 
     // Stack init
     this.stack = new Int32Array(MAX_STACK_DEPTH * FRAME_SIZE);
+
+    // Bind helper
+    this.boundGetString = this.getString.bind(this);
+    
+    // Init Cache (Lazy)
+    // We don't know the size of stringTable items count easily without iterating, 
+    // but we can just use sparse array since IDs are sequential from Flattener.
+    this.decodedStrings = []; 
+  }
+
+  private getString(id: number): string {
+    const cached = this.decodedStrings[id];
+    if (cached !== undefined) {
+      return cached;
+    }
+    const start = this.stringOffsets[id]!;
+    const end = this.stringOffsets[id + 1]!;
+    const val = this.decoder.decode(this.stringTable.subarray(start, end));
+    this.decodedStrings[id] = val;
+    return val;
   }
 
   /**
@@ -244,7 +271,7 @@ export class Matcher {
           const staticPtr = this.nodeBuffer[base + NODE_OFFSET_STATIC_CHILD_PTR]!;
           const segment = this.segments[segIdx]!;
 
-          const childPtr = findStaticChild(staticPtr, staticCount, segment, this.staticChildrenBuffer, this.stringTable);
+          const childPtr = findStaticChild(staticPtr, staticCount, segment, this.staticChildrenBuffer, this.boundGetString);
 
           if (childPtr !== -1) {
             // Push Child Frame
@@ -283,7 +310,7 @@ export class Matcher {
         const nameID = this.paramsBuffer[pBase]!;
         const patternID = this.paramsBuffer[pBase + 1]!;
 
-        const name = this.stringTable[nameID]!;
+        const name = this.getString(nameID);
         const value = this.decodeAndCache(segIdx, decodeParams);
 
         if (value === undefined) {
@@ -319,16 +346,17 @@ export class Matcher {
         if (wildcardPtr !== 0) {
           const childBase = wildcardPtr * NODE_STRIDE;
           const nameID = this.nodeBuffer[childBase + NODE_OFFSET_MATCH_FUNC]!;
-          const name = this.stringTable[nameID]!;
+          const name = this.getString(nameID);
 
           // Capture Remainder
           let value: string;
           const suffixPlan = suffixPlanFactory ? suffixPlanFactory() : undefined;
-          if (suffixPlan) {
-            // Optimization for repeating lookups (omitted for clarity)
-            value = this.segments.slice(segIdx).join('/');
+          
+          if (suffixPlan && segIdx < suffixPlan.offsets.length) {
+             const offset = suffixPlan.offsets[segIdx];
+             value = suffixPlan.source.substring(offset!);
           } else {
-            value = this.segments.slice(segIdx).join('/');
+             value = this.segments.slice(segIdx).join('/');
           }
 
           this.paramNames[this.paramCount] = name;

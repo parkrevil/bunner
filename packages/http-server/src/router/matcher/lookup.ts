@@ -3,7 +3,7 @@ export function findStaticChild(
   staticCount: number,
   segment: string,
   staticChildrenBuffer: Uint32Array,
-  stringTable: ReadonlyArray<string>,
+  getString: (id: number) => string,
 ): number {
   // Optimization: Binary Search for static children
   // Threshold: 8 items. Below 8, linear scan is often faster due to locality/branch prediction.
@@ -12,7 +12,7 @@ export function findStaticChild(
     for (let i = 0; i < staticCount; i++) {
       const sID = staticChildrenBuffer[ptr]!;
       // Direct string comparison is fast in JS engine (interned strings)
-      if (stringTable[sID] === segment) {
+      if (getString(sID) === segment) {
         return staticChildrenBuffer[ptr + 1]!;
       }
       ptr += 2;
@@ -25,7 +25,7 @@ export function findStaticChild(
       const mid = (low + high) >>> 1;
       const ptr = staticPtr + (mid << 1);
       const sID = staticChildrenBuffer[ptr]!;
-      const midVal = stringTable[sID]!;
+      const midVal = getString(sID);
 
       if (midVal === segment) {
         return staticChildrenBuffer[ptr + 1]!;

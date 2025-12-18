@@ -16,7 +16,6 @@ import {
   NODE_SHIFT_PARAM_COUNT,
   NODE_SHIFT_WILDCARD_ORIGIN,
   NODE_STRIDE,
-  NODE_STRIDE,
   METHOD_OFFSET,
   PARAM_ENTRY_STRIDE,
 } from '../schema';
@@ -187,13 +186,35 @@ export class Flattener {
       }
     }
 
+    // Encode String Table
+    const encoder = new TextEncoder();
+    const offsets: number[] = [];
+    const encodedChunks: Uint8Array[] = [];
+    let currentOffset = 0;
+
+    for (const str of stringList) {
+      offsets.push(currentOffset);
+      const encoded = encoder.encode(str);
+      encodedChunks.push(encoded);
+      currentOffset += encoded.length;
+    }
+    offsets.push(currentOffset); // Sentinel
+
+    const stringTable = new Uint8Array(currentOffset);
+    let ptr = 0;
+    for (const chunk of encodedChunks) {
+      stringTable.set(chunk, ptr);
+      ptr += chunk.length;
+    }
+
     return {
       nodeBuffer,
       staticChildrenBuffer: Uint32Array.from(staticChildrenList),
       paramChildrenBuffer: Uint32Array.from(paramChildrenList),
       paramsBuffer: Uint32Array.from(paramsList),
       methodsBuffer: Uint32Array.from(methodsList),
-      stringTable: stringList,
+      stringTable,
+      stringOffsets: Uint32Array.from(offsets),
       patterns,
       rootIndex: 0,
     };

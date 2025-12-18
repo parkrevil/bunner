@@ -5,6 +5,7 @@ import { RouterCache } from './cache';
 import { Matcher } from './matcher';
 import { buildPatternTester } from './matcher/pattern-tester';
 import { Processor, type ProcessorConfig } from './processor';
+import { METHOD_OFFSET } from './schema';
 import type { DynamicMatchResult, Handler, MatchResultMeta, RouterOptions } from './types';
 
 /**
@@ -16,6 +17,8 @@ export class Router<R = any> {
   private readonly builder: Builder<Handler<R>>;
   private matcher: Matcher | null = null;
   private cache: RouterCache<DynamicMatchResult> | undefined;
+  // Key: normalized path, Value: Sparse array of handlers indexed by Method ID
+  private staticMap: Map<string, Handler<R>[]> = new Map();
 
   constructor(options: RouterOptions = {}) {
     this.options = options;
@@ -175,7 +178,42 @@ export class Router<R = any> {
     // Process Segments
     // "segments" are needed for Matcher.
     // `processor.process(searchPath)` returns string[].
-    const { segments, segmentDecodeHints, suffixPlan } = this.processor.normalize(searchPath);
+    const { segments, segmentDecodeHints, normalized } = this.processor.normalize(searchPath);
+
+    // Static Fast-path
+    const staticHandlers = this.staticMap.get(normalized);
+    if (staticHandlers) {
+      const handler = staticHandlers[METHOD_OFFSET[method]];
+      if (handler) {
+        return handler({}, { source: 'static-fast' });
+      }
+    }
+
+    // Lazy Suffix Plan
+    let suffixPlanCache: import('./types').SuffixPlan | undefined;
+    const suffixPlanFactory = () => {
+        if (suffixPlanCache) return suffixPlanCache;
+        const offsets = new Uint32Array(segments.length + 1);
+        let ptr = 0;
+        // normalized starts with '/' if searchPath was absolute or normalized to start with /
+        // normalized = '/' + segments.join('/')
+        // segments[0] starts at index 1.
+        
+        // Wait, normalize() implementation: '/' + ctx.segments.join('/')
+        // So offset for segment 0 is 1.
+        ptr = 1;
+        for (let i = 0; i < segments.length; i++) {
+            offsets[i] = ptr;
+            ptr += segments[i].length + 1; // +1 for next slash
+        }
+        offsets[segments.length] = ptr; // End
+        
+        suffixPlanCache = {
+            source: normalized,
+            offsets
+        };
+        return suffixPlanCache;
+    };
 
     // Dynamic Match
     const execResult = this.matcher!.exec(
@@ -184,7 +222,7 @@ export class Router<R = any> {
       segmentDecodeHints,
       this.options.decodeParams ?? true,
       false, // captureSnapshot
-      () => suffixPlan,
+      suffixPlanFactory,
     );
 
     const defaults = this.builder.config.optionalParamDefaults;
@@ -223,7 +261,31 @@ export class Router<R = any> {
   }
 
   private addOne(method: HttpMethod, path: string, handler: Handler<R>): void {
-    const { segments } = this.processor.normalize(path, false);
+    const { segments, normalized } = this.processor.normalize(path, false);
+    
+    // Check for dynamic segments (*, :)
+    let isDynamic = false;
+    for (const segment of segments) {
+      const firstChar = segment.charCodeAt(0);
+      if (firstChar === 42 || firstChar === 58) {
+        // '*' or ':'
+        isDynamic = true;
+        break;
+      }
+    }
+
+    if (!isDynamic) {
+        let handlers = this.staticMap.get(normalized);
+        if (!handlers) {
+            handlers = [];
+            this.staticMap.set(normalized, handlers);
+        }
+        const mOffset = METHOD_OFFSET[method];
+        if (mOffset !== undefined) {
+             handlers[mOffset] = handler;
+        }
+    }
+
     // Trailing slash handled by processor
     this.builder.add(method, segments, handler);
   }

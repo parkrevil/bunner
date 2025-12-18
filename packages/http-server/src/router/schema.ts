@@ -82,9 +82,15 @@ export interface BinaryRouterLayout {
 
   /**
    * String table for segment values and param names.
-   * Indexed by integer IDs stored in buffers.
+   * Encoded as UTF-8 bytes in a single buffer.
    */
-  readonly stringTable: ReadonlyArray<string>;
+  readonly stringTable: Uint8Array;
+
+  /**
+   * Offsets for the string table.
+   * Format: [Offset0, Offset1, ... OffsetN, TotalLength]
+   */
+  readonly stringOffsets: Uint32Array;
 
   /**
    * Regex patterns.
