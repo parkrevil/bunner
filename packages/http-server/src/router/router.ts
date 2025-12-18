@@ -143,15 +143,21 @@ export class Router<R = any> {
     }
 
     // Case sensitivity
-    // Handled by builder structure (normalized to lower case if insensitive).
-    // But input path matching relies on `Matcher` walking. `Matcher` compares segments.
-    // If insensitive, `Matcher` logic should have handled it?
-    // Actually `Matcher` compares strictly against node segments.
-    // If insensitive, builder lowercased keys.
-    // Input must be lowercased if insensitive?
-    // `this.options.caseSensitive` defaults true.
     if (this.options.caseSensitive === false) {
       searchPath = searchPath.toLowerCase();
+    }
+
+    // Optimization: Raw Static Lookup
+    // If the path is "clean" (already normalized), we can skip Processor.normalize().
+    // We only check if searchPath starts with '/' to match our normalized keys.
+    if (searchPath.charCodeAt(0) === 47 /* '/' */) {
+        const staticHandlers = this.staticMap.get(searchPath);
+        if (staticHandlers) {
+            const handler = staticHandlers[METHOD_OFFSET[method]];
+            if (handler) {
+                return handler({}, { source: 'static-fast' });
+            }
+        }
     }
 
     // Cache Lookup
@@ -167,6 +173,7 @@ export class Router<R = any> {
         if (!handler) {
           return null;
         }
+        // Params are cloned from cache for safety (users might mutate)
         return handler({ ...cached.params }, { source: 'cache' });
       }
     }
@@ -180,13 +187,16 @@ export class Router<R = any> {
     // `processor.process(searchPath)` returns string[].
     const { segments, segmentDecodeHints, normalized } = this.processor.normalize(searchPath);
 
-    // Static Fast-path
-    const staticHandlers = this.staticMap.get(normalized);
-    if (staticHandlers) {
-      const handler = staticHandlers[METHOD_OFFSET[method]];
-      if (handler) {
-        return handler({}, { source: 'static-fast' });
-      }
+    // Static Fast-path (Fallback for normalized paths)
+    // Only check if normalized != searchPath (otherwise we already checked)
+    if (normalized !== searchPath) {
+        const staticHandlers = this.staticMap.get(normalized);
+        if (staticHandlers) {
+            const handler = staticHandlers[METHOD_OFFSET[method]];
+            if (handler) {
+                return handler({}, { source: 'static-fast' });
+            }
+        }
     }
 
     // Lazy Suffix Plan
@@ -244,11 +254,14 @@ export class Router<R = any> {
         const cacheKey = `${method}:${searchPath}`;
         this.cache.set(cacheKey, {
           handlerIndex: execResult.handlerIndex,
-          params: execResult.params,
+          params: { ...execResult.params }, // Clone for safety
         });
       }
 
-      return handler({ ...execResult.params }, meta);
+      // Optimization: Reuse params object directly.
+      // Matcher creates a fresh object for us, and we are double-checking usage.
+      // If we assumed handler doesn't mutate / expects clean object, we pass it.
+      return handler(execResult.params, meta);
     }
 
     // Cache Miss

@@ -152,7 +152,8 @@ export class Matcher {
     }
 
     // Build Result
-    const bag = Object.create(null) as RouteParams;
+    // Build Result
+    const bag: RouteParams = {};
     let snapshot: Array<[string, string | undefined]> | undefined;
     if (captureSnapshot) {
       snapshot = new Array(this.paramCount);
