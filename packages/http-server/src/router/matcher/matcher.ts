@@ -20,7 +20,7 @@ import {
   PARAM_ENTRY_STRIDE,
   METHOD_OFFSET,
 } from '../schema';
-import type { DynamicMatchResult, EncodedSlashBehavior, PatternTesterFn, RouteParams, SuffixPlan } from '../types';
+import type { EncodedSlashBehavior, PatternTesterFn, RouteParams } from '../types';
 
 import {
   STAGE_ENTER,
@@ -68,6 +68,15 @@ export class Matcher {
   private segments!: string[];
   private segmentHints: Uint8Array | undefined;
 
+  // Suffix/Wildcard Optimization State
+  private normalizedPath!: string;
+  private suffixOffsets: Uint32Array | null = null;
+
+  // Results
+  private resultHandlerIndex: number = -1;
+  private resultParams: RouteParams | null = null;
+  private resultSnapshot: Array<[string, string | undefined]> | undefined;
+
   constructor(
     layout: BinaryRouterLayout,
     globalConfig: {
@@ -94,50 +103,31 @@ export class Matcher {
     this.stack = new Int32Array(MAX_STACK_DEPTH * FRAME_SIZE);
 
     // Init Cache (Lazy)
-    
-    // Init Cache (Lazy)
-    // We don't know the size of stringTable items count easily without iterating, 
-    // but we can just use sparse array since IDs are sequential from Flattener.
-    this.decodedStrings = []; 
-  }
-
-  private getString(id: number): string {
-    const cached = this.decodedStrings[id];
-    if (cached !== undefined) {
-      return cached;
-    }
-    const start = this.stringOffsets[id]!;
-    const end = this.stringOffsets[id + 1]!;
-    const val = this.decoder.decode(this.stringTable.subarray(start, end));
-    this.decodedStrings[id] = val;
-    return val;
+    this.decodedStrings = [];
   }
 
   /**
    * Executes the matching process for a given path.
-   * @param method The HTTP Method code.
-   * @param segments The tokenized path segments.
-   * @param segmentHints Optional encoding hints for segments.
-   * @param decodeParams Whether to decode URL-encoded parameters.
-   * @param captureSnapshot Whether to capture a snapshot of params for debugging/observability.
-   * @param suffixPlanFactory Optional factory for suffix matching strategies (optimization).
+   * NO ALLOCATION for result object (Stateful API).
    */
-  public exec(
+  public match(
     method: HttpMethod,
     segments: string[],
+    normalizedPath: string,
     segmentHints: Uint8Array | undefined,
     decodeParams: boolean,
     captureSnapshot: boolean,
-    suffixPlanFactory?: () => SuffixPlan | undefined,
-  ): DynamicMatchResult | null {
+  ): boolean {
     // Reset State
     const code = METHOD_OFFSET[method];
     if (code === undefined) {
-      return null; // Unknown method
+      return false; // Unknown method
     }
     this.methodCode = code;
     this.segments = segments;
+    this.normalizedPath = normalizedPath;
     this.segmentHints = segmentHints;
+    this.suffixOffsets = null; // Lazy init
     this.paramCount = 0;
 
     // Clear Cache
@@ -145,13 +135,12 @@ export class Matcher {
       this.paramCache[i] = undefined as unknown as string;
     }
 
-    const handlerIndex = this.walk(decodeParams, suffixPlanFactory);
+    const handlerIndex = this.walk(decodeParams);
 
     if (handlerIndex === null) {
-      return null;
+      return false;
     }
 
-    // Build Result
     // Build Result
     const bag: RouteParams = {};
     let snapshot: Array<[string, string | undefined]> | undefined;
@@ -167,7 +156,54 @@ export class Matcher {
         snapshot[i] = [name, value];
       }
     }
-    return { handlerIndex, params: bag, snapshot };
+
+    this.resultHandlerIndex = handlerIndex;
+    this.resultParams = bag;
+    this.resultSnapshot = snapshot;
+    return true;
+  }
+
+  public getHandlerIndex(): number {
+    return this.resultHandlerIndex;
+  }
+
+  public getParams(): RouteParams {
+    return this.resultParams!;
+  }
+
+  public getSnapshot(): Array<[string, string | undefined]> | undefined {
+    return this.resultSnapshot;
+  }
+
+  private getString(id: number): string {
+    const cached = this.decodedStrings[id];
+    if (cached !== undefined) {
+      return cached;
+    }
+    const start = this.stringOffsets[id]!;
+    const end = this.stringOffsets[id + 1]!;
+    const val = this.decoder.decode(this.stringTable.subarray(start, end));
+    this.decodedStrings[id] = val;
+    return val;
+  }
+
+  private getSuffixValue(segIdx: number): string {
+    // Lazy calculate offsets if needed
+    if (!this.suffixOffsets) {
+      const segments = this.segments;
+      const offsets = new Uint32Array(segments.length + 1);
+      let ptr = 1; // normalized starts with '/'
+      for (let i = 0; i < segments.length; i++) {
+        offsets[i] = ptr;
+        ptr += segments[i].length + 1; // +1 for next slash
+      }
+      offsets[segments.length] = ptr;
+      this.suffixOffsets = offsets;
+    }
+
+    const offset = this.suffixOffsets[segIdx];
+    // Safely substring from normalized path
+    return this.normalizedPath.substring(offset!);
   }
 
   private decodeAndCache(index: number, decodeParams: boolean): string | undefined {
@@ -195,15 +231,8 @@ export class Matcher {
 
   /**
    * The core Stack Machine for traversing the Radix Tree.
-   * Uses a flat Int32Array stack to avoid recursion and object allocation overhead.
-   *
-   * States:
-   * - STAGE_ENTER: Entering a node. Checks for match if path ends, otherwise transitions to STATIC or WILDCARD.
-   * - STAGE_STATIC: Accessing static children table (Binary Search or Linear Scan).
-   * - STAGE_PARAM: Iterating over parameter children.
-   * - STAGE_WILDCARD: Checking wildcard match as last resort.
    */
-  private walk(decodeParams: boolean, suffixPlanFactory?: () => SuffixPlan | undefined): number | null {
+  private walk(decodeParams: boolean): number | null {
     let sp = 0;
 
     // Push Root Frame
@@ -241,12 +270,7 @@ export class Matcher {
               }
             }
           }
-          // Try Wildcard as fallback if method not found? No, if segments ended, wildcard only matches if it accepts empty,
-          // but wildcard children are distinct from "this node".
-          // Actually, if we are at end of path, we don't traverse children usually.
-          // BUT if the path ends here, and we didn't find a method, we might technically fall through to something else?
-          // In this implementation, if segments ended, we only look at THIS node methods.
-          this.stack[framePtr + FRAME_OFFSET_STAGE] = STAGE_WILDCARD; // This seems to imply we might accept empty wildcard match?
+          this.stack[framePtr + FRAME_OFFSET_STAGE] = STAGE_WILDCARD;
           continue;
         }
         this.stack[framePtr + FRAME_OFFSET_STAGE] = STAGE_STATIC;
@@ -347,15 +371,8 @@ export class Matcher {
           const name = this.getString(nameID);
 
           // Capture Remainder
-          let value: string;
-          const suffixPlan = suffixPlanFactory ? suffixPlanFactory() : undefined;
-          
-          if (suffixPlan && segIdx < suffixPlan.offsets.length) {
-             const offset = suffixPlan.offsets[segIdx];
-             value = suffixPlan.source.substring(offset!);
-          } else {
-             value = this.segments.slice(segIdx).join('/');
-          }
+          // Use internal getSuffixValue instead of suffixPlan closure
+          const value = this.getSuffixValue(segIdx);
 
           this.paramNames[this.paramCount] = name;
           this.paramValues[this.paramCount] = value;

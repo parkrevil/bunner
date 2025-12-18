@@ -151,13 +151,13 @@ export class Router<R = any> {
     // If the path is "clean" (already normalized), we can skip Processor.normalize().
     // We only check if searchPath starts with '/' to match our normalized keys.
     if (searchPath.charCodeAt(0) === 47 /* '/' */) {
-        const staticHandlers = this.staticMap.get(searchPath);
-        if (staticHandlers) {
-            const handler = staticHandlers[METHOD_OFFSET[method]];
-            if (handler) {
-                return handler({}, { source: 'static-fast' });
-            }
+      const staticHandlers = this.staticMap.get(searchPath);
+      if (staticHandlers) {
+        const handler = staticHandlers[METHOD_OFFSET[method]];
+        if (handler) {
+          return handler({}, { source: 'static-fast' });
         }
+      }
     }
 
     // Cache Lookup
@@ -190,59 +190,36 @@ export class Router<R = any> {
     // Static Fast-path (Fallback for normalized paths)
     // Only check if normalized != searchPath (otherwise we already checked)
     if (normalized !== searchPath) {
-        const staticHandlers = this.staticMap.get(normalized);
-        if (staticHandlers) {
-            const handler = staticHandlers[METHOD_OFFSET[method]];
-            if (handler) {
-                return handler({}, { source: 'static-fast' });
-            }
+      const staticHandlers = this.staticMap.get(normalized);
+      if (staticHandlers) {
+        const handler = staticHandlers[METHOD_OFFSET[method]];
+        if (handler) {
+          return handler({}, { source: 'static-fast' });
         }
+      }
     }
 
-    // Lazy Suffix Plan
-    let suffixPlanCache: import('./types').SuffixPlan | undefined;
-    const suffixPlanFactory = () => {
-        if (suffixPlanCache) return suffixPlanCache;
-        const offsets = new Uint32Array(segments.length + 1);
-        let ptr = 0;
-        // normalized starts with '/' if searchPath was absolute or normalized to start with /
-        // normalized = '/' + segments.join('/')
-        // segments[0] starts at index 1.
-        
-        // Wait, normalize() implementation: '/' + ctx.segments.join('/')
-        // So offset for segment 0 is 1.
-        ptr = 1;
-        for (let i = 0; i < segments.length; i++) {
-            offsets[i] = ptr;
-            ptr += segments[i].length + 1; // +1 for next slash
-        }
-        offsets[segments.length] = ptr; // End
-        
-        suffixPlanCache = {
-            source: normalized,
-            offsets
-        };
-        return suffixPlanCache;
-    };
-
     // Dynamic Match
-    const execResult = this.matcher!.exec(
+    const matched = this.matcher!.match(
       method,
       segments,
+      normalized,
       segmentDecodeHints,
       this.options.decodeParams ?? true,
       false, // captureSnapshot
-      suffixPlanFactory,
     );
 
-    const defaults = this.builder.config.optionalParamDefaults;
-    if (execResult && defaults) {
-      defaults.apply(execResult.handlerIndex, execResult.params);
-    }
+    if (matched) {
+      const handlerIndex = this.matcher!.getHandlerIndex();
+      const params = this.matcher!.getParams();
 
-    if (execResult) {
+      const defaults = this.builder.config.optionalParamDefaults;
+      if (defaults) {
+        defaults.apply(handlerIndex, params);
+      }
+
       // Execute Handler
-      const handler = this.builder.handlers[execResult.handlerIndex];
+      const handler = this.builder.handlers[handlerIndex];
       // Handlers are guaranteed by build process but array access returns potential undefined
       if (!handler) {
         return null;
@@ -253,15 +230,13 @@ export class Router<R = any> {
       if (this.cache) {
         const cacheKey = `${method}:${searchPath}`;
         this.cache.set(cacheKey, {
-          handlerIndex: execResult.handlerIndex,
-          params: { ...execResult.params }, // Clone for safety
+          handlerIndex: handlerIndex,
+          params: { ...params }, // Clone for safety
         });
       }
 
       // Optimization: Reuse params object directly.
-      // Matcher creates a fresh object for us, and we are double-checking usage.
-      // If we assumed handler doesn't mutate / expects clean object, we pass it.
-      return handler(execResult.params, meta);
+      return handler(params, meta);
     }
 
     // Cache Miss
@@ -275,7 +250,7 @@ export class Router<R = any> {
 
   private addOne(method: HttpMethod, path: string, handler: Handler<R>): void {
     const { segments, normalized } = this.processor.normalize(path, false);
-    
+
     // Check for dynamic segments (*, :)
     let isDynamic = false;
     for (const segment of segments) {
@@ -288,15 +263,15 @@ export class Router<R = any> {
     }
 
     if (!isDynamic) {
-        let handlers = this.staticMap.get(normalized);
-        if (!handlers) {
-            handlers = [];
-            this.staticMap.set(normalized, handlers);
-        }
-        const mOffset = METHOD_OFFSET[method];
-        if (mOffset !== undefined) {
-             handlers[mOffset] = handler;
-        }
+      let handlers = this.staticMap.get(normalized);
+      if (!handlers) {
+        handlers = [];
+        this.staticMap.set(normalized, handlers);
+      }
+      const mOffset = METHOD_OFFSET[method];
+      if (mOffset !== undefined) {
+        handlers[mOffset] = handler;
+      }
     }
 
     // Trailing slash handled by processor
