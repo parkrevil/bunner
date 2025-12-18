@@ -5,7 +5,6 @@ import {
   type BunnerApplicationNormalizedOptions,
   type RootModuleFile,
 } from '@bunner/core';
-import { Logger } from '@bunner/core-logger';
 import type { Server } from 'bun';
 import { StatusCodes } from 'http-status-codes';
 
@@ -17,7 +16,6 @@ import { getIps } from './utils';
 
 export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
   private readonly rootModuleFile: RootModuleFile;
-  private readonly logger = new Logger();
   private server: Server<unknown> | undefined;
   private workerPool: WorkerPool<BunnerHttpWorker>;
 
@@ -53,7 +51,7 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
       },
     });
 
-    this.logger.info('✨ Bunner HTTP Server initialized');
+    console.info('✨ Bunner HTTP Server initialized');
   }
 
   /**
@@ -109,7 +107,7 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
 
           return new Response(workerRes.body, workerRes.init);
         } catch (e) {
-          this.logger.error(e);
+          console.error(e);
 
           return new Response('Internal server error', {
             status: StatusCodes.INTERNAL_SERVER_ERROR,

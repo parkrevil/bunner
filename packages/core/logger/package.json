@@ -1,8 +1,0 @@
-{
-  "name": "@bunner/core-logger",
-  "module": "index.ts",
-  "type": "module",
-  "dependencies": {
-    "@bunner/core": "*"
-  }
-}
