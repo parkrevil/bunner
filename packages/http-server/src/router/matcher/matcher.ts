@@ -36,7 +36,6 @@ import {
   MAX_STACK_DEPTH,
   MAX_PARAMS,
 } from './constants';
-import { findStaticChild } from './lookup';
 
 export class Matcher {
   // Layout Buffers
@@ -62,7 +61,6 @@ export class Matcher {
 
   // Native Decoder
   private readonly decoder = new TextDecoder();
-  private readonly boundGetString: (id: number) => string;
   private readonly decodedStrings: string[];
 
   // Current Request Context
@@ -95,8 +93,7 @@ export class Matcher {
     // Stack init
     this.stack = new Int32Array(MAX_STACK_DEPTH * FRAME_SIZE);
 
-    // Bind helper
-    this.boundGetString = this.getString.bind(this);
+    // Init Cache (Lazy)
     
     // Init Cache (Lazy)
     // We don't know the size of stringTable items count easily without iterating, 
@@ -271,7 +268,7 @@ export class Matcher {
           const staticPtr = this.nodeBuffer[base + NODE_OFFSET_STATIC_CHILD_PTR]!;
           const segment = this.segments[segIdx]!;
 
-          const childPtr = findStaticChild(staticPtr, staticCount, segment, this.staticChildrenBuffer, this.boundGetString);
+          const childPtr = this.findStaticChild(staticPtr, staticCount, segment);
 
           if (childPtr !== -1) {
             // Push Child Frame
@@ -401,5 +398,44 @@ export class Matcher {
       }
     }
     return null;
+  }
+
+  /**
+   * Optimization: Binary Search for static children
+   * Threshold: 8 items. Below 8, linear scan is often faster due to locality/branch prediction.
+   */
+  private findStaticChild(staticPtr: number, staticCount: number, segment: string): number {
+    if (staticCount < 8) {
+      let ptr = staticPtr;
+      for (let i = 0; i < staticCount; i++) {
+        const sID = this.staticChildrenBuffer[ptr]!;
+        // Direct string comparison is fast in JS engine (interned strings)
+        if (this.getString(sID) === segment) {
+          return this.staticChildrenBuffer[ptr + 1]!;
+        }
+        ptr += 2;
+      }
+    } else {
+      let low = 0;
+      let high = staticCount - 1;
+
+      while (low <= high) {
+        const mid = (low + high) >>> 1;
+        const ptr = staticPtr + (mid << 1);
+        const sID = this.staticChildrenBuffer[ptr]!;
+        const midVal = this.getString(sID);
+
+        if (midVal === segment) {
+          return this.staticChildrenBuffer[ptr + 1]!;
+        }
+
+        if (midVal < segment) {
+          low = mid + 1;
+        } else {
+          high = mid - 1;
+        }
+      }
+    }
+    return -1;
   }
 }
