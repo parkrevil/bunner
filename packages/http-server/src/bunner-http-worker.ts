@@ -32,6 +32,12 @@ export class BunnerHttpWorker extends BaseWorker {
       this.container = manifest.createContainer();
       const metadataRegistry = manifest.createMetadataRegistry();
 
+      // Register Dynamic Modules (New AOT Feature)
+      if (typeof manifest.registerDynamicModules === 'function') {
+        console.log('⚡ Loading Dynamic Modules...');
+        await manifest.registerDynamicModules(this.container);
+      }
+
       // Load Scoped Keys Map if available (New AOT Feature)
       let scopedKeysMap = new Map();
       if (typeof manifest.createScopedKeysMap === 'function') {

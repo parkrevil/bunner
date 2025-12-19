@@ -20,6 +20,14 @@ export class InjectorGenerator {
       }
     };
 
+    // Helper for library imports
+    const addLibImport = (className: string, libPath: string) => {
+      if (!importedIdentifiers.has(className)) {
+        imports.push(`import { ${className} } from "${libPath}";`);
+        importedIdentifiers.add(className);
+      }
+    };
+
     // Iterate all modules
     graph.modules.forEach(node => {
       // 1. Generate Factories for Providers
@@ -27,10 +35,31 @@ export class InjectorGenerator {
         // Find ClassMetadata for this provider
         const classInfo = graph.classMap.get(token);
         if (!classInfo) {
-          // TODO: Custom providers (useValue/useFactory) handled later
-          if (ref.metadata && ref.metadata.useValue) {
-            // Simple value provider
-            factoryEntries.push(`  container.set('${node.name}::${token}', () => ${JSON.stringify(ref.metadata.useValue)});`);
+          // Custom providers (useValue/useFactory)
+          if (ref.metadata) {
+            if (ref.metadata.useValue) {
+              // Simple value provider
+              factoryEntries.push(`  container.set('${node.name}::${token}', () => ${JSON.stringify(ref.metadata.useValue)});`);
+            } else if (ref.metadata.useFactory) {
+              // Factory Provider
+              const factoryFn = ref.metadata.useFactory.__bunner_factory_code;
+              if (factoryFn) {
+                // Inject resolution
+                const injectedArgs = (ref.metadata.inject || []).map((injectItem: any) => {
+                  const tokenName = injectItem.__bunner_ref || injectItem;
+                  const resolved = graph.resolveToken(node.name, tokenName) || tokenName;
+                  return `c.get('${resolved}')`;
+                });
+
+                // We wrap the factory execution
+                // factoryFn is likely "(config) => ..." or "async (c) => ..."
+                // We need to call it: (extractedFn)(...args)
+                factoryEntries.push(`  container.set('${node.name}::${token}', async (c) => {
+                        const factory = ${factoryFn};
+                        return factory(${injectedArgs.join(', ')});
+                    });`);
+              }
+            }
           }
           return;
         }
@@ -61,6 +90,40 @@ export class InjectorGenerator {
       });
     });
 
+    // 3. Generate Dynamic Module Logic
+    const dynamicEntries: string[] = [];
+    graph.modules.forEach(node => {
+      node.dynamicImports.forEach(imp => {
+        if (imp.__bunner_call) {
+          // e.g. "ConfigModule.forRoot"
+          const [className, _methodName] = imp.__bunner_call.split('.');
+
+          // Find import source for className in this module's file
+          const importSource = node.metadata.imports && node.metadata.imports[className];
+
+          if (importSource) {
+            if (importSource.startsWith('.')) {
+              // Relative import logic if needed
+            } else {
+              addLibImport(className, importSource);
+            }
+          } else {
+            // Maybe it is in classMap?
+            const classInfo = graph.classMap.get(className);
+            if (classInfo) {
+              addImport(className, classInfo.filePath);
+            }
+          }
+
+          // Generate Call
+          const args = imp.args.map((a: any) => JSON.stringify(a)).join(', ');
+          dynamicEntries.push(`  // Dynamic Module: ${imp.__bunner_call}`);
+          dynamicEntries.push(`  const mod_${node.name}_${className} = await ${imp.__bunner_call}(${args});`);
+          dynamicEntries.push(`  await container.loadDynamicModule('${node.name}', mod_${node.name}_${className});`);
+        }
+      });
+    });
+
     return `
 import { Container } from "@bunner/core";
 ${imports.join('\n')}
@@ -69,6 +132,10 @@ export function createContainer() {
   const container = new Container();
 ${factoryEntries.join('\n')}
   return container;
+}
+
+export async function registerDynamicModules(container: any) {
+${dynamicEntries.join('\n')}
 }
 `;
   }
@@ -92,7 +159,7 @@ ${factoryEntries.join('\n')}
         return `c.get('${resolvedToken}')`;
       }
       // Fallback or explicit global?
-      console.warn(`⚠️  [Generator] Could not resolve dependency '${token}' in module '${node.name}'`);
+      // console.warn(\`⚠️  [Generator] Could not resolve dependency '\${token}' in module '\${node.name}'\`);
       return `c.get('${token}')`; // Try global/unscoped as hail mary
     });
   }

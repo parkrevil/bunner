@@ -28,14 +28,29 @@ export interface ClassMetadata {
     type: string;
     decorators: DecoratorMetadata[];
   }[];
+  imports: Record<string, string>; // Identifier -> Source Path
 }
 
 export class AstParser {
+  private currentCode: string = '';
+
   parse(filename: string, code: string): ClassMetadata[] {
+    this.currentCode = code;
     const result = parseSync(filename, code);
     const classes: ClassMetadata[] = [];
 
+    const imports: Record<string, string> = {};
+
     const traverse = (node: any) => {
+      // Handle ImportDeclaration
+      if (node.type === 'ImportDeclaration') {
+        const source = node.source.value;
+        (node.specifiers || []).forEach((spec: any) => {
+          // local.name is what we use in code
+          imports[spec.local.name] = source;
+        });
+      }
+
       // Handle ExportNamedDeclaration containing ClassDeclaration
       if (node.type === 'ExportNamedDeclaration' && node.declaration) {
         traverse(node.declaration);
@@ -43,7 +58,9 @@ export class AstParser {
       }
 
       if (node.type === 'ClassDeclaration') {
-        classes.push(this.extractClassMetadata(node));
+        const classMeta = this.extractClassMetadata(node);
+        classMeta.imports = { ...imports }; // Attach imports available in this file scope
+        classes.push(classMeta);
       }
 
       // Check for children if Program or other block
@@ -122,6 +139,7 @@ export class AstParser {
       constructorParams,
       methods,
       properties,
+      imports: {}, // Will be populated by traverse
     };
   }
 
@@ -179,10 +197,31 @@ export class AstParser {
           args: (node.arguments || []).map((arg: any) => this.parseExpression(arg)),
         };
 
+      case 'CallExpression': {
+        // Dynamic Module Call (e.g. ConfigModule.forRoot())
+        // We need to capture the callee name (e.g. "ConfigModule.forRoot" or just "forRoot")
+        // Note: callee might be MemberExpression
+        let calleeName = 'unknown';
+        if (node.callee.type === 'MemberExpression') {
+          calleeName = `${node.callee.object.name}.${node.callee.property.name}`;
+        } else if (node.callee.type === 'Identifier') {
+          calleeName = node.callee.name;
+        }
+
+        return {
+          __bunner_call: calleeName,
+          args: (node.arguments || []).map((arg: any) => this.parseExpression(arg)),
+        };
+      }
+
       // Handle ArrowFunctionExpression for useFactory or other async configs if needed simply
       case 'ArrowFunctionExpression':
-        // Extremely simplified representation for now. Real implementation needs full codegen.
-        return { __bunner_arrow_fn: true };
+      case 'FunctionExpression': {
+        const start = node.start;
+        const end = node.end;
+        const factoryCode = this.currentCode.slice(start, end);
+        return { __bunner_factory_code: factoryCode };
+      }
 
       default:
         // Fallback or unsupported

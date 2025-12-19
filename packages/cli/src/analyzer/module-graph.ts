@@ -16,6 +16,7 @@ export class ModuleNode {
   metadata: ClassMetadata;
   filePath: string;
   imports: Set<ModuleNode> = new Set();
+  dynamicImports: Set<any> = new Set(); // Stores { __bunner_call: string, args: [] }
   providers: Map<string, ProviderRef> = new Map();
   exports: Set<string> = new Set();
   controllers: Set<string> = new Set();
@@ -122,6 +123,9 @@ export class ModuleGraph {
 
       if (imp.__bunner_ref) {
         helper(imp.__bunner_ref);
+      } else if (imp.__bunner_call) {
+        // Dynamic Import
+        node.dynamicImports.add(imp);
       }
     });
   }
