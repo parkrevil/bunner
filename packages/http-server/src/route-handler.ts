@@ -1,38 +1,56 @@
 import { type Container } from '@bunner/core';
 
 import type { RouteHandlerEntry } from './interfaces';
-import type { RouteKey } from './types';
 
-// Simple String Hash function (djb2)
-function hash(str: string): number {
-  let hash = 5381;
-  let i = str.length;
+export interface MatchResult {
+  entry: RouteHandlerEntry;
+  params: Record<string, string>;
+}
 
-  while (i) {
-    hash = (hash * 33) ^ str.charCodeAt(--i);
-  }
-
-  return hash >>> 0;
+interface InternalRoute {
+  method: string;
+  path: string;
+  regex: RegExp;
+  paramNames: string[];
+  entry: RouteHandlerEntry;
 }
 
 export class RouteHandler {
   private container: Container;
   private metadataRegistry: Map<any, any>;
-  private handlers: Map<RouteKey, RouteHandlerEntry> = new Map();
+  private routes: InternalRoute[] = [];
 
   constructor(container: Container, metadataRegistry: Map<any, any>) {
     this.container = container;
     this.metadataRegistry = metadataRegistry;
   }
 
-  find(key: RouteKey): RouteHandlerEntry | undefined {
-    return this.handlers.get(key);
+  match(method: string, path: string): MatchResult | undefined {
+    const methodUpper = method.toUpperCase();
+
+    for (const route of this.routes) {
+      if (route.method !== methodUpper) {
+        continue;
+      }
+
+      const match = route.regex.exec(path);
+      if (match) {
+        const params: Record<string, string> = {};
+        route.paramNames.forEach((name, index) => {
+          params[name] = match[index + 1];
+        });
+        return {
+          entry: route.entry,
+          params,
+        };
+      }
+    }
+    return undefined;
   }
 
   register() {
     console.log('🔍 [RouteHandler] Registering routes from metadata...');
     for (const [targetClass, meta] of this.metadataRegistry.entries()) {
-      // Check if it's a Controller
       const controllerDec = (meta.decorators || []).find((d: any) => d.name === 'Controller' || d.name === 'RestController');
 
       if (controllerDec) {
@@ -51,47 +69,55 @@ export class RouteHandler {
       return;
     }
 
-    Object.getPrototypeOf(instance);
-
-    // Walk Methods
     (meta.methods || []).forEach((method: any) => {
       const routeDec = (method.decorators || []).find((d: any) =>
         ['Get', 'Post', 'Put', 'Delete', 'Patch', 'Options', 'Head'].includes(d.name),
       );
 
       if (routeDec) {
-        const httpMethodStr = this.mapDecoratorToMethod(routeDec.name); // E.g. "GET"
-        const path = routeDec.arguments[0] || '';
-        const fullPath = '/' + [prefix, path].filter(Boolean).join('/').replace(/\/+/g, '/');
+        const httpMethod = routeDec.name.toUpperCase();
+        const subPath = routeDec.arguments[0] || '';
+        const fullPath = '/' + [prefix, subPath].filter(Boolean).join('/').replace(/\/+/g, '/');
 
-        console.log(`🛣️  Route Registered: [${httpMethodStr}] ${fullPath} -> ${targetClass.name}.${method.name}`);
+        console.log(`🛣️  Route Registered: [${httpMethod}] ${fullPath} -> ${targetClass.name}.${method.name}`);
 
-        const handler = instance[method.name].bind(instance);
+        const { regex, paramNames } = this.pathToRegex(fullPath);
 
         const paramTypes = (method.parameters || [])
           .sort((a: any, b: any) => a.index - b.index)
           .map((p: any) => {
             const d = (p.decorators || [])[0];
-            if (!d) {
-              return 'unknown';
-            }
-            return d.name.toLowerCase();
+            return d ? d.name.toLowerCase() : 'unknown';
           });
 
         const entry: RouteHandlerEntry = {
-          handler,
+          handler: instance[method.name].bind(instance),
           paramType: paramTypes,
         };
 
-        // Key: HASH("METHOD:PATH")
-        const key = hash(`${httpMethodStr}:${fullPath}`.toUpperCase());
-        this.handlers.set(key, entry);
-        console.log(`   Key: ${key} (${httpMethodStr}:${fullPath})`);
+        this.routes.push({
+          method: httpMethod,
+          path: fullPath,
+          regex,
+          paramNames,
+          entry,
+        });
       }
     });
   }
 
-  private mapDecoratorToMethod(name: string): string {
-    return name.toUpperCase();
+  private pathToRegex(path: string) {
+    const paramNames: string[] = [];
+    const pattern = path
+      .replace(/[\\$.+*?^|[\](){}]/g, '\\$&') // Escape characters
+      .replace(/:([a-zA-Z0-9_]+)/g, (_, name) => {
+        paramNames.push(name);
+        return '([^/]+)';
+      });
+
+    return {
+      regex: new RegExp(`^${pattern}$`),
+      paramNames,
+    };
   }
 }

@@ -8,16 +8,6 @@ import { HttpMethod } from './enums';
 import type { HttpWorkerResponse, RouteHandlerEntry, WorkerInitParams } from './interfaces';
 import { RouteHandler } from './route-handler';
 
-// Function to compute hash (Must match RouteHandler)
-function hash(str: string): number {
-  let hash = 5381;
-  let i = str.length;
-  while (i) {
-    hash = (hash * 33) ^ str.charCodeAt(--i);
-  }
-  return hash >>> 0;
-}
-
 export class BunnerHttpWorker extends BaseWorker {
   private container: Container;
   private routeHandler: RouteHandler;
@@ -64,7 +54,7 @@ export class BunnerHttpWorker extends BaseWorker {
       const path = urlObj.pathname;
       const methodStr = HttpMethod[httpMethod];
 
-      const routeKey = hash(`${methodStr.toUpperCase()}:${path}`.toUpperCase());
+      const match = this.routeHandler.match(methodStr, path);
 
       // Adaptive Request Object for BunnerRequest
       const adaptiveReq = {
@@ -73,26 +63,24 @@ export class BunnerHttpWorker extends BaseWorker {
         headers: headers,
         body: body,
         queryParams: Object.fromEntries(urlObj.searchParams.entries()),
+        params: match ? match.params : {},
         ...reqContext,
       };
 
       const req = new BunnerRequest(adaptiveReq);
-
-      // Mocked Response object for BunnerResponse constructor
       const res = new BunnerResponse(req, {
         headers: new Headers(),
         status: 0,
       } as any);
 
-      const routeEntry = this.routeHandler.find(routeKey);
-
-      if (!routeEntry) {
-        console.warn(`[Worker] Route not found for key: ${routeKey} (${methodStr.toUpperCase()}:${path})`);
+      if (!match) {
+        console.warn(`[Worker] Route not found: ${methodStr.toUpperCase()}:${path}`);
         return res.setStatus(StatusCodes.NOT_FOUND).end();
       }
 
       console.log(`[Worker] Matched Route: ${methodStr.toUpperCase()}:${path}`);
 
+      const routeEntry = match.entry;
       const result = await routeEntry.handler(...this.buildRouteHandlerParams(routeEntry, req, res));
 
       if (result instanceof Response) {
