@@ -1,10 +1,8 @@
 import type { HttpMethodDecoratorOptions } from './interfaces';
 
 function createHttpMethodDecorator() {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  return function (path?: string, options?: HttpMethodDecoratorOptions): MethodDecorator {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    return (target: object, propertyKey: string | symbol) => {};
+  return function (_path?: string, _options?: HttpMethodDecoratorOptions): MethodDecorator {
+    return (_target: object, _propertyKey: string | symbol) => {};
   };
 }
 

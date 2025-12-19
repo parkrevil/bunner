@@ -4,7 +4,6 @@ import { Glob } from 'bun';
 
 import { AstParser, type ClassMetadata } from '../analyzer/ast-parser';
 import { ModuleGraph } from '../analyzer/module-graph';
-import { SourceScanner } from '../analyzer/source-scanner';
 import { ManifestGenerator } from '../generators/manifest';
 import { ConfigLoader } from '../utils/config-loader';
 
@@ -12,7 +11,7 @@ export async function build() {
   console.log('🚀 Starting Bunner Production Build...');
 
   // 1. Load Config
-  const _config = await ConfigLoader.load();
+  await ConfigLoader.load();
   const projectRoot = process.cwd();
   const srcDir = resolve(projectRoot, 'src');
   const outDir = resolve(projectRoot, 'dist');
@@ -23,7 +22,7 @@ export async function build() {
   console.log(`📂 Output Dir: ${outDir}`);
 
   // 2. Initialize Components
-  const _scanner = new SourceScanner();
+  // const _scanner = new SourceScanner();
   const parser = new AstParser();
   const manifestGen = new ManifestGenerator();
 

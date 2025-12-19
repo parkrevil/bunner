@@ -1,5 +1,3 @@
-import 'reflect-metadata/lite';
-
 export * from './src/bunner';
 export * from './src/application';
 export * from './src/common';

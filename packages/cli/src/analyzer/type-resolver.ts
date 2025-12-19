@@ -13,7 +13,7 @@ export class TypeResolver {
   private program: ts.Program | undefined;
   private checker: ts.TypeChecker | undefined;
 
-  constructor(private tsConfigPath: string = 'tsconfig.json') {}
+  constructor() {}
 
   init(fileNames: string[]) {
     // This is the heavy part (Priority 2) - only called when needed

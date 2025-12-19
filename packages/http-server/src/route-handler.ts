@@ -39,7 +39,7 @@ export class RouteHandler {
       if (match) {
         const params: Record<string, string> = {};
         route.paramNames.forEach((name, index) => {
-          params[name] = match[index + 1];
+          params[name] = match[index + 1] || '';
         });
         return {
           entry: route.entry,

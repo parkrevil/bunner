@@ -5,7 +5,6 @@ import { Glob } from 'bun';
 
 import { AstParser, type ClassMetadata } from '../analyzer/ast-parser';
 import { ModuleGraph } from '../analyzer/module-graph';
-import { SourceScanner } from '../analyzer/source-scanner';
 import { ManifestGenerator } from '../generators/manifest';
 import { ConfigLoader } from '../utils/config-loader';
 
@@ -13,14 +12,14 @@ export async function dev() {
   console.log('🚀 Starting Bunner Dev Server...');
 
   // 1. Load Config
-  const _config = await ConfigLoader.load();
+  await ConfigLoader.load();
   const projectRoot = process.cwd();
   const srcDir = resolve(projectRoot, 'src');
   const outDir = resolve(projectRoot, '.bunner');
 
   // 2. Initialize Components
 
-  const _scanner = new SourceScanner();
+  // const _scanner = new SourceScanner();
   const parser = new AstParser();
   const manifestGen = new ManifestGenerator();
 
@@ -96,22 +95,23 @@ export { container, metadata };
 
   // 5. Watcher
   console.log(`👀 Watching ${srcDir} for changes...`);
-  // eslint-disable-next-line @typescript-eslint/no-misused-promises
-  const watcher = watch(srcDir, { recursive: true }, async (_event, filename) => {
-    if (!filename || !filename.endsWith('.ts')) {
-      return;
-    }
+  const watcher = watch(srcDir, { recursive: true }, (_event, filename) => {
+    void (async () => {
+      if (!filename || !filename.endsWith('.ts')) {
+        return;
+      }
 
-    const fullPath = join(srcDir, filename);
-    console.log(`🔄 Syncing: ${filename}`);
+      const fullPath = join(srcDir, filename);
+      console.log(`🔄 Syncing: ${filename}`);
 
-    if (!(await Bun.file(fullPath).exists())) {
-      fileCache.delete(fullPath);
-    } else {
-      await analyzeFile(fullPath);
-    }
+      if (!(await Bun.file(fullPath).exists())) {
+        fileCache.delete(fullPath);
+      } else {
+        await analyzeFile(fullPath);
+      }
 
-    await rebuild();
+      await rebuild();
+    })();
   });
 
   process.on('SIGINT', () => {

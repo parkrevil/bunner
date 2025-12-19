@@ -30,3 +30,5 @@ export interface RootModuleFile {
 export interface CreateApplicationOptions extends BunnerApplicationBaseOptions {
   [key: string]: any;
 }
+
+export interface BunnerModule {}

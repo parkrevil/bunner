@@ -33,7 +33,10 @@ export class AppModule {}
 const usersMeta = parser.parse('user.module.ts', userModuleCode);
 const appMeta = parser.parse('app.module.ts', appModuleCode);
 
-const allClasses = [...usersMeta, ...appMeta];
+const allClasses = [
+  ...usersMeta.map(m => ({ metadata: m, filePath: 'user.module.ts' })),
+  ...appMeta.map(m => ({ metadata: m, filePath: 'app.module.ts' })),
+];
 
 const graph = new ModuleGraph(allClasses);
 graph.build();

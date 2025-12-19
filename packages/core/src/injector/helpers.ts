@@ -3,16 +3,6 @@ import { isClass } from '../common/helpers';
 import type { ForwardRef, ProviderUseClass, ProviderUseExisting, ProviderUseFactory, ProviderUseValue } from '.';
 
 /**
- * Forward Ref Decorator
- * @description ForwardRef decorator
- * @param fn
- * @returns
- */
-export function forwardRef<T>(fn: () => T): ForwardRef {
-  return { forwardRef: fn };
-}
-
-/**
  * Is Forward Ref
  * @description Checks if a value is a forward ref
  * @param value

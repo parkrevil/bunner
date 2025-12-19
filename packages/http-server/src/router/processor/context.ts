@@ -1,5 +1,3 @@
-import type { ProcessorConfig } from '../types'; // Check if types exist there
-
 // Need to define ProcessorConfig here or import?
 // ProcessorConfig was defined in processor.ts. I should extract it to types.
 // For now I will inline or import.

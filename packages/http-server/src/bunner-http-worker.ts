@@ -66,7 +66,7 @@ export class BunnerHttpWorker extends BaseWorker {
 
       const urlObj = new URL(url, 'http://localhost');
       const path = urlObj.pathname;
-      const methodStr = HttpMethod[httpMethod];
+      const methodStr = HttpMethod[httpMethod] || 'GET';
 
       const match = this.routeHandler.match(methodStr, path);
 
@@ -130,7 +130,7 @@ export class BunnerHttpWorker extends BaseWorker {
     const params = [];
 
     for (const type of entry.paramType) {
-      switch (type) {
+      switch (type as string) {
         case 'body':
           params.push(req.body);
           break;

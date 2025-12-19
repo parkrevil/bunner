@@ -4,17 +4,14 @@ export function Injectable(): ClassDecorator {
   return (target: any) => target;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function Controller(prefix: string = ''): ClassDecorator {
+export function Controller(_prefix: string = ''): ClassDecorator {
   return (target: any) => target;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function Module(metadata: any): ClassDecorator {
+export function Module(_metadata: any): ClassDecorator {
   return (target: any) => target;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function RootModule(metadata: any): ClassDecorator {
+export function RootModule(_metadata: any): ClassDecorator {
   return (target: any) => target;
 }

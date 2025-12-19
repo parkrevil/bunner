@@ -195,7 +195,7 @@ export class Matcher {
       let ptr = 1; // normalized starts with '/'
       for (let i = 0; i < segments.length; i++) {
         offsets[i] = ptr;
-        ptr += segments[i].length + 1; // +1 for next slash
+        ptr += segments[i]!.length + 1; // +1 for next slash
       }
       offsets[segments.length] = ptr;
       this.suffixOffsets = offsets;

@@ -1,6 +1,5 @@
 function createHttpParamDecorator() {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  return function (target: object, propertyKey: string | symbol | undefined, index: number) {};
+  return function (_target: object, _propertyKey: string | symbol | undefined, _index: number) {};
 }
 
 export const Body = () => createHttpParamDecorator();
