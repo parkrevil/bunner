@@ -13,3 +13,8 @@ export function Controller(prefix: string = ''): ClassDecorator {
 export function Module(metadata: any): ClassDecorator {
   return (target: any) => target;
 }
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function RootModule(metadata: any): ClassDecorator {
+  return (target: any) => target;
+}
