@@ -28,3 +28,17 @@ export enum ContentType {
   Text = 'text/plain',
   Json = 'application/json',
 }
+
+/**
+ * HTTP Method
+ * @description The HTTP method
+ */
+export enum HttpMethod {
+  Get,
+  Post,
+  Put,
+  Patch,
+  Delete,
+  Head,
+  Options,
+}
