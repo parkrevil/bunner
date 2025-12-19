@@ -22,7 +22,6 @@ export async function build() {
   console.log(`📂 Output Dir: ${outDir}`);
 
   // 2. Initialize Components
-
   const _scanner = new SourceScanner();
   const parser = new AstParser();
   const manifestGen = new ManifestGenerator();
@@ -48,50 +47,41 @@ export async function build() {
 
   // 4. Generate Manifests (Intermediate)
   console.log('🛠️  Generating intermediate manifests...');
-  // Ensure .bunner exists for intermediate files
-  // We use .bunner as a staging area before bundling
+  const manifestFile = join(bunnerDir, 'manifest.ts');
   const manifestCode = manifestGen.generate(classes, bunnerDir);
-  await Bun.write(join(bunnerDir, 'manifest.ts'), manifestCode);
+  await Bun.write(manifestFile, manifestCode);
 
-  const indexContent = `
-import { createContainer, createMetadataRegistry } from "./manifest";
-
-// For production, we don't rely on dynamic paths for workers as much, 
-// but we still need to set up the global environment.
-globalThis.__BUNNER_MANIFEST_PATH__ = import.meta.resolve("./manifest.ts"); // Check if this works in bundled env
-const container = createContainer();
-const metadata = createMetadataRegistry();
-globalThis.__BUNNER_CONTAINER__ = container;
-globalThis.__BUNNER_METADATA_REGISTRY__ = metadata;
-
-export { container, metadata };
-`;
-  await Bun.write(join(bunnerDir, 'index.ts'), indexContent);
-
-  // 5. Bun Build (Bundling)
-  console.log('📦 Bundling application...');
-
-  const entryPoint = join(bunnerDir, 'entry.ts');
+  // 5. Setup Entry Point
+  const entryPointFile = join(bunnerDir, 'entry.ts');
   const userMain = join(srcDir, 'main.ts');
 
-  // We don't need relative path calculation if we use absolute path in import.
-  // Bun handles absolute imports in bundling.
-
+  // We set globals BEFORE importing user code.
+  // We use direct imports from manifest to ensure they are bundled.
   const buildEntryContent = `
-// 1. Initialize AOT Environment
-import { container, metadata } from "./index";
+import { createContainer, createMetadataRegistry } from "./manifest";
 
-// 2. Execute User Application
-import "${userMain}";
+console.log("[Entry] Initializing AOT Globals...");
+globalThis.__BUNNER_MANIFEST_PATH__ = import.meta.resolve("./manifest.js"); 
+globalThis.__BUNNER_CONTAINER__ = createContainer();
+globalThis.__BUNNER_METADATA_REGISTRY__ = createMetadataRegistry();
+
+console.log("[Entry] Bootstrapping User Application...");
+await import("${userMain}");
 `;
-  await Bun.write(entryPoint, buildEntryContent);
+  await Bun.write(entryPointFile, buildEntryContent);
+
+  // 6. Bun Build (Bundling)
+  console.log('📦 Bundling application, manifest, and workers...');
+
+  const workerSrc = resolve(projectRoot, 'node_modules/@bunner/http-server/src/bunner-http-worker.ts');
 
   const result = await Bun.build({
-    entrypoints: [entryPoint],
+    entrypoints: [entryPointFile, workerSrc, manifestFile],
     outdir: outDir,
     target: 'bun',
     minify: true,
     sourcemap: 'external',
+    naming: '[name].js',
   });
 
   if (!result.success) {
@@ -103,5 +93,7 @@ import "${userMain}";
   }
 
   console.log('✅ Build Complete!');
-  console.log(`   Output: ${join(outDir, 'entry.js')}`);
+  console.log(`   Entry: ${join(outDir, 'entry.js')}`);
+  console.log(`   Worker: ${join(outDir, 'bunner-http-worker.js')}`);
+  console.log(`   Manifest: ${join(outDir, 'manifest.js')}`);
 }

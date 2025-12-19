@@ -32,8 +32,16 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
       },
       ...options,
     };
+
+    // Detect if we are running from a bundled .js file or a .ts source
+    const currentUrl = import.meta.url;
+    const isBundled = currentUrl.endsWith('.js');
+    const workerScript = isBundled
+      ? new URL('./bunner-http-worker.js', currentUrl)
+      : new URL('./bunner-http-worker.ts', currentUrl);
+
     this.workerPool = new WorkerPool<BunnerHttpWorker>({
-      script: new URL('./bunner-http-worker.ts', import.meta.url),
+      script: workerScript,
       size: options.workers,
     });
   }
@@ -42,8 +50,16 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
    * Initialize the server
    */
   async init() {
+    // Sanitize rootModuleFile to be cloneable (remove methods/complex objects)
+    const sanitizedRootModuleFile: RootModuleFile = {
+      path: this.rootModuleFile.path,
+      className: this.rootModuleFile.className,
+      manifestPath: this.rootModuleFile.manifestPath,
+      // Exclude container and metadata as they are not cloneable
+    };
+
     await this.workerPool.init({
-      rootModuleFile: this.rootModuleFile,
+      rootModuleFile: sanitizedRootModuleFile,
       options: {
         logLevel: this.options.logLevel,
         workers: this.options.workers,

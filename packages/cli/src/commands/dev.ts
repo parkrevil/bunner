@@ -48,6 +48,7 @@ export async function dev() {
     await Bun.write(join(outDir, 'manifest.ts'), manifestCode);
 
     // Inject global path for Worker access
+    const userMain = join(srcDir, 'main.ts');
     const indexContent = `
 import { createContainer, createMetadataRegistry } from "./manifest";
 console.log("🌟 Bunner App Started (Generated)");
@@ -57,6 +58,9 @@ const container = createContainer();
 const metadata = createMetadataRegistry();
 globalThis.__BUNNER_CONTAINER__ = container;
 globalThis.__BUNNER_METADATA_REGISTRY__ = metadata;
+
+// Start User Application (Dynamic Import to guarantee execution order)
+await import("${userMain}");
 
 export { container, metadata };
 `;

@@ -20,14 +20,12 @@ export class MetadataGenerator {
       }
 
       // Serialize Metadata
-      // We need to verify if args are serializable (JSON).
-      // Analyzer currently extracts literals.
       const serializedMeta = JSON.stringify({
+        className: metadata.className,
         decorators: metadata.decorators,
         constructorParams: metadata.constructorParams,
-        // TODO: Add method decorators and property decorators extraction in AST Parser
-        // For now, AST parser only does class & ctor params.
-        // We need to extend AST parser to capture method metadata for Routes.
+        methods: metadata.methods,
+        properties: metadata.properties,
       });
 
       registryEntries.push(`  registry.set(${metadata.className}, ${serializedMeta});`);

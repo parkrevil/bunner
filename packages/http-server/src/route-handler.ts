@@ -2,7 +2,18 @@ import { type Container } from '@bunner/core';
 
 import type { RouteHandlerEntry } from './interfaces';
 import type { RouteKey } from './types';
-// import { HttpMethod } from './enums'; // Unused
+
+// Simple String Hash function (djb2)
+function hash(str: string): number {
+  let hash = 5381;
+  let i = str.length;
+
+  while (i) {
+    hash = (hash * 33) ^ str.charCodeAt(--i);
+  }
+
+  return hash >>> 0;
+}
 
 export class RouteHandler {
   private container: Container;
@@ -19,11 +30,13 @@ export class RouteHandler {
   }
 
   register() {
+    console.log('🔍 [RouteHandler] Registering routes from metadata...');
     for (const [targetClass, meta] of this.metadataRegistry.entries()) {
       // Check if it's a Controller
-      const controllerDec = meta.decorators.find((d: any) => d.name === 'Controller' || d.name === 'RestController');
+      const controllerDec = (meta.decorators || []).find((d: any) => d.name === 'Controller' || d.name === 'RestController');
 
       if (controllerDec) {
+        console.log(`FOUND Controller: ${meta.className}`);
         this.registerController(targetClass, meta, controllerDec);
       }
     }
@@ -34,45 +47,46 @@ export class RouteHandler {
     const instance = this.container.get(targetClass);
 
     if (!instance) {
+      console.warn(`⚠️  Cannot resolve controller instance: ${meta.className}`);
       return;
     }
 
     Object.getPrototypeOf(instance);
 
     // Walk Methods
-    meta.methods.forEach((method: any) => {
-      const routeDec = method.decorators.find((d: any) =>
+    (meta.methods || []).forEach((method: any) => {
+      const routeDec = (method.decorators || []).find((d: any) =>
         ['Get', 'Post', 'Put', 'Delete', 'Patch', 'Options', 'Head'].includes(d.name),
       );
 
       if (routeDec) {
-        const httpMethod = this.mapDecoratorToMethod(routeDec.name);
+        const httpMethodStr = this.mapDecoratorToMethod(routeDec.name); // E.g. "GET"
         const path = routeDec.arguments[0] || '';
         const fullPath = '/' + [prefix, path].filter(Boolean).join('/').replace(/\/+/g, '/');
 
-        console.log(`🛣️  Route Registered: [${httpMethod}] ${fullPath} -> ${targetClass.name}.${method.name}`);
+        console.log(`🛣️  Route Registered: [${httpMethodStr}] ${fullPath} -> ${targetClass.name}.${method.name}`);
 
         const handler = instance[method.name].bind(instance);
-        // Params mapping need metadata too.
-        // Use _ to ignore unused var check
-        const _paramTypes = method.parameters
+
+        const paramTypes = (method.parameters || [])
           .sort((a: any, b: any) => a.index - b.index)
           .map((p: any) => {
-            const d = p.decorators[0];
+            const d = (p.decorators || [])[0];
             if (!d) {
               return 'unknown';
             }
             return d.name.toLowerCase();
           });
 
-        const _entry: RouteHandlerEntry = {
+        const entry: RouteHandlerEntry = {
           handler,
-          paramType: _paramTypes, // Using it here to suppress unused error if needed, but currently interface uses it.
+          paramType: paramTypes,
         };
 
-        // Mock adding to handlers for now to satisfy linter
-        // this.handlers.set(hash(httpMethod + fullPath), _entry);
-        // TODO: Real hash logic
+        // Key: HASH("METHOD:PATH")
+        const key = hash(`${httpMethodStr}:${fullPath}`.toUpperCase());
+        this.handlers.set(key, entry);
+        console.log(`   Key: ${key} (${httpMethodStr}:${fullPath})`);
       }
     });
   }

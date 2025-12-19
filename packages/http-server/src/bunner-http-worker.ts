@@ -1,12 +1,22 @@
-import { BaseWorker, BunnerError, Container, type WorkerId } from '@bunner/core';
+import { BaseWorker, Container, type WorkerId } from '@bunner/core';
 import { expose } from 'comlink';
 import { StatusCodes } from 'http-status-codes';
 
 import { BunnerRequest } from './bunner-request';
 import { BunnerResponse } from './bunner-response';
-import { HttpError } from './errors';
+import { HttpMethod } from './enums';
 import type { HttpWorkerResponse, RouteHandlerEntry, WorkerInitParams } from './interfaces';
 import { RouteHandler } from './route-handler';
+
+// Function to compute hash (Must match RouteHandler)
+function hash(str: string): number {
+  let hash = 5381;
+  let i = str.length;
+  while (i) {
+    hash = (hash * 33) ^ str.charCodeAt(--i);
+  }
+  return hash >>> 0;
+}
 
 export class BunnerHttpWorker extends BaseWorker {
   private container: Container;
@@ -26,7 +36,6 @@ export class BunnerHttpWorker extends BaseWorker {
     this.id = workerId;
 
     if (params.rootModuleFile.manifestPath) {
-      // AOT Mode
       console.log(`⚡ AOT Worker Load: ${params.rootModuleFile.manifestPath}`);
       const manifest = await import(params.rootModuleFile.manifestPath);
 
@@ -35,7 +44,6 @@ export class BunnerHttpWorker extends BaseWorker {
 
       this.routeHandler = new RouteHandler(this.container, metadataRegistry);
     } else {
-      // Legacy Mode (Dynamic)
       console.warn('Legacy init not supported in AOT Core yet.');
       this.container = new Container();
       this.routeHandler = new RouteHandler(this.container, new Map());
@@ -48,48 +56,65 @@ export class BunnerHttpWorker extends BaseWorker {
     console.log(`🚀 Bunner HTTP Worker #${this.id} is bootstrapping...`);
   }
 
-  async handleRequest(_params: any): Promise<HttpWorkerResponse> {
+  async handleRequest(params: any): Promise<HttpWorkerResponse> {
     try {
-      const { request: ffiReq, response: ffiRes, routeKey } = {} as any;
-      const req = new BunnerRequest(ffiReq);
-      const res = new BunnerResponse(req, ffiRes);
+      const { httpMethod, url, headers, body, request: reqContext } = params;
+
+      const urlObj = new URL(url, 'http://localhost');
+      const path = urlObj.pathname;
+      const methodStr = HttpMethod[httpMethod];
+
+      const routeKey = hash(`${methodStr.toUpperCase()}:${path}`.toUpperCase());
+
+      // Adaptive Request Object for BunnerRequest
+      const adaptiveReq = {
+        httpMethod: httpMethod,
+        url: url,
+        headers: headers,
+        body: body,
+        queryParams: Object.fromEntries(urlObj.searchParams.entries()),
+        ...reqContext,
+      };
+
+      const req = new BunnerRequest(adaptiveReq);
+
+      // Mocked Response object for BunnerResponse constructor
+      const res = new BunnerResponse(req, {
+        headers: new Headers(),
+        status: 0,
+      } as any);
+
+      const routeEntry = this.routeHandler.find(routeKey);
+
+      if (!routeEntry) {
+        console.warn(`[Worker] Route not found for key: ${routeKey} (${methodStr.toUpperCase()}:${path})`);
+        return res.setStatus(StatusCodes.NOT_FOUND).end();
+      }
+
+      console.log(`[Worker] Matched Route: ${methodStr.toUpperCase()}:${path}`);
+
+      const result = await routeEntry.handler(...this.buildRouteHandlerParams(routeEntry, req, res));
+
+      if (result instanceof Response) {
+        return {
+          body: await result.text(),
+          init: {
+            status: result.status,
+            statusText: result.statusText,
+            headers: result.headers.toJSON(),
+          },
+        };
+      }
 
       if (res.isSent()) {
         return res.getWorkerResponse();
       }
 
-      if (isNaN(routeKey)) {
-        return res.setStatus(StatusCodes.NOT_FOUND).end();
-      }
-
-      const routeEntry = this.routeHandler.find(routeKey);
-
-      if (!routeEntry) {
-        return res.setStatus(StatusCodes.NOT_FOUND).end();
-      }
-
-      const result = await routeEntry.handler(...this.buildRouteHandlerParams(routeEntry, req, res));
-
-      if (result instanceof Response || res.isSent()) {
-        return res.end();
-      }
-
       return res.setBody(result).end();
     } catch (e: any) {
-      console.log(e);
-
-      if (e instanceof BunnerError) {
-        //
-      } else if (e instanceof HttpError) {
-        //
-      } else if (e instanceof Error) {
-        //
-      } else {
-        //
-      }
-
+      console.error('[Worker] handleRequest Error:', e);
       return {
-        body: '',
+        body: 'Internal Server Error',
         init: { status: StatusCodes.INTERNAL_SERVER_ERROR },
       };
     }
@@ -109,26 +134,32 @@ export class BunnerHttpWorker extends BaseWorker {
           break;
 
         case 'param':
+        case 'params':
           params.push(req.params);
           break;
 
         case 'query':
+        case 'queries':
           params.push(req.queryParams);
           break;
 
         case 'header':
+        case 'headers':
           params.push(req.headers);
           break;
 
         case 'cookie':
+        case 'cookies':
           params.push(req.cookies);
           break;
 
         case 'request':
+        case 'req':
           params.push(req);
           break;
 
         case 'response':
+        case 'res':
           params.push(res);
           break;
 

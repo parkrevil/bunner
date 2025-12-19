@@ -1,6 +1,6 @@
 import { CookieMap } from 'bun';
 
-import type { HttpMethod } from './enums';
+import { HttpMethod } from './enums';
 
 export class BunnerRequest {
   readonly requestId: string;
@@ -25,28 +25,29 @@ export class BunnerRequest {
   readonly isTrustedProxy: boolean;
   readonly subdomains: string[];
 
-  constructor(_req: Request) {
-    /*     this.requestId = req.requestId;
+  constructor(req: any) {
+    const urlObj = new URL(req.url, 'http://localhost');
+
+    this.requestId = req.requestId || Math.random().toString(36).substring(7);
     this.httpMethod = req.httpMethod;
     this.url = req.url;
-    this.path = req.path;
+    this.path = urlObj.pathname;
     this.headers = new Headers(req.headers);
-    this.cookies = new CookieMap(req.cookies);
-    this.protocol = req.protocol ?? null;
-    this.host = req.host ?? null;
-    this.hostname = req.hostname ?? null;
-    this.port = req.port ?? null;
-    this.queryString = req.queryString ?? null;
-    this.contentType = req.contentType ?? null;
-    this.contentLength = req.contentLength ?? null;
-    this.charset = req.charset ?? null;
-    this.params = req.params;
-    this.queryParams = req.queryParams;
+    this.cookies = new CookieMap(this.headers.get('cookie') || '');
+    this.protocol = urlObj.protocol.replace(':', '') || null;
+    this.host = urlObj.host || null;
+    this.hostname = urlObj.hostname || null;
+    this.port = urlObj.port ? parseInt(urlObj.port) : null;
+    this.queryString = urlObj.search || null;
+    this.contentType = this.headers.get('content-type') || null;
+    this.contentLength = this.headers.get('content-length') ? parseInt(this.headers.get('content-length')!) : null;
+    this.charset = null; // Extract from content-type if needed
+    this.params = req.params || {};
+    this.queryParams = req.queryParams || {};
     this.body = req.body ?? null;
-    this.isTrustedProxy = req.isTrustedProxy;
-    this.subdomains = req.subdomains;
+    this.isTrustedProxy = req.isTrustedProxy || false;
+    this.subdomains = [];
     this.ip = req.ip ?? null;
-    this.ips = req.ips;
- */
+    this.ips = req.ips || [];
   }
 }

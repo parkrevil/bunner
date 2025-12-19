@@ -8,14 +8,14 @@ async function bootstrap() {
     logLevel: LogLevel.Debug,
     workers: 1,
     queueCapacity: 8192,
-    port: 5000,
+    port: 5001,
   });
 
   console.info('🚀 Server is starting...');
 
   await app.start();
 
-  console.info('🚀 Server is running on port 5000');
+  console.info('🚀 Server is running on port 5001');
 
   setInterval(() => {
     const mem = process.memoryUsage();
