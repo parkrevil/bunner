@@ -25,12 +25,22 @@ export class BunnerHttpWorker extends BaseWorker {
 
     this.id = workerId;
 
-    const rootModuleCls = await import(params.rootModuleFile.path).then(mod => mod[params.rootModuleFile.className]);
+    if (params.rootModuleFile.manifestPath) {
+      // AOT Mode
+      console.log(`⚡ AOT Worker Load: ${params.rootModuleFile.manifestPath}`);
+      const manifest = await import(params.rootModuleFile.manifestPath);
 
-    this.container = new Container(rootModuleCls);
-    await this.container.init();
+      this.container = manifest.createContainer();
+      const metadataRegistry = manifest.createMetadataRegistry();
 
-    this.routeHandler = new RouteHandler(this.container);
+      this.routeHandler = new RouteHandler(this.container, metadataRegistry);
+    } else {
+      // Legacy Mode (Dynamic)
+      console.warn('Legacy init not supported in AOT Core yet.');
+      this.container = new Container();
+      this.routeHandler = new RouteHandler(this.container, new Map());
+    }
+
     this.routeHandler.register();
   }
 
@@ -89,13 +99,6 @@ export class BunnerHttpWorker extends BaseWorker {
     console.log(`🛑 Worker #${this.id} is destroying...`);
   }
 
-  /**
-   * Builds the parameters for the route handler.
-   * @param entry The route handler entry.
-   * @param req The Bunner request.
-   * @param res The Bunner response.
-   * @returns The parameters for the route handler.
-   */
   private buildRouteHandlerParams(entry: RouteHandlerEntry, req: BunnerRequest, res: BunnerResponse): any {
     const params = [];
 

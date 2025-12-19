@@ -19,14 +19,13 @@ export async function dev() {
 
   // 2. Initialize Components
 
-  const _scanner = new SourceScanner(); // Keep for future use
+  const _scanner = new SourceScanner();
   const parser = new AstParser();
   const manifestGen = new ManifestGenerator();
 
   // State
   const fileCache = new Map<string, { metadata: ClassMetadata; filePath: string }[]>();
 
-  // Helper: Analyze one file and update cache
   async function analyzeFile(filePath: string) {
     try {
       const fileContent = await Bun.file(filePath).text();
@@ -41,7 +40,6 @@ export async function dev() {
     }
   }
 
-  // Helper: Rebuild Manifest
   async function rebuild() {
     const allClasses = Array.from(fileCache.values()).flat();
     console.log(`🛠️  Rebuilding manifest (${allClasses.length} classes)...`);
@@ -49,15 +47,21 @@ export async function dev() {
     const manifestCode = manifestGen.generate(allClasses, outDir);
     await Bun.write(join(outDir, 'manifest.ts'), manifestCode);
 
+    // Inject global path for Worker access
     const indexContent = `
-import { createContainer } from "./manifest";
+import { createContainer, createMetadataRegistry } from "./manifest";
 console.log("🌟 Bunner App Started (Generated)");
+
+globalThis.__BUNNER_MANIFEST_PATH__ = import.meta.resolve("./manifest.ts");
 const container = createContainer();
-export { container };
+const metadata = createMetadataRegistry();
+globalThis.__BUNNER_CONTAINER__ = container;
+globalThis.__BUNNER_METADATA_REGISTRY__ = metadata;
+
+export { container, metadata };
 `;
-    if (!(await Bun.file(join(outDir, 'index.ts')).exists())) {
-      await Bun.write(join(outDir, 'index.ts'), indexContent);
-    }
+    // Always overwrite index.ts in strict mode to ensure new exports
+    await Bun.write(join(outDir, 'index.ts'), indexContent);
   }
 
   // 3. Initial Scan

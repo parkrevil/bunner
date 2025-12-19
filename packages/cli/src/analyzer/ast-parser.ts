@@ -1,15 +1,32 @@
 import { parseSync } from 'oxc-parser';
 
+export interface DecoratorMetadata {
+  name: string;
+  arguments: any[];
+}
+
 export interface ClassMetadata {
   className: string;
+  decorators: DecoratorMetadata[];
   constructorParams: {
     name: string;
     type: string;
-    decorators: string[];
+    decorators: DecoratorMetadata[];
   }[];
-  decorators: {
+  methods: {
     name: string;
-    arguments: any[];
+    decorators: DecoratorMetadata[];
+    parameters: {
+      name: string;
+      type: string;
+      decorators: DecoratorMetadata[];
+      index: number;
+    }[];
+  }[];
+  properties: {
+    name: string;
+    type: string;
+    decorators: DecoratorMetadata[];
   }[];
 }
 
@@ -43,27 +60,72 @@ export class AstParser {
     const className = node.id.name;
     const decorators = (node.decorators || []).map((d: any) => this.extractDecorator(d));
     const constructorParams: ClassMetadata['constructorParams'] = [];
+    const methods: ClassMetadata['methods'] = [];
+    const properties: ClassMetadata['properties'] = [];
 
-    const constructorMethod = node.body.body.find((m: any) => m.type === 'MethodDefinition' && m.kind === 'constructor');
+    node.body.body.forEach((member: any) => {
+      if (member.type === 'MethodDefinition') {
+        if (member.kind === 'constructor') {
+          member.value.params.forEach((param: any) => {
+            const paramData = this.extractParam(param);
+            if (paramData) {
+              constructorParams.push(paramData);
+            }
+          });
+        } else if (member.kind === 'method') {
+          // Extract Method Metadata
+          const methodName = member.key.name;
+          const methodDecorators = (member.decorators || []).map((d: any) => this.extractDecorator(d));
+          const methodParams: any[] = [];
 
-    if (constructorMethod) {
-      constructorMethod.value.params.forEach((param: any) => {
-        const paramData = this.extractParam(param);
-        if (paramData) {
-          constructorParams.push(paramData);
+          member.value.params.forEach((param: any, index: number) => {
+            const p = this.extractParam(param);
+            if (p) {
+              methodParams.push({ ...p, index });
+            }
+          });
+
+          if (methodDecorators.length > 0 || methodParams.some(p => p.decorators.length > 0)) {
+            methods.push({
+              name: methodName,
+              decorators: methodDecorators,
+              parameters: methodParams,
+            });
+          }
         }
-      });
-    }
+      } else if (member.type === 'PropertyDefinition') {
+        const propName = member.key.name;
+        const propDecorators = (member.decorators || []).map((d: any) => this.extractDecorator(d));
+        // Type?
+        let propType = 'any';
+        if (member.typeAnnotation && member.typeAnnotation.typeAnnotation) {
+          // Simplified type extraction
+          const t = member.typeAnnotation.typeAnnotation;
+          if (t.type === 'TSTypeReference' && t.typeName.type === 'Identifier') {
+            propType = t.typeName.name;
+          }
+        }
+
+        if (propDecorators.length > 0) {
+          properties.push({
+            name: propName,
+            type: propType,
+            decorators: propDecorators,
+          });
+        }
+      }
+    });
 
     return {
       className,
-      constructorParams,
       decorators,
+      constructorParams,
+      methods,
+      properties,
     };
   }
 
-  private extractDecorator(decoratorNode: any) {
-    // Handling @Decorator() or @Decorator
+  private extractDecorator(decoratorNode: any): DecoratorMetadata {
     let name = '';
     let args: any[] = [];
 
@@ -74,7 +136,8 @@ export class AstParser {
         if (arg.type === 'Literal') {
           return arg.value;
         }
-        return null; // Complex args not supported in this MVP
+        // TODO: ObjectExpression support for configs
+        return null;
       });
     } else if (decoratorNode.expression.type === 'Identifier') {
       name = decoratorNode.expression.name;
@@ -83,17 +146,20 @@ export class AstParser {
     return { name, arguments: args };
   }
 
-  private extractParam(paramNode: any) {
+  private extractParam(paramNode: any): any {
     if (paramNode.type === 'TSParameterProperty') {
       return this.extractParam(paramNode.parameter);
     }
 
-    if (paramNode.type === 'Identifier') {
-      const name = paramNode.name;
+    // Handle Identifier or AssignmentPattern (default value)
+    if (paramNode.type === 'Identifier' || paramNode.type === 'AssignmentPattern') {
+      const node = paramNode.type === 'AssignmentPattern' ? paramNode.left : paramNode;
+      const name = node.name;
       let type = 'any';
+      const decorators = (paramNode.decorators || []).map((d: any) => this.extractDecorator(d));
 
-      if (paramNode.typeAnnotation && paramNode.typeAnnotation.typeAnnotation) {
-        const typeNode = paramNode.typeAnnotation.typeAnnotation;
+      if (node.typeAnnotation && node.typeAnnotation.typeAnnotation) {
+        const typeNode = node.typeAnnotation.typeAnnotation;
         if (typeNode.type === 'TSTypeReference' && typeNode.typeName.type === 'Identifier') {
           type = typeNode.typeName.name;
         } else if (typeNode.type === 'TSStringKeyword') {
@@ -105,7 +171,7 @@ export class AstParser {
         }
       }
 
-      return { name, type, decorators: [] };
+      return { name, type, decorators };
     }
     return null;
   }

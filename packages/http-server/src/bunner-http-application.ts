@@ -19,7 +19,7 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
   private server: Server<unknown> | undefined;
   private workerPool: WorkerPool<BunnerHttpWorker>;
 
-  constructor(rootModuleFile: RootModuleFile, options: BunnerApplicationNormalizedOptions<BunnerHttpServer>) {
+  constructor(rootModuleFile: RootModuleFile, options: BunnerApplicationNormalizedOptions) {
     super();
 
     this.server = undefined;

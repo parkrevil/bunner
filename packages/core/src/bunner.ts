@@ -3,10 +3,9 @@ import {
   type BunnerApplicationBaseOptions,
   type BunnerModule,
   type CreateApplicationOptions,
+  type BunnerApplicationOptions,
 } from './application';
-import { LogLevel, type BunnerApplicationOptions, type Class } from './common';
-import { BunnerError } from './errors';
-import { MetadataKey } from './injector';
+import { LogLevel, type Class } from './common';
 
 /**
  * Bunner class
@@ -24,20 +23,17 @@ export class Bunner {
   static async create<TOpts, T extends BaseApplication<TOpts>>(
     appCls: Class<T>,
     rootModuleCls: Class<BunnerModule>,
-    options?: BunnerApplicationOptions<T>,
+    options?: BunnerApplicationOptions,
   ) {
     this.setupSignalHandlers();
 
-    const rootModuleMetadata = Reflect.getMetadata(MetadataKey.RootModule, rootModuleCls);
+    // AOT Support
+    const aotContainer = (globalThis as any).__BUNNER_CONTAINER__;
+    const aotManifestPath = (globalThis as any).__BUNNER_MANIFEST_PATH__;
+    const aotMetadata = (globalThis as any).__BUNNER_METADATA_REGISTRY__;
 
-    if (!rootModuleMetadata) {
-      throw new BunnerError(`Root module "${rootModuleCls.name}" is missing @RootModule decorator`);
-    }
-
-    const rootModuleFile = Bun.file(rootModuleMetadata.path);
-
-    if (!(await rootModuleFile.exists())) {
-      throw new BunnerError(`Root module file "${rootModuleMetadata.path}" does not exist`);
+    if (!aotContainer) {
+      console.warn('[Bunner] ⚠️ AOT Container not found.');
     }
 
     const normalizedOptions = this.normalizeOptions<T, TOpts>(options);
@@ -48,8 +44,11 @@ export class Bunner {
 
     const app = new appCls(
       {
-        path: rootModuleMetadata.path,
+        path: 'aot-generated',
         className: rootModuleCls.name,
+        container: aotContainer,
+        manifestPath: aotManifestPath,
+        metadata: aotMetadata,
       },
       normalizedOptions,
     );
@@ -61,26 +60,14 @@ export class Bunner {
     return app;
   }
 
-  /**
-   * Get all applications
-   * @returns applications
-   */
   static getApplications() {
     return Object.fromEntries(this.apps.entries());
   }
 
-  /**
-   * Get an application by name
-   * @param name - The name of the application
-   * @returns The application
-   */
   static getApplication(name: string) {
     return this.apps.get(name);
   }
 
-  /**
-   * Shutdown all applications
-   */
   static async shutdown() {
     if (this.isShuttingDown) {
       return;
@@ -101,21 +88,12 @@ export class Bunner {
     ).catch(console.error);
   }
 
-  /**
-   * Generate a default name for an application
-   * @returns The default name
-   */
   private static generateApplicationDefaultName() {
     return `bunner--${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
   }
 
-  /**
-   * Normalize application options
-   * @param options The application options
-   * @returns The normalized options
-   */
   private static normalizeOptions<T extends BaseApplication<any>, O = T extends BaseApplication<infer OO> ? OO : never>(
-    options?: BunnerApplicationOptions<T>,
+    options?: BunnerApplicationOptions,
   ): O & BunnerApplicationBaseOptions {
     const {
       name = this.generateApplicationDefaultName(),
@@ -142,9 +120,6 @@ export class Bunner {
     };
   }
 
-  /**
-   * Setup OS signal handlers (idempotent)
-   */
   private static setupSignalHandlers() {
     if (this.signalsInitialized) {
       return;

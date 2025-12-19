@@ -1,38 +1,32 @@
-import type { LogLevel } from '../common';
+import { type Container } from '../injector/container';
 
-/**
- * Create Bunner Application Options
- * @description The options for creating a Bunner application
- */
-export interface CreateApplicationOptions {
-  name?: string;
-  logLevel?: LogLevel;
-  workers?: number | 'full' | 'half';
-  queueCapacity?: number;
-}
-
-/**
- * Bunner Application Base Options
- * @description The base options for a Bunner application
- */
 export interface BunnerApplicationBaseOptions {
   name: string;
-  logLevel: LogLevel;
+  logLevel: number;
   workers: number;
   queueCapacity: number;
 }
 
-/**
- * Root Module File Interface
- * @description Represents the root module file with its path and class name.
- */
+// Removed generic T from NormalizedOptions as well.
+export type BunnerApplicationNormalizedOptions = BunnerApplicationBaseOptions & { [key: string]: any };
+
+// Removed generic T as it was causing lint issues and seemingly unused for now.
+export interface BunnerApplicationOptions {
+  name?: string;
+  logLevel?: number;
+  workers?: number | 'full' | 'half';
+  queueCapacity?: number;
+  [key: string]: any;
+}
+
 export interface RootModuleFile {
   path: string;
   className: string;
+  container?: Container;
+  manifestPath?: string;
+  metadata?: Map<any, any>;
 }
 
-/**
- * Base Module Interface
- * @description Represents a base module in the application.
- */
-export interface BunnerModule {}
+export interface CreateApplicationOptions extends BunnerApplicationBaseOptions {
+  [key: string]: any;
+}
