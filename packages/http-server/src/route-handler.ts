@@ -18,11 +18,13 @@ interface InternalRoute {
 export class RouteHandler {
   private container: Container;
   private metadataRegistry: Map<any, any>;
+  private scopedKeys: Map<any, string>;
   private routes: InternalRoute[] = [];
 
-  constructor(container: Container, metadataRegistry: Map<any, any>) {
+  constructor(container: Container, metadataRegistry: Map<any, any>, scopedKeys: Map<any, string> = new Map()) {
     this.container = container;
     this.metadataRegistry = metadataRegistry;
+    this.scopedKeys = scopedKeys;
   }
 
   match(method: string, path: string): MatchResult | undefined {
@@ -62,10 +64,20 @@ export class RouteHandler {
 
   private registerController(targetClass: any, meta: any, controllerDec: any) {
     const prefix = controllerDec.arguments[0] || '';
-    const instance = this.container.get(targetClass);
+
+    // Resolve Instance using Scoped Key if available
+    const scopedKey = this.scopedKeys.get(targetClass);
+    let instance;
+
+    if (scopedKey) {
+      instance = this.container.get(scopedKey);
+    } else {
+      // Fallback for legacy or unscoped
+      instance = this.container.get(targetClass);
+    }
 
     if (!instance) {
-      console.warn(`⚠️  Cannot resolve controller instance: ${meta.className}`);
+      console.warn(`⚠️  Cannot resolve controller instance: ${meta.className} (Key: ${scopedKey || targetClass.name})`);
       return;
     }
 

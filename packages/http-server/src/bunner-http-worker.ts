@@ -32,7 +32,15 @@ export class BunnerHttpWorker extends BaseWorker {
       this.container = manifest.createContainer();
       const metadataRegistry = manifest.createMetadataRegistry();
 
-      this.routeHandler = new RouteHandler(this.container, metadataRegistry);
+      // Load Scoped Keys Map if available (New AOT Feature)
+      let scopedKeysMap = new Map();
+      if (typeof manifest.createScopedKeysMap === 'function') {
+        scopedKeysMap = manifest.createScopedKeysMap();
+      } else {
+        console.warn('⚠️  Manifest does not support Scoped Keys. Running in legacy mode.');
+      }
+
+      this.routeHandler = new RouteHandler(this.container, metadataRegistry, scopedKeysMap);
     } else {
       console.warn('Legacy init not supported in AOT Core yet.');
       this.container = new Container();

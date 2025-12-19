@@ -131,19 +131,63 @@ export class AstParser {
 
     if (decoratorNode.expression.type === 'CallExpression') {
       name = decoratorNode.expression.callee.name;
-      // Simplified arg extraction (literals only for now)
-      args = decoratorNode.expression.arguments.map((arg: any) => {
-        if (arg.type === 'Literal') {
-          return arg.value;
-        }
-        // TODO: ObjectExpression support for configs
-        return null;
-      });
+      args = decoratorNode.expression.arguments.map((arg: any) => this.parseExpression(arg));
     } else if (decoratorNode.expression.type === 'Identifier') {
       name = decoratorNode.expression.name;
     }
 
     return { name, arguments: args };
+  }
+
+  private parseExpression(expr: any): any {
+    if (!expr) {
+      return null;
+    }
+
+    // OXC AST normalization
+    const node = expr.type === 'ExpressionStatement' ? expr.expression : expr;
+
+    switch (node.type) {
+      case 'Literal':
+      case 'StringLiteral':
+      case 'NumericLiteral':
+      case 'BooleanLiteral':
+      case 'NullLiteral':
+        return node.value;
+
+      case 'ObjectExpression': {
+        const obj: any = {};
+        (node.properties || []).forEach((prop: any) => {
+          if (prop.type === 'Property') {
+            const key = prop.key.name || prop.key.value;
+            obj[key] = this.parseExpression(prop.value);
+          }
+        });
+        return obj;
+      }
+
+      case 'ArrayExpression':
+        return (node.elements || []).map((el: any) => this.parseExpression(el));
+
+      case 'Identifier':
+        // Tag as reference to handle later in Codegen (e.g. for @Inject(Token))
+        return { __bunner_ref: node.name };
+
+      case 'NewExpression':
+        return {
+          __bunner_new: node.callee.name,
+          args: (node.arguments || []).map((arg: any) => this.parseExpression(arg)),
+        };
+
+      // Handle ArrowFunctionExpression for useFactory or other async configs if needed simply
+      case 'ArrowFunctionExpression':
+        // Extremely simplified representation for now. Real implementation needs full codegen.
+        return { __bunner_arrow_fn: true };
+
+      default:
+        // Fallback or unsupported
+        return null;
+    }
   }
 
   private extractParam(paramNode: any): any {

@@ -4,6 +4,7 @@ import { join, resolve } from 'path';
 import { Glob } from 'bun';
 
 import { AstParser, type ClassMetadata } from '../analyzer/ast-parser';
+import { ModuleGraph } from '../analyzer/module-graph';
 import { SourceScanner } from '../analyzer/source-scanner';
 import { ManifestGenerator } from '../generators/manifest';
 import { ConfigLoader } from '../utils/config-loader';
@@ -44,20 +45,27 @@ export async function dev() {
     const allClasses = Array.from(fileCache.values()).flat();
     console.log(`🛠️  Rebuilding manifest (${allClasses.length} classes)...`);
 
-    const manifestCode = manifestGen.generate(allClasses, outDir);
+    // Build Module Graph
+    const graph = new ModuleGraph(allClasses);
+    graph.build();
+
+    const manifestCode = manifestGen.generate(graph, allClasses, outDir);
     await Bun.write(join(outDir, 'manifest.ts'), manifestCode);
 
     // Inject global path for Worker access
     const userMain = join(srcDir, 'main.ts');
     const indexContent = `
-import { createContainer, createMetadataRegistry } from "./manifest";
+import { createContainer, createMetadataRegistry, createScopedKeysMap } from "./manifest";
 console.log("🌟 Bunner App Started (Generated)");
 
 globalThis.__BUNNER_MANIFEST_PATH__ = import.meta.resolve("./manifest.ts");
 const container = createContainer();
 const metadata = createMetadataRegistry();
+const scopedKeys = createScopedKeysMap();
+
 globalThis.__BUNNER_CONTAINER__ = container;
 globalThis.__BUNNER_METADATA_REGISTRY__ = metadata;
+globalThis.__BUNNER_SCOPED_KEYS__ = scopedKeys;
 
 // Start User Application (Dynamic Import to guarantee execution order)
 await import("${userMain}");
