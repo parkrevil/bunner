@@ -1,19 +1,6 @@
-import { MetadataKey } from './enums';
-import type { RestControllerDecoratorOptions, RestControllerMetadata } from './interfaces';
+import type { RestControllerDecoratorOptions } from './interfaces';
 
-/**
- * Controller Decorators
- * @param path - The base path for the controller
- * @param options - The controller options
- * @returns ClassDecorator
- */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function RestController(path?: string, options?: RestControllerDecoratorOptions): ClassDecorator {
-  return function <T extends Function>(target: T) {
-    const controllerMetadata: RestControllerMetadata = {
-      path,
-      options,
-    };
-
-    Reflect.defineMetadata(MetadataKey.RestController, controllerMetadata, target);
-  };
+  return (target: any) => target;
 }

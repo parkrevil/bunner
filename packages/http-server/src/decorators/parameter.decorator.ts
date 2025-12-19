@@ -1,68 +1,12 @@
-import { EmitDecoratorMetadataError } from '@bunner/core';
-
-import { MetadataKey } from './enums';
-import type { RestRouteHandlerParamMetadata } from './interfaces';
-import type { RouteHandlerParamType } from './types';
-
-function createHttpParamDecorator(type: RouteHandlerParamType) {
-  return function (target: object, propertyKey: string | symbol | undefined, index: number) {
-    if (!propertyKey) {
-      throw new EmitDecoratorMetadataError();
-    }
-
-    const existingParams: RestRouteHandlerParamMetadata[] =
-      Reflect.getMetadata(MetadataKey.RouteHandlerParams, target, propertyKey) ?? [];
-    existingParams.push({ index, type });
-
-    Reflect.defineMetadata(MetadataKey.RouteHandlerParams, existingParams, target, propertyKey);
-  };
+function createHttpParamDecorator() {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  return function (target: object, propertyKey: string | symbol | undefined, index: number) {};
 }
 
-/**
- * Body HTTP parameter decorator
- * @description Inject the body object
- * @returns
- */
-export const Body = () => createHttpParamDecorator('body');
-
-/**
- * Query HTTP parameter decorator
- * @description Inject the query object
- * @returns
- */
-export const Query = () => createHttpParamDecorator('query');
-
-/**
- * Params HTTP parameter decorator
- * @description Inject the params object
- * @returns
- */
-export const Params = () => createHttpParamDecorator('param');
-
-/**
- * Request HTTP parameter decorator
- * @description Inject the BunnerRequest object
- * @returns
- */
-export const Request = () => createHttpParamDecorator('request');
-
-/**
- * Response HTTP parameter decorator
- * @description Inject the BunnerResponse object
- * @returns
- */
-export const Response = () => createHttpParamDecorator('response');
-
-/**
- * Response HTTP parameter decorator
- * @description Inject the BunnerResponse object
- * @returns
- */
-export const Cookie = () => createHttpParamDecorator('cookie');
-
-/**
- * Response HTTP parameter decorator
- * @description Inject the BunnerResponse object
- * @returns
- */
-export const Ip = () => createHttpParamDecorator('ip');
+export const Body = () => createHttpParamDecorator();
+export const Query = () => createHttpParamDecorator();
+export const Params = () => createHttpParamDecorator();
+export const Request = () => createHttpParamDecorator();
+export const Response = () => createHttpParamDecorator();
+export const Cookie = () => createHttpParamDecorator();
+export const Ip = () => createHttpParamDecorator();
