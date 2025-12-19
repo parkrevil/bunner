@@ -1,5 +1,3 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-nocheck
 import css from '@eslint/css';
 import eslint from '@eslint/js';
 import json from '@eslint/json';
@@ -160,19 +158,19 @@ export default defineConfig([
   },
   {
     files: ['**/*.json'],
-    plugins: { json },
+    plugins: { json: json as any },
     language: 'json/json',
     extends: ['json/recommended'],
   },
   {
     files: ['**/*.md'],
-    plugins: { markdown },
+    plugins: { markdown: markdown as any },
     language: 'markdown/gfm',
     extends: ['markdown/recommended'],
   },
   {
     files: ['**/*.css'],
-    plugins: { css },
+    plugins: { css: css as any },
     language: 'css/css',
     extends: ['css/recommended'],
   },
