@@ -142,12 +142,21 @@ ${dynamicEntries.join('\n')}
 
   private resolveConstructorDeps(meta: ClassMetadata, node: ModuleNode, graph: ModuleGraph): string[] {
     return meta.constructorParams.map(param => {
-      // 1. Check for @Inject(Token)
-      // const injectDec = param.decorators.find(d => d.name === 'Inject');
-      // let token = injectDec ? injectDec.arguments[0] : param.type;
+      let token = param.type;
 
-      // Simplified for Phase 1: Use type name as token
-      const token = param.type;
+      // 1. Check for @Inject(Token) or @Inject(forwardRef(() => Token))
+      const injectDec = param.decorators.find(d => d.name === 'Inject');
+      if (injectDec && injectDec.arguments.length > 0) {
+        const arg = injectDec.arguments[0];
+        if (typeof arg === 'string') {
+          token = arg; // @Inject('SOME_STRING')
+        } else if (arg.__bunner_forward_ref) {
+          token = arg.__bunner_forward_ref; // @Inject(forwardRef(() => Token))
+        } else if (arg.__bunner_ref) {
+          token = arg.__bunner_ref; // @Inject(Token)
+        }
+      }
+
       if (typeof token !== 'string') {
         return 'undefined';
       }
@@ -158,9 +167,9 @@ ${dynamicEntries.join('\n')}
       if (resolvedToken) {
         return `c.get('${resolvedToken}')`;
       }
-      // Fallback or explicit global?
-      // console.warn(\`⚠️  [Generator] Could not resolve dependency '\${token}' in module '\${node.name}'\`);
-      return `c.get('${token}')`; // Try global/unscoped as hail mary
+
+      // Fallback
+      return `c.get('${token}')`;
     });
   }
 }

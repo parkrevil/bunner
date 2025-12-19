@@ -198,7 +198,7 @@ export class AstParser {
         };
 
       case 'CallExpression': {
-        // Dynamic Module Call (e.g. ConfigModule.forRoot())
+        // Dynamic Module Call (e.g. ConfigModule.forRoot()) OR forwardRef()
         // We need to capture the callee name (e.g. "ConfigModule.forRoot" or just "forRoot")
         // Note: callee might be MemberExpression
         let calleeName = 'unknown';
@@ -206,6 +206,20 @@ export class AstParser {
           calleeName = `${node.callee.object.name}.${node.callee.property.name}`;
         } else if (node.callee.type === 'Identifier') {
           calleeName = node.callee.name;
+        }
+
+        // Handle forwardRef(() => Module)
+        if (calleeName === 'forwardRef' && node.arguments.length > 0) {
+          const arg = node.arguments[0];
+          // Expect ArrowFunctionExpression or FunctionExpression
+          if (arg.type === 'ArrowFunctionExpression' || arg.type === 'FunctionExpression') {
+            // Extract the return value identifier from the function body
+            // e.g. () => ModuleName
+            if (arg.body.type === 'Identifier') {
+              return { __bunner_forward_ref: arg.body.name };
+            }
+            // BlockStatement? { return ModuleName; }
+          }
         }
 
         return {

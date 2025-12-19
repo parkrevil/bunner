@@ -126,6 +126,15 @@ export class ModuleGraph {
       } else if (imp.__bunner_call) {
         // Dynamic Import
         node.dynamicImports.add(imp);
+      } else if (imp.__bunner_forward_ref) {
+        // Forward Ref Import
+        // Treat as normal import for graph linking, but maybe flag it?
+        // The runtime won't need special handling if we just assume eventual consistency in AOT map.
+        // Problem is if A depends on B and B on A, build order might matter if we were instantiating during build.
+        // But we are generating factories.
+        // Factories are lazy. So A's factory calls new A(c.get(B)) and B's new B(c.get(A)).
+        // As long as keys exist in map, it should work fine at runtime thanks to lazy lookup.
+        helper(imp.__bunner_forward_ref);
       }
     });
   }
