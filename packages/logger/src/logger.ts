@@ -30,10 +30,6 @@ export class Logger {
     this.transport = new ConsoleTransport(this.globalOptions);
   }
 
-  /* -------------------------------------------------------------------------- */
-  /*                               Logging Methods                              */
-  /* -------------------------------------------------------------------------- */
-
   trace<T = Record<string, any>>(msg: string, ...args: (T | Error | Loggable)[]) {
     this.log('trace', msg, ...args);
   }
@@ -57,10 +53,6 @@ export class Logger {
   fatal<T = Record<string, any>>(msg: string, ...args: (T | Error | Loggable)[]) {
     this.log('fatal', msg, ...args);
   }
-
-  /* -------------------------------------------------------------------------- */
-  /*                               Internal Logic                               */
-  /* -------------------------------------------------------------------------- */
 
   private log<T = Record<string, any>>(level: LogLevel, msg: string, ...args: (T | Error | Loggable)[]) {
     if (!this.isLevelEnabled(level)) {

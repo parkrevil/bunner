@@ -25,8 +25,7 @@ export class OptionalParamDefaults {
     if (!defaults) {
       return;
     }
-    
-    // params is Object.create(null), so 'in' operator is safe and fast
+
     const val = this.defaultValue;
     const len = defaults.length;
     for (let i = 0; i < len; i++) {

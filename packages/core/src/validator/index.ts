@@ -1,3 +1,4 @@
+export * from './interfaces';
 export * from './decorators';
 
-export * from './validator-compiler';
+export * from './compiler';

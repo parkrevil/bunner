@@ -14,18 +14,14 @@ export async function dev() {
   const logger = new Logger('CLI:Dev');
   logger.info('🚀 Starting Bunner Dev Server...');
 
-  // 1. Load Config
-  await ConfigLoader.load();
+  const config = await ConfigLoader.load();
   const projectRoot = process.cwd();
   const srcDir = resolve(projectRoot, 'src');
   const outDir = resolve(projectRoot, '.bunner');
 
-  // 2. Initialize Components
-
   const parser = new AstParser();
   const manifestGen = new ManifestGenerator();
 
-  // State
   const fileCache = new Map<string, { metadata: ClassMetadata; filePath: string }[]>();
 
   async function analyzeFile(filePath: string) {
@@ -46,31 +42,38 @@ export async function dev() {
     const allClasses = Array.from(fileCache.values()).flat();
     logger.debug(`🛠️  Rebuilding manifest (${allClasses.length} classes)...`);
 
-    // Build Module Graph
     const graph = new ModuleGraph(allClasses);
     graph.build();
 
     const manifestCode = manifestGen.generate(graph, allClasses, outDir);
     await Bun.write(join(outDir, 'manifest.ts'), manifestCode);
 
-    // Inject global path for Worker access
     const userMain = join(srcDir, 'main.ts');
     const entryGen = new EntryGenerator();
     const indexContent = entryGen.generate(userMain, true);
 
-    // Always overwrite index.ts in strict mode to ensure new exports
     await Bun.write(join(outDir, 'index.ts'), indexContent);
   }
 
-  // 3. Initial Scan
   const glob = new Glob('**/*.ts');
   logger.info('🔍 Initial Scan...');
+
   for await (const file of glob.scan(srcDir)) {
     await analyzeFile(join(srcDir, file));
   }
+
+  if (config.scanPaths) {
+    for (const scanPath of config.scanPaths) {
+      const absPath = resolve(projectRoot, scanPath);
+      logger.info(`🔍 Scanning additional path: ${scanPath}`);
+      for await (const file of glob.scan(absPath)) {
+        await analyzeFile(join(absPath, file));
+      }
+    }
+  }
+
   await rebuild();
 
-  // 4. Spawn Child App
   const appEntry = join(outDir, 'index.ts');
   logger.info('🚀 Spawning App', { command: `bun run --watch ${appEntry}` });
 

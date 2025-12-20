@@ -30,10 +30,6 @@ export class WorkerPool<T extends BaseWorker> {
     this.workers = Array.from({ length: size }, (_, id) => this.spawnWorker(id));
   }
 
-  /**
-   * Destroy the worker pool and terminate all workers.
-   * @param params Parameters to pass to each worker's destroy method.
-   */
   async destroy() {
     this.destroying = true;
 
@@ -46,12 +42,6 @@ export class WorkerPool<T extends BaseWorker> {
     await Promise.all(this.workers.map((_, id) => this.destroyWorker(id)));
   }
 
-  /**
-   * Call a method on a worker from the pool.
-   * @param method The method name to call.
-   * @param args Arguments to pass to the method.
-   * @returns The result of the method call.
-   */
   async call<K extends ClassProperties<T>>(method: K, ...args: MethodParams<T, K>): Promise<Awaited<MethodReturn<T, K>>> {
     let workerId: number | undefined;
     let increased = false;
@@ -85,10 +75,6 @@ export class WorkerPool<T extends BaseWorker> {
     }
   }
 
-  /**
-   * Initialize the worker pool.
-   * @param params Parameters to pass to each worker's init method.
-   */
   async init(params?: InitParams<T>) {
     this.initParams = params;
 
@@ -101,10 +87,6 @@ export class WorkerPool<T extends BaseWorker> {
     }
   }
 
-  /**
-   * Bootstrap the worker pool.
-   * @param params Parameters to pass to each worker's bootstrap method.
-   */
   async bootstrap(params?: BootstrapParams<T>) {
     this.bootstrapParams = params;
 

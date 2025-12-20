@@ -10,7 +10,6 @@ import type { HttpWorkerResponse, RouteHandlerEntry } from './interfaces';
 import { ValidationPipe } from './pipes/validation.pipe';
 import { RouteHandler } from './route-handler';
 
-// ... class ...
 export class BunnerHttpWorker extends BaseWorker {
   private container: Container;
   private routeHandler: RouteHandler;
@@ -37,13 +36,11 @@ export class BunnerHttpWorker extends BaseWorker {
       this.container = manifest.createContainer();
       const metadataRegistry = manifest.createMetadataRegistry();
 
-      // Register Dynamic Modules (New AOT Feature)
       if (typeof manifest.registerDynamicModules === 'function') {
         this.logger.info('⚡ Loading Dynamic Modules...');
         await manifest.registerDynamicModules(this.container);
       }
 
-      // Load Scoped Keys Map if available (New AOT Feature)
       let scopedKeysMap = new Map();
       if (typeof manifest.createScopedKeysMap === 'function') {
         scopedKeysMap = manifest.createScopedKeysMap();
@@ -75,7 +72,6 @@ export class BunnerHttpWorker extends BaseWorker {
 
       const match = this.routeHandler.match(methodStr, path);
 
-      // Adaptive Request Object for BunnerRequest
       const adaptiveReq = {
         httpMethod: httpMethod,
         url: url,
@@ -136,7 +132,7 @@ export class BunnerHttpWorker extends BaseWorker {
 
     for (let i = 0; i < entry.paramType.length; i++) {
       const type = entry.paramType[i] as string;
-      const metatype = entry.paramRefs[i]; // Get Type Reference
+      const metatype = entry.paramRefs[i]; 
       let paramValue = undefined;
 
       switch (type) {
@@ -175,13 +171,11 @@ export class BunnerHttpWorker extends BaseWorker {
           break;
       }
 
-      // Apply ValidationPipe for Body (and Query/Params if metatype is provided)
-      // Currently focusing on Body validation as per plan
       if (metatype && (type === 'body' || type === 'query')) {
         paramValue = await this.validationPipe.transform(paramValue, {
           type: type as any,
           metatype,
-          data: undefined, // We don't have deep param name info here easily yet
+          data: undefined, 
         });
       }
 

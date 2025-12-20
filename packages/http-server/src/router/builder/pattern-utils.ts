@@ -43,7 +43,7 @@ export class PatternUtils {
       removed = true;
     }
     if (removed) {
-      // Log warning if policy
+
       const policy = this.config.regexAnchorPolicy;
       const msg = `[Router] Parameter regex '${patternSrc}' contained anchors which were stripped.`;
       if (policy === 'error') {

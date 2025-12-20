@@ -13,7 +13,6 @@ export async function build() {
   const logger = new Logger('CLI:Build');
   logger.info('🚀 Starting Bunner Production Build...');
 
-  // 1. Load Config
   const config = await ConfigLoader.load();
   const projectRoot = process.cwd();
   const srcDir = resolve(projectRoot, 'src');
@@ -24,12 +23,9 @@ export async function build() {
   logger.info(`📂 Source Dir: ${srcDir}`);
   logger.info(`📂 Output Dir: ${outDir}`);
 
-  // 2. Initialize Components
-
   const parser = new AstParser();
   const manifestGen = new ManifestGenerator();
 
-  // 3. Scan & Analyze
   const glob = new Glob('**/*.ts');
   const classes: { metadata: ClassMetadata; filePath: string }[] = [];
 
@@ -48,18 +44,15 @@ export async function build() {
     }
   }
 
-  // 4. Build Module Graph
   logger.info('🕸️  Building Module Graph...');
   const graph = new ModuleGraph(classes);
   graph.build();
 
-  // 5. Generate Manifests (Intermediate)
   logger.info('🛠️  Generating intermediate manifests...');
   const manifestFile = join(bunnerDir, 'manifest.ts');
   const manifestCode = manifestGen.generate(graph, classes, bunnerDir);
   await Bun.write(manifestFile, manifestCode);
 
-  // 6. Setup Entry Point
   const entryPointFile = join(bunnerDir, 'entry.ts');
   const userMain = join(srcDir, 'main.ts');
   const entryGen = new EntryGenerator();
@@ -67,7 +60,6 @@ export async function build() {
   const buildEntryContent = entryGen.generate(userMain, false);
   await Bun.write(entryPointFile, buildEntryContent);
 
-  // 7. Bun Build (Bundling)
   logger.info('📦 Bundling application, manifest, and workers...');
 
   const workers = config.workers?.map(w => resolve(projectRoot, w)) || [];

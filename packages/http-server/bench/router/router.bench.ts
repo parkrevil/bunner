@@ -4,7 +4,6 @@ import { Router } from '../../src/router/router';
 import type { RouterOptions, Handler } from '../../src/router/types';
 import type { HttpMethod } from '../../src/types';
 
-// Adapting old types for bench
 type RouterInstance = Router<{ key: number | string; params: any }>;
 type RouteMatch = { key: number | string; params: any };
 

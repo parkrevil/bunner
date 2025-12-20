@@ -1,7 +1,6 @@
 import type { WorkerStats } from './interfaces';
 import type { WorkerId, InitParams } from './types';
 
-// Declare global WORKER_ID
 declare global {
   var WORKER_ID: number | undefined;
 }

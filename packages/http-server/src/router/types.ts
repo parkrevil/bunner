@@ -1,7 +1,5 @@
 import type { HttpMethod } from '../types';
 
-// RouteId is internal only now
-
 export interface RouterOptions {
   ignoreTrailingSlash?: boolean;
   collapseSlashes?: boolean;
@@ -86,7 +84,6 @@ export interface SuffixPlan {
 
 export type RouteParams = Record<string, string | undefined>;
 
-// Internal Result types
 export interface MatchResultMeta {
   readonly source?: 'static-fast' | 'cache' | 'dynamic';
 }
@@ -97,10 +94,8 @@ export interface DynamicMatchResult {
   snapshot?: Array<[string, string | undefined]>;
 }
 
-// Handler Type
 export type Handler<R = any> = (params: RouteParams, meta: MatchResultMeta) => R;
 
-// Router Interfaces
 export interface RouterInstance<R> {
   match(method: HttpMethod, path: string): R | null;
 }

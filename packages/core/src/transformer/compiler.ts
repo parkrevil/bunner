@@ -4,27 +4,12 @@ export class TransformerCompiler {
   private static p2iCache = new Map<Function, Function>();
   private static i2pCache = new Map<Function, Function>();
 
-  /**
-   * Compiles plainToInstance function
-   */
   static compilePlainToInstance(target: Function): (plain: any) => any {
     if (this.p2iCache.has(target)) {
       return this.p2iCache.get(target) as any;
     }
 
     const metadata = MetadataConsumer.getCombinedMetadata(target);
-
-    // We assume 'target' constructor is available in scope or we use 'new target()' if we could pass it.
-    // 'new Function' cannot access outer scope 'target'.
-    // So we return a closure.
-
-    // Strategy: generate the body, then wrap.
-    /*
-      const instance = new Target();
-      if (plain.name !== undefined) instance.name = String(plain.name);
-      if (plain.age !== undefined) instance.age = Number(plain.age);
-      return instance;
-    */
 
     const bodyLines: string[] = [];
     bodyLines.push('const instance = new Target();'); // Target will be passed as arg
@@ -168,7 +153,7 @@ export class TransformerCompiler {
 
     // eslint-disable-next-line @typescript-eslint/no-implied-eval
     const fn = new Function('instance', 'converters', 'classRefs', bodyLines.join('\n'));
-    
+
     const classRefs: Record<string, any> = {};
     for (const [propName, prop] of Object.entries(metadata.properties)) {
       if ((prop as any).isClass) classRefs[propName] = (prop as any).type;

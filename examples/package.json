@@ -11,7 +11,8 @@
   "dependencies": {
     "@bunner/core": "workspace:*",
     "@bunner/http-server": "workspace:*",
-    "@bunner/logger": "workspace:*"
+    "@bunner/logger": "workspace:*",
+    "@bunner/scalar": "workspace:*"
   },
   "devDependencies": {
     "@bunner/cli": "workspace:*",

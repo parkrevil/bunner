@@ -25,7 +25,7 @@ import type { Node } from './node';
 
 export class Flattener {
   static flatten(root: Node): BinaryRouterLayout {
-    // 1. Linearize Nodes (BFS)
+
     const nodes: Node[] = [];
     const nodeToIndex = new Map<Node, number>();
     const queue: Node[] = [root];
@@ -38,8 +38,6 @@ export class Flattener {
       nodeToIndex.set(node, nodes.length);
       nodes.push(node);
 
-      // Important: For Binary Search to work in Matcher, children MUST be sorted by segment.
-      // StaticChildStore might be in inline (insertion) order. We must sort here.
       const staticEntries = Array.from(node.staticChildren.entries());
       staticEntries.sort((a, b) => (a[0] < b[0] ? -1 : 1));
 
@@ -54,7 +52,6 @@ export class Flattener {
       }
     }
 
-    // Buffers and String Tables
     const nodeBuffer = new Uint32Array(nodes.length * NODE_STRIDE);
     const staticChildrenList: number[] = [];
     const paramChildrenList: number[] = [];
@@ -86,12 +83,10 @@ export class Flattener {
       return id;
     };
 
-    // 2. Build Nodes in Buffer
     for (let i = 0; i < nodes.length; i++) {
       const node = nodes[i]!;
       const base = i * NODE_STRIDE;
 
-      // Meta
       const kindCode = node.kind === NodeKind.Static ? 0 : node.kind === NodeKind.Param ? 1 : 2;
       let wildcardOriginCode = 0;
       if (node.wildcardOrigin === 'multi') {
@@ -110,13 +105,12 @@ export class Flattener {
 
       nodeBuffer[base + NODE_OFFSET_META] = meta;
 
-      // Methods
       let methodMask = 0;
       if (methodCount > 0) {
         const sortedEntries: { code: number; key: number }[] = [];
         for (const [method, key] of node.methods.byMethod.entries()) {
           const mCodeNum = METHOD_OFFSET[method];
-          // mCodeNum should be valid as Builder validates it
+
           if (mCodeNum !== undefined) {
             if (mCodeNum < 31) {
               methodMask |= 1 << mCodeNum;
@@ -136,12 +130,10 @@ export class Flattener {
       }
       nodeBuffer[base + NODE_OFFSET_METHOD_MASK] = methodMask;
 
-      // Static Children (Sorted)
       if (node.staticChildren.size > 0) {
         nodeBuffer[base + NODE_OFFSET_STATIC_CHILD_PTR] = staticChildrenList.length;
         nodeBuffer[base + NODE_OFFSET_STATIC_CHILD_COUNT] = node.staticChildren.size;
 
-        // Re-get entries and sort again to ensure buffer logic matches queue logic
         const staticEntries = Array.from(node.staticChildren.entries());
         staticEntries.sort((a, b) => (a[0] < b[0] ? -1 : 1));
 
@@ -154,7 +146,6 @@ export class Flattener {
         nodeBuffer[base + NODE_OFFSET_STATIC_CHILD_COUNT] = 0;
       }
 
-      // Param Children
       if (node.paramChildren.length > 0) {
         nodeBuffer[base + NODE_OFFSET_PARAM_CHILD_PTR] = paramChildrenList.length;
         for (const child of node.paramChildren) {
@@ -164,14 +155,12 @@ export class Flattener {
         nodeBuffer[base + NODE_OFFSET_PARAM_CHILD_PTR] = 0;
       }
 
-      // Wildcard
       if (node.wildcardChild) {
         nodeBuffer[base + NODE_OFFSET_WILDCARD_CHILD_PTR] = nodeToIndex.get(node.wildcardChild)!;
       } else {
         nodeBuffer[base + NODE_OFFSET_WILDCARD_CHILD_PTR] = 0;
       }
 
-      // Data (Name/Pattern/Segment)
       if (node.kind === NodeKind.Param) {
         const paramIdx = paramsList.length / PARAM_ENTRY_STRIDE;
         paramsList.push(getStringId(node.segment));
@@ -186,7 +175,6 @@ export class Flattener {
       }
     }
 
-    // Encode String Table
     const encoder = new TextEncoder();
     const offsets: number[] = [];
     const encodedChunks: Uint8Array[] = [];
@@ -198,7 +186,7 @@ export class Flattener {
       encodedChunks.push(encoded);
       currentOffset += encoded.length;
     }
-    offsets.push(currentOffset); // Sentinel
+    offsets.push(currentOffset); 
 
     const stringTable = new Uint8Array(currentOffset);
     let ptr = 0;

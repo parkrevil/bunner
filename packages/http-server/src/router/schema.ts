@@ -1,4 +1,3 @@
-// Internal Method Mapping for Binary Layout
 export const METHOD_OFFSET = {
   GET: 0,
   POST: 1,
@@ -17,20 +16,18 @@ export enum NodeKind {
   Wildcard = 'wildcard',
 }
 
-// Node Layout Constants (Offsets in Uint32)
 export const NODE_STRIDE = 8;
 
 export const NODE_OFFSET_META = 0;
-// META: [Kind (8bit) | MethodCount (8bit) | WildcardOrigin (8bit) | Flags (8bit)]
+
 export const NODE_OFFSET_METHOD_MASK = 1;
-export const NODE_OFFSET_MATCH_FUNC = 2; // Reserved for fast-match function ID or Pattern ID
+export const NODE_OFFSET_MATCH_FUNC = 2; 
 export const NODE_OFFSET_STATIC_CHILD_PTR = 3;
 export const NODE_OFFSET_STATIC_CHILD_COUNT = 4;
 export const NODE_OFFSET_PARAM_CHILD_PTR = 5;
 export const NODE_OFFSET_WILDCARD_CHILD_PTR = 6;
 export const NODE_OFFSET_METHODS_PTR = 7;
 
-// Param Table Stride
 export const PARAM_ENTRY_STRIDE = 2;
 export const PARAM_OFFSET_NAME = 0;
 export const PARAM_OFFSET_PATTERN = 1;
@@ -49,56 +46,22 @@ export interface SerializedPattern {
 }
 
 export interface BinaryRouterLayout {
-  /**
-   * The main node arena.
-   * Each node occupies NODE_STRIDE (8) words.
-   */
+
   readonly nodeBuffer: Uint32Array;
 
-  /**
-   * Static Children Table.
-   * Format: [SegmentStringIndex, TargetNodeIndex, ...]
-   */
   readonly staticChildrenBuffer: Uint32Array;
 
-  /**
-   * Param Children Table.
-   * Format: [TargetNodeIndex, ...]
-   */
   readonly paramChildrenBuffer: Uint32Array;
 
-  /**
-   * Params Table (for Param Nodes).
-   * Format: [NameStringIndex, PatternIndex, ...]
-   * PatternIndex is -1 (or 0xFFFFFFFF) if no pattern.
-   */
   readonly paramsBuffer: Uint32Array;
 
-  /**
-   * Methods Handler Table.
-   * Format: [MethodEnum, RouteId, ...]
-   */
   readonly methodsBuffer: Uint32Array;
 
-  /**
-   * String table for segment values and param names.
-   * Encoded as UTF-8 bytes in a single buffer.
-   */
   readonly stringTable: Uint8Array;
 
-  /**
-   * Offsets for the string table.
-   * Format: [Offset0, Offset1, ... OffsetN, TotalLength]
-   */
   readonly stringOffsets: Uint32Array;
 
-  /**
-   * Regex patterns.
-   */
   readonly patterns: ReadonlyArray<SerializedPattern>;
 
-  /**
-   * Root node index in nodeBuffer (usually 0).
-   */
   readonly rootIndex: number;
 }

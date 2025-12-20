@@ -29,13 +29,12 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
     this.options = {
       ...{
         port: 5000,
-        bodyLimit: 10 * 1024 * 1024, // 10 MB
+        bodyLimit: 10 * 1024 * 1024, 
         trustProxy: false,
       },
       ...options,
     };
 
-    // Detect if we are running from a bundled .js file or a .ts source
     const currentUrl = import.meta.url;
     const isBundled = currentUrl.endsWith('.js');
     const workerScript = isBundled
@@ -48,16 +47,13 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
     });
   }
 
-  /**
-   * Initialize the server
-   */
   async init() {
-    // Sanitize rootModuleFile to be cloneable (remove methods/complex objects)
+
     const sanitizedRootModuleFile: RootModuleFile = {
       path: this.rootModuleFile.path,
       className: this.rootModuleFile.className,
       manifestPath: this.rootModuleFile.manifestPath,
-      // Exclude container and metadata as they are not cloneable
+
     };
 
     await this.workerPool.init({
@@ -72,9 +68,6 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
     this.logger.info('✨ Bunner HTTP Server initialized');
   }
 
-  /**
-   * Start the server
-   */
   async start() {
     await this.workerPool.bootstrap();
 
@@ -135,11 +128,6 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
     });
   }
 
-  /**
-   * Stop and destroy the server
-   * @param force - Whether to force the server to close
-   * @returns A promise that resolves to true if the application stopped successfully
-   */
   async shutdown(force = false) {
     this.logger.info('🛑 HTTP Server is shutting down...');
 

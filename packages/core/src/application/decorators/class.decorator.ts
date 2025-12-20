@@ -1,5 +1,3 @@
-// AOT Markers - Zero Overhead at Runtime
-
 export function Injectable() {
   return (_target: Function) => {};
 }

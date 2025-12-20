@@ -36,9 +36,6 @@ export class Builder<T> {
     return Flattener.flatten(this.root);
   }
 
-  /**
-   * Recursive core of the builder. Traverses or creates nodes based on the current segment.
-   */
   private addSegments(
     node: Node,
     index: number,
@@ -48,7 +45,7 @@ export class Builder<T> {
     key: number,
     segments: string[],
   ): void {
-    // 1. Base Case: End of segments -> Register Route
+
     if (index === segments.length) {
       this.registerRoute(node, method, key, omittedOptionals, segments);
       return;
@@ -57,25 +54,19 @@ export class Builder<T> {
     const segment = segments[index]!;
     const charCode = segment.charCodeAt(0);
 
-    // 2. Wildcard ('*')
     if (charCode === 42) {
       this.handleWildcard(node, index, activeParams, omittedOptionals, method, key, segments);
       return;
     }
 
-    // 3. Parameter (':')
     if (charCode === 58) {
       this.handleParam(node, index, activeParams, omittedOptionals, method, key, segments);
       return;
     }
 
-    // 4. Static Segment
     this.handleStatic(node, index, activeParams, omittedOptionals, method, key, segments);
   }
 
-  /**
-   * Registers the finalizing route on the current node.
-   */
   private registerRoute(node: Node, method: HttpMethod, key: number, omittedOptionals: string[], segments: string[]): void {
     const methodId = METHOD_OFFSET[method];
     if (methodId === undefined) {
@@ -86,25 +77,14 @@ export class Builder<T> {
       const methodName = method;
       throw new Error(`Route already exists for ${methodName} at path: /${segments.join('/')}`);
     }
-    // node.methods.byMethod keys are HttpMethod (string) ??
-    // Wait, builder/types.ts says Map<HttpMethod, number>.
-    // But schema.ts says methodsBuffer is [MethodEnum, RouteId]. MethodEnum is number.
-    // So Builder must verify uniqueness by string, but FLATTENER needs to write numbers.
-    // Actually, `node.methods.byMethod` is defined in `builder/types.ts` as `Map<HttpMethod, number>`.
-    // Since `HttpMethod` is now string, `Map<string, number>` is correct for storage.
-    // Schema mapping happens during FLATTEN.
-    // Wait, the error is `RouteId` usage in `builder.ts` signatures.
+
     node.methods.byMethod.set(method, key);
 
-    // Track metrics for optional parameters if configured
     if (omittedOptionals.length && this.config.optionalParamDefaults) {
       this.config.optionalParamDefaults.record(key, omittedOptionals);
     }
   }
 
-  /**
-   * Processes a Wildcard segment (e.g., "*", "*user").
-   */
   private handleWildcard(
     node: Node,
     index: number,
@@ -116,20 +96,16 @@ export class Builder<T> {
   ): void {
     const segment = segments[index]!;
 
-    // Conflict Check: Wildcards generally cannot coexist with Static or Param siblings in this implementation
-    // (Subject to specific design constraints)
     if (node.staticChildren.size || node.paramChildren.length) {
       throw new Error(`Conflict: adding wildcard '*' at '${this.getPathString(segments, index)}' would shadow existing routes`);
     }
 
-    // Rule: Wildcard must be terminal
     if (index !== segments.length - 1) {
       throw new Error("Wildcard '*' must be the last segment");
     }
 
     const name = segment.length > 1 ? segment.slice(1) : '*';
 
-    // Reuse or Create Wildcard Node
     if (node.wildcardChild) {
       const existing = node.wildcardChild;
       if (existing.wildcardOrigin !== 'star' || existing.segment !== name) {

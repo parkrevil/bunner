@@ -16,6 +16,6 @@ export interface RouteMethods {
 
 export interface SortedChildArrays {
   segments: string[];
-  nodes: any[]; // Using any to avoid circular dependency with Node. Casting used in Store.
+  nodes: any[]; 
   fingerprints: number[];
 }

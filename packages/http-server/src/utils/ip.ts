@@ -4,15 +4,6 @@ import { HeaderField } from '../enums';
 
 import type { ClientIpsResult } from './interfaces';
 
-/**
- * Returns the most trustworthy client IP and forwarded chain visible to the server.
- * Honours proxy headers when `trustProxy` is enabled; otherwise falls back
- * to the socket address exposed by Bun.
- * @param request The incoming request
- * @param server The Bun server instance
- * @param trustProxy Whether to trust proxy headers
- * @returns The best-guess client IP and the forwarded chain (if any)
- */
 export function getIps(request: Request, server: Server<unknown>, trustProxy?: boolean): ClientIpsResult {
   const shouldTrustProxy = trustProxy ?? false;
 
@@ -236,7 +227,6 @@ function isIpv6(value: string): boolean {
     return false;
   }
 
-  // Basic validation: allow shorthand (::) and hex segments.
   const validChars = /^[0-9a-fA-F:]+$/;
   if (!validChars.test(value)) {
     return false;

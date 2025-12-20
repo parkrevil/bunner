@@ -28,11 +28,6 @@ function compareFingerprintAndSegment(fpA: number, segA: string, fpB: number, se
   return segA < segB ? -1 : 1;
 }
 
-/**
- * Optimized Map implementation for storing static child nodes.
- * Automatically switches between an inline array (for small counts)
- * and a sorted array with binary search (for large counts) to minimize memory and maximize lookup speed.
- */
 export class StaticChildMap implements Iterable<Entry> {
   private inlineKeys: string[] | null = null;
   private inlineValues: Node[] | null = null;
@@ -131,7 +126,6 @@ export class StaticChildMap implements Iterable<Entry> {
     return this.entries();
   }
 
-  // --- Private Helpers ---
   private promote(): void {
     if (this.sorted || !this.inlineKeys || !this.inlineValues) {
       return;

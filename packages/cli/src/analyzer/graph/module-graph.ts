@@ -25,7 +25,7 @@ export class ModuleNode {
   providers: Map<string, ProviderRef> = new Map();
   exports: Set<string> = new Set();
   controllers: Set<string> = new Set();
-  // For Cycle Detection
+
   visiting: boolean = false;
   visited: boolean = false;
 
@@ -46,7 +46,7 @@ export class ModuleGraph {
 
   build() {
     this.allClasses.forEach(info => {
-      const moduleDec = info.metadata.decorators.find(d => d.name === 'Module');
+      const moduleDec = info.metadata.decorators.find(d => d.name === 'Module' || d.name === 'RootModule');
       if (moduleDec) {
         this.modules.set(info.metadata.className, new ModuleNode(info));
       }
@@ -66,7 +66,6 @@ export class ModuleGraph {
   detectCycles(): CyclePath[] {
     const cycles: CyclePath[] = [];
 
-    // Reset flags
     this.modules.forEach(node => {
       node.visited = false;
       node.visiting = false;
@@ -106,16 +105,13 @@ export class ModuleGraph {
 
     for (const neighbor of node.imports) {
       if (neighbor.visiting) {
-        // Cycle Detected!
-        // Extract cycle path from stack (A -> B -> C -> A)
+
         const cycleStartIndex = stack.findIndex(n => n === neighbor);
         const cycleNodes = stack.slice(cycleStartIndex);
-        cycleNodes.push(neighbor); // Close the loop for visualization
+        cycleNodes.push(neighbor); 
 
         const pathNames = cycleNodes.map(n => n.name);
 
-        // Suggest fix: Use forwardRef on the last edge or the first edge of the cycle
-        // "In Module A imports: [forwardRef(() => ModuleB)]"
         const source = pathNames[0];
         const target = pathNames[1];
 
@@ -134,7 +130,7 @@ export class ModuleGraph {
   }
 
   private populateNode(node: ModuleNode) {
-    const moduleDec = node.metadata.decorators.find(d => d.name === 'Module')!;
+    const moduleDec = node.metadata.decorators.find(d => d.name === 'Module' || d.name === 'RootModule')!;
     const args = moduleDec.arguments[0] || {};
 
     (args.providers || []).forEach((p: any) => {
@@ -158,7 +154,7 @@ export class ModuleGraph {
   }
 
   private linkImports(node: ModuleNode) {
-    const moduleDec = node.metadata.decorators.find(d => d.name === 'Module')!;
+    const moduleDec = node.metadata.decorators.find(d => d.name === 'Module' || d.name === 'RootModule')!;
     const args = moduleDec.arguments[0] || {};
 
     (args.imports || []).forEach((imp: any) => {
@@ -167,7 +163,7 @@ export class ModuleGraph {
         if (importedModule) {
           node.imports.add(importedModule);
         } else {
-          // console.warn(`⚠️ Module '${node.name}' imports unknown '${importName}'`);
+
         }
       };
 
@@ -224,7 +220,7 @@ export class ModuleGraph {
     if (node.providers.has(token)) {
       return `${node.name}::${token}`;
     }
-    // Re-export handling could be here
+
     return null;
   }
 }

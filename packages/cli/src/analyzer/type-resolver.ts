@@ -4,7 +4,7 @@ export interface TypeMetadata {
   name: string;
   properties: {
     name: string;
-    type: string; // Simplified for now
+    type: string; 
     optional: boolean;
   }[];
 }
@@ -16,8 +16,8 @@ export class TypeResolver {
   constructor() {}
 
   init(fileNames: string[]) {
-    // This is the heavy part (Priority 2) - only called when needed
-    this.program = ts.createProgram(fileNames, {}); // Should load options from tsconfig
+
+    this.program = ts.createProgram(fileNames, {}); 
     this.checker = this.program.getTypeChecker();
   }
 

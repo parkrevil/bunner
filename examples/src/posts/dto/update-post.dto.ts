@@ -1,11 +1,3 @@
-import { IsString, IsOptional } from '@bunner/core';
+import { CreatePostDto } from './create-post.dto';
 
-export class UpdatePostDto {
-  @IsOptional()
-  @IsString()
-  title?: string;
-
-  @IsOptional()
-  @IsString()
-  content?: string;
-}
+export class UpdatePostDto implements Partial<CreatePostDto> { }

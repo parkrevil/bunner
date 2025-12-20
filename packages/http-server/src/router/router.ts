@@ -8,16 +8,13 @@ import { Processor, type ProcessorConfig } from './processor';
 import { METHOD_OFFSET } from './schema';
 import type { DynamicMatchResult, Handler, MatchResultMeta, RouterOptions } from './types';
 
-/**
- * High-performance generic router.
- */
 export class Router<R = any> {
   private readonly options: RouterOptions;
   private readonly processor: Processor;
   private readonly builder: Builder<Handler<R>>;
   private matcher: Matcher | null = null;
   private cache: RouterCache<DynamicMatchResult> | undefined;
-  // Key: normalized path, Value: Sparse array of handlers indexed by Method ID
+
   private staticMap: Map<string, Handler<R>[]> = new Map();
 
   constructor(options: RouterOptions = {}) {
@@ -52,9 +49,6 @@ export class Router<R = any> {
     this.builder = new Builder<Handler<R>>(buildConfig);
   }
 
-  /**
-   * Registers a route.
-   */
   add(method: HttpMethod | HttpMethod[] | '*', path: string, handler: Handler<R>): void {
     // If the router is already built, we cannot add more routes safely without rebuilding
     // or invalidating internal structures. For now, assume mutable phase only before build()

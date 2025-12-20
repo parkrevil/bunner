@@ -38,7 +38,7 @@ import {
 } from './constants';
 
 export class Matcher {
-  // Layout Buffers
+
   private readonly nodeBuffer: Uint32Array;
   private readonly staticChildrenBuffer: Uint32Array;
   private readonly paramChildrenBuffer: Uint32Array;
@@ -52,27 +52,22 @@ export class Matcher {
   private readonly encodedSlashBehavior: EncodedSlashBehavior;
   private readonly failFastOnBadEncoding: boolean;
 
-  // Runtime State (Pooled/Reused)
   private readonly stack: Int32Array;
   private paramNames: string[] = new Array(MAX_PARAMS);
   private paramValues: string[] = new Array(MAX_PARAMS);
   private paramCache: string[] = new Array(MAX_STACK_DEPTH);
   private paramCount = 0;
 
-  // Native Decoder
   private readonly decoder = new TextDecoder();
   private readonly decodedStrings: string[];
 
-  // Current Request Context
   private methodCode: number = 0;
   private segments!: string[];
   private segmentHints: Uint8Array | undefined;
 
-  // Suffix/Wildcard Optimization State
   private normalizedPath!: string;
   private suffixOffsets: Uint32Array | null = null;
 
-  // Results
   private resultHandlerIndex: number = -1;
   private resultParams: RouteParams | null = null;
   private resultSnapshot: Array<[string, string | undefined]> | undefined;
@@ -85,7 +80,7 @@ export class Matcher {
       failFastOnBadEncoding: boolean;
     },
   ) {
-    // Unpack Layout
+
     this.nodeBuffer = layout.nodeBuffer;
     this.staticChildrenBuffer = layout.staticChildrenBuffer;
     this.paramChildrenBuffer = layout.paramChildrenBuffer;
@@ -99,17 +94,11 @@ export class Matcher {
     this.encodedSlashBehavior = globalConfig.encodedSlashBehavior;
     this.failFastOnBadEncoding = globalConfig.failFastOnBadEncoding;
 
-    // Stack init
     this.stack = new Int32Array(MAX_STACK_DEPTH * FRAME_SIZE);
 
-    // Init Cache (Lazy)
     this.decodedStrings = [];
   }
 
-  /**
-   * Executes the matching process for a given path.
-   * NO ALLOCATION for result object (Stateful API).
-   */
   public match(
     method: HttpMethod,
     segments: string[],
@@ -118,19 +107,18 @@ export class Matcher {
     decodeParams: boolean,
     captureSnapshot: boolean,
   ): boolean {
-    // Reset State
+
     const code = METHOD_OFFSET[method];
     if (code === undefined) {
-      return false; // Unknown method
+      return false; 
     }
     this.methodCode = code;
     this.segments = segments;
     this.normalizedPath = normalizedPath;
     this.segmentHints = segmentHints;
-    this.suffixOffsets = null; // Lazy init
+    this.suffixOffsets = null; 
     this.paramCount = 0;
 
-    // Clear Cache
     for (let i = 0; i < segments.length; i++) {
       this.paramCache[i] = undefined as unknown as string;
     }
@@ -141,7 +129,6 @@ export class Matcher {
       return false;
     }
 
-    // Build Result
     const bag: RouteParams = {};
     let snapshot: Array<[string, string | undefined]> | undefined;
     if (captureSnapshot) {
@@ -188,21 +175,21 @@ export class Matcher {
   }
 
   private getSuffixValue(segIdx: number): string {
-    // Lazy calculate offsets if needed
+
     if (!this.suffixOffsets) {
       const segments = this.segments;
       const offsets = new Uint32Array(segments.length + 1);
-      let ptr = 1; // normalized starts with '/'
+      let ptr = 1; 
       for (let i = 0; i < segments.length; i++) {
         offsets[i] = ptr;
-        ptr += segments[i]!.length + 1; // +1 for next slash
+        ptr += segments[i]!.length + 1; 
       }
       offsets[segments.length] = ptr;
       this.suffixOffsets = offsets;
     }
 
     const offset = this.suffixOffsets[segIdx];
-    // Safely substring from normalized path
+
     return this.normalizedPath.substring(offset!);
   }
 
@@ -229,13 +216,9 @@ export class Matcher {
     return decoded;
   }
 
-  /**
-   * The core Stack Machine for traversing the Radix Tree.
-   */
   private walk(decodeParams: boolean): number | null {
     let sp = 0;
 
-    // Push Root Frame
     this.stack[sp + FRAME_OFFSET_NODE] = this.rootIndex;
     this.stack[sp + FRAME_OFFSET_SEGMENT] = 0;
     this.stack[sp + FRAME_OFFSET_STAGE] = STAGE_ENTER;
@@ -250,9 +233,8 @@ export class Matcher {
       const nodeIdx = this.stack[framePtr + FRAME_OFFSET_NODE]!;
       const segIdx = this.stack[framePtr + FRAME_OFFSET_SEGMENT]!;
 
-      // --- 1. ENTRY STAGE ---
       if (stage === STAGE_ENTER) {
-        // Path matches fully?
+
         if (segIdx === this.segments.length) {
           const base = nodeIdx * NODE_STRIDE;
           const methodsPtr = this.nodeBuffer[base + NODE_OFFSET_METHODS_PTR]!;
@@ -276,11 +258,10 @@ export class Matcher {
         this.stack[framePtr + FRAME_OFFSET_STAGE] = STAGE_STATIC;
         continue;
       } else if (stage === STAGE_STATIC) {
-        // --- 2. STATIC CHILDREN ---
+
         const base = nodeIdx * NODE_STRIDE;
         const stateIter = this.stack[framePtr + FRAME_OFFSET_ITERATOR]!;
 
-        // Iterator 0: Init, 1: Done
         if (stateIter > 0) {
           this.stack[framePtr + FRAME_OFFSET_STAGE] = STAGE_PARAM;
           this.stack[framePtr + FRAME_OFFSET_ITERATOR] = 0;
@@ -296,7 +277,7 @@ export class Matcher {
           const childPtr = this.findStaticChild(staticPtr, staticCount, segment);
 
           if (childPtr !== -1) {
-            // Push Child Frame
+
             this.stack[sp + FRAME_OFFSET_NODE] = childPtr;
             this.stack[sp + FRAME_OFFSET_SEGMENT] = segIdx + 1;
             this.stack[sp + FRAME_OFFSET_STAGE] = STAGE_ENTER;
@@ -306,12 +287,12 @@ export class Matcher {
             continue;
           }
         }
-        // Fallthrough to Params
+
         this.stack[framePtr + FRAME_OFFSET_STAGE] = STAGE_PARAM;
         this.stack[framePtr + FRAME_OFFSET_ITERATOR] = 0;
         continue;
       } else if (stage === STAGE_PARAM) {
-        // --- 3. PARAM CHILDREN ---
+
         const base = nodeIdx * NODE_STRIDE;
         const meta = this.nodeBuffer[base + NODE_OFFSET_META]!;
         const paramCount = (meta & NODE_MASK_PARAM_COUNT) >>> NODE_SHIFT_PARAM_COUNT;
@@ -339,7 +320,6 @@ export class Matcher {
           continue;
         }
 
-        // Regex Check
         if (patternID !== 0xffffffff) {
           const tester = this.patternTesters[patternID];
           if (tester && !tester(value)) {
@@ -347,12 +327,10 @@ export class Matcher {
           }
         }
 
-        // Capture Param
         this.paramNames[this.paramCount] = name;
         this.paramValues[this.paramCount] = value;
         this.paramCount++;
 
-        // Push Child Frame
         this.stack[sp + FRAME_OFFSET_NODE] = childIdx;
         this.stack[sp + FRAME_OFFSET_SEGMENT] = segIdx + 1;
         this.stack[sp + FRAME_OFFSET_STAGE] = STAGE_ENTER;
@@ -361,7 +339,7 @@ export class Matcher {
         sp += FRAME_SIZE;
         continue;
       } else if (stage === STAGE_WILDCARD) {
-        // --- 4. WILDCARD CHILD ---
+
         const base = nodeIdx * NODE_STRIDE;
         const wildcardPtr = this.nodeBuffer[base + NODE_OFFSET_WILDCARD_CHILD_PTR]!;
 
@@ -370,8 +348,6 @@ export class Matcher {
           const nameID = this.nodeBuffer[childBase + NODE_OFFSET_MATCH_FUNC]!;
           const name = this.getString(nameID);
 
-          // Capture Remainder
-          // Use internal getSuffixValue instead of suffixPlan closure
           const value = this.getSuffixValue(segIdx);
 
           this.paramNames[this.paramCount] = name;
@@ -382,13 +358,12 @@ export class Matcher {
           if (childMethodsPtr > 0) {
             const mask = this.nodeBuffer[childBase + NODE_OFFSET_METHOD_MASK]!;
             if (this.methodCode < 31 && mask & (1 << this.methodCode)) {
-              // Validate Multi vs Zero Origin
+
               const meta = this.nodeBuffer[childBase + NODE_OFFSET_META]!;
               const origin = (meta & NODE_MASK_WILDCARD_ORIGIN) >>> NODE_SHIFT_WILDCARD_ORIGIN;
 
-              // Origin 1 = Multi (+), requires at least one segment
               if (origin === 1 && value.length === 0) {
-                // Backtrack local state
+
                 sp -= FRAME_SIZE;
                 if (sp > 0) {
                   this.paramCount = this.stack[sp - FRAME_SIZE + FRAME_OFFSET_PARAM_BASE]!;
@@ -408,7 +383,6 @@ export class Matcher {
           }
         }
 
-        // Backtrack
         sp -= FRAME_SIZE;
         if (sp > 0) {
           this.paramCount = this.stack[sp - FRAME_SIZE + FRAME_OFFSET_PARAM_BASE]!;
@@ -418,16 +392,12 @@ export class Matcher {
     return null;
   }
 
-  /**
-   * Optimization: Binary Search for static children
-   * Threshold: 8 items. Below 8, linear scan is often faster due to locality/branch prediction.
-   */
   private findStaticChild(staticPtr: number, staticCount: number, segment: string): number {
     if (staticCount < 8) {
       let ptr = staticPtr;
       for (let i = 0; i < staticCount; i++) {
         const sID = this.staticChildrenBuffer[ptr]!;
-        // Direct string comparison is fast in JS engine (interned strings)
+
         if (this.getString(sID) === segment) {
           return this.staticChildrenBuffer[ptr + 1]!;
         }

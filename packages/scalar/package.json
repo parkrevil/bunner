@@ -1,0 +1,14 @@
+{
+  "name": "@bunner/scalar",
+  "version": "0.0.1",
+  "description": "Scalar API Documentation integration for Bunner",
+  "main": "index.ts",
+  "types": "index.ts",
+  "dependencies": {
+    "@bunner/core": "workspace:*",
+    "@bunner/http-server": "workspace:*"
+  },
+  "peerDependencies": {
+    "bun": "*"
+  }
+}

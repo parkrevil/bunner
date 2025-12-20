@@ -1,18 +1,8 @@
-import { MetadataStorage } from '../metadata/metadata-storage';
+import type { ValidatorOptions } from './interfaces';
 
-export type ValidatorOptions = {
-  message?: string;
-  each?: boolean;
-};
+function createDecorator(_name: string, _args: any[] = [], _options: any = {}) {
+  return function (_target: object, _propertyKey: string | symbol) {
 
-// Generic helper for standard decorators
-function createDecorator(name: string, args: any[] = [], options: any = {}) {
-  return function (target: object, propertyKey: string | symbol) {
-    MetadataStorage.addDecoratorMetadata(target, propertyKey, {
-      name,
-      arguments: args,
-      options,
-    });
   };
 }
 

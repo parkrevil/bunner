@@ -1,5 +1,4 @@
 import type { ProcessorContext } from '../context';
-// verify import
 
 export function validateSegments(ctx: ProcessorContext): void {
   const maxLen = ctx.config.maxSegmentLength ?? 256;
@@ -18,7 +17,7 @@ export function validateSegments(ctx: ProcessorContext): void {
       ctx.segmentDecodeHints[i] = 1;
       if (failFast) {
         try {
-          // Just check if it throws
+
           decodeURIComponent(seg);
         } catch (_e) {
           throw new Error(`Malformed percent encoded component: ${seg}`);

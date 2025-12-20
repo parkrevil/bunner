@@ -1,7 +1,3 @@
-// Need to define ProcessorConfig here or import?
-// ProcessorConfig was defined in processor.ts. I should extract it to types.
-// For now I will inline or import.
-
 export interface ProcessorConfig {
   collapseSlashes?: boolean;
   ignoreTrailingSlash?: boolean;

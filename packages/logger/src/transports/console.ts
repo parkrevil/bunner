@@ -9,7 +9,6 @@ const DEFAULT_COLORS: Record<LogLevel, Color> = {
   fatal: 'magenta',
 };
 
-// ANSI Color Codes
 const RESET = '\x1b[0m';
 const COLORS: Record<Color, string> = {
   black: '\x1b[30m',
@@ -60,17 +59,14 @@ export class ConsoleTransport implements Transport {
   private logPretty<T>(message: LogMessage<T>): void {
     const { level, time, msg, context, reqId, workerId, err, ...rest } = message;
 
-    // 1. Time
     const date = new Date(time);
     const timeStr = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}:${date.getSeconds().toString().padStart(2, '0')}`;
     const timeColored = `${COLORS.gray}${timeStr}${RESET}`;
 
-    // 2. Level
     const color = this.options.prettyOptions?.colors?.[level] || DEFAULT_COLORS[level];
     const levelCode = COLORS[color] || COLORS.white;
     const levelStr = `${levelCode}${level.toUpperCase().padEnd(5)}${RESET}`;
 
-    // 3. Metadata (Context, ReqId, WorkerId)
     let metaStr = '';
     if (workerId !== undefined) {
       metaStr += `[W:${workerId}] `;
@@ -82,27 +78,22 @@ export class ConsoleTransport implements Transport {
       metaStr += `[${COLORS.cyan}${context}${RESET}] `;
     }
 
-    // 4. Message
     const msgStr = `${levelCode}${msg}${RESET}`;
 
-    // 5. Build Line
     const line = `${timeColored} ${levelStr} ${metaStr}${msgStr}`;
 
-    // 6. Output
     if (level === 'error' || level === 'fatal') {
       console.error(line);
     } else {
       console.log(line);
     }
 
-    // 7. Error Stack
     if (err) {
       console.error(err);
     }
 
-    // 8. Additional Data
     if (Object.keys(rest).length > 0) {
-      // Check for toLog() support
+
       const processedRest: any = {};
       for (const [key, val] of Object.entries(rest)) {
         if (val && typeof val === 'object' && 'toLog' in val && typeof (val as any).toLog === 'function') {
@@ -111,7 +102,7 @@ export class ConsoleTransport implements Transport {
           processedRest[key] = val;
         }
       }
-      console.log(Bun.inspect(processedRest, { colors: true, depth: 2 })); // Changed depth to 2 to match valid types roughly or just use undefined if Bun allows, but type definition says number.
+      console.log(Bun.inspect(processedRest, { colors: true, depth: 2 })); 
     }
   }
 }

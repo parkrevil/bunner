@@ -8,7 +8,7 @@ export function decodeURIComponentSafe(value: string, behavior: EncodedSlashBeha
   const target = value;
 
   if (behavior === 'reject') {
-    // Check for encoded slashes (%2F or %2f)
+
     if (/%(2F|2f)/.test(value)) {
       throw new Error('Encoded slashes are forbidden');
     }

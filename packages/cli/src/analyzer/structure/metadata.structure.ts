@@ -5,11 +5,16 @@ export interface DecoratorMetadata {
 
 export interface ClassMetadata {
   className: string;
+  heritage?: {
+    clause: 'extends' | 'implements';
+    typeName: string; 
+    typeArgs?: string[]; 
+  };
   decorators: DecoratorMetadata[];
   constructorParams: {
     name: string;
     type: string;
-    typeArgs?: string[]; // Generic Arguments e.g. ['User'] for Promise<User>
+    typeArgs?: string[]; 
     decorators: DecoratorMetadata[];
   }[];
   methods: {
@@ -28,11 +33,11 @@ export interface ClassMetadata {
     type: string;
     typeArgs?: string[];
     decorators: DecoratorMetadata[];
-    items?: any; // For Array items type info
+    items?: any; 
     isOptional?: boolean;
     isArray?: boolean;
     isEnum?: boolean;
     literals?: (string | number | boolean)[];
   }[];
-  imports: Record<string, string>; // Identifier -> Source Path
+  imports: Record<string, string>; 
 }

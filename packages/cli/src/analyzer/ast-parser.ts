@@ -16,7 +16,7 @@ export class AstParser {
     const imports: Record<string, string> = {};
 
     const traverse = (node: any) => {
-      // Handle ImportDeclaration
+
       if (node.type === 'ImportDeclaration') {
         const source = node.source.value;
         (node.specifiers || []).forEach((spec: any) => {
@@ -24,7 +24,6 @@ export class AstParser {
         });
       }
 
-      // Handle ExportNamedDeclaration containing ClassDeclaration
       if (node.type === 'ExportNamedDeclaration' && node.declaration) {
         traverse(node.declaration);
         return;
@@ -36,7 +35,6 @@ export class AstParser {
         classes.push(classMeta);
       }
 
-      // Check for children if Program or nested
       if (node.type === 'Program' && node.body) {
         node.body.forEach(traverse);
       }
@@ -56,7 +54,7 @@ export class AstParser {
     node.body.body.forEach((member: any) => {
       if (member.type === 'MethodDefinition') {
         if (member.kind === 'constructor') {
-          // Constructor
+
           member.value.params.forEach((param: any) => {
             const paramData = this.extractParam(param);
             if (paramData) {
@@ -64,7 +62,7 @@ export class AstParser {
             }
           });
         } else if (member.kind === 'method') {
-          // Method
+
           const methodName = member.key.name;
           const methodDecorators = (member.decorators || []).map((d: any) => this.extractDecorator(d));
           const methodParams: any[] = [];
@@ -85,7 +83,7 @@ export class AstParser {
           }
         }
       } else if (member.type === 'PropertyDefinition') {
-        // Property
+
         const propName = member.key.name;
         const propDecorators = (member.decorators || []).map((d: any) => this.extractDecorator(d));
 
@@ -110,8 +108,69 @@ export class AstParser {
       }
     });
 
+    // Heritage (Extends/Implements)
+    let heritage: ClassMetadata['heritage'] = undefined;
+
+    // 1. extends Clause
+    if (node.superClass) {
+      // Direct extension: extends BaseClass
+      if (node.superClass.type === 'Identifier') {
+        heritage = {
+          clause: 'extends',
+          typeName: node.superClass.name,
+        };
+      }
+      // Generic or Mapped Type: extends Partial<Dto>
+      else if (node.superClass.type === 'CallExpression' || node.superClass.type === 'TSTypeInstantiationExpression' || (node.superClass.typeName && node.superClass.typeName.name === 'Partial')) {
+        // Note: Oxc parser might parse `Partial<Dto>` as TSTypeInstantiationExpression
+        // or CallExpression if it looks like func call (but <...> is TypeInstantiation)
+
+        if (node.superClass.type === 'TSTypeInstantiationExpression') {
+          const baseName = node.superClass.expression.type === 'Identifier' ? node.superClass.expression.name : 'Unknown';
+          if (['Partial', 'Pick', 'Omit', 'Required'].includes(baseName)) {
+            const typeArgs = node.superClass.typeParameters.params.map((p: any) => {
+              // Simple resolution for Identifier types as args
+              if (p.type === 'TSTypeReference' && p.typeName.type === 'Identifier') {
+                return p.typeName.name;
+              }
+              return 'Unknown';
+            });
+
+            heritage = {
+              clause: 'extends',
+              typeName: baseName,
+              typeArgs
+            };
+          }
+        }
+      }
+    }
+
+    // 2. implements Clause (if extends is not mapped type, check implements)
+    if (!heritage && node.implements && node.implements.length > 0) {
+      // Only process the first significant one for DTO mapping for now
+      const impl = node.implements[0]; // TSClassImplements
+
+      // implements Partial<Dto>
+      if (impl.expression.type === 'Identifier' && ['Partial', 'Pick', 'Omit'].includes(impl.expression.name)) {
+        const typeArgs = impl.typeParameters ? impl.typeParameters.params.map((p: any) => {
+          if (p.type === 'TSTypeReference' && p.typeName.type === 'Identifier') {
+            return p.typeName.name;
+          }
+          return 'Unknown';
+        }) : [];
+
+        heritage = {
+          clause: 'implements',
+          typeName: impl.expression.name,
+          typeArgs
+        };
+      }
+    }
+
     return {
       className,
+      heritage,
       decorators,
       constructorParams,
       methods,
@@ -152,7 +211,7 @@ export class AstParser {
       case 'ObjectExpression': {
         const obj: any = {};
         (node.properties || []).forEach((prop: any) => {
-          if (prop.type === 'Property') {
+          if (prop.type === 'Property' || prop.type === 'ObjectProperty') {
             const key = prop.key.name || prop.key.value;
             obj[key] = this.parseExpression(prop.value);
           }
@@ -211,7 +270,13 @@ export class AstParser {
 
   private extractParam(paramNode: any): any {
     if (paramNode.type === 'TSParameterProperty') {
-      return this.extractParam(paramNode.parameter);
+      const param = this.extractParam(paramNode.parameter);
+      if (param) {
+        // Merge decorators from TSParameterProperty (parent)
+        const parentDecorators = (paramNode.decorators || []).map((d: any) => this.extractDecorator(d));
+        param.decorators = [...parentDecorators, ...param.decorators];
+      }
+      return param;
     }
 
     if (paramNode.type === 'Identifier' || paramNode.type === 'AssignmentPattern') {

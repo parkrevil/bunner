@@ -7,10 +7,8 @@ export interface BunnerApplicationBaseOptions {
   queueCapacity: number;
 }
 
-// Removed generic T from NormalizedOptions as well.
 export type BunnerApplicationNormalizedOptions = BunnerApplicationBaseOptions & { [key: string]: any };
 
-// Removed generic T as it was causing lint issues and seemingly unused for now.
 export interface BunnerApplicationOptions {
   name?: string;
   logLevel?: number;
@@ -31,4 +29,13 @@ export interface CreateApplicationOptions extends BunnerApplicationBaseOptions {
   [key: string]: any;
 }
 
-export interface BunnerModule {}
+export interface BunnerModule { }
+
+export interface DynamicModule {
+  module: any;
+  providers?: any[];
+  controllers?: any[];
+  imports?: any[];
+  exports?: any[];
+  global?: boolean;
+}

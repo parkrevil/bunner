@@ -1,5 +1,5 @@
 export type FactoryFn<T = any> = (container: Container) => T;
-export type Token = any; // Constructor or String
+export type Token = any; 
 
 export class Container {
   private factories = new Map<Token, FactoryFn>();
@@ -16,19 +16,18 @@ export class Container {
   }
 
   get<T = any>(token: Token): T {
-    // 1. Check Instance Cache
+
     if (this.instances.has(token)) {
       return this.instances.get(token);
     }
 
-    // 2. Check Factory
     const factory = this.factories.get(token);
     if (!factory) {
+      console.error(`[Container] Missing Provider: ${token}`);
+
       throw new Error(`No provider for token: ${token.name || token}`);
     }
 
-    // 3. Create Instance (Lazy)
-    // We pass 'this' (container) so the factory can resolve deps recursively
     const instance = factory(this);
     this.instances.set(token, instance);
 
@@ -46,13 +45,13 @@ export class Container {
     await Promise.resolve();
 
     const providers = dynamicModule.providers || [];
-    // Normalize providers
+
     for (const p of providers) {
       let token: any;
       let factory: FactoryFn | undefined;
 
       if (typeof p === 'function') {
-        // Class provider
+
         token = p;
         factory = c => new p(...this.resolveDepsFor(p, scope, c));
       } else if (p.provide) {
@@ -60,17 +59,16 @@ export class Container {
         if (p.useValue) {
           factory = () => p.useValue;
         } else if (p.useFactory) {
-          // This relies on useFactory being executable
+
           factory = async c => {
             const args = (p.inject || []).map((t: any) => c.get(t));
             return await p.useFactory(...args);
           };
         } else {
-          factory = () => null; // Unsupported
+          factory = () => null; 
         }
       }
 
-      // Register with Scoped Key
       let keyStr = '';
       if (typeof token === 'string') {
         keyStr = `${scope}::${token}`;
@@ -84,8 +82,38 @@ export class Container {
     }
   }
 
-  // Helper for dynamic instantiation (Runtime Reflection fallback if needed)
-  private resolveDepsFor(_ctor: any, _scope: string, _c: Container): any[] {
-    return []; // Placeholder. Dynamic modules often imply manual setup or standard injection
+  private resolveDepsFor(ctor: any, scope: string, _c: Container): any[] {
+    const registry = (globalThis as any).__BUNNER_METADATA_REGISTRY__;
+    if (!registry || !registry.has(ctor)) {
+      return [];
+    }
+
+    const meta = registry.get(ctor);
+    if (!meta.constructorParams) {
+      return [];
+    }
+
+    return meta.constructorParams.map((param: any) => {
+      let token = param.type;
+
+      const injectDec = param.decorators?.find((d: any) => d.name === 'Inject');
+      if (injectDec && injectDec.arguments?.length > 0) {
+        token = injectDec.arguments[0];
+      }
+
+      let key = `${scope}::${token}`;
+
+      try {
+        return this.get(key);
+      } catch (e) {
+
+        try {
+          return this.get(token);
+        } catch (e2) {
+
+          return undefined;
+        }
+      }
+    });
   }
 }

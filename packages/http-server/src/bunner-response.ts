@@ -89,21 +89,10 @@ export class BunnerResponse {
     return this;
   }
 
-  /**
-   * Get the cookies set on the response.
-   * @returns The cookies set on the response.
-   */
   getCookies() {
     return this._cookies;
   }
 
-  /**
-   * Set a cookie on the response.
-   * @param name - The name of the cookie.
-   * @param value - The value of the cookie.
-   * @param options - Options for serializing the cookie.
-   * @returns The response instance.
-   */
   setCookie(name: string, value: string, options?: CookieInit) {
     this._cookies.set(name, value, options);
 
@@ -182,10 +171,6 @@ export class BunnerResponse {
     return this.buildWorkerResponse();
   }
 
-  /**
-   * Build the response for the worker.
-   * @description This method finalizes the response by setting cookies and preparing the body and headers for sending to the worker.
-   */
   private buildWorkerResponse(): BunnerResponse {
     if (this._cookies.size > 0) {
       this.setHeader(HeaderField.SetCookie, this._cookies.toSetCookieHeaders().join(', '));
@@ -203,9 +188,6 @@ export class BunnerResponse {
     return this;
   }
 
-  /**
-   * Infer content type based on current body value.
-   */
   private inferContentType() {
     if (
       this._body !== null &&

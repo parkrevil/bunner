@@ -11,9 +11,7 @@ export function collapseSlashes(ctx: ProcessorContext): void {
 }
 
 export function handleTrailingSlashOptions(ctx: ProcessorContext): void {
-  // If ignoreTrailingSlash is true AND we didn't collapse slashes (because that removes empty anyway),
-  // we check if last segment is empty.
-  // Note: This logic depends on configuration.
+
   if (ctx.config.ignoreTrailingSlash && ctx.segments.length > 0 && ctx.segments[ctx.segments.length - 1] === '') {
     ctx.segments.pop();
   }

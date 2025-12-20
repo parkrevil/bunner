@@ -4,16 +4,13 @@ import { Logger } from '@bunner/logger';
 
 import { AppModule } from './app.module';
 
-// Force Bun Stage 3 Decorators Detection (Actually it fails with accessor in this version?)
-// class _ForceStage3 { @((_, ctx) => { ctx.kind }) accessor force: any; }
-
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const app = await Bunner.create(BunnerHttpServer, AppModule, {
     logLevel: LogLevel.Debug,
     workers: 1,
     queueCapacity: 8192,
-    port: 5001,
+    port: 5002,
   });
 
   logger.info('🚀 Server is starting...');

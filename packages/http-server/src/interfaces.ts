@@ -8,38 +8,22 @@ export interface BunnerHttpServerOptions {
   trustProxy?: boolean;
 }
 
-/**
- * Worker Init Params
- * @description The parameters for initializing a worker
- */
 export interface WorkerInitParams {
   rootModuleFile: RootModuleFile;
   options: WorkerOptions;
 }
 
-/**
- * Worker Options
- * @description The options for the worker
- */
 export interface WorkerOptions {}
 
-/**
- * HTTP Worker Response
- * @description The response structure sent from the worker to the main thread
- */
 export interface HttpWorkerResponse {
   body: any;
   init: ResponseInit;
 }
 
-/**
- * Route Handler Entry
- * @description The entry for a route handler
- */
 export interface RouteHandlerEntry {
   handler: AnyFunction;
   paramType: RouteHandlerParamType[];
-  paramRefs: any[]; // Parameter Types (Constructors or Strings)
+  paramRefs: any[]; 
 }
 
 export interface ArgumentMetadata {

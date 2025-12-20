@@ -41,7 +41,7 @@ export class BunnerRequest {
     this.queryString = urlObj.search || null;
     this.contentType = this.headers.get('content-type') || null;
     this.contentLength = this.headers.get('content-length') ? parseInt(this.headers.get('content-length')!) : null;
-    this.charset = null; // Extract from content-type if needed
+    this.charset = null; 
     this.params = req.params || {};
     this.queryParams = req.queryParams || {};
     this.body = req.body ?? null;

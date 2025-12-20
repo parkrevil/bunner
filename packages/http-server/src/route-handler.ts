@@ -67,14 +67,13 @@ export class RouteHandler {
   private registerController(targetClass: any, meta: any, controllerDec: any) {
     const prefix = controllerDec.arguments[0] || '';
 
-    // Resolve Instance using Scoped Key if available
     const scopedKey = this.scopedKeys.get(targetClass);
     let instance;
 
     if (scopedKey) {
       instance = this.container.get(scopedKey);
     } else {
-      // Fallback for legacy or unscoped
+
       instance = this.container.get(targetClass);
     }
 
@@ -104,7 +103,7 @@ export class RouteHandler {
             return d ? d.name.toLowerCase() : 'unknown';
           });
 
-        const paramRefs = (method.parameters || []).sort((a: any, b: any) => a.index - b.index).map((p: any) => p.type); // type is now Ref or String from MetadataRegistry
+        const paramRefs = (method.parameters || []).sort((a: any, b: any) => a.index - b.index).map((p: any) => p.type); 
 
         const entry: RouteHandlerEntry = {
           handler: instance[method.name].bind(instance),
@@ -126,7 +125,7 @@ export class RouteHandler {
   private pathToRegex(path: string) {
     const paramNames: string[] = [];
     const pattern = path
-      .replace(/[\\$.+*?^|[\](){}]/g, '\\$&') // Escape characters
+      .replace(/[\\$.+*?^|[\](){}]/g, '\\$&') 
       .replace(/:([a-zA-Z0-9_]+)/g, (_, name) => {
         paramNames.push(name);
         return '([^/]+)';

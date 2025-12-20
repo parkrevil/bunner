@@ -9,20 +9,12 @@ import {
 } from './application';
 import { LogLevel, type Class } from './common';
 
-/**
- * Bunner class
- */
 export class Bunner {
   static apps: Map<string, BaseApplication> = new Map();
   private static readonly logger = new Logger(Bunner.name);
   private static isShuttingDown = false;
   private static signalsInitialized = false;
 
-  /**
-   * Create a new Bunner application
-   * @param type - The type of the application
-   * @returns The Bunner application
-   */
   static async create<TOpts, T extends BaseApplication<TOpts>>(
     appCls: Class<T>,
     rootModuleCls: Class<BunnerModule>,
@@ -30,7 +22,6 @@ export class Bunner {
   ) {
     this.setupSignalHandlers();
 
-    // AOT Support
     const aotContainer = (globalThis as any).__BUNNER_CONTAINER__;
     const aotManifestPath = (globalThis as any).__BUNNER_MANIFEST_PATH__;
     const aotMetadata = (globalThis as any).__BUNNER_METADATA_REGISTRY__;
