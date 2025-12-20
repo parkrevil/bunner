@@ -11,18 +11,23 @@ export class MetadataGenerator {
     const classMap = new Map<string, ClassMetadata>();
     classes.forEach(c => classMap.set(c.metadata.className, c.metadata));
 
-    const cloneProps = (props: ClassMetadata['properties']): ClassMetadata['properties'] => props.map(p => ({
-      ...p,
-      decorators: [...p.decorators],
-      items: p.items ? { ...p.items } : undefined,
-    }));
+    const cloneProps = (props: ClassMetadata['properties']): ClassMetadata['properties'] =>
+      props.map(p => ({
+        ...p,
+        decorators: [...p.decorators],
+        items: p.items ? { ...p.items } : undefined,
+      }));
 
     const resolveMetadata = (className: string, visited = new Set<string>()): ClassMetadata['properties'] => {
-      if (visited.has(className)) return [];
+      if (visited.has(className)) {
+        return [];
+      }
       visited.add(className);
 
       const meta = classMap.get(className);
-      if (!meta) return [];
+      if (!meta) {
+        return [];
+      }
 
       let properties: ClassMetadata['properties'] = cloneProps(meta.properties);
 

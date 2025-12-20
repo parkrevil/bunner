@@ -1,4 +1,5 @@
 import { Module, type DynamicModule } from '@bunner/core';
+
 import { ScalarController } from './scalar.controller';
 import { ScalarService } from './scalar.service';
 
@@ -11,10 +12,7 @@ export interface ScalarModuleOptions {
 
 @Module({
   controllers: [ScalarController],
-  providers: [
-    ScalarService,
-    { provide: 'SCALAR_OPTIONS', useValue: {} }
-  ],
+  providers: [ScalarService, { provide: 'SCALAR_OPTIONS', useValue: {} }],
 })
 export class ScalarModule {
   static forRoot(options: ScalarModuleOptions): DynamicModule {

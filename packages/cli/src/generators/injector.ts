@@ -87,9 +87,7 @@ export class InjectorGenerator {
           const importSource = node.metadata.imports && node.metadata.imports[className];
 
           if (importSource) {
-            if (importSource.startsWith('.')) {
-
-            } else {
+            if (!importSource.startsWith('.')) {
               addLibImport(className, importSource);
             }
           } else {

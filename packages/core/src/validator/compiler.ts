@@ -15,7 +15,7 @@ export class ValidatorCompiler {
     lines.push("if (!obj || typeof obj !== 'object') return ['Invalid object'];");
 
     for (const [propName, prop] of Object.entries(metadata.properties)) {
-      const p = prop as any;
+      const p = prop;
       const access = `obj['${propName}']`;
 
       if (p.isOptional) {
@@ -70,16 +70,18 @@ export class ValidatorCompiler {
     try {
       const classRefs: Record<string, Function> = {};
       for (const [propName, prop] of Object.entries(metadata.properties)) {
-        if ((prop as any).metatype) {
-          classRefs[propName] = (prop as any).metatype;
+        if (prop.metatype) {
+          classRefs[propName] = prop.metatype;
         }
       }
 
       const validators = {
         getValidator: (val: any, Target: any) => {
-          if (!val || !Target) return [];
+          if (!val || !Target) {
+            return [];
+          }
           if (Array.isArray(val)) {
-            let allErrors: string[] = [];
+            const allErrors: string[] = [];
             val.forEach((item, i) => {
               const errors = ValidatorCompiler.compile(Target)(item);
               allErrors.push(...errors.map(e => `[${i}].${e}`));
@@ -87,10 +89,15 @@ export class ValidatorCompiler {
             return allErrors;
           }
           return ValidatorCompiler.compile(Target)(val);
-        }
+        },
       };
 
-      const fn = new Function('obj', 'validators', 'classRefs', fnBody) as (obj: any, validators: any, classRefs: any) => string[];
+      // eslint-disable-next-line @typescript-eslint/no-implied-eval
+      const fn = new Function('obj', 'validators', 'classRefs', fnBody) as (
+        obj: any,
+        validators: any,
+        classRefs: any,
+      ) => string[];
 
       const wrappedFn = (obj: any) => fn(obj, validators, classRefs);
       this.cache.set(target, wrappedFn);

@@ -1,10 +1,9 @@
 import { RootModule } from '@bunner/core';
 import { Logger } from '@bunner/logger';
+import { ScalarModule } from '@bunner/scalar';
 
 import { PostsModule } from './posts';
 import { UsersModule } from './users';
-
-import { ScalarModule } from '@bunner/scalar';
 
 @RootModule({
   path: __filename,
@@ -14,8 +13,8 @@ import { ScalarModule } from '@bunner/scalar';
     ScalarModule.forRoot({
       title: 'Bunner Example API',
       version: '1.0.0',
-      path: '/api-docs'
-    })
+      path: '/api-docs',
+    }),
   ],
 })
 export class AppModule {

@@ -1,15 +1,17 @@
 import { Controller, Inject } from '@bunner/core';
 import { Get } from '@bunner/http-server';
-import { ScalarService } from './scalar.service';
+
 import { ScalarUiMiddleware } from './scalar-ui.middleware';
+import { ScalarService } from './scalar.service';
 
 @Controller()
 export class ScalarController {
   constructor(
     private scalarService: ScalarService,
-    @Inject('SCALAR_OPTIONS') _options: any
-  ) { }
+    @Inject('SCALAR_OPTIONS') _options: any,
+  ) {}
 
+  @Get('/api-docs')
   getDocs() {
     const spec = this.scalarService.getSpec();
     return new ScalarUiMiddleware(spec, {}).handle({} as any);
@@ -18,7 +20,7 @@ export class ScalarController {
   @Get('/api-docs/json')
   getJson() {
     return new Response(JSON.stringify(this.scalarService.getSpec()), {
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 'Content-Type': 'application/json' },
     });
   }
 }

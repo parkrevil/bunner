@@ -16,7 +16,6 @@ export class AstParser {
     const imports: Record<string, string> = {};
 
     const traverse = (node: any) => {
-
       if (node.type === 'ImportDeclaration') {
         const source = node.source.value;
         (node.specifiers || []).forEach((spec: any) => {
@@ -54,7 +53,6 @@ export class AstParser {
     node.body.body.forEach((member: any) => {
       if (member.type === 'MethodDefinition') {
         if (member.kind === 'constructor') {
-
           member.value.params.forEach((param: any) => {
             const paramData = this.extractParam(param);
             if (paramData) {
@@ -62,7 +60,6 @@ export class AstParser {
             }
           });
         } else if (member.kind === 'method') {
-
           const methodName = member.key.name;
           const methodDecorators = (member.decorators || []).map((d: any) => this.extractDecorator(d));
           const methodParams: any[] = [];
@@ -83,7 +80,6 @@ export class AstParser {
           }
         }
       } else if (member.type === 'PropertyDefinition') {
-
         const propName = member.key.name;
         const propDecorators = (member.decorators || []).map((d: any) => this.extractDecorator(d));
 
@@ -119,9 +115,11 @@ export class AstParser {
           clause: 'extends',
           typeName: node.superClass.name,
         };
-      }
-      // Generic or Mapped Type: extends Partial<Dto>
-      else if (node.superClass.type === 'CallExpression' || node.superClass.type === 'TSTypeInstantiationExpression' || (node.superClass.typeName && node.superClass.typeName.name === 'Partial')) {
+      } else if (
+        node.superClass.type === 'CallExpression' ||
+        node.superClass.type === 'TSTypeInstantiationExpression' ||
+        (node.superClass.typeName && node.superClass.typeName.name === 'Partial')
+      ) {
         // Note: Oxc parser might parse `Partial<Dto>` as TSTypeInstantiationExpression
         // or CallExpression if it looks like func call (but <...> is TypeInstantiation)
 
@@ -139,7 +137,7 @@ export class AstParser {
             heritage = {
               clause: 'extends',
               typeName: baseName,
-              typeArgs
+              typeArgs,
             };
           }
         }
@@ -153,17 +151,19 @@ export class AstParser {
 
       // implements Partial<Dto>
       if (impl.expression.type === 'Identifier' && ['Partial', 'Pick', 'Omit'].includes(impl.expression.name)) {
-        const typeArgs = impl.typeParameters ? impl.typeParameters.params.map((p: any) => {
-          if (p.type === 'TSTypeReference' && p.typeName.type === 'Identifier') {
-            return p.typeName.name;
-          }
-          return 'Unknown';
-        }) : [];
+        const typeArgs = impl.typeParameters
+          ? impl.typeParameters.params.map((p: any) => {
+              if (p.type === 'TSTypeReference' && p.typeName.type === 'Identifier') {
+                return p.typeName.name;
+              }
+              return 'Unknown';
+            })
+          : [];
 
         heritage = {
           clause: 'implements',
           typeName: impl.expression.name,
-          typeArgs
+          typeArgs,
         };
       }
     }

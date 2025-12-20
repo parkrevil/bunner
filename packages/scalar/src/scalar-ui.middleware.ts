@@ -1,5 +1,8 @@
 export class ScalarUiMiddleware {
-  constructor(private spec: any, _options: any) { }
+  constructor(
+    private spec: any,
+    _options: any,
+  ) {}
 
   handle(_req: Request): Response | Promise<Response> {
     const htmlEmbedded = `
@@ -15,7 +18,7 @@ export class ScalarUiMiddleware {
     <script
       id="api-reference"
       type="application/json"
-      data-spec='${JSON.stringify(this.spec).replace(/'/g, "&apos;")}'
+      data-spec='${JSON.stringify(this.spec).replace(/'/g, '&apos;')}'
     ></script>
     <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
   </body>
@@ -23,7 +26,7 @@ export class ScalarUiMiddleware {
     `;
 
     return new Response(htmlEmbedded, {
-      headers: { 'Content-Type': 'text/html' }
+      headers: { 'Content-Type': 'text/html' },
     });
   }
 }

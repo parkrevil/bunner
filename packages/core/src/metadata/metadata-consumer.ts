@@ -6,7 +6,6 @@ export class MetadataConsumer {
   }
 
   static getCombinedMetadata(target: Function) {
-
     if (this.cliRegistry.size === 0 && (globalThis as any).__BUNNER_METADATA_REGISTRY__) {
       this.cliRegistry = (globalThis as any).__BUNNER_METADATA_REGISTRY__;
     }
@@ -14,7 +13,6 @@ export class MetadataConsumer {
     const cliMeta = this.cliRegistry.get(target);
 
     if (!cliMeta) {
-
       return { className: target.name, properties: {} };
     }
 
@@ -24,7 +22,6 @@ export class MetadataConsumer {
         properties[prop.name] = prop;
       });
     } else {
-
       Object.assign(properties, cliMeta.properties);
     }
 
@@ -33,7 +30,7 @@ export class MetadataConsumer {
       properties: properties,
       decorators: cliMeta.decorators,
       constructorParams: cliMeta.constructorParams,
-      methods: cliMeta.methods
+      methods: cliMeta.methods,
     };
   }
 }

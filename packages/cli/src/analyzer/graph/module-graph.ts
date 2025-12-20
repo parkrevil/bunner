@@ -105,10 +105,9 @@ export class ModuleGraph {
 
     for (const neighbor of node.imports) {
       if (neighbor.visiting) {
-
         const cycleStartIndex = stack.findIndex(n => n === neighbor);
         const cycleNodes = stack.slice(cycleStartIndex);
-        cycleNodes.push(neighbor); 
+        cycleNodes.push(neighbor);
 
         const pathNames = cycleNodes.map(n => n.name);
 
@@ -162,8 +161,6 @@ export class ModuleGraph {
         const importedModule = this.modules.get(importName);
         if (importedModule) {
           node.imports.add(importedModule);
-        } else {
-
         }
       };
 

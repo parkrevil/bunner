@@ -45,7 +45,6 @@ export class Builder<T> {
     key: number,
     segments: string[],
   ): void {
-
     if (index === segments.length) {
       this.registerRoute(node, method, key, omittedOptionals, segments);
       return;

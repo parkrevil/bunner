@@ -1,4 +1,4 @@
-import { } from '@bunner/core';
+import {} from '@bunner/core';
 
 export class OpenApiFactory {
   static create(registry: Map<any, any>, config: { title: string; version: string }) {
@@ -15,7 +15,7 @@ export class OpenApiFactory {
     };
 
     for (const [target, meta] of registry.entries()) {
-      const metatype = meta as any;
+      const metatype = meta;
 
       const controllerDec = metatype.decorators.find((d: any) => d.name === 'Controller' || d.name === 'RestController');
 
@@ -42,7 +42,7 @@ export class OpenApiFactory {
 
     meta.methods.forEach((method: any) => {
       const httpMethodDec = method.decorators.find((d: any) =>
-        ['Get', 'Post', 'Put', 'Delete', 'Patch', 'Options', 'Head'].includes(d.name)
+        ['Get', 'Post', 'Put', 'Delete', 'Patch', 'Options', 'Head'].includes(d.name),
       );
 
       if (httpMethodDec) {
@@ -50,26 +50,34 @@ export class OpenApiFactory {
         const httpMethod = httpMethodDec.name.toLowerCase();
 
         let fullPath = (basePath + '/' + methodPath).replace(/\/+/g, '/');
-        if (fullPath.length > 1 && fullPath.endsWith('/')) fullPath = fullPath.slice(0, -1);
+        if (fullPath.length > 1 && fullPath.endsWith('/')) {
+          fullPath = fullPath.slice(0, -1);
+        }
 
         fullPath = fullPath.replace(/:([a-zA-Z0-9_]+)/g, '{$1}');
 
-        if (!doc.paths[fullPath]) doc.paths[fullPath] = {};
+        if (!doc.paths[fullPath]) {
+          doc.paths[fullPath] = {};
+        }
 
         const operation: any = {
           tags: [tag],
           operationId: `${meta.className}_${method.name}`,
           parameters: [],
           responses: {
-            '200': { description: 'Success' }
-          }
+            '200': { description: 'Success' },
+          },
         };
 
         const opDec = method.decorators.find((d: any) => d.name === 'ApiOperation');
         if (opDec) {
           const opts = opDec.arguments[0];
-          if (opts.summary) operation.summary = opts.summary;
-          if (opts.description) operation.description = opts.description;
+          if (opts.summary) {
+            operation.summary = opts.summary;
+          }
+          if (opts.description) {
+            operation.description = opts.description;
+          }
         }
 
         method.parameters.forEach((param: any) => {
@@ -82,7 +90,7 @@ export class OpenApiFactory {
               name: argName,
               in: inType,
               required: inType === 'path',
-              schema: { type: 'string' }
+              schema: { type: 'string' },
             });
           }
 
@@ -92,16 +100,15 @@ export class OpenApiFactory {
             operation.requestBody = {
               content: {
                 'application/json': {
-                  schema: schema
-                }
-              }
+                  schema: schema,
+                },
+              },
             };
           }
         });
 
         const resDecs = method.decorators.filter((d: any) => d.name === 'ApiResponse' || d.name.endsWith('Response'));
-        resDecs.forEach((_d: any) => {
-        });
+        resDecs.forEach((_d: any) => {});
 
         doc.paths[fullPath][httpMethod] = operation;
       }
@@ -121,7 +128,7 @@ export class OpenApiFactory {
     let targetName = typeName;
 
     for (const [target, meta] of registry.entries()) {
-      const m = meta as any;
+      const m = meta;
       if (m.className === typeName || target.name === typeName) {
         targetMeta = m;
         targetName = m.className;
@@ -155,8 +162,12 @@ export class OpenApiFactory {
       const apiProp = prop.decorators.find((d: any) => d.name === 'ApiProperty');
       if (apiProp) {
         const opts = apiProp.arguments[0] || {};
-        if (opts.description) propSchema.description = opts.description;
-        if (opts.example) propSchema.example = opts.example;
+        if (opts.description) {
+          propSchema.description = opts.description;
+        }
+        if (opts.example) {
+          propSchema.example = opts.example;
+        }
       }
       schema.properties[prop.name] = propSchema;
     });

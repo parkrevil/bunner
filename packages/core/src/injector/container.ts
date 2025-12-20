@@ -1,5 +1,5 @@
 export type FactoryFn<T = any> = (container: Container) => T;
-export type Token = any; 
+export type Token = any;
 
 export class Container {
   private factories = new Map<Token, FactoryFn>();
@@ -16,7 +16,6 @@ export class Container {
   }
 
   get<T = any>(token: Token): T {
-
     if (this.instances.has(token)) {
       return this.instances.get(token);
     }
@@ -51,7 +50,6 @@ export class Container {
       let factory: FactoryFn | undefined;
 
       if (typeof p === 'function') {
-
         token = p;
         factory = c => new p(...this.resolveDepsFor(p, scope, c));
       } else if (p.provide) {
@@ -59,13 +57,12 @@ export class Container {
         if (p.useValue) {
           factory = () => p.useValue;
         } else if (p.useFactory) {
-
           factory = async c => {
             const args = (p.inject || []).map((t: any) => c.get(t));
             return await p.useFactory(...args);
           };
         } else {
-          factory = () => null; 
+          factory = () => null;
         }
       }
 
@@ -101,16 +98,14 @@ export class Container {
         token = injectDec.arguments[0];
       }
 
-      let key = `${scope}::${token}`;
+      const key = `${scope}::${token}`;
 
       try {
         return this.get(key);
-      } catch (e) {
-
+      } catch (_e) {
         try {
           return this.get(token);
-        } catch (e2) {
-
+        } catch (_e2) {
           return undefined;
         }
       }

@@ -6,11 +6,10 @@ export interface TypeInfo {
   isArray?: boolean;
   isEnum?: boolean;
   literals?: (string | number | boolean)[];
-  items?: TypeInfo; 
+  items?: TypeInfo;
 }
 
 export class TypeResolver {
-
   resolve(typeNode: any): TypeInfo {
     if (!typeNode) {
       return { typeName: 'any' };
@@ -24,9 +23,6 @@ export class TypeResolver {
         typeNode.typeArguments.params.forEach((param: any) => {
           const resolved = this.resolve(param);
 
-          if (resolved.isArray) {
-
-          }
           typeArgs.push(resolved.typeName);
         });
       }
@@ -73,7 +69,7 @@ export class TypeResolver {
       const allLiterals = types.every((t: TypeInfo) => t.literals && t.literals.length > 0);
       if (allLiterals) {
         return {
-          typeName: types[0].typeName, 
+          typeName: types[0].typeName,
           isUnion: true,
           literals: types.flatMap((t: TypeInfo) => t.literals || []),
         };
