@@ -27,17 +27,17 @@ packages/cli/src/
 
 ### 1-1. AST 파서 구조 개편 및 타입 리졸버 강화
 
-- [ ] `packages/cli/src/analyzer` 내부 구조 리팩토링 (단일 파일에서 모듈 단위로 분리)
-- [ ] **Recursive Type Analyzer** 구현
-  - [ ] `Promise<T>`, `Array<T>` 등 제네릭 타입의 재귀적 파싱 로직 구현
-  - [ ] `Partial`, `Pick`, `Omit` 등 TypeScript 유틸리티 타입 해석 로직 추가
-  - [ ] 외부 라이브러리(`node_modules`)의 `.d.ts` 파일 파싱 및 타입 추적 기능 구현
+- [x] `packages/cli/src/analyzer` 내부 구조 리팩토링 (단일 파일에서 모듈 단위로 분리)
+- [x] **Recursive Type Analyzer** 구현
+  - [x] `Promise<T>`, `Array<T>` 등 제네릭 타입의 재귀적 파싱 로직 구현
+  - [x] `Partial`, `Pick`, `Omit` 등 TypeScript 유틸리티 타입 해석 로직 추가
+  - [ ] 외부 라이브러리(`node_modules`)의 `.d.ts` 파일 파싱 및 타입 추적 기능 구현 (Phase 1.5로 이월)
 
 ### 1-2. 의존성 그래프(Dependency Graph) 구축
 
-- [ ] 프로젝트 전체 모듈 간의 의존성 관계를 메모리 상에 그래프 자료구조로 구축
-- [ ] Import/Export 구문을 기반으로 한 모듈 연결성 파악 로직 구현
-- [ ] 그래프 순회 알고리즘을 통한 데드 코드 식별 및 최적화 기반 마련
+- [x] 프로젝트 전체 모듈 간의 의존성 관계를 메모리 상에 그래프 자료구조로 구축
+- [x] Import/Export 구문을 기반으로 한 모듈 연결성 파악 로직 구현
+- [ ] 그래프 순회 알고리즘을 통한 데드 코드 식별 및 최적화 기반 마련 (추후 과제)
 
 ---
 
