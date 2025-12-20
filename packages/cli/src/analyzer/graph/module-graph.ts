@@ -1,4 +1,4 @@
-import type { ClassMetadata } from './ast-parser';
+import type { ClassMetadata } from '../structure/metadata.structure';
 
 export interface ProviderRef {
   token: any;
@@ -16,7 +16,7 @@ export class ModuleNode {
   metadata: ClassMetadata;
   filePath: string;
   imports: Set<ModuleNode> = new Set();
-  dynamicImports: Set<any> = new Set(); // Stores { __bunner_call: string, args: [] }
+  dynamicImports: Set<any> = new Set();
   providers: Map<string, ProviderRef> = new Map();
   exports: Set<string> = new Set();
   controllers: Set<string> = new Set();
@@ -30,7 +30,6 @@ export class ModuleNode {
 
 export class ModuleGraph {
   public modules: Map<string, ModuleNode> = new Map();
-  // Map to find which module a non-module class belongs to (for faster lookup if needed)
   public classMap: Map<string, ClassInfo> = new Map();
 
   constructor(private allClasses: ClassInfo[]) {
@@ -38,7 +37,6 @@ export class ModuleGraph {
   }
 
   build() {
-    // 1. Create Nodes
     this.allClasses.forEach(info => {
       const moduleDec = info.metadata.decorators.find(d => d.name === 'Module');
       if (moduleDec) {
@@ -46,12 +44,10 @@ export class ModuleGraph {
       }
     });
 
-    // 2. Link & Populate
     this.modules.forEach(node => {
       this.populateNode(node);
     });
 
-    // 3. Resolve Imports
     this.modules.forEach(node => {
       this.linkImports(node);
     });
@@ -65,12 +61,10 @@ export class ModuleGraph {
       return null;
     }
 
-    // 1. Check Self
     if (node.providers.has(token)) {
       return `${moduleName}::${token}`;
     }
 
-    // 2. Check Imports
     for (const imported of node.imports) {
       if (imported.exports.has(token)) {
         return this.findExportingModule(imported, token);
@@ -84,13 +78,11 @@ export class ModuleGraph {
     const moduleDec = node.metadata.decorators.find(d => d.name === 'Module')!;
     const args = moduleDec.arguments[0] || {};
 
-    // Providers
     (args.providers || []).forEach((p: any) => {
       const ref = this.normalizeProvider(p);
       this.providersAdd(node, ref);
     });
 
-    // Controllers
     (args.controllers || []).forEach((c: any) => {
       const name = c.__bunner_ref || c;
       if (typeof name === 'string') {
@@ -98,7 +90,6 @@ export class ModuleGraph {
       }
     });
 
-    // Exports
     (args.exports || []).forEach((e: any) => {
       const token = this.extractToken(e);
       if (token) {
@@ -117,23 +108,15 @@ export class ModuleGraph {
         if (importedModule) {
           node.imports.add(importedModule);
         } else {
-          console.warn(`⚠️  Module '${node.name}' imports unknown module '${importName}'`);
+          // console.warn(`⚠️ Module '${node.name}' imports unknown '${importName}'`);
         }
       };
 
       if (imp.__bunner_ref) {
         helper(imp.__bunner_ref);
       } else if (imp.__bunner_call) {
-        // Dynamic Import
         node.dynamicImports.add(imp);
       } else if (imp.__bunner_forward_ref) {
-        // Forward Ref Import
-        // Treat as normal import for graph linking, but maybe flag it?
-        // The runtime won't need special handling if we just assume eventual consistency in AOT map.
-        // Problem is if A depends on B and B on A, build order might matter if we were instantiating during build.
-        // But we are generating factories.
-        // Factories are lazy. So A's factory calls new A(c.get(B)) and B's new B(c.get(A)).
-        // As long as keys exist in map, it should work fine at runtime thanks to lazy lookup.
         helper(imp.__bunner_forward_ref);
       }
     });
@@ -143,15 +126,12 @@ export class ModuleGraph {
     if (typeof p === 'string') {
       return { token: p, isExported: false };
     }
-
     if (p.__bunner_ref) {
       return { token: p.__bunner_ref, isExported: false };
     }
-
     if (p.provide) {
       return { token: p.provide, metadata: p, isExported: false };
     }
-
     return { token: 'UNKNOWN', isExported: false };
   }
 
@@ -185,8 +165,7 @@ export class ModuleGraph {
     if (node.providers.has(token)) {
       return `${node.name}::${token}`;
     }
-
-    // TODO: Handle Re-exports recursively if needed
+    // Re-export handling could be here
     return null;
   }
 }

@@ -1,44 +1,18 @@
 import { parseSync } from 'oxc-parser';
 
-export interface DecoratorMetadata {
-  name: string;
-  arguments: any[];
-}
+import type { ClassMetadata, DecoratorMetadata } from './structure/metadata.structure';
+import { TypeResolver, type TypeInfo } from './type-resolver/type-resolver';
 
-export interface ClassMetadata {
-  className: string;
-  decorators: DecoratorMetadata[];
-  constructorParams: {
-    name: string;
-    type: string;
-    decorators: DecoratorMetadata[];
-  }[];
-  methods: {
-    name: string;
-    decorators: DecoratorMetadata[];
-    parameters: {
-      name: string;
-      type: string;
-      decorators: DecoratorMetadata[];
-      index: number;
-    }[];
-  }[];
-  properties: {
-    name: string;
-    type: string;
-    decorators: DecoratorMetadata[];
-  }[];
-  imports: Record<string, string>; // Identifier -> Source Path
-}
+export type { ClassMetadata, DecoratorMetadata };
 
 export class AstParser {
   private currentCode: string = '';
+  private typeResolver = new TypeResolver();
 
   parse(filename: string, code: string): ClassMetadata[] {
     this.currentCode = code;
     const result = parseSync(filename, code);
     const classes: ClassMetadata[] = [];
-
     const imports: Record<string, string> = {};
 
     const traverse = (node: any) => {
@@ -46,7 +20,6 @@ export class AstParser {
       if (node.type === 'ImportDeclaration') {
         const source = node.source.value;
         (node.specifiers || []).forEach((spec: any) => {
-          // local.name is what we use in code
           imports[spec.local.name] = source;
         });
       }
@@ -59,11 +32,11 @@ export class AstParser {
 
       if (node.type === 'ClassDeclaration') {
         const classMeta = this.extractClassMetadata(node);
-        classMeta.imports = { ...imports }; // Attach imports available in this file scope
+        classMeta.imports = { ...imports };
         classes.push(classMeta);
       }
 
-      // Check for children if Program or other block
+      // Check for children if Program or nested
       if (node.type === 'Program' && node.body) {
         node.body.forEach(traverse);
       }
@@ -83,6 +56,7 @@ export class AstParser {
     node.body.body.forEach((member: any) => {
       if (member.type === 'MethodDefinition') {
         if (member.kind === 'constructor') {
+          // Constructor
           member.value.params.forEach((param: any) => {
             const paramData = this.extractParam(param);
             if (paramData) {
@@ -90,7 +64,7 @@ export class AstParser {
             }
           });
         } else if (member.kind === 'method') {
-          // Extract Method Metadata
+          // Method
           const methodName = member.key.name;
           const methodDecorators = (member.decorators || []).map((d: any) => this.extractDecorator(d));
           const methodParams: any[] = [];
@@ -111,22 +85,20 @@ export class AstParser {
           }
         }
       } else if (member.type === 'PropertyDefinition') {
+        // Property
         const propName = member.key.name;
         const propDecorators = (member.decorators || []).map((d: any) => this.extractDecorator(d));
-        // Type?
-        let propType = 'any';
+
+        let typeInfo: TypeInfo = { typeName: 'any', typeArgs: undefined };
         if (member.typeAnnotation && member.typeAnnotation.typeAnnotation) {
-          // Simplified type extraction
-          const t = member.typeAnnotation.typeAnnotation;
-          if (t.type === 'TSTypeReference' && t.typeName.type === 'Identifier') {
-            propType = t.typeName.name;
-          }
+          typeInfo = this.typeResolver.resolve(member.typeAnnotation.typeAnnotation);
         }
 
         if (propDecorators.length > 0) {
           properties.push({
             name: propName,
-            type: propType,
+            type: typeInfo.typeName,
+            typeArgs: typeInfo.typeArgs,
             decorators: propDecorators,
           });
         }
@@ -139,7 +111,7 @@ export class AstParser {
       constructorParams,
       methods,
       properties,
-      imports: {}, // Will be populated by traverse
+      imports: {},
     };
   }
 
@@ -162,7 +134,6 @@ export class AstParser {
       return null;
     }
 
-    // OXC AST normalization
     const node = expr.type === 'ExpressionStatement' ? expr.expression : expr;
 
     switch (node.type) {
@@ -188,7 +159,6 @@ export class AstParser {
         return (node.elements || []).map((el: any) => this.parseExpression(el));
 
       case 'Identifier':
-        // Tag as reference to handle later in Codegen (e.g. for @Inject(Token))
         return { __bunner_ref: node.name };
 
       case 'NewExpression':
@@ -198,9 +168,6 @@ export class AstParser {
         };
 
       case 'CallExpression': {
-        // Dynamic Module Call (e.g. ConfigModule.forRoot()) OR forwardRef()
-        // We need to capture the callee name (e.g. "ConfigModule.forRoot" or just "forRoot")
-        // Note: callee might be MemberExpression
         let calleeName = 'unknown';
         if (node.callee.type === 'MemberExpression') {
           calleeName = `${node.callee.object.name}.${node.callee.property.name}`;
@@ -211,14 +178,10 @@ export class AstParser {
         // Handle forwardRef(() => Module)
         if (calleeName === 'forwardRef' && node.arguments.length > 0) {
           const arg = node.arguments[0];
-          // Expect ArrowFunctionExpression or FunctionExpression
           if (arg.type === 'ArrowFunctionExpression' || arg.type === 'FunctionExpression') {
-            // Extract the return value identifier from the function body
-            // e.g. () => ModuleName
             if (arg.body.type === 'Identifier') {
               return { __bunner_forward_ref: arg.body.name };
             }
-            // BlockStatement? { return ModuleName; }
           }
         }
 
@@ -228,7 +191,6 @@ export class AstParser {
         };
       }
 
-      // Handle ArrowFunctionExpression for useFactory or other async configs if needed simply
       case 'ArrowFunctionExpression':
       case 'FunctionExpression': {
         const start = node.start;
@@ -238,7 +200,6 @@ export class AstParser {
       }
 
       default:
-        // Fallback or unsupported
         return null;
     }
   }
@@ -248,27 +209,22 @@ export class AstParser {
       return this.extractParam(paramNode.parameter);
     }
 
-    // Handle Identifier or AssignmentPattern (default value)
     if (paramNode.type === 'Identifier' || paramNode.type === 'AssignmentPattern') {
       const node = paramNode.type === 'AssignmentPattern' ? paramNode.left : paramNode;
       const name = node.name;
-      let type = 'any';
       const decorators = (paramNode.decorators || []).map((d: any) => this.extractDecorator(d));
 
+      let typeInfo: TypeInfo = { typeName: 'any', typeArgs: undefined };
       if (node.typeAnnotation && node.typeAnnotation.typeAnnotation) {
-        const typeNode = node.typeAnnotation.typeAnnotation;
-        if (typeNode.type === 'TSTypeReference' && typeNode.typeName.type === 'Identifier') {
-          type = typeNode.typeName.name;
-        } else if (typeNode.type === 'TSStringKeyword') {
-          type = 'string';
-        } else if (typeNode.type === 'TSNumberKeyword') {
-          type = 'number';
-        } else if (typeNode.type === 'TSBooleanKeyword') {
-          type = 'boolean';
-        }
+        typeInfo = this.typeResolver.resolve(node.typeAnnotation.typeAnnotation);
       }
 
-      return { name, type, decorators };
+      return {
+        name,
+        type: typeInfo.typeName,
+        typeArgs: typeInfo.typeArgs,
+        decorators,
+      };
     }
     return null;
   }
