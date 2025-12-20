@@ -1,9 +1,13 @@
-/**\
+import { Logger } from '@bunner/logger';
+
+const logger = new Logger('FinalizationRegistry');
+
+/**
  * Finalization Registry
  * @description The finalization registry instance
  */
 export const finalizationRegistry = new FinalizationRegistry(heldValue => {
-  console.log(`${heldValue} has been GC'd`);
+  logger.debug(`${heldValue} has been GC'd`);
 });
 
 /**

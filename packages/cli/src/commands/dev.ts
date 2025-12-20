@@ -1,5 +1,6 @@
 import { join, resolve } from 'path';
 
+import { Logger } from '@bunner/logger';
 import { Glob } from 'bun';
 
 import { AstParser, type ClassMetadata } from '../analyzer/ast-parser';
@@ -9,7 +10,8 @@ import { ConfigLoader } from '../utils/config-loader';
 import { ProjectWatcher } from '../watcher/project-watcher';
 
 export async function dev() {
-  console.log('🚀 Starting Bunner Dev Server...');
+  const logger = new Logger('CLI:Dev');
+  logger.info('🚀 Starting Bunner Dev Server...');
 
   // 1. Load Config
   await ConfigLoader.load();
@@ -35,14 +37,14 @@ export async function dev() {
       fileCache.set(filePath, cacheEntries);
       return true;
     } catch (e) {
-      console.error(`❌ Parse Error (${filePath}):`, e);
+      logger.error(`❌ Parse Error (${filePath})`, e);
       return false;
     }
   }
 
   async function rebuild() {
     const allClasses = Array.from(fileCache.values()).flat();
-    console.log(`🛠️  Rebuilding manifest (${allClasses.length} classes)...`);
+    logger.debug(`🛠️  Rebuilding manifest (${allClasses.length} classes)...`);
 
     // Build Module Graph
     const graph = new ModuleGraph(allClasses);
@@ -77,7 +79,7 @@ export { container, metadata };
 
   // 3. Initial Scan
   const glob = new Glob('**/*.ts');
-  console.log('🔍 Initial Scan...');
+  logger.info('🔍 Initial Scan...');
   for await (const file of glob.scan(srcDir)) {
     await analyzeFile(join(srcDir, file));
   }
@@ -85,7 +87,7 @@ export { container, metadata };
 
   // 4. Spawn Child App
   const appEntry = join(outDir, 'index.ts');
-  console.log(`🚀 Spawning App: bun run --watch ${appEntry}`);
+  logger.info('🚀 Spawning App', { command: `bun run --watch ${appEntry}` });
 
   const appProc = Bun.spawn(['bun', 'run', '--watch', appEntry], {
     stdout: 'inherit',
@@ -105,11 +107,11 @@ export { container, metadata };
       }
 
       const fullPath = join(srcDir, filename);
-      console.log(`🔄 [${event.eventType}] Detected change in: ${filename}`);
+      logger.debug(`🔄 [${event.eventType}] Detected change in: ${filename}`);
 
       if (event.eventType === 'rename' && !(await Bun.file(fullPath).exists())) {
         // Deleted
-        console.log(`🗑️ File deleted: ${filename}`);
+        logger.info(`🗑️ File deleted: ${filename}`);
         fileCache.delete(fullPath);
       } else {
         // Changed or Created

@@ -1,9 +1,12 @@
+import { Logger } from '@bunner/logger';
+
 import { START_ANCHOR_PATTERN, END_ANCHOR_PATTERN } from './constants';
 import type { BuilderConfig } from './types';
 
 export class PatternUtils {
   private readonly compiledPatternCache = new Map<string, RegExp>();
   private readonly config: BuilderConfig;
+  private readonly logger = new Logger(PatternUtils.name);
 
   constructor(config: BuilderConfig) {
     this.config = config;
@@ -47,7 +50,7 @@ export class PatternUtils {
         throw new Error(msg);
       }
       if (policy === 'warn') {
-        console.warn(msg);
+        this.logger.warn(msg);
       }
     }
     return normalized;

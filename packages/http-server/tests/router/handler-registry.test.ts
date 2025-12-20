@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'bun:test';
+
 import { HandlerRegistry } from '../../src/router/handler-registry';
 
 describe('HandlerRegistry', () => {
   it('should register and retrieve handlers by ID', () => {
     const registry = new HandlerRegistry();
     const handler = () => 'test';
-    
+
     registry.register('test-id', handler);
     expect(registry.get('test-id')).toBe(handler);
   });
@@ -18,7 +19,7 @@ describe('HandlerRegistry', () => {
   it('should throw when registering duplicate ID', () => {
     const registry = new HandlerRegistry();
     const handler = () => 'test';
-    
+
     registry.register('dup', handler);
     expect(() => {
       registry.register('dup', () => 'other');
@@ -36,7 +37,7 @@ describe('HandlerRegistry', () => {
     const registry = new HandlerRegistry();
     registry.register('a', () => {});
     registry.register('b', () => {});
-    
+
     registry.clear();
     expect(registry.has('a')).toBe(false);
     expect(registry.has('b')).toBe(false);

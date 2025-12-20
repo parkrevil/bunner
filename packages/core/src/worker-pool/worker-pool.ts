@@ -1,3 +1,4 @@
+import { Logger } from '@bunner/logger';
 import { nanoseconds } from 'bun';
 import { releaseProxy, wrap } from 'comlink';
 import { backOff } from 'exponential-backoff';
@@ -15,6 +16,7 @@ export class WorkerPool<T extends BaseWorker> {
   private readonly reviving = new Set<number>();
   private readonly workers: Array<WrappedWorker<T> | undefined>;
   private readonly loadBalancer: LoadBalancer;
+  private readonly logger = new Logger(WorkerPool.name);
   private statsTimer: ReturnType<typeof setInterval> | undefined;
   private destroying = false;
   private initParams: InitParams<T>;
@@ -130,7 +132,7 @@ export class WorkerPool<T extends BaseWorker> {
       return;
     }
 
-    console.error(`💥 Worker #${id} ${event}: `, e);
+    this.logger.error(`💥 Worker #${id} ${event}: `, e);
 
     await this.destroyWorker(id).catch(() => {});
 
@@ -158,7 +160,7 @@ export class WorkerPool<T extends BaseWorker> {
 
         ++attempt;
 
-        console.info(`🩺 Revive attempt ${attempt} for worker #${id}`);
+        this.logger.info(`🩺 Revive attempt ${attempt} for worker #${id}`);
 
         const worker = this.spawnWorker(id);
 

@@ -1,3 +1,5 @@
+import { Logger } from '@bunner/logger';
+
 import {
   type BaseApplication,
   type BunnerApplicationBaseOptions,
@@ -12,6 +14,7 @@ import { LogLevel, type Class } from './common';
  */
 export class Bunner {
   static apps: Map<string, BaseApplication> = new Map();
+  private static readonly logger = new Logger(Bunner.name);
   private static isShuttingDown = false;
   private static signalsInitialized = false;
 
@@ -33,7 +36,7 @@ export class Bunner {
     const aotMetadata = (globalThis as any).__BUNNER_METADATA_REGISTRY__;
 
     if (!aotContainer) {
-      console.warn('[Bunner] ⚠️ AOT Container not found.');
+      this.logger.warn('⚠️ AOT Container not found.');
     }
 
     const normalizedOptions = this.normalizeOptions<T, TOpts>(options);
@@ -82,10 +85,10 @@ export class Bunner {
         try {
           await app.shutdown(true);
         } catch (e) {
-          console.error('[Bunner] app shutdown failed:', e);
+          Bunner.logger.error('app shutdown failed', e);
         }
       }),
-    ).catch(console.error);
+    ).catch(e => Bunner.logger.error('Shutdown Error', e));
   }
 
   private static generateApplicationDefaultName() {
@@ -129,14 +132,14 @@ export class Bunner {
       let exitCode = 0;
 
       try {
-        console.log('🛑 Shutting down...');
+        Bunner.logger.info('🛑 Shutting down...');
 
         await Promise.race([
           this.shutdown(),
           new Promise((_, reject) => setTimeout(() => reject(new Error('shutdown timeout')), 10000)),
         ]);
       } catch (e) {
-        console.error(`[Bunner] graceful shutdown failed on ${signal}:`, e);
+        Bunner.logger.error(`graceful shutdown failed on ${signal}`, e);
 
         exitCode = 1;
       } finally {

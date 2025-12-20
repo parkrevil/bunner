@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'bun:test';
+
 import { Router } from '../../src/router/router';
 import type { MatchResultMeta } from '../../src/router/types';
 
@@ -53,14 +54,14 @@ describe('Router Static Fast-path', () => {
     expect(result).not.toBeNull();
     expect(result!.source).toBe('static-fast');
   });
-  
+
   it('should not hit fast-path if normalization produces different path not in map', () => {
-     // Case: ignoreTrailingSlash=false.
-     // add('/foo') -> staticMap['GET:/foo']
-     // match('/foo/') -> normalized '/foo/' -> staticMap get fail -> dynamic match (fail or 404)
-     const router = new Router({ ignoreTrailingSlash: false });
-     router.add('GET', '/foo', () => 'ok');
-     const result = router.match('GET', '/foo/');
-     expect(result).toBeNull();
+    // Case: ignoreTrailingSlash=false.
+    // add('/foo') -> staticMap['GET:/foo']
+    // match('/foo/') -> normalized '/foo/' -> staticMap get fail -> dynamic match (fail or 404)
+    const router = new Router({ ignoreTrailingSlash: false });
+    router.add('GET', '/foo', () => 'ok');
+    const result = router.match('GET', '/foo/');
+    expect(result).toBeNull();
   });
 });

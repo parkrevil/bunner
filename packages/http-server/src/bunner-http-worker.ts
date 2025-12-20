@@ -1,16 +1,19 @@
 import { BaseWorker, Container, type WorkerId } from '@bunner/core';
+import { Logger } from '@bunner/logger';
 import { expose } from 'comlink';
 import { StatusCodes } from 'http-status-codes';
 
 import { BunnerRequest } from './bunner-request';
 import { BunnerResponse } from './bunner-response';
 import { HttpMethod } from './enums';
-import type { HttpWorkerResponse, RouteHandlerEntry, WorkerInitParams } from './interfaces';
+import type { HttpWorkerResponse, RouteHandlerEntry } from './interfaces';
 import { RouteHandler } from './route-handler';
 
+// ... class ...
 export class BunnerHttpWorker extends BaseWorker {
   private container: Container;
   private routeHandler: RouteHandler;
+  private logger = new Logger(BunnerHttpWorker);
 
   constructor() {
     super();
@@ -20,13 +23,13 @@ export class BunnerHttpWorker extends BaseWorker {
     return this.id;
   }
 
-  async init(workerId: WorkerId, params: WorkerInitParams) {
-    console.log(`🔧 Bunner HTTP Worker #${workerId} is initializing...`);
+  override async init(workerId: WorkerId, params: any) {
+    this.logger.info(`🔧 Bunner HTTP Worker #${workerId} is initializing...`);
 
     this.id = workerId;
 
     if (params.rootModuleFile.manifestPath) {
-      console.log(`⚡ AOT Worker Load: ${params.rootModuleFile.manifestPath}`);
+      this.logger.info(`⚡ AOT Worker Load: ${params.rootModuleFile.manifestPath}`);
       const manifest = await import(params.rootModuleFile.manifestPath);
 
       this.container = manifest.createContainer();
@@ -34,7 +37,7 @@ export class BunnerHttpWorker extends BaseWorker {
 
       // Register Dynamic Modules (New AOT Feature)
       if (typeof manifest.registerDynamicModules === 'function') {
-        console.log('⚡ Loading Dynamic Modules...');
+        this.logger.info('⚡ Loading Dynamic Modules...');
         await manifest.registerDynamicModules(this.container);
       }
 
@@ -43,12 +46,12 @@ export class BunnerHttpWorker extends BaseWorker {
       if (typeof manifest.createScopedKeysMap === 'function') {
         scopedKeysMap = manifest.createScopedKeysMap();
       } else {
-        console.warn('⚠️  Manifest does not support Scoped Keys. Running in legacy mode.');
+        this.logger.warn('⚠️  Manifest does not support Scoped Keys. Running in legacy mode.');
       }
 
       this.routeHandler = new RouteHandler(this.container, metadataRegistry, scopedKeysMap);
     } else {
-      console.warn('Legacy init not supported in AOT Core yet.');
+      this.logger.warn('Legacy init not supported in AOT Core yet.');
       this.container = new Container();
       this.routeHandler = new RouteHandler(this.container, new Map());
     }
@@ -57,7 +60,7 @@ export class BunnerHttpWorker extends BaseWorker {
   }
 
   bootstrap() {
-    console.log(`🚀 Bunner HTTP Worker #${this.id} is bootstrapping...`);
+    this.logger.info(`🚀 Bunner HTTP Worker #${this.id} is bootstrapping...`);
   }
 
   async handleRequest(params: any): Promise<HttpWorkerResponse> {
@@ -88,11 +91,11 @@ export class BunnerHttpWorker extends BaseWorker {
       } as any);
 
       if (!match) {
-        console.warn(`[Worker] Route not found: ${methodStr.toUpperCase()}:${path}`);
+        this.logger.warn(`Route not found: ${methodStr.toUpperCase()}:${path}`);
         return res.setStatus(StatusCodes.NOT_FOUND).end();
       }
 
-      console.log(`[Worker] Matched Route: ${methodStr.toUpperCase()}:${path}`);
+      this.logger.debug(`Matched Route: ${methodStr.toUpperCase()}:${path}`);
 
       const routeEntry = match.entry;
       const result = await routeEntry.handler(...this.buildRouteHandlerParams(routeEntry, req, res));
@@ -114,7 +117,7 @@ export class BunnerHttpWorker extends BaseWorker {
 
       return res.setBody(result).end();
     } catch (e: any) {
-      console.error('[Worker] handleRequest Error:', e);
+      this.logger.error('handleRequest Error', e);
       return {
         body: 'Internal Server Error',
         init: { status: StatusCodes.INTERNAL_SERVER_ERROR },
@@ -123,7 +126,7 @@ export class BunnerHttpWorker extends BaseWorker {
   }
 
   destroy() {
-    console.log(`🛑 Worker #${this.id} is destroying...`);
+    this.logger.info(`🛑 Worker #${this.id} is destroying...`);
   }
 
   private buildRouteHandlerParams(entry: RouteHandlerEntry, req: BunnerRequest, res: BunnerResponse): any {

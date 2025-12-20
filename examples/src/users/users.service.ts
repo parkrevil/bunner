@@ -1,10 +1,16 @@
 import { Injectable } from '@bunner/core';
+import { Logger } from '@bunner/logger';
 
 import { UserRepository } from './users.repository';
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly userRepository: UserRepository) {}
+  constructor(
+    private readonly userRepository: UserRepository,
+    private readonly logger: Logger,
+  ) {
+    this.logger.debug('UsersService initialized');
+  }
 
   findAll() {
     return this.userRepository.findAll();
@@ -15,6 +21,7 @@ export class UsersService {
   }
 
   create(body: any) {
+    this.logger.info('Creating user', body);
     this.userRepository.create(body);
   }
 

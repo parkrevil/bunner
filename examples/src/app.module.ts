@@ -1,4 +1,5 @@
 import { RootModule } from '@bunner/core';
+import { Logger } from '@bunner/logger';
 
 import { PostsModule } from './posts';
 import { UsersModule } from './users';
@@ -8,7 +9,7 @@ import { UsersModule } from './users';
   imports: [UsersModule, PostsModule],
 })
 export class AppModule {
-  constructor() {
-    console.log('AppModule initialized');
+  constructor(private readonly logger: Logger) {
+    this.logger.info('AppModule initialized');
   }
 }

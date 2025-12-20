@@ -1,3 +1,5 @@
+import { Logger } from '@bunner/logger';
+
 import type { WorkerSlot } from './interfaces';
 
 export class LoadBalancer {
@@ -7,6 +9,7 @@ export class LoadBalancer {
   private readonly responseTimeLimit: number;
   private slots: Array<WorkerSlot | undefined>;
   private weights: WorkerSlot;
+  private readonly logger = new Logger(LoadBalancer.name);
 
   constructor(count: number) {
     this.alpha = 0.2;
@@ -57,6 +60,8 @@ export class LoadBalancer {
       }
     });
 
+    this.logger.trace(`Acquired slot: ${bestSlot} (Score: ${bestScore})`);
+
     return bestSlot;
   }
 
@@ -77,6 +82,7 @@ export class LoadBalancer {
   }
 
   updateStats(id: number, stats: Omit<WorkerSlot, 'active'>) {
+    this.logger.trace(`Updating stats for worker #${id}`, stats);
     const slot = this.slots[id];
 
     if (!slot) {

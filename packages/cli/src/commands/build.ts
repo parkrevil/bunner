@@ -1,5 +1,6 @@
 import { join, resolve } from 'path';
 
+import { Logger } from '@bunner/logger';
 import { Glob } from 'bun';
 
 import { AstParser, type ClassMetadata } from '../analyzer/ast-parser';
@@ -8,7 +9,8 @@ import { ManifestGenerator } from '../generators/manifest';
 import { ConfigLoader } from '../utils/config-loader';
 
 export async function build() {
-  console.log('🚀 Starting Bunner Production Build...');
+  const logger = new Logger('CLI:Build');
+  logger.info('🚀 Starting Bunner Production Build...');
 
   // 1. Load Config
   await ConfigLoader.load();
@@ -17,9 +19,9 @@ export async function build() {
   const outDir = resolve(projectRoot, 'dist');
   const bunnerDir = resolve(projectRoot, '.bunner');
 
-  console.log(`📂 Project Root: ${projectRoot}`);
-  console.log(`📂 Source Dir: ${srcDir}`);
-  console.log(`📂 Output Dir: ${outDir}`);
+  logger.info(`📂 Project Root: ${projectRoot}`);
+  logger.info(`📂 Source Dir: ${srcDir}`);
+  logger.info(`📂 Output Dir: ${outDir}`);
 
   // 2. Initialize Components
   // const _scanner = new SourceScanner();
@@ -30,7 +32,7 @@ export async function build() {
   const glob = new Glob('**/*.ts');
   const classes: { metadata: ClassMetadata; filePath: string }[] = [];
 
-  console.log('🔍 Scanning source files...');
+  logger.info('🔍 Scanning source files...');
   for await (const file of glob.scan(srcDir)) {
     const fullPath = join(srcDir, file);
     try {
@@ -41,17 +43,17 @@ export async function build() {
         classes.push({ metadata: meta, filePath: fullPath });
       });
     } catch (e) {
-      console.error(`⚠️ Failed to parse ${file}:`, e);
+      logger.error(`⚠️ Failed to parse ${file}:`, e);
     }
   }
 
   // 4. Build Module Graph
-  console.log('🕸️  Building Module Graph...');
+  logger.info('🕸️  Building Module Graph...');
   const graph = new ModuleGraph(classes);
   graph.build();
 
   // 5. Generate Manifests (Intermediate)
-  console.log('🛠️  Generating intermediate manifests...');
+  logger.info('🛠️  Generating intermediate manifests...');
   const manifestFile = join(bunnerDir, 'manifest.ts');
   const manifestCode = manifestGen.generate(graph, classes, bunnerDir);
   await Bun.write(manifestFile, manifestCode);
@@ -77,7 +79,7 @@ await import("${userMain}");
   await Bun.write(entryPointFile, buildEntryContent);
 
   // 7. Bun Build (Bundling)
-  console.log('📦 Bundling application, manifest, and workers...');
+  logger.info('📦 Bundling application, manifest, and workers...');
 
   const workerSrc = resolve(projectRoot, 'node_modules/@bunner/http-server/src/bunner-http-worker.ts');
 
@@ -91,15 +93,15 @@ await import("${userMain}");
   });
 
   if (!result.success) {
-    console.error('❌ Build Failed:');
-    for (const msg of result.logs) {
-      console.error(msg);
+    logger.error('❌ Build Failed:');
+    for (const log of result.logs) {
+      logger.error(log.message, log);
     }
     process.exit(1);
   }
 
-  console.log('✅ Build Complete!');
-  console.log(`   Entry: ${join(outDir, 'entry.js')}`);
-  console.log(`   Worker: ${join(outDir, 'bunner-http-worker.js')}`);
-  console.log(`   Manifest: ${join(outDir, 'manifest.js')}`);
+  logger.info('✅ Build Complete!');
+  logger.info(`   Entry: ${join(outDir, 'entry.js')}`);
+  logger.info(`   Worker: ${join(outDir, 'bunner-http-worker.js')}`);
+  logger.info(`   Manifest: ${join(outDir, 'manifest.js')}`);
 }

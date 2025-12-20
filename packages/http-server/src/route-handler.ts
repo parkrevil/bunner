@@ -1,4 +1,5 @@
 import { type Container } from '@bunner/core';
+import { Logger } from '@bunner/logger';
 
 import type { RouteHandlerEntry } from './interfaces';
 
@@ -20,6 +21,7 @@ export class RouteHandler {
   private metadataRegistry: Map<any, any>;
   private scopedKeys: Map<any, string>;
   private routes: InternalRoute[] = [];
+  private readonly logger = new Logger(RouteHandler.name);
 
   constructor(container: Container, metadataRegistry: Map<any, any>, scopedKeys: Map<any, string> = new Map()) {
     this.container = container;
@@ -51,12 +53,12 @@ export class RouteHandler {
   }
 
   register() {
-    console.log('🔍 [RouteHandler] Registering routes from metadata...');
+    this.logger.debug('🔍 Registering routes from metadata...');
     for (const [targetClass, meta] of this.metadataRegistry.entries()) {
       const controllerDec = (meta.decorators || []).find((d: any) => d.name === 'Controller' || d.name === 'RestController');
 
       if (controllerDec) {
-        console.log(`FOUND Controller: ${meta.className}`);
+        this.logger.debug(`FOUND Controller: ${meta.className}`);
         this.registerController(targetClass, meta, controllerDec);
       }
     }
@@ -77,7 +79,7 @@ export class RouteHandler {
     }
 
     if (!instance) {
-      console.warn(`⚠️  Cannot resolve controller instance: ${meta.className} (Key: ${scopedKey || targetClass.name})`);
+      this.logger.warn(`⚠️  Cannot resolve controller instance: ${meta.className} (Key: ${scopedKey || targetClass.name})`);
       return;
     }
 
@@ -91,7 +93,7 @@ export class RouteHandler {
         const subPath = routeDec.arguments[0] || '';
         const fullPath = '/' + [prefix, subPath].filter(Boolean).join('/').replace(/\/+/g, '/');
 
-        console.log(`🛣️  Route Registered: [${httpMethod}] ${fullPath} -> ${targetClass.name}.${method.name}`);
+        this.logger.info(`🛣️  Route Registered: [${httpMethod}] ${fullPath} -> ${targetClass.name}.${method.name}`);
 
         const { regex, paramNames } = this.pathToRegex(fullPath);
 

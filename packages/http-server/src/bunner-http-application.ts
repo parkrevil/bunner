@@ -5,6 +5,7 @@ import {
   type BunnerApplicationNormalizedOptions,
   type RootModuleFile,
 } from '@bunner/core';
+import { Logger } from '@bunner/logger';
 import type { Server } from 'bun';
 import { StatusCodes } from 'http-status-codes';
 
@@ -18,6 +19,7 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
   private readonly rootModuleFile: RootModuleFile;
   private server: Server<unknown> | undefined;
   private workerPool: WorkerPool<BunnerHttpWorker>;
+  private readonly logger = new Logger(BunnerHttpServer.name);
 
   constructor(rootModuleFile: RootModuleFile, options: BunnerApplicationNormalizedOptions) {
     super();
@@ -67,7 +69,7 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
       },
     });
 
-    console.info('✨ Bunner HTTP Server initialized');
+    this.logger.info('✨ Bunner HTTP Server initialized');
   }
 
   /**
@@ -123,7 +125,7 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
 
           return new Response(workerRes.body, workerRes.init);
         } catch (e) {
-          console.error(e);
+          this.logger.error('Fetch Error', e);
 
           return new Response('Internal server error', {
             status: StatusCodes.INTERNAL_SERVER_ERROR,
@@ -139,7 +141,7 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
    * @returns A promise that resolves to true if the application stopped successfully
    */
   async shutdown(force = false) {
-    console.log('🛑 HTTP Server is shutting down...');
+    this.logger.info('🛑 HTTP Server is shutting down...');
 
     await this.workerPool.destroy();
     await this.server?.stop(force);

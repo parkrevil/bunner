@@ -1,3 +1,4 @@
+import { Logger } from '@bunner/logger';
 import { type ImportKind } from 'bun';
 
 export interface DependencyNode {
@@ -11,6 +12,7 @@ export interface DependencyNode {
 
 export class SourceScanner {
   private transpiler = new Bun.Transpiler({ loader: 'ts' });
+  private readonly logger = new Logger(SourceScanner.name);
 
   async scanFile(filePath: string): Promise<DependencyNode | null> {
     try {
@@ -29,7 +31,7 @@ export class SourceScanner {
         exports: exports,
       };
     } catch (error) {
-      console.error(`Failed to scan file: ${filePath}`, error);
+      this.logger.error(`Failed to scan file: ${filePath}`, error);
       return null;
     }
   }

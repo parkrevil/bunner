@@ -1,4 +1,5 @@
 import { Injectable } from '@bunner/core';
+import { Logger } from '@bunner/logger';
 
 import { CommentsService } from './comments';
 import { PostsRepository } from './posts.repository';
@@ -8,7 +9,10 @@ export class PostsService {
   constructor(
     private readonly postRepo: PostsRepository,
     private readonly commentsService: CommentsService,
-  ) {}
+    private readonly logger: Logger,
+  ) {
+    this.logger.debug('PostsService initialized');
+  }
 
   findAll() {
     return this.postRepo.findAll();

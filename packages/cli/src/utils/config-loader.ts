@@ -1,5 +1,7 @@
 import { join } from 'path';
 
+import { Logger } from '@bunner/logger';
+
 export interface BunnerConfig {
   entry: string;
   port?: number;
@@ -10,23 +12,25 @@ export interface BunnerConfig {
 }
 
 export class ConfigLoader {
+  private static readonly logger = new Logger('ConfigLoader');
+
   static async load(cwd: string = process.cwd()): Promise<BunnerConfig> {
     const configPaths = [join(cwd, 'bunner.config.ts'), join(cwd, 'bunner.config.js')];
 
     for (const path of configPaths) {
       if (await Bun.file(path).exists()) {
         try {
-          console.log(`🔧 Loading config from ${path}`);
+          this.logger.debug(`🔧 Loading config from ${path}`);
           const mod = await import(path);
           return mod.default ?? mod;
         } catch (error) {
-          console.error(`❌ Failed to load config at ${path}`, error);
+          this.logger.error(`❌ Failed to load config at ${path}`, error);
           process.exit(1);
         }
       }
     }
 
-    console.log('⚠️ No config found, using defaults.');
+    this.logger.warn('⚠️ No config found, using defaults.');
     return {
       entry: './src/main.ts',
     };
