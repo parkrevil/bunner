@@ -23,7 +23,7 @@ export interface HttpWorkerResponse {
 export interface RouteHandlerEntry {
   handler: AnyFunction;
   paramType: RouteHandlerParamType[];
-  paramRefs: any[]; 
+  paramRefs: any[];
 }
 
 export interface ArgumentMetadata {

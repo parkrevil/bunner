@@ -25,7 +25,6 @@ import type { Node } from './node';
 
 export class Flattener {
   static flatten(root: Node): BinaryRouterLayout {
-
     const nodes: Node[] = [];
     const nodeToIndex = new Map<Node, number>();
     const queue: Node[] = [root];
@@ -186,7 +185,7 @@ export class Flattener {
       encodedChunks.push(encoded);
       currentOffset += encoded.length;
     }
-    offsets.push(currentOffset); 
+    offsets.push(currentOffset);
 
     const stringTable = new Uint8Array(currentOffset);
     let ptr = 0;

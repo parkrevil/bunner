@@ -1,9 +1,7 @@
 import type { ValidatorOptions } from './interfaces';
 
 function createDecorator(_name: string, _args: any[] = [], _options: any = {}) {
-  return function (_target: object, _propertyKey: string | symbol) {
-
-  };
+  return function (_target: object, _propertyKey: string | symbol) {};
 }
 
 export function IsString(options?: ValidatorOptions) {

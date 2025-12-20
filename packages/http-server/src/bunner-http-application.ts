@@ -29,7 +29,7 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
     this.options = {
       ...{
         port: 5000,
-        bodyLimit: 10 * 1024 * 1024, 
+        bodyLimit: 10 * 1024 * 1024,
         trustProxy: false,
       },
       ...options,
@@ -48,12 +48,10 @@ export class BunnerHttpServer extends BaseApplication<BunnerHttpServerOptions> {
   }
 
   async init() {
-
     const sanitizedRootModuleFile: RootModuleFile = {
       path: this.rootModuleFile.path,
       className: this.rootModuleFile.className,
       manifestPath: this.rootModuleFile.manifestPath,
-
     };
 
     await this.workerPool.init({

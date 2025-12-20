@@ -7,14 +7,14 @@ export interface ClassMetadata {
   className: string;
   heritage?: {
     clause: 'extends' | 'implements';
-    typeName: string; 
-    typeArgs?: string[]; 
+    typeName: string;
+    typeArgs?: string[];
   };
   decorators: DecoratorMetadata[];
   constructorParams: {
     name: string;
     type: string;
-    typeArgs?: string[]; 
+    typeArgs?: string[];
     decorators: DecoratorMetadata[];
   }[];
   methods: {
@@ -33,11 +33,11 @@ export interface ClassMetadata {
     type: string;
     typeArgs?: string[];
     decorators: DecoratorMetadata[];
-    items?: any; 
+    items?: any;
     isOptional?: boolean;
     isArray?: boolean;
     isEnum?: boolean;
     literals?: (string | number | boolean)[];
   }[];
-  imports: Record<string, string>; 
+  imports: Record<string, string>;
 }

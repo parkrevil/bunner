@@ -19,7 +19,7 @@ afterAll(() => {
 
 describe('RadixRouter :: basic routing', () => {
   const buildRouter = (configure: (builder: Router<string>) => void): RouterInstance<string> => {
-    const builder = new Router<string>(); 
+    const builder = new Router<string>();
     configure(builder);
     return builder.build();
   };
@@ -115,9 +115,7 @@ describe('RadixRouter :: basic routing', () => {
     }
   });
 
-  it.skip('should cache pure static routes in the fast-path table', () => {
-
-  });
+  it.skip('should cache pure static routes in the fast-path table', () => {});
 
   it('should normalize redundant slashes and dot segments on the static fast path', () => {
     const builder = new Router<string>();

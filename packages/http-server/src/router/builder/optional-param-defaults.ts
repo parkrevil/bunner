@@ -29,10 +29,10 @@ export class OptionalParamDefaults {
     const val = this.defaultValue;
     const len = defaults.length;
     for (let i = 0; i < len; i++) {
-        const name = defaults[i];
-        if (name && !(name in params)) {
-            params[name] = val;
-        }
+      const name = defaults[i];
+      if (name && !(name in params)) {
+        params[name] = val;
+      }
     }
   }
 }

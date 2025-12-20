@@ -1,7 +1,6 @@
 import type { Handler } from './types';
 
 export class HandlerRegistry<R = any> {
-
   private handlers: Map<string, Handler<R>>;
 
   constructor() {

@@ -93,7 +93,6 @@ export class ConsoleTransport implements Transport {
     }
 
     if (Object.keys(rest).length > 0) {
-
       const processedRest: any = {};
       for (const [key, val] of Object.entries(rest)) {
         if (val && typeof val === 'object' && 'toLog' in val && typeof (val as any).toLog === 'function') {
@@ -102,7 +101,7 @@ export class ConsoleTransport implements Transport {
           processedRest[key] = val;
         }
       }
-      console.log(Bun.inspect(processedRest, { colors: true, depth: 2 })); 
+      console.log(Bun.inspect(processedRest, { colors: true, depth: 2 }));
     }
   }
 }

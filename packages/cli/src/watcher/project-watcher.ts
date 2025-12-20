@@ -8,7 +8,6 @@ export type FileChangePayload = {
 };
 
 export class ProjectWatcher {
-
   private watcher: any;
   private readonly logger = new Logger(ProjectWatcher.name);
 
@@ -18,7 +17,6 @@ export class ProjectWatcher {
     this.logger.debug(`👁️  Watching for file changes in ${this.rootPath}... (using fs.watch as Bun.watch wrapper)`);
 
     this.watcher = watch(this.rootPath, { recursive: true }, (event, filename) => {
-
       if (
         !filename ||
         filename.includes('node_modules') ||

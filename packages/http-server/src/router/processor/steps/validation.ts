@@ -17,7 +17,6 @@ export function validateSegments(ctx: ProcessorContext): void {
       ctx.segmentDecodeHints[i] = 1;
       if (failFast) {
         try {
-
           decodeURIComponent(seg);
         } catch (_e) {
           throw new Error(`Malformed percent encoded component: ${seg}`);

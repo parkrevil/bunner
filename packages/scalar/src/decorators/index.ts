@@ -25,49 +25,49 @@ export interface ApiResponseOptions {
 }
 
 export function ApiProperty(_options?: ApiPropertyOptions): PropertyDecorator {
-  return () => { };
+  return () => {};
 }
 
 export function ApiPropertyOptional(_options?: ApiPropertyOptions): PropertyDecorator {
-  return () => { };
+  return () => {};
 }
 
 export function ApiTags(..._tags: string[]): ClassDecorator {
-  return () => { };
+  return () => {};
 }
 
 export function ApiBearerAuth(): ClassDecorator {
-  return () => { };
+  return () => {};
 }
 
 export function ApiOperation(_options: ApiOperationOptions): MethodDecorator {
-  return () => { };
+  return () => {};
 }
 
 export function ApiResponse(_options: ApiResponseOptions): MethodDecorator {
-  return () => { };
+  return () => {};
 }
 
 export function ApiOkResponse(_options?: Omit<ApiResponseOptions, 'status'>): MethodDecorator {
-  return () => { };
+  return () => {};
 }
 
 export function ApiCreatedResponse(_options?: Omit<ApiResponseOptions, 'status'>): MethodDecorator {
-  return () => { };
+  return () => {};
 }
 
 export function ApiNotFoundResponse(_options?: Omit<ApiResponseOptions, 'status'>): MethodDecorator {
-  return () => { };
+  return () => {};
 }
 
 export function ApiBody(_options: { type: any; description?: string; isArray?: boolean }): MethodDecorator {
-  return () => { };
+  return () => {};
 }
 
 export function ApiQuery(_options: { name: string; required?: boolean; type?: any; description?: string }): MethodDecorator {
-  return () => { };
+  return () => {};
 }
 
 export function ApiParam(_options: { name: string; type?: any; description?: string }): MethodDecorator {
-  return () => { };
+  return () => {};
 }

@@ -55,7 +55,6 @@ describe('Router Static Fast-path', () => {
   });
 
   it('should not hit fast-path if normalization produces different path not in map', () => {
-
     const router = new Router({ ignoreTrailingSlash: false });
     router.add('GET', '/foo', () => 'ok');
     const result = router.match('GET', '/foo/');

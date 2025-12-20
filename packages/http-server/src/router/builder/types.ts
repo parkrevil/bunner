@@ -16,6 +16,6 @@ export interface RouteMethods {
 
 export interface SortedChildArrays {
   segments: string[];
-  nodes: any[]; 
+  nodes: any[];
   fingerprints: number[];
 }

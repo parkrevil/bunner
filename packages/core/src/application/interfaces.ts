@@ -29,7 +29,7 @@ export interface CreateApplicationOptions extends BunnerApplicationBaseOptions {
   [key: string]: any;
 }
 
-export interface BunnerModule { }
+export interface BunnerModule {}
 
 export interface DynamicModule {
   module: any;

@@ -4,7 +4,7 @@ export interface TypeMetadata {
   name: string;
   properties: {
     name: string;
-    type: string; 
+    type: string;
     optional: boolean;
   }[];
 }
@@ -16,8 +16,7 @@ export class TypeResolver {
   constructor() {}
 
   init(fileNames: string[]) {
-
-    this.program = ts.createProgram(fileNames, {}); 
+    this.program = ts.createProgram(fileNames, {});
     this.checker = this.program.getTypeChecker();
   }
 

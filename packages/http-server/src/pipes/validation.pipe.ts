@@ -16,7 +16,6 @@ export class ValidationPipe implements PipeTransform {
     const errors = validateFn(object);
 
     if (errors.length > 0) {
-
       const error: any = new Error('Validation failed');
       error.status = StatusCodes.BAD_REQUEST;
       error.details = errors;

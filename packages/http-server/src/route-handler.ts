@@ -73,7 +73,6 @@ export class RouteHandler {
     if (scopedKey) {
       instance = this.container.get(scopedKey);
     } else {
-
       instance = this.container.get(targetClass);
     }
 
@@ -103,7 +102,7 @@ export class RouteHandler {
             return d ? d.name.toLowerCase() : 'unknown';
           });
 
-        const paramRefs = (method.parameters || []).sort((a: any, b: any) => a.index - b.index).map((p: any) => p.type); 
+        const paramRefs = (method.parameters || []).sort((a: any, b: any) => a.index - b.index).map((p: any) => p.type);
 
         const entry: RouteHandlerEntry = {
           handler: instance[method.name].bind(instance),
@@ -124,12 +123,10 @@ export class RouteHandler {
 
   private pathToRegex(path: string) {
     const paramNames: string[] = [];
-    const pattern = path
-      .replace(/[\\$.+*?^|[\](){}]/g, '\\$&') 
-      .replace(/:([a-zA-Z0-9_]+)/g, (_, name) => {
-        paramNames.push(name);
-        return '([^/]+)';
-      });
+    const pattern = path.replace(/[\\$.+*?^|[\](){}]/g, '\\$&').replace(/:([a-zA-Z0-9_]+)/g, (_, name) => {
+      paramNames.push(name);
+      return '([^/]+)';
+    });
 
     return {
       regex: new RegExp(`^${pattern}$`),

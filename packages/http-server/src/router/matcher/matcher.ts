@@ -38,7 +38,6 @@ import {
 } from './constants';
 
 export class Matcher {
-
   private readonly nodeBuffer: Uint32Array;
   private readonly staticChildrenBuffer: Uint32Array;
   private readonly paramChildrenBuffer: Uint32Array;
@@ -80,7 +79,6 @@ export class Matcher {
       failFastOnBadEncoding: boolean;
     },
   ) {
-
     this.nodeBuffer = layout.nodeBuffer;
     this.staticChildrenBuffer = layout.staticChildrenBuffer;
     this.paramChildrenBuffer = layout.paramChildrenBuffer;
@@ -107,16 +105,15 @@ export class Matcher {
     decodeParams: boolean,
     captureSnapshot: boolean,
   ): boolean {
-
     const code = METHOD_OFFSET[method];
     if (code === undefined) {
-      return false; 
+      return false;
     }
     this.methodCode = code;
     this.segments = segments;
     this.normalizedPath = normalizedPath;
     this.segmentHints = segmentHints;
-    this.suffixOffsets = null; 
+    this.suffixOffsets = null;
     this.paramCount = 0;
 
     for (let i = 0; i < segments.length; i++) {
@@ -175,14 +172,13 @@ export class Matcher {
   }
 
   private getSuffixValue(segIdx: number): string {
-
     if (!this.suffixOffsets) {
       const segments = this.segments;
       const offsets = new Uint32Array(segments.length + 1);
-      let ptr = 1; 
+      let ptr = 1;
       for (let i = 0; i < segments.length; i++) {
         offsets[i] = ptr;
-        ptr += segments[i]!.length + 1; 
+        ptr += segments[i]!.length + 1;
       }
       offsets[segments.length] = ptr;
       this.suffixOffsets = offsets;
@@ -234,7 +230,6 @@ export class Matcher {
       const segIdx = this.stack[framePtr + FRAME_OFFSET_SEGMENT]!;
 
       if (stage === STAGE_ENTER) {
-
         if (segIdx === this.segments.length) {
           const base = nodeIdx * NODE_STRIDE;
           const methodsPtr = this.nodeBuffer[base + NODE_OFFSET_METHODS_PTR]!;
@@ -258,7 +253,6 @@ export class Matcher {
         this.stack[framePtr + FRAME_OFFSET_STAGE] = STAGE_STATIC;
         continue;
       } else if (stage === STAGE_STATIC) {
-
         const base = nodeIdx * NODE_STRIDE;
         const stateIter = this.stack[framePtr + FRAME_OFFSET_ITERATOR]!;
 
@@ -277,7 +271,6 @@ export class Matcher {
           const childPtr = this.findStaticChild(staticPtr, staticCount, segment);
 
           if (childPtr !== -1) {
-
             this.stack[sp + FRAME_OFFSET_NODE] = childPtr;
             this.stack[sp + FRAME_OFFSET_SEGMENT] = segIdx + 1;
             this.stack[sp + FRAME_OFFSET_STAGE] = STAGE_ENTER;
@@ -292,7 +285,6 @@ export class Matcher {
         this.stack[framePtr + FRAME_OFFSET_ITERATOR] = 0;
         continue;
       } else if (stage === STAGE_PARAM) {
-
         const base = nodeIdx * NODE_STRIDE;
         const meta = this.nodeBuffer[base + NODE_OFFSET_META]!;
         const paramCount = (meta & NODE_MASK_PARAM_COUNT) >>> NODE_SHIFT_PARAM_COUNT;
@@ -339,7 +331,6 @@ export class Matcher {
         sp += FRAME_SIZE;
         continue;
       } else if (stage === STAGE_WILDCARD) {
-
         const base = nodeIdx * NODE_STRIDE;
         const wildcardPtr = this.nodeBuffer[base + NODE_OFFSET_WILDCARD_CHILD_PTR]!;
 
@@ -358,12 +349,10 @@ export class Matcher {
           if (childMethodsPtr > 0) {
             const mask = this.nodeBuffer[childBase + NODE_OFFSET_METHOD_MASK]!;
             if (this.methodCode < 31 && mask & (1 << this.methodCode)) {
-
               const meta = this.nodeBuffer[childBase + NODE_OFFSET_META]!;
               const origin = (meta & NODE_MASK_WILDCARD_ORIGIN) >>> NODE_SHIFT_WILDCARD_ORIGIN;
 
               if (origin === 1 && value.length === 0) {
-
                 sp -= FRAME_SIZE;
                 if (sp > 0) {
                   this.paramCount = this.stack[sp - FRAME_SIZE + FRAME_OFFSET_PARAM_BASE]!;

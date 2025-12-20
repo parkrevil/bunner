@@ -8,23 +8,22 @@ export interface BaseLogMessage {
   context?: string;
   reqId?: string;
   workerId?: number;
-  err?: Error | Loggable; 
+  err?: Error | Loggable;
 }
 
 export type LogMessage<T = Record<string, any>> = BaseLogMessage & T;
 
 export interface Loggable {
-  toLog(): Record<string, any>; 
+  toLog(): Record<string, any>;
 }
 
 export interface LoggerOptions<T = Record<string, any>> {
-
   level?: LogLevel;
 
   format?: 'pretty' | 'json';
   prettyOptions?: {
     colors?: Record<LogLevel, Color>;
-    columns?: Array<keyof LogMessage<T>>; 
+    columns?: Array<keyof LogMessage<T>>;
   };
 }
 

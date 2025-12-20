@@ -21,7 +21,7 @@ export const NODE_STRIDE = 8;
 export const NODE_OFFSET_META = 0;
 
 export const NODE_OFFSET_METHOD_MASK = 1;
-export const NODE_OFFSET_MATCH_FUNC = 2; 
+export const NODE_OFFSET_MATCH_FUNC = 2;
 export const NODE_OFFSET_STATIC_CHILD_PTR = 3;
 export const NODE_OFFSET_STATIC_CHILD_COUNT = 4;
 export const NODE_OFFSET_PARAM_CHILD_PTR = 5;
@@ -46,7 +46,6 @@ export interface SerializedPattern {
 }
 
 export interface BinaryRouterLayout {
-
   readonly nodeBuffer: Uint32Array;
 
   readonly staticChildrenBuffer: Uint32Array;

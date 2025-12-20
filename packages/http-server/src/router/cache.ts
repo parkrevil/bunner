@@ -10,7 +10,6 @@ export class RouterCache<T> {
   get(key: string): T | null | undefined {
     const value = this.map.get(key);
     if (value !== undefined) {
-
       this.map.delete(key);
       this.map.set(key, value);
     }

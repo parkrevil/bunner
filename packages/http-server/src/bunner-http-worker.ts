@@ -132,7 +132,7 @@ export class BunnerHttpWorker extends BaseWorker {
 
     for (let i = 0; i < entry.paramType.length; i++) {
       const type = entry.paramType[i] as string;
-      const metatype = entry.paramRefs[i]; 
+      const metatype = entry.paramRefs[i];
       let paramValue = undefined;
 
       switch (type) {
@@ -175,7 +175,7 @@ export class BunnerHttpWorker extends BaseWorker {
         paramValue = await this.validationPipe.transform(paramValue, {
           type: type as any,
           metatype,
-          data: undefined, 
+          data: undefined,
         });
       }
 

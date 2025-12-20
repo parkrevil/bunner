@@ -2,9 +2,7 @@ import type { HttpMethodDecoratorOptions } from './interfaces';
 
 function createHttpMethodDecorator(_method: string) {
   return function (_pathOrOptions?: string | HttpMethodDecoratorOptions, _options?: HttpMethodDecoratorOptions) {
-    return (_target: object, _propertyKey: string | symbol, _descriptor: PropertyDescriptor) => {
-
-    };
+    return (_target: object, _propertyKey: string | symbol, _descriptor: PropertyDescriptor) => {};
   };
 }
 

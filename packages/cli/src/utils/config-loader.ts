@@ -10,7 +10,7 @@ export interface BunnerConfig {
     strictValidation?: boolean;
     minify?: boolean;
   };
-  scanPaths?: string[]; 
+  scanPaths?: string[];
 }
 
 export class ConfigLoader {
