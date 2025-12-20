@@ -7,6 +7,7 @@ import { BunnerRequest } from './bunner-request';
 import { BunnerResponse } from './bunner-response';
 import { HttpMethod } from './enums';
 import type { HttpWorkerResponse, RouteHandlerEntry } from './interfaces';
+import { ValidationPipe } from './pipes/validation.pipe';
 import { RouteHandler } from './route-handler';
 
 // ... class ...
@@ -14,6 +15,7 @@ export class BunnerHttpWorker extends BaseWorker {
   private container: Container;
   private routeHandler: RouteHandler;
   private logger = new Logger(BunnerHttpWorker);
+  private validationPipe = new ValidationPipe();
 
   constructor() {
     super();
@@ -98,7 +100,7 @@ export class BunnerHttpWorker extends BaseWorker {
       this.logger.debug(`Matched Route: ${methodStr.toUpperCase()}:${path}`);
 
       const routeEntry = match.entry;
-      const result = await routeEntry.handler(...this.buildRouteHandlerParams(routeEntry, req, res));
+      const result = await routeEntry.handler(...(await this.buildRouteHandlerParams(routeEntry, req, res)));
 
       if (result instanceof Response) {
         return {
@@ -129,53 +131,61 @@ export class BunnerHttpWorker extends BaseWorker {
     this.logger.info(`🛑 Worker #${this.id} is destroying...`);
   }
 
-  private buildRouteHandlerParams(entry: RouteHandlerEntry, req: BunnerRequest, res: BunnerResponse): any {
+  private async buildRouteHandlerParams(entry: RouteHandlerEntry, req: BunnerRequest, res: BunnerResponse): Promise<any[]> {
     const params = [];
 
-    for (const type of entry.paramType) {
-      switch (type as string) {
-        case 'body':
-          params.push(req.body);
-          break;
+    for (let i = 0; i < entry.paramType.length; i++) {
+      const type = entry.paramType[i] as string;
+      const metatype = entry.paramRefs[i]; // Get Type Reference
+      let paramValue = undefined;
 
+      switch (type) {
+        case 'body':
+          paramValue = req.body;
+          break;
         case 'param':
         case 'params':
-          params.push(req.params);
+          paramValue = req.params;
           break;
-
         case 'query':
         case 'queries':
-          params.push(req.queryParams);
+          paramValue = req.queryParams;
           break;
-
         case 'header':
         case 'headers':
-          params.push(req.headers);
+          paramValue = req.headers;
           break;
-
         case 'cookie':
         case 'cookies':
-          params.push(req.cookies);
+          paramValue = req.cookies;
           break;
-
         case 'request':
         case 'req':
-          params.push(req);
+          paramValue = req;
           break;
-
         case 'response':
         case 'res':
-          params.push(res);
+          paramValue = res;
           break;
-
         case 'ip':
-          params.push(req.ip);
+          paramValue = req.ip;
           break;
-
         default:
-          params.push(undefined);
+          paramValue = undefined;
           break;
       }
+
+      // Apply ValidationPipe for Body (and Query/Params if metatype is provided)
+      // Currently focusing on Body validation as per plan
+      if (metatype && (type === 'body' || type === 'query')) {
+        paramValue = await this.validationPipe.transform(paramValue, {
+          type: type as any,
+          metatype,
+          data: undefined, // We don't have deep param name info here easily yet
+        });
+      }
+
+      params.push(paramValue);
     }
 
     return params;

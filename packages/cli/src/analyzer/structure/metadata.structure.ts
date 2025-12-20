@@ -28,6 +28,11 @@ export interface ClassMetadata {
     type: string;
     typeArgs?: string[];
     decorators: DecoratorMetadata[];
+    items?: any; // For Array items type info
+    isOptional?: boolean;
+    isArray?: boolean;
+    isEnum?: boolean;
+    literals?: (string | number | boolean)[];
   }[];
   imports: Record<string, string>; // Identifier -> Source Path
 }

@@ -104,9 +104,12 @@ export class RouteHandler {
             return d ? d.name.toLowerCase() : 'unknown';
           });
 
+        const paramRefs = (method.parameters || []).sort((a: any, b: any) => a.index - b.index).map((p: any) => p.type); // type is now Ref or String from MetadataRegistry
+
         const entry: RouteHandlerEntry = {
           handler: instance[method.name].bind(instance),
           paramType: paramTypes,
+          paramRefs,
         };
 
         this.routes.push({

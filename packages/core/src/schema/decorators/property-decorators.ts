@@ -1,27 +1,30 @@
-import { MetadataKeys } from '../enums';
+import { MetadataStorage } from '../../metadata/metadata-storage';
 
 import type { FieldOptions } from './interfaces';
 
-export function Field(options?: FieldOptions): PropertyDecorator {
-  return function (target: any, propertyKey: string | symbol): void {
-    if (!target.__bunner_meta) {
-      target.__bunner_meta = {};
+export function Field(options?: FieldOptions) {
+  return function (_: undefined, context: ClassFieldDecoratorContext) {
+    if (context.kind !== 'field') {
+      throw new Error(`@Field must be used on a field. Used on: ${context.kind}`);
     }
-    if (!target.__bunner_meta[MetadataKeys.Field]) {
-      target.__bunner_meta[MetadataKeys.Field] = {};
-    }
-    target.__bunner_meta[MetadataKeys.Field][propertyKey] = options || {};
+
+    MetadataStorage.addDecoratorMetadata(context, {
+      name: 'Field',
+      arguments: [],
+      options,
+    });
   };
 }
 
-export function Exclude(): PropertyDecorator {
-  return function (target: any, propertyKey: string | symbol): void {
-    if (!target.__bunner_meta) {
-      target.__bunner_meta = {};
+export function Exclude() {
+  return function (_: undefined, context: ClassFieldDecoratorContext) {
+    if (context.kind !== 'field') {
+      throw new Error(`@Exclude must be used on a field. Used on: ${context.kind}`);
     }
-    if (!target.__bunner_meta[MetadataKeys.Exclude]) {
-      target.__bunner_meta[MetadataKeys.Exclude] = {};
-    }
-    target.__bunner_meta[MetadataKeys.Exclude][propertyKey] = true;
+
+    MetadataStorage.addDecoratorMetadata(context, {
+      name: 'Exclude', // We keep Exclude name for Schema, but runtime should map it to Hidden or handle it.
+      arguments: [],
+    });
   };
 }

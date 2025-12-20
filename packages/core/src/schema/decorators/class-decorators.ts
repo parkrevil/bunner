@@ -1,19 +1,31 @@
-import { MetadataKeys } from '../enums';
+import { MetadataStorage } from '../../metadata/metadata-storage';
+// MetadataKeys unused
 
-export function Serialize(): ClassDecorator {
-  return function <T extends Function>(target: T) {
-    if (!(target as any).__bunner_meta) {
-      (target as any).__bunner_meta = {};
+export function Serialize() {
+  return function (_: any, context: ClassDecoratorContext) {
+    if (context.kind !== 'class') {
+      throw new Error(`@Serialize must be used on a class. Used on: ${context.kind}`);
     }
-    (target as any).__bunner_meta[MetadataKeys.Serialize] = true;
+
+    MetadataStorage.addDecoratorMetadata(context, {
+      name: 'Serialize',
+      arguments: [],
+    });
+
+    // Legacy support if needed via explicit meta attach?
+    // JIT compiler should read from MetadataStorage.
   };
 }
 
-export function Deserialize(): ClassDecorator {
-  return function <T extends Function>(target: T) {
-    if (!(target as any).__bunner_meta) {
-      (target as any).__bunner_meta = {};
+export function Deserialize() {
+  return function (_: any, context: ClassDecoratorContext) {
+    if (context.kind !== 'class') {
+      throw new Error(`@Deserialize must be used on a class. Used on: ${context.kind}`);
     }
-    (target as any).__bunner_meta[MetadataKeys.Deserialize] = true;
+
+    MetadataStorage.addDecoratorMetadata(context, {
+      name: 'Deserialize',
+      arguments: [],
+    });
   };
 }

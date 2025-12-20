@@ -39,4 +39,15 @@ export interface HttpWorkerResponse {
 export interface RouteHandlerEntry {
   handler: AnyFunction;
   paramType: RouteHandlerParamType[];
+  paramRefs: any[]; // Parameter Types (Constructors or Strings)
+}
+
+export interface ArgumentMetadata {
+  type: 'body' | 'query' | 'param' | 'custom';
+  metatype?: any;
+  data?: string;
+}
+
+export interface PipeTransform<T = any, R = any> {
+  transform(value: T, metadata: ArgumentMetadata): R | Promise<R>;
 }

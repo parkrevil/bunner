@@ -10,6 +10,7 @@ export class MetadataGenerator {
     const imports: string[] = [];
     const registryEntries: string[] = [];
     const importedClasses = new Set<string>();
+    const availableClasses = new Set(classes.map(c => c.metadata.className));
 
     classes.forEach(({ metadata, filePath }) => {
       // Import the class
@@ -19,14 +20,41 @@ export class MetadataGenerator {
         importedClasses.add(metadata.className);
       }
 
-      // Serialize Metadata
-      const serializedMeta = JSON.stringify({
-        className: metadata.className,
-        decorators: metadata.decorators,
-        constructorParams: metadata.constructorParams,
-        methods: metadata.methods,
-        properties: metadata.properties,
+      // Serialize Metadata manually to support Class References
+      const props = metadata.properties.map(prop => {
+        // Determine if type is a known class (Reference) or Primitive (String)
+        const isClassRef = availableClasses.has(prop.type);
+        const typeValue = isClassRef ? prop.type : `'${prop.type}'`;
+
+        // Handle Array Items Type Ref
+        let itemsStr = 'undefined';
+        if (prop.items) {
+          const isItemRef = availableClasses.has(prop.items.typeName);
+          const itemTypeVal = isItemRef ? prop.items.typeName : `'${prop.items.typeName}'`;
+          itemsStr = `{ typeName: ${itemTypeVal} }`;
+        }
+
+        return `{
+          name: '${prop.name}',
+          type: ${typeValue},
+          isClass: ${isClassRef},
+          typeArgs: ${JSON.stringify(prop.typeArgs)},
+          decorators: ${JSON.stringify(prop.decorators)},
+          isOptional: ${prop.isOptional},
+          isArray: ${prop.isArray},
+          isEnum: ${prop.isEnum},
+          items: ${itemsStr},
+          literals: ${JSON.stringify(prop.literals)}
+        }`;
       });
+
+      const serializedMeta = `{
+        className: '${metadata.className}',
+        decorators: ${JSON.stringify(metadata.decorators)},
+        constructorParams: ${JSON.stringify(metadata.constructorParams)},
+        methods: ${JSON.stringify(metadata.methods)},
+        properties: [${props.join(',')}]
+      }`;
 
       registryEntries.push(`  registry.set(${metadata.className}, ${serializedMeta});`);
     });

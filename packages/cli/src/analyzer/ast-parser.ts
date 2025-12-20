@@ -100,6 +100,11 @@ export class AstParser {
             type: typeInfo.typeName,
             typeArgs: typeInfo.typeArgs,
             decorators: propDecorators,
+            isOptional: member.optional || member.accessibility === 'protected' || false, // Handling optionality
+            isArray: typeInfo.isArray,
+            isEnum: typeInfo.isEnum,
+            literals: typeInfo.literals,
+            items: typeInfo.items,
           });
         }
       }

@@ -4,3 +4,6 @@ export * from './src/common';
 export * from './src/injector';
 export * from './src/errors';
 export * from './src/worker-pool';
+export * from './src/validator';
+export * from './src/transformer';
+export * from './src/metadata';

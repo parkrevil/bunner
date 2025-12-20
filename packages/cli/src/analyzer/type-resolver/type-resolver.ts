@@ -4,6 +4,9 @@ export interface TypeInfo {
   isUnion?: boolean;
   unionTypes?: TypeInfo[];
   isArray?: boolean;
+  isEnum?: boolean;
+  literals?: (string | number | boolean)[];
+  items?: TypeInfo; // For Array Element Type
 }
 
 export class TypeResolver {
@@ -50,6 +53,7 @@ export class TypeResolver {
         typeName: 'Array',
         typeArgs: [elementType.typeName],
         isArray: true,
+        items: elementType,
       };
     }
 
@@ -70,11 +74,29 @@ export class TypeResolver {
       return { typeName: 'any' };
     }
 
-    // 4. TSUnionType (e.g., User | null)
-    // 의존성 주입 시 null/undefined는 무시하고 실제 타입이 중요함.
+    // 4. Literal Types (e.g. 'admin', 123)
+    if (typeNode.type === 'TSLiteralType') {
+      return {
+        typeName: typeof typeNode.literal.value,
+        literals: [typeNode.literal.value],
+      };
+    }
+
+    // 5. TSUnionType (e.g., 'admin' | 'user', User | null)
     if (typeNode.type === 'TSUnionType') {
       const types = (typeNode.types || []).map((t: any) => this.resolve(t));
-      // null/undefined 제외하고 첫 번째 유의미한 타입 찾기 (간소화 전략)
+
+      // Check for String/Number Literal Union
+      const allLiterals = types.every((t: TypeInfo) => t.literals && t.literals.length > 0);
+      if (allLiterals) {
+        return {
+          typeName: types[0].typeName, // 'string' or 'number'
+          isUnion: true,
+          literals: types.flatMap((t: TypeInfo) => t.literals || []),
+        };
+      }
+
+      // Standard Union (Pick first valid non-null)
       const valid = types.find((t: TypeInfo) => t.typeName !== 'null' && t.typeName !== 'undefined' && t.typeName !== 'void');
 
       return {
