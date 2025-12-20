@@ -14,6 +14,7 @@
     "@bunner/logger": "workspace:*"
   },
   "devDependencies": {
+    "@bunner/cli": "workspace:*",
     "@types/bun": "^1.3.0",
     "typescript": "^5"
   }
