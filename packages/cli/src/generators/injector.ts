@@ -1,5 +1,5 @@
 import { type ClassMetadata } from '../analyzer/ast-parser';
-import { ModuleGraph, type ModuleNode } from '../analyzer/module-graph';
+import { ModuleGraph, type ModuleNode, type ProviderRef } from '../analyzer/graph/module-graph';
 import { PathResolver } from '../utils/path-resolver';
 
 export class InjectorGenerator {
@@ -29,9 +29,9 @@ export class InjectorGenerator {
     };
 
     // Iterate all modules
-    graph.modules.forEach(node => {
+    graph.modules.forEach((node: ModuleNode) => {
       // 1. Generate Factories for Providers
-      node.providers.forEach((ref, token) => {
+      node.providers.forEach((ref: ProviderRef, token: string) => {
         // Find ClassMetadata for this provider
         const classInfo = graph.classMap.get(token);
         if (!classInfo) {
@@ -74,7 +74,7 @@ export class InjectorGenerator {
       });
 
       // 2. Generate Factories for Controllers
-      node.controllers.forEach(ctrlName => {
+      node.controllers.forEach((ctrlName: string) => {
         const classInfo = graph.classMap.get(ctrlName);
         if (!classInfo) {
           return;
@@ -92,8 +92,8 @@ export class InjectorGenerator {
 
     // 3. Generate Dynamic Module Logic
     const dynamicEntries: string[] = [];
-    graph.modules.forEach(node => {
-      node.dynamicImports.forEach(imp => {
+    graph.modules.forEach((node: ModuleNode) => {
+      node.dynamicImports.forEach((imp: any) => {
         if (imp.__bunner_call) {
           // e.g. "ConfigModule.forRoot"
           const [className, _methodName] = imp.__bunner_call.split('.');
@@ -141,11 +141,11 @@ ${dynamicEntries.join('\n')}
   }
 
   private resolveConstructorDeps(meta: ClassMetadata, node: ModuleNode, graph: ModuleGraph): string[] {
-    return meta.constructorParams.map(param => {
+    return meta.constructorParams.map((param: any) => {
       let token = param.type;
 
       // 1. Check for @Inject(Token) or @Inject(forwardRef(() => Token))
-      const injectDec = param.decorators.find(d => d.name === 'Inject');
+      const injectDec = param.decorators.find((d: any) => d.name === 'Inject');
       if (injectDec && injectDec.arguments.length > 0) {
         const arg = injectDec.arguments[0];
         if (typeof arg === 'string') {

@@ -1,5 +1,5 @@
 import { type ClassMetadata } from '../analyzer/ast-parser';
-import { ModuleGraph } from '../analyzer/module-graph';
+import { ModuleGraph, type ModuleNode } from '../analyzer/graph/module-graph';
 
 import { InjectorGenerator } from './injector';
 import { MetadataGenerator } from './metadata';
@@ -20,8 +20,8 @@ export class ManifestGenerator {
     // This is primarily for Controllers so RouteHandler can find them.
     const scopedKeysEntries: string[] = [];
 
-    graph.modules.forEach(node => {
-      node.controllers.forEach(ctrlName => {
+    graph.modules.forEach((node: ModuleNode) => {
+      node.controllers.forEach((ctrlName: string) => {
         // We assume ctrlName is the class name.
         // We need to import the class to use it as a key.
         // InjectorGenerator already imports them? No, we need explicit imports here or reuse.
