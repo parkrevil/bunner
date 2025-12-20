@@ -14,7 +14,6 @@ export function Controller(_prefix: string = '') {
     if (context.kind !== 'class') {
       throw new Error(`@Controller must be used on a class. Used on: ${context.kind}`);
     }
-    // Metadata is handled by CLI analysis, but we can hook instance creation here if needed.
     return value;
   };
 }

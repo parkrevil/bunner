@@ -143,10 +143,49 @@ export class TransformerCompiler {
     if (this.i2pCache.has(target)) {
       return this.i2pCache.get(target) as any;
     }
-    // TODO: Implement Optimization for instanceToPlain (filtering @Hidden, etc)
-    // For now, identity or simple spread? No, spread keeps hidden.
-    // This is Phase 3 part 2.
-    const closure = (instance: any) => ({ ...instance });
+
+    const metadata = MetadataConsumer.getCombinedMetadata(target);
+    const bodyLines: string[] = [];
+    bodyLines.push('const plain = {};');
+
+    for (const [propName, prop] of Object.entries(metadata.properties)) {
+      const p = prop as any;
+      const isHidden = p.decorators.some((d: any) => d.name === 'Hidden' || d.name === 'Exclude');
+
+      if (!isHidden) {
+        // If it's a class instance, we might want to recursively convert.
+        if (p.isClass || (p.isArray && p.items && p.items.typeName)) {
+           bodyLines.push(`  if (instance['${propName}'] !== undefined) {`);
+           bodyLines.push(`    plain['${propName}'] = converters.instanceToPlain(instance['${propName}'], classRefs['${propName}']);`);
+           bodyLines.push('  }');
+        } else {
+           bodyLines.push(`  if (instance['${propName}'] !== undefined) plain['${propName}'] = instance['${propName}'];`);
+        }
+      }
+    }
+
+    bodyLines.push('return plain;');
+
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+    const fn = new Function('instance', 'converters', 'classRefs', bodyLines.join('\n'));
+    
+    const classRefs: Record<string, any> = {};
+    for (const [propName, prop] of Object.entries(metadata.properties)) {
+      if ((prop as any).isClass) classRefs[propName] = (prop as any).type;
+      if ((prop as any).isArray && (prop as any).items?.typeName) classRefs[propName] = (prop as any).items.typeName;
+    }
+
+    const converters = {
+       instanceToPlain: (val: any, Target?: any) => {
+         if (!val) return val;
+         if (Array.isArray(val)) {
+            return val.map(v => Target ? TransformerCompiler.compileInstanceToPlain(Target)(v) : v);
+         }
+         return Target ? TransformerCompiler.compileInstanceToPlain(Target)(val) : val;
+       }
+    };
+
+    const closure = (instance: any) => fn(instance, converters, classRefs);
     this.i2pCache.set(target, closure);
     return closure;
   }

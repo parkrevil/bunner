@@ -77,19 +77,75 @@ console.log("[Entry] Bootstrapping User Application...");
 await import("${userMain}");
 `;
   await Bun.write(entryPointFile, buildEntryContent);
+  
+  // Ensure Bun picks up the correct decorator settings for AOT files
+  const bunnerTsConfig = join(bunnerDir, 'tsconfig.json');
+  await Bun.write(bunnerTsConfig, JSON.stringify({
+    extends: "../tsconfig.json",
+    compilerOptions: {
+      experimentalDecorators: false,
+      emitDecoratorMetadata: false
+    }
+  }));
 
   // 7. Bun Build (Bundling)
   logger.info('📦 Bundling application, manifest, and workers...');
 
   const workerSrc = resolve(projectRoot, 'node_modules/@bunner/http-server/src/bunner-http-worker.ts');
 
+  /*
+  const buildCmd = [
+    'bun', 'build',
+    entryPointFile,
+    workerSrc,
+    manifestFile,
+    `--outdir=${outDir}`,
+    '--target=bun',
+    '--naming=[name].js',
+    '--sourcemap=external'
+  ];
+
+  const buildProc = Bun.spawnSync(buildCmd, {
+    cwd: projectRoot,
+    stdout: 'inherit',
+    stderr: 'inherit',
+  });
+
+  if (!buildProc.success) {
+    logger.error('❌ Build Failed');
+    process.exit(1);
+  }
+  */
+
   const result = await Bun.build({
     entrypoints: [entryPointFile, workerSrc, manifestFile],
     outdir: outDir,
     target: 'bun',
-    minify: true,
+    minify: false,
     sourcemap: 'external',
     naming: '[name].js',
+    plugins: [{
+      name: 'force-standard-decorators',
+      setup(build) {
+        const t = new Bun.Transpiler({
+          loader: 'ts',
+          target: 'bun',
+          tsconfig: {
+            compilerOptions: {
+              experimentalDecorators: false,
+              emitDecoratorMetadata: false
+            }
+          } as any
+        });
+        build.onLoad({ filter: /\.ts$/ }, async (args) => {
+          const text = await Bun.file(args.path).text();
+          return {
+            contents: t.transformSync(text),
+            loader: 'js',
+          };
+        });
+      }
+    }]
   });
 
   if (!result.success) {
@@ -99,6 +155,7 @@ await import("${userMain}");
     }
     process.exit(1);
   }
+
 
   logger.info('✅ Build Complete!');
   logger.info(`   Entry: ${join(outDir, 'entry.js')}`);

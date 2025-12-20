@@ -1,14 +1,14 @@
 {
   "compilerOptions": {
     "lib": ["ESNext"],
-    "target": "ESNext",
-    "module": "Preserve",
+    "target": "ES2022",
+    "module": "ESNext",
     "moduleDetection": "force",
     "allowJs": true,
 
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
-    "verbatimModuleSyntax": true,
+    "verbatimModuleSyntax": false,
     "noEmit": true,
 
     "strict": true,
@@ -17,6 +17,8 @@
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
     "strictPropertyInitialization": false,
+    "experimentalDecorators": false,
+    "emitDecoratorMetadata": false,
 
     "noUnusedLocals": true,
     "noUnusedParameters": true,

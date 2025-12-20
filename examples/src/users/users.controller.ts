@@ -1,9 +1,12 @@
-import { RestController, Delete, Get, Params, Post, Put, Body } from '@bunner/http-server';
+import { RestController, Get, Params, Post, Body, Put, Delete } from '@bunner/http-server';
+import { CreateUserComplexDto, AddressDto, SocialDto } from './dto/complex.dto';
+import { Logger } from '@bunner/logger';
 
 import { UsersService } from './users.service';
 
 @RestController('users')
 export class UsersController {
+  private readonly logger = new Logger(UsersController);
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
@@ -11,27 +14,40 @@ export class UsersController {
     return this.usersService.findAll();
   }
 
+  @Post('complex')
+  complexCreate(body: CreateUserComplexDto) {
+    this.logger.info('Complex Data Received:', body);
+    return {
+      message: 'Validated and Transformed!',
+      data: body,
+      isNameString: typeof body.name === 'string',
+      isAgeNumber: typeof body.age === 'number',
+      isAddressInstance: body.addresses?.[0] instanceof AddressDto,
+      isSocialInstance: body.social instanceof SocialDto
+    };
+  }
+
   @Get(':id')
-  getById(@Params() params: any) {
+  getById(params: any) {
     const { id } = params;
 
     return this.usersService.findOneById(id);
   }
 
   @Post()
-  create(@Body() body: any) {
+  create(body: any) {
     return this.usersService.create(body);
   }
 
   @Put(':id')
-  update(@Params() params: any, @Body() body: any) {
+  update(params: any, body: any) {
     const { id } = params;
 
     return this.usersService.update(id, body);
   }
 
   @Delete(':id')
-  delete(@Params() params: any) {
+  delete(params: any) {
     const { id } = params;
 
     return this.usersService.delete(id);

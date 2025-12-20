@@ -12,32 +12,32 @@ export class PostsController {
   }
 
   @Get(':id')
-  getById(@Params() params: any) {
+  getById(params: any) {
     const { id } = params;
     return this.postsService.findOneById(id);
   }
 
   @Post()
-  create(@Body() body: any) {
+  create(body: any) {
     return this.postsService.create(body);
   }
 
   @Put(':id')
-  update(@Params() params: any, @Body() body: any) {
+  update(params: any, body: any) {
     const { id } = params;
 
     return this.postsService.update(id, body);
   }
 
   @Delete(':id')
-  delete(@Params() params: any) {
+  delete(params: any) {
     const { id } = params;
 
     return this.postsService.delete(id);
   }
 
   @Post(':id/comments')
-  createComment(@Params() params: any, @Body() body: any) {
+  createComment(params: any, body: any) {
     const { id } = params;
 
     return this.postsService.createComment(id, body);
