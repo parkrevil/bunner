@@ -5,6 +5,7 @@ import { Glob } from 'bun';
 
 import { AstParser, type ClassMetadata } from '../analyzer/ast-parser';
 import { ModuleGraph } from '../analyzer/graph/module-graph';
+import { EntryGenerator } from '../generators/entry';
 import { ManifestGenerator } from '../generators/manifest';
 import { ConfigLoader } from '../utils/config-loader';
 import { ProjectWatcher } from '../watcher/project-watcher';
@@ -21,7 +22,6 @@ export async function dev() {
 
   // 2. Initialize Components
 
-  // const _scanner = new SourceScanner();
   const parser = new AstParser();
   const manifestGen = new ManifestGenerator();
 
@@ -55,24 +55,9 @@ export async function dev() {
 
     // Inject global path for Worker access
     const userMain = join(srcDir, 'main.ts');
-    const indexContent = `
-import { createContainer, createMetadataRegistry, createScopedKeysMap } from "./manifest";
-console.log("🌟 Bunner App Started (Generated)");
+    const entryGen = new EntryGenerator();
+    const indexContent = entryGen.generate(userMain, true);
 
-globalThis.__BUNNER_MANIFEST_PATH__ = import.meta.resolve("./manifest.ts");
-const container = createContainer();
-const metadata = createMetadataRegistry();
-const scopedKeys = createScopedKeysMap();
-
-globalThis.__BUNNER_CONTAINER__ = container;
-globalThis.__BUNNER_METADATA_REGISTRY__ = metadata;
-globalThis.__BUNNER_SCOPED_KEYS__ = scopedKeys;
-
-// Start User Application (Dynamic Import to guarantee execution order)
-await import("${userMain}");
-
-export { container, metadata };
-`;
     // Always overwrite index.ts in strict mode to ensure new exports
     await Bun.write(join(outDir, 'index.ts'), indexContent);
   }
@@ -95,7 +80,6 @@ export { container, metadata };
     env: { ...process.env, FORCE_COLOR: '1' },
   });
 
-  // 5. Watcher
   // 5. Watcher
   const projectWatcher = new ProjectWatcher(srcDir);
   projectWatcher.start(event => {

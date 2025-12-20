@@ -1,37 +1,17 @@
-// AOT Markers - Zero Overhead at Runtime (Standard Decorators)
+// AOT Markers - Zero Overhead at Runtime
 
 export function Injectable() {
-  return (value: any, context: ClassDecoratorContext) => {
-    if (context.kind !== 'class') {
-      throw new Error(`@Injectable must be used on a class. Used on: ${context.kind}`);
-    }
-    return value;
-  };
+  return (_target: Function) => {};
 }
 
 export function Controller(_prefix: string = '') {
-  return (value: any, context: ClassDecoratorContext) => {
-    if (context.kind !== 'class') {
-      throw new Error(`@Controller must be used on a class. Used on: ${context.kind}`);
-    }
-    return value;
-  };
+  return (_target: Function) => {};
 }
 
 export function Module(_metadata: any) {
-  return (value: any, context: ClassDecoratorContext) => {
-    if (context.kind !== 'class') {
-      throw new Error(`@Module must be used on a class. Used on: ${context.kind}`);
-    }
-    return value;
-  };
+  return (_target: Function) => {};
 }
 
 export function RootModule(_metadata: any) {
-  return (value: any, context: ClassDecoratorContext) => {
-    if (context.kind !== 'class') {
-      throw new Error(`@RootModule must be used on a class. Used on: ${context.kind}`);
-    }
-    return value;
-  };
+  return (_target: Function) => {};
 }

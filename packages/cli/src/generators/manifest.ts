@@ -3,16 +3,14 @@ import { ModuleGraph, type ModuleNode } from '../analyzer/graph/module-graph';
 
 import { InjectorGenerator } from './injector';
 import { MetadataGenerator } from './metadata';
-import { ValidatorGenerator } from './validator';
 
 export class ManifestGenerator {
   private injectorGen = new InjectorGenerator();
-  private validatorGen = new ValidatorGenerator();
+
   private metadataGen = new MetadataGenerator();
 
   generate(graph: ModuleGraph, classes: { metadata: ClassMetadata; filePath: string }[], outputDir: string): string {
     const injectorCode = this.injectorGen.generate(graph, outputDir);
-    const validatorCode = this.validatorGen.generate();
     const metadataCode = this.metadataGen.generate(classes, outputDir);
 
     // Generate Scoped Keys Map
@@ -46,7 +44,7 @@ ${injectorCode}
 
 ${metadataCode}
 
-${validatorCode}
+
 
 export function createScopedKeysMap() {
   const map = new Map();

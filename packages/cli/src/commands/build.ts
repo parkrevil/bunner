@@ -5,6 +5,7 @@ import { Glob } from 'bun';
 
 import { AstParser, type ClassMetadata } from '../analyzer/ast-parser';
 import { ModuleGraph } from '../analyzer/graph/module-graph';
+import { EntryGenerator } from '../generators/entry';
 import { ManifestGenerator } from '../generators/manifest';
 import { ConfigLoader } from '../utils/config-loader';
 
@@ -13,7 +14,7 @@ export async function build() {
   logger.info('🚀 Starting Bunner Production Build...');
 
   // 1. Load Config
-  await ConfigLoader.load();
+  const config = await ConfigLoader.load();
   const projectRoot = process.cwd();
   const srcDir = resolve(projectRoot, 'src');
   const outDir = resolve(projectRoot, 'dist');
@@ -24,7 +25,7 @@ export async function build() {
   logger.info(`📂 Output Dir: ${outDir}`);
 
   // 2. Initialize Components
-  // const _scanner = new SourceScanner();
+
   const parser = new AstParser();
   const manifestGen = new ManifestGenerator();
 
@@ -61,91 +62,27 @@ export async function build() {
   // 6. Setup Entry Point
   const entryPointFile = join(bunnerDir, 'entry.ts');
   const userMain = join(srcDir, 'main.ts');
+  const entryGen = new EntryGenerator();
 
-  // We set globals BEFORE importing user code.
-  // We use direct imports from manifest to ensure they are bundled.
-  const buildEntryContent = `
-import { createContainer, createMetadataRegistry, createScopedKeysMap } from "./manifest";
-
-console.log("[Entry] Initializing AOT Globals...");
-globalThis.__BUNNER_MANIFEST_PATH__ = import.meta.resolve("./manifest.js"); 
-globalThis.__BUNNER_CONTAINER__ = createContainer();
-globalThis.__BUNNER_METADATA_REGISTRY__ = createMetadataRegistry();
-globalThis.__BUNNER_SCOPED_KEYS__ = createScopedKeysMap();
-
-console.log("[Entry] Bootstrapping User Application...");
-await import("${userMain}");
-`;
+  const buildEntryContent = entryGen.generate(userMain, false);
   await Bun.write(entryPointFile, buildEntryContent);
-  
-  // Ensure Bun picks up the correct decorator settings for AOT files
-  const bunnerTsConfig = join(bunnerDir, 'tsconfig.json');
-  await Bun.write(bunnerTsConfig, JSON.stringify({
-    extends: "../tsconfig.json",
-    compilerOptions: {
-      experimentalDecorators: false,
-      emitDecoratorMetadata: false
-    }
-  }));
 
   // 7. Bun Build (Bundling)
   logger.info('📦 Bundling application, manifest, and workers...');
 
-  const workerSrc = resolve(projectRoot, 'node_modules/@bunner/http-server/src/bunner-http-worker.ts');
+  const workers = config.workers?.map(w => resolve(projectRoot, w)) || [];
 
-  /*
-  const buildCmd = [
-    'bun', 'build',
-    entryPointFile,
-    workerSrc,
-    manifestFile,
-    `--outdir=${outDir}`,
-    '--target=bun',
-    '--naming=[name].js',
-    '--sourcemap=external'
-  ];
-
-  const buildProc = Bun.spawnSync(buildCmd, {
-    cwd: projectRoot,
-    stdout: 'inherit',
-    stderr: 'inherit',
-  });
-
-  if (!buildProc.success) {
-    logger.error('❌ Build Failed');
-    process.exit(1);
+  if (workers.length > 0) {
+    workers.forEach(w => logger.info(`   Worker Entry: ${w}`));
   }
-  */
 
   const result = await Bun.build({
-    entrypoints: [entryPointFile, workerSrc, manifestFile],
+    entrypoints: [entryPointFile, manifestFile, ...workers],
     outdir: outDir,
     target: 'bun',
     minify: false,
     sourcemap: 'external',
     naming: '[name].js',
-    plugins: [{
-      name: 'force-standard-decorators',
-      setup(build) {
-        const t = new Bun.Transpiler({
-          loader: 'ts',
-          target: 'bun',
-          tsconfig: {
-            compilerOptions: {
-              experimentalDecorators: false,
-              emitDecoratorMetadata: false
-            }
-          } as any
-        });
-        build.onLoad({ filter: /\.ts$/ }, async (args) => {
-          const text = await Bun.file(args.path).text();
-          return {
-            contents: t.transformSync(text),
-            loader: 'js',
-          };
-        });
-      }
-    }]
   });
 
   if (!result.success) {
@@ -156,9 +93,13 @@ await import("${userMain}");
     process.exit(1);
   }
 
-
   logger.info('✅ Build Complete!');
   logger.info(`   Entry: ${join(outDir, 'entry.js')}`);
-  logger.info(`   Worker: ${join(outDir, 'bunner-http-worker.js')}`);
+  if (workers.length > 0) {
+    workers.forEach(w => {
+      const workerName = w.split('/').pop()?.replace('.ts', '.js');
+      logger.info(`   Worker: ${join(outDir, workerName || '')}`);
+    });
+  }
   logger.info(`   Manifest: ${join(outDir, 'manifest.js')}`);
 }

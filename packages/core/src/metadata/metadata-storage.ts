@@ -1,34 +1,45 @@
-// Polyfill Symbol.metadata if not exists (Bun/Node > 20 might have it, but strict safety)
-(Symbol as any).metadata ??= Symbol('Symbol.metadata');
-
-export const BUNNER_METADATA = Symbol('BUNNER_METADATA');
+// Simple global storage since we don't want to use 'reflect-metadata' package at runtime
+// Key: Class Constructor, Value: Metadata Object
+const storage = new WeakMap<object, any>();
 
 export class MetadataStorage {
-  static addDecoratorMetadata(
-    context: ClassFieldDecoratorContext | ClassMethodDecoratorContext | ClassDecoratorContext,
-    metadata: any,
-  ) {
-    const metaObj = (context.metadata as any)[BUNNER_METADATA] || { properties: {} }; // For methods, we might want "methods" key?
-    // Current Structure: { properties: {} } - "properties" is generic for members.
-    (context.metadata as any)[BUNNER_METADATA] = metaObj;
+  static addDecoratorMetadata(target: object, propertyKey: string | symbol | undefined, metadata: any) {
+    // Resolve the class constructor to use as the WeakMap key
+    let constructor: any = target;
 
-    const propKey = String(context.name);
-    // TODO: Distinguish between methods and properties if needed.
-    // For now, validator uses checks on usage.
+    if (propertyKey) {
+      // It's a property or method decorator
+      if (typeof target === 'object' && target !== null) {
+        // Instance member: target is the Prototype
+        constructor = target.constructor;
+      }
+      // If target is a function, it's a Static member (target IS the constructor)
+    }
+    // If propertyKey is undefined, it's a Class decorator (target IS the constructor)
 
-    if (!metaObj.properties[propKey]) {
-      metaObj.properties[propKey] = { decorators: [] };
+    let meta = storage.get(constructor);
+    if (!meta) {
+      meta = { properties: {} };
+      storage.set(constructor, meta);
     }
 
-    metaObj.properties[propKey].decorators.push(metadata);
+    // For Class Decorators, use a special key or just root?
+    // Let's use a special key 'class' or attach to properties with a prefix?
+    // Current CLI might expect them in specific place.
+    // CLI AstParser extracts them to top-level 'decorators' array.
+    // MetadataStorage runtime structure: meta.properties[propKey].decorators
+
+    // Let's store class decorators under a special property key like "__class__"
+    const propKey = propertyKey ? String(propertyKey) : '__class__';
+
+    if (!meta.properties[propKey]) {
+      meta.properties[propKey] = { decorators: [] };
+    }
+
+    meta.properties[propKey].decorators.push(metadata);
   }
 
   static getMetadata(target: Function) {
-    // Read from Symbol.metadata
-    const meta = (target as any)[Symbol.metadata];
-    return meta ? meta[BUNNER_METADATA] : undefined;
+    return storage.get(target);
   }
-
-  // Backward compatibility mock for "get()" singleton if needed?
-  // No, let's switch to static utils.
 }

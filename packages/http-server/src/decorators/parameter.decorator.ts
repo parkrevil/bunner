@@ -18,10 +18,20 @@
 // We will define them as functions that return a no-op function.
 // This ensures that IF the runtime tries to execute them (e.g. on a method via mistargeting), they don't crash.
 
-export const Body = () => () => {};
-export const Query = () => () => {};
-export const Params = () => () => {};
-export const Request = () => () => {};
-export const Response = () => () => {};
-export const Cookie = () => () => {};
-export const Ip = () => () => {};
+// Parameters are (target: Object, propertyKey: string | symbol, parameterIndex: number)
+export const Body =
+  (_property?: string, ..._pipes: any[]) =>
+  (_target: object, _propertyKey: string | symbol, _parameterIndex: number) => {};
+export const Query =
+  (_property?: string, ..._pipes: any[]) =>
+  (_target: object, _propertyKey: string | symbol, _parameterIndex: number) => {};
+export const Params =
+  (_property?: string, ..._pipes: any[]) =>
+  (_target: object, _propertyKey: string | symbol, _parameterIndex: number) => {};
+export const Param = Params; // Alias for compatibility
+export const Request = () => (_target: object, _propertyKey: string | symbol, _parameterIndex: number) => {};
+export const Req = Request; // Alias
+export const Response = () => (_target: object, _propertyKey: string | symbol, _parameterIndex: number) => {};
+export const Res = Response; // Alias
+export const Cookie = (_property?: string) => (_target: object, _propertyKey: string | symbol, _parameterIndex: number) => {};
+export const Ip = () => (_target: object, _propertyKey: string | symbol, _parameterIndex: number) => {};

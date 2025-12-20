@@ -2,7 +2,7 @@ import { MetadataStorage } from '@bunner/core';
 
 import type { HttpMethodDecoratorOptions } from './interfaces';
 
-// Helper to Create Standard Method Decorator
+// Helper to Create Method Decorator
 function createHttpMethodDecorator(method: string) {
   return function (pathOrOptions?: string | HttpMethodDecoratorOptions, options?: HttpMethodDecoratorOptions) {
     let path = '/';
@@ -12,18 +12,12 @@ function createHttpMethodDecorator(method: string) {
       options = pathOrOptions;
     }
 
-    return (value: any, context: ClassMethodDecoratorContext) => {
-      if (context.kind !== 'method') {
-        throw new Error(`@${method} must be used on a method. Used on: ${context.kind}`);
-      }
-
-      MetadataStorage.addDecoratorMetadata(context, {
+    return (target: object, propertyKey: string | symbol, _descriptor: PropertyDescriptor) => {
+      MetadataStorage.addDecoratorMetadata(target, propertyKey, {
         name: method,
         arguments: [path],
         options,
       });
-
-      return value;
     };
   };
 }

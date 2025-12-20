@@ -1,5 +1,7 @@
-import { RestController, Delete, Get, Params, Post, Put, Body } from '@bunner/http-server';
+import { RestController, Delete, Get, Param, Post, Put, Body } from '@bunner/http-server';
 
+import { CreatePostDto } from './dto/create-post.dto';
+import { UpdatePostDto } from './dto/update-post.dto';
 import { PostsService } from './posts.service';
 
 @RestController('posts')
@@ -12,34 +14,27 @@ export class PostsController {
   }
 
   @Get(':id')
-  getById(params: any) {
-    const { id } = params;
-    return this.postsService.findOneById(id);
+  getById(@Param('id') id: string) {
+    return this.postsService.findOneById(Number(id));
   }
 
   @Post()
-  create(body: any) {
+  create(@Body() body: CreatePostDto) {
     return this.postsService.create(body);
   }
 
   @Put(':id')
-  update(params: any, body: any) {
-    const { id } = params;
-
-    return this.postsService.update(id, body);
+  update(@Param('id') id: string, @Body() body: UpdatePostDto) {
+    return this.postsService.update(Number(id), body);
   }
 
   @Delete(':id')
-  delete(params: any) {
-    const { id } = params;
-
-    return this.postsService.delete(id);
+  delete(@Param('id') id: string) {
+    return this.postsService.delete(Number(id));
   }
 
   @Post(':id/comments')
-  createComment(params: any, body: any) {
-    const { id } = params;
-
-    return this.postsService.createComment(id, body);
+  createComment(@Param('id') id: string, @Body() body: any) {
+    return this.postsService.createComment(Number(id), body);
   }
 }

@@ -1,7 +1,7 @@
-import { RestController, Get, Params, Post, Body, Put, Delete } from '@bunner/http-server';
-import { CreateUserComplexDto, AddressDto, SocialDto } from './dto/complex.dto';
+import { RestController, Get, Post, Put, Delete } from '@bunner/http-server';
 import { Logger } from '@bunner/logger';
 
+import { CreateUserComplexDto, AddressDto, SocialDto } from './dto/complex.dto';
 import { UsersService } from './users.service';
 
 @RestController('users')
@@ -23,7 +23,7 @@ export class UsersController {
       isNameString: typeof body.name === 'string',
       isAgeNumber: typeof body.age === 'number',
       isAddressInstance: body.addresses?.[0] instanceof AddressDto,
-      isSocialInstance: body.social instanceof SocialDto
+      isSocialInstance: body.social instanceof SocialDto,
     };
   }
 
