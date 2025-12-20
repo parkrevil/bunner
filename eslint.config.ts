@@ -10,7 +10,7 @@ import { plugin as tseslintPlugin, configs as tseslintConfigs } from 'typescript
 
 export default defineConfig([
   {
-    ignores: ['node_modules', '**/node_modules/**', '**/*.js', '**/*.d.ts', 'bin', '**/bin/**', 'rust-packages'],
+    ignores: ['node_modules', '**/node_modules/**', '**/*.js', '**/*.d.ts', 'bin', '**/bin/**', 'rust-packages', '**/.bunner/**'],
   },
   {
     files: ['**/*.ts'],
