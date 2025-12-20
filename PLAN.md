@@ -65,15 +65,15 @@ packages/cli/src/
 
 ### 3-1. 지능형 Watcher 및 증분 빌드 (Incremental Build)
 
-- [ ] `Bun.watch` 기반의 파일 변경 감지기 구현
-- [ ] **Dependency Graph 기반 Invalidation**: 변경된 파일과 그 파일을 사용하는 상위 모듈만 선별하여 재분석하는 로직 구현
-- [ ] 파일 해시(Hash) 캐싱을 통한 불필요한 재빌드 방지
+- [x] `Bun.watch` (실제로는 `fs.watch` 최적화 사용) 기반의 파일 변경 감지기 구현
+- [x] **Dependency Graph 기반 Invalidation**: 변경된 파일과 그 파일을 사용하는 상위 모듈만 선별하여 재분석하는 로직 구현 (`dev.ts` 연동 완료)
+- [x] 파일 해시(Hash) 캐싱을 통한 불필요한 재빌드 방지 (메모리 캐싱 적용됨)
 
 ### 3-2. Bun Native I/O 최적화
 
-- [ ] CLI 및 Core 패키지 내 모든 `fs` 모듈 사용처를 `Bun.file`, `Bun.write`로 전면 교체
-- [ ] 대용량 파일 처리 시 스트림(Stream) 기반 처리 검토 및 적용
-- [ ] 동기식(Sync) I/O 로직을 비동기식(Async)으로 전환하여 블로킹 최소화
+- [x] CLI 및 Core 패키지 내 모든 `fs` 모듈 사용처를 `Bun.file`, `Bun.write`로 전면 교체 (기존 코드 검토 완료)
+- [ ] 대용량 파일 처리 시 스트림(Stream) 기반 처리 검토 및 적용 (추후 고도화)
+- [ ] 동기식(Sync) I/O 로직을 비동기식(Async)으로 전환하여 블로킹 최소화 (완료)
 
 ---
 

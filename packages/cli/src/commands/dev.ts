@@ -1,12 +1,12 @@
-import { watch } from 'node:fs'; // Bun native watch via node compat or fs.watch
 import { join, resolve } from 'path';
 
 import { Glob } from 'bun';
 
 import { AstParser, type ClassMetadata } from '../analyzer/ast-parser';
-import { ModuleGraph } from '../analyzer/module-graph';
+import { ModuleGraph } from '../analyzer/graph/module-graph';
 import { ManifestGenerator } from '../generators/manifest';
 import { ConfigLoader } from '../utils/config-loader';
+import { ProjectWatcher } from '../watcher/project-watcher';
 
 export async function dev() {
   console.log('🚀 Starting Bunner Dev Server...');
@@ -94,28 +94,35 @@ export { container, metadata };
   });
 
   // 5. Watcher
-  console.log(`👀 Watching ${srcDir} for changes...`);
-  const watcher = watch(srcDir, { recursive: true }, (_event, filename) => {
+  // 5. Watcher
+  const projectWatcher = new ProjectWatcher(srcDir);
+  projectWatcher.start(event => {
     void (async () => {
-      if (!filename || !filename.endsWith('.ts')) {
+      const filename = event.filename;
+      // Debounce or immediate? For now immediate.
+      if (!filename) {
         return;
       }
 
       const fullPath = join(srcDir, filename);
-      console.log(`🔄 Syncing: ${filename}`);
+      console.log(`🔄 [${event.eventType}] Detected change in: ${filename}`);
 
-      if (!(await Bun.file(fullPath).exists())) {
+      if (event.eventType === 'rename' && !(await Bun.file(fullPath).exists())) {
+        // Deleted
+        console.log(`🗑️ File deleted: ${filename}`);
         fileCache.delete(fullPath);
       } else {
+        // Changed or Created
         await analyzeFile(fullPath);
       }
 
+      // Incremental Rebuild Trigger
       await rebuild();
     })();
   });
 
   process.on('SIGINT', () => {
-    watcher.close();
+    projectWatcher.close();
     appProc.kill();
     process.exit(0);
   });
