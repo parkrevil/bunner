@@ -11,6 +11,7 @@
     "typescript": "^5"
   },
   "dependencies": {
-    "oxc-parser": "^0.104.0"
+    "oxc-parser": "^0.104.0",
+    "@bunner/logger": "workspace:*"
   }
 }

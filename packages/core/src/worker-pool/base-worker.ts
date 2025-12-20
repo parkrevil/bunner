@@ -1,19 +1,25 @@
 import type { WorkerStats } from './interfaces';
-import type { WorkerId } from './types';
+import type { WorkerId, InitParams } from './types';
+
+// Declare global WORKER_ID
+declare global {
+  var WORKER_ID: number | undefined;
+}
 
 export abstract class BaseWorker {
   protected prevCpu: ReturnType<typeof process.cpuUsage>;
   protected id: WorkerId;
 
-  constructor() {
-    this.prevCpu = process.cpuUsage();
-  }
-
-  abstract init(workerId: WorkerId, params?: any): void | Promise<void>;
-
   abstract bootstrap(params?: any): void | Promise<void>;
 
   abstract destroy(): void | Promise<void>;
+
+  async init<T>(id: number, _params: InitParams<T>) {
+    globalThis.WORKER_ID = id;
+    this.id = id;
+    this.prevCpu = process.cpuUsage();
+    await Promise.resolve();
+  }
 
   getStats() {
     const currentCpu = process.cpuUsage(this.prevCpu);

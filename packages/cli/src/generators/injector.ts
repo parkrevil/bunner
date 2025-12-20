@@ -3,7 +3,10 @@ import { ModuleGraph, type ModuleNode, type ProviderRef } from '../analyzer/grap
 import { PathResolver } from '../utils/path-resolver';
 
 export class InjectorGenerator {
+  private hasLogger = false;
+
   generate(graph: ModuleGraph, outputDir: string): string {
+    this.hasLogger = false;
     const imports: string[] = [];
     const factoryEntries: string[] = [];
     const importedIdentifiers = new Set<string>();
@@ -124,6 +127,10 @@ export class InjectorGenerator {
       });
     });
 
+    if (this.hasLogger) {
+      imports.push('import { Logger } from "@bunner/logger";');
+    }
+
     return `
 import { Container } from "@bunner/core";
 ${imports.join('\n')}
@@ -143,6 +150,12 @@ ${dynamicEntries.join('\n')}
   private resolveConstructorDeps(meta: ClassMetadata, node: ModuleNode, graph: ModuleGraph): string[] {
     return meta.constructorParams.map((param: any) => {
       let token = param.type;
+
+      // 0. Check for Logger
+      if (token === 'Logger') {
+        this.hasLogger = true;
+        return `new Logger(${meta.className})`;
+      }
 
       // 1. Check for @Inject(Token) or @Inject(forwardRef(() => Token))
       const injectDec = param.decorators.find((d: any) => d.name === 'Inject');
