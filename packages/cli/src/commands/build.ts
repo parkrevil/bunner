@@ -3,7 +3,7 @@ import { join, resolve } from 'path';
 import { Glob } from 'bun';
 
 import { AstParser, type ClassMetadata } from '../analyzer/ast-parser';
-import { ModuleGraph } from '../analyzer/module-graph';
+import { ModuleGraph } from '../analyzer/graph/module-graph';
 import { ManifestGenerator } from '../generators/manifest';
 import { ConfigLoader } from '../utils/config-loader';
 
