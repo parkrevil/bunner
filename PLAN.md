@@ -47,15 +47,15 @@ packages/cli/src/
 
 ### 2-1. 지능형 순환 참조 탐지기 (Smart Circular Detector)
 
-- [ ] Phase 1에서 구축한 의존성 그래프를 활용하여 사이클(`A -> B -> A`) 탐지 알고리즘 구현
-- [ ] 사이클 발생 시 **가장 적절한 단절 지점(Cut Point)** 추천 알고리즘 개발
-- [ ] 에러 메시지에 시각적 경로(`Cycle Path`) 표시 및 `forwardRef` 적용 코드 조각 제공 로직 구현
+- [x] Phase 1에서 구축한 의존성 그래프를 활용하여 사이클(`A -> B -> A`) 탐지 알고리즘 구현
+- [x] 사이클 발생 시 **가장 적절한 단절 지점(Cut Point)** 추천 알고리즘 개발
+- [x] 에러 메시지에 시각적 경로(`Cycle Path`) 표시 및 `forwardRef` 적용 코드 조각 제공 로직 구현
 
 ### 2-2. JIT 코드 생성기 개선 (JIT Debugging)
 
-- [ ] `new Function` 생성 문자열에 `//# sourceURL=bunner://...` 메타 태그 자동 삽입
-- [ ] 생성된 JS 코드의 가독성을 위한 **Pretty Printer** (들여쓰기, 포맷팅) 적용
-- [ ] JIT 코드 내 변수명 이스케이프 처리를 통한 Code Injection 방지 및 보안성 강화
+- [x] `new Function` 생성 문자열에 `//# sourceURL=bunner://...` 메타 태그 자동 삽입
+- [x] 생성된 JS 코드의 가독성을 위한 **Pretty Printer** (들여쓰기, 포맷팅) 적용
+- [x] JIT 코드 내 변수명 이스케이프 처리를 통한 Code Injection 방지 및 보안성 강화
 
 ---
 

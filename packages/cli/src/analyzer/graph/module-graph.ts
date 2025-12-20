@@ -11,6 +11,11 @@ export interface ClassInfo {
   filePath: string;
 }
 
+export interface CyclePath {
+  path: string[];
+  suggestedFix?: string;
+}
+
 export class ModuleNode {
   name: string;
   metadata: ClassMetadata;
@@ -20,6 +25,9 @@ export class ModuleNode {
   providers: Map<string, ProviderRef> = new Map();
   exports: Set<string> = new Set();
   controllers: Set<string> = new Set();
+  // For Cycle Detection
+  visiting: boolean = false;
+  visited: boolean = false;
 
   constructor(info: ClassInfo) {
     this.name = info.metadata.className;
@@ -55,6 +63,24 @@ export class ModuleGraph {
     return this.modules;
   }
 
+  detectCycles(): CyclePath[] {
+    const cycles: CyclePath[] = [];
+
+    // Reset flags
+    this.modules.forEach(node => {
+      node.visited = false;
+      node.visiting = false;
+    });
+
+    this.modules.forEach(node => {
+      if (!node.visited) {
+        this._detectCyclesRecursive(node, [], cycles);
+      }
+    });
+
+    return cycles;
+  }
+
   resolveToken(moduleName: string, token: string): string | null {
     const node = this.modules.get(moduleName);
     if (!node) {
@@ -72,6 +98,39 @@ export class ModuleGraph {
     }
 
     return null;
+  }
+
+  private _detectCyclesRecursive(node: ModuleNode, stack: ModuleNode[], cycles: CyclePath[]) {
+    node.visiting = true;
+    stack.push(node);
+
+    for (const neighbor of node.imports) {
+      if (neighbor.visiting) {
+        // Cycle Detected!
+        // Extract cycle path from stack (A -> B -> C -> A)
+        const cycleStartIndex = stack.findIndex(n => n === neighbor);
+        const cycleNodes = stack.slice(cycleStartIndex);
+        cycleNodes.push(neighbor); // Close the loop for visualization
+
+        const pathNames = cycleNodes.map(n => n.name);
+
+        // Suggest fix: Use forwardRef on the last edge or the first edge of the cycle
+        // "In Module A imports: [forwardRef(() => ModuleB)]"
+        const source = pathNames[0];
+        const target = pathNames[1];
+
+        cycles.push({
+          path: pathNames,
+          suggestedFix: `Circular dependency detected: ${pathNames.join(' -> ')}. Try using forwardRef in ${source}: imports: [forwardRef(() => ${target})]`,
+        });
+      } else if (!neighbor.visited) {
+        this._detectCyclesRecursive(neighbor, stack, cycles);
+      }
+    }
+
+    stack.pop();
+    node.visiting = false;
+    node.visited = true;
   }
 
   private populateNode(node: ModuleNode) {
