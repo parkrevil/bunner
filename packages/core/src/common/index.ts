@@ -5,3 +5,4 @@ export * from './instances';
 export * from './utils';
 export * from './enums';
 export * from './forward-ref';
+export * from './interfaces';

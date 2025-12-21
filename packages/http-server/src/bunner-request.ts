@@ -25,6 +25,10 @@ export class BunnerRequest {
   readonly isTrustedProxy: boolean;
   readonly subdomains: string[];
 
+  get method(): string {
+    return HttpMethod[this.httpMethod] || 'GET';
+  }
+
   constructor(req: any) {
     const urlObj = new URL(req.url, 'http://localhost');
 

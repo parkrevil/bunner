@@ -24,6 +24,8 @@ export interface RouteHandlerEntry {
   handler: AnyFunction;
   paramType: RouteHandlerParamType[];
   paramRefs: any[];
+  controllerClass: any;
+  methodName: string;
 }
 
 export interface ArgumentMetadata {

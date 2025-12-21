@@ -108,6 +108,8 @@ export class RouteHandler {
           handler: instance[method.name].bind(instance),
           paramType: paramTypes,
           paramRefs,
+          controllerClass: targetClass,
+          methodName: method.name,
         };
 
         this.routes.push({

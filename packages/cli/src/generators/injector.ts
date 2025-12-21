@@ -36,6 +36,22 @@ export class InjectorGenerator {
           if (ref.metadata) {
             if (ref.metadata.useValue) {
               factoryEntries.push(`  container.set('${node.name}::${token}', () => ${JSON.stringify(ref.metadata.useValue)});`);
+            } else if (ref.metadata.useClass) {
+              const classes = Array.isArray(ref.metadata.useClass) ? ref.metadata.useClass : [ref.metadata.useClass];
+
+              const instances = classes.map((clsItem: any) => {
+                const className = clsItem.__bunner_ref || clsItem;
+                const classInfo = graph.classMap.get(className);
+                if (!classInfo) {
+                  return 'undefined'; // Should ideally warn
+                }
+                addImport(classInfo.metadata.className, classInfo.filePath);
+                const deps = this.resolveConstructorDeps(classInfo.metadata, node, graph);
+                return `new ${classInfo.metadata.className}(${deps.join(', ')})`;
+              });
+
+              const factoryBody = Array.isArray(ref.metadata.useClass) ? `[${instances.join(', ')}]` : instances[0];
+              factoryEntries.push(`  container.set('${node.name}::${token}', (c) => ${factoryBody});`);
             } else if (ref.metadata.useFactory) {
               const factoryFn = ref.metadata.useFactory.__bunner_factory_code;
               if (factoryFn) {

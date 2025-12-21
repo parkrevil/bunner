@@ -37,6 +37,10 @@ export class Container {
     return this.factories.keys();
   }
 
+  has(token: Token): boolean {
+    return this.factories.has(token);
+  }
+
   async loadDynamicModule(scope: string, dynamicModule: any) {
     if (!dynamicModule) {
       return;
