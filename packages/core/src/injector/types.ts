@@ -1,4 +1,4 @@
-import type { InjectableDecoratorOptions, ModuleDecoratorOptions, RootModuleDecoratorOptions } from '../application/decorators';
+import type { InjectableDecoratorOptions, ModuleDecoratorOptions } from '../application/decorators';
 import type { Class } from '../common/types';
 
 import type {
@@ -18,7 +18,7 @@ export type ProviderToken = string | symbol | Class;
 
 export type Provider = Class | ProviderUseValue | ProviderUseClass | ProviderUseExisting | ProviderUseFactory;
 
-export type RootModuleMetadata = Required<RootModuleDecoratorOptions>;
+export type RootModuleMetadata = Required<ModuleDecoratorOptions>;
 
 export type ModuleMetadata = Required<ModuleDecoratorOptions>;
 

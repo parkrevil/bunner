@@ -1,57 +1,35 @@
-import type { ClassMetadata } from '../structure/metadata.structure';
-
-export interface ProviderRef {
-  token: any;
-  metadata?: any;
-  isExported: boolean;
-}
-
-export interface ClassInfo {
-  metadata: ClassMetadata;
-  filePath: string;
-}
-
-export interface CyclePath {
-  path: string[];
-  suggestedFix?: string;
-}
-
-export class ModuleNode {
-  name: string;
-  metadata: ClassMetadata;
-  filePath: string;
-  imports: Set<ModuleNode> = new Set();
-  dynamicImports: Set<any> = new Set();
-  providers: Map<string, ProviderRef> = new Map();
-  exports: Set<string> = new Set();
-  controllers: Set<string> = new Set();
-
-  visiting: boolean = false;
-  visited: boolean = false;
-
-  constructor(info: ClassInfo) {
-    this.name = info.metadata.className;
-    this.metadata = info.metadata;
-    this.filePath = info.filePath;
-  }
-}
+import type { CyclePath, ProviderRef, FileAnalysis } from './interfaces';
+import { ModuleNode } from './module-node';
 
 export class ModuleGraph {
-  public modules: Map<string, ModuleNode> = new Map();
-  public classMap: Map<string, ClassInfo> = new Map();
+  public modules: Map<string, ModuleNode> = new Map(); // Key: FilePath
+  public classMap: Map<string, ModuleNode> = new Map(); // Key: ClassName
 
-  constructor(private allClasses: ClassInfo[]) {
-    this.allClasses.forEach(c => this.classMap.set(c.metadata.className, c));
-  }
+  constructor(private fileMap: Map<string, FileAnalysis>) {}
 
   build() {
-    this.allClasses.forEach(info => {
-      const moduleDec = info.metadata.decorators.find(d => d.name === 'Module' || d.name === 'RootModule');
-      if (moduleDec) {
-        this.modules.set(info.metadata.className, new ModuleNode(info));
-      }
-    });
+    // 1. Create Nodes
+    for (const [filePath, analysis] of this.fileMap.entries()) {
+      analysis.classes.forEach(info => {
+        const moduleDec = info.metadata.decorators.find(d => d.name === 'Module' || d.name === 'RootModule');
 
+        // Create a wrapper node for every class to facilitate lookup by Injector
+        // Even if it's not a Module, we need its metadata and file path.
+        const node = new ModuleNode(info);
+        node.filePath = filePath;
+
+        // Index all classes
+        // Warning: This assumes unique class names or last-wins for now.
+        // Ideally we should use ImportRegistry logic, but InjectorGenerator relies on this map.
+        this.classMap.set(info.metadata.className, node);
+
+        if (moduleDec) {
+          this.modules.set(filePath, node);
+        }
+      });
+    }
+
+    // 2. Populate and Link
     this.modules.forEach(node => {
       this.populateNode(node);
     });
@@ -81,22 +59,37 @@ export class ModuleGraph {
   }
 
   resolveToken(moduleName: string, token: string): string | null {
-    const node = this.modules.get(moduleName);
+    const node = this.classMap.get(moduleName);
     if (!node) {
       return null;
     }
 
     if (node.providers.has(token)) {
-      return `${moduleName}::${token}`;
+      return `${node.name}::${token}`;
     }
 
     for (const imported of node.imports) {
-      if (imported.exports.has(token)) {
-        return this.findExportingModule(imported, token);
+      if (this.isExportedFromModule(imported, token)) {
+        return `${imported.name}::${token}`;
       }
     }
 
     return null;
+  }
+
+  private isExportedFromModule(node: ModuleNode, token: string, visited = new Set<string>()): boolean {
+    if (visited.has(node.filePath)) {
+      return false;
+    }
+    visited.add(node.filePath);
+
+    if (node.exports.has(token)) {
+      return true;
+    }
+
+    // Direct exports check is usually enough for module linkage logic
+    // But if we want to confirm recursive exports availability:
+    return false;
   }
 
   private _detectCyclesRecursive(node: ModuleNode, stack: ModuleNode[], cycles: CyclePath[]) {
@@ -155,23 +148,104 @@ export class ModuleGraph {
   private linkImports(node: ModuleNode) {
     const moduleDec = node.metadata.decorators.find(d => d.name === 'Module' || d.name === 'RootModule')!;
     const args = moduleDec.arguments[0] || {};
+    const importsMeta = node.metadata.imports || {};
 
     (args.imports || []).forEach((imp: any) => {
-      const helper = (importName: string) => {
-        const importedModule = this.modules.get(importName);
-        if (importedModule) {
-          node.imports.add(importedModule);
-        }
-      };
-
       if (imp.__bunner_ref) {
-        helper(imp.__bunner_ref);
+        const importName = imp.__bunner_ref;
+        const absPath = importsMeta[importName];
+
+        if (absPath) {
+          this.resolveModuleFromPath(node, absPath, importName);
+        } else {
+          // Same file Check
+          const sameFileNode = this.classMap.get(importName);
+          if (sameFileNode && sameFileNode.filePath === node.filePath) {
+            node.imports.add(sameFileNode);
+          }
+        }
       } else if (imp.__bunner_call) {
         node.dynamicImports.add(imp);
       } else if (imp.__bunner_forward_ref) {
-        helper(imp.__bunner_forward_ref);
+        const importName = imp.__bunner_forward_ref;
+        const absPath = importsMeta[importName];
+
+        if (absPath) {
+          this.resolveModuleFromPath(node, absPath, importName);
+        } else {
+          const sameFileNode = this.classMap.get(importName);
+          if (sameFileNode && sameFileNode.filePath === node.filePath) {
+            node.imports.add(sameFileNode);
+          }
+        }
       }
     });
+  }
+
+  private resolveModuleFromPath(parentNode: ModuleNode, targetPath: string, targetName: string, visited = new Set<string>()) {
+    if (visited.has(targetPath)) {
+      return;
+    }
+    visited.add(targetPath);
+
+    const fileKey = this.findFileKey(targetPath);
+    if (!fileKey) {
+      return;
+    }
+
+    const fileAnalysis = this.fileMap.get(fileKey)!;
+
+    // 1. Direct Export from File
+    if (fileAnalysis.exports.includes(targetName)) {
+      const cls = fileAnalysis.classes.find(c => c.metadata.className === targetName);
+      if (cls) {
+        // It's a class in this file. Is it a module?
+        // We need to look up in classMap but verify filePath.
+        const node = this.classMap.get(targetName);
+        if (node && node.filePath === fileKey) {
+          parentNode.imports.add(node);
+          return;
+        }
+      }
+    }
+
+    // 2. Re-exports (Recursive)
+    for (const re of fileAnalysis.reExports) {
+      if (re.exportAll) {
+        this.resolveModuleFromPath(parentNode, re.module, targetName, visited);
+      } else if (re.names) {
+        const match = re.names.find(n => n.exported === targetName);
+        if (match) {
+          // Aliased export logic: find 'local' in 'module'
+          this.resolveModuleFromPath(parentNode, re.module, match.local, visited);
+          return;
+        }
+      }
+    }
+  }
+
+  private findFileKey(path: string): string | undefined {
+    // Exact match
+    if (this.fileMap.has(path)) {
+      return path;
+    }
+    // Add extension
+    if (this.fileMap.has(path + '.ts')) {
+      return path + '.ts';
+    }
+    // Index
+    if (this.fileMap.has(path + '/index.ts')) {
+      return path + '/index.ts';
+    }
+
+    // Fuzzy search (slow but safe for weird paths)
+    // Only if not found exact
+    for (const key of this.fileMap.keys()) {
+      if (key.replace(/\.ts$/, '') === path.replace(/\.ts$/, '')) {
+        return key;
+      }
+    }
+    return undefined;
   }
 
   private normalizeProvider(p: any): ProviderRef {
@@ -210,14 +284,6 @@ export class ModuleGraph {
     if (e.provide) {
       return e.provide;
     }
-    return null;
-  }
-
-  private findExportingModule(node: ModuleNode, token: string): string | null {
-    if (node.providers.has(token)) {
-      return `${node.name}::${token}`;
-    }
-
     return null;
   }
 }

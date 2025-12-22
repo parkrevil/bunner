@@ -1,4 +1,4 @@
-import { RootModule } from '@bunner/core';
+import { Module } from '@bunner/core';
 import { HTTP_BEFORE_REQUEST, HTTP_ERROR_HANDLER } from '@bunner/http-server';
 import { Logger } from '@bunner/logger';
 import { ScalarModule } from '@bunner/scalar';
@@ -9,8 +9,7 @@ import { LoggerMiddleware } from './middleware/logger.middleware';
 import { PostsModule } from './posts';
 import { UsersModule } from './users';
 
-@RootModule({
-  path: __filename,
+@Module({
   imports: [
     UsersModule,
     PostsModule,

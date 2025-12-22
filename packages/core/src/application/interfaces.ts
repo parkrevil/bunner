@@ -1,8 +1,8 @@
-import { type Container } from '../injector/container';
+// Removed unused Container import
 
 export interface BunnerApplicationBaseOptions {
   name: string;
-  logLevel: number;
+  logLevel: string | number;
   workers: number;
   queueCapacity: number;
 }
@@ -11,25 +11,32 @@ export type BunnerApplicationNormalizedOptions = BunnerApplicationBaseOptions & 
 
 export interface BunnerApplicationOptions {
   name?: string;
-  logLevel?: number;
+  logLevel?: string | number;
   workers?: number | 'full' | 'half';
   queueCapacity?: number;
   [key: string]: any;
 }
 
-export interface RootModuleFile {
+// Simplified Module Interface
+export interface BunnerModule {
+  imports?: any[];
+  controllers?: any[];
+  providers?: any[];
+  exports?: any[];
+  [key: string]: any;
+}
+
+export type EntryModuleMetadata = {
   path: string;
   className: string;
-  container?: Container;
   manifestPath?: string;
-  metadata?: Map<any, any>;
-}
+};
 
 export interface CreateApplicationOptions extends BunnerApplicationBaseOptions {
   [key: string]: any;
 }
 
-export interface BunnerModule {}
+// Single definition of BunnerModule removed below
 
 export interface DynamicModule {
   module: any;

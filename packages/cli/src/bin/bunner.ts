@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 import { parseArgs } from 'util';
-import { dev } from '../commands/dev';
-import { build } from '../commands/build';
+import { dev, build } from '../commands';
 
 const { positionals } = parseArgs({
   args: Bun.argv.slice(2),

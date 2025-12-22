@@ -1,13 +1,8 @@
 import * as ts from 'typescript';
 
-export interface TypeMetadata {
-  name: string;
-  properties: {
-    name: string;
-    type: string;
-    optional: boolean;
-  }[];
-}
+import { BunnerCliError } from '../errors';
+
+import type { TypeMetadata } from './interfaces';
 
 export class TypeResolver {
   private program: ts.Program | undefined;
@@ -15,14 +10,14 @@ export class TypeResolver {
 
   constructor() {}
 
-  init(fileNames: string[]) {
+  init(fileNames: string[]): void {
     this.program = ts.createProgram(fileNames, {});
     this.checker = this.program.getTypeChecker();
   }
 
-  resolveDTO(fileName: string, className: string): TypeMetadata | null {
+  resolveType(fileName: string, className: string): TypeMetadata | null {
     if (!this.program || !this.checker) {
-      throw new Error('TypeResolver not initialized. Call init() first.');
+      throw new BunnerCliError('TypeResolver not initialized. Call init() first.');
     }
 
     const sourceFile = this.program.getSourceFile(fileName);

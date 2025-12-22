@@ -9,7 +9,3 @@ export function Controller(_prefix: string = '') {
 export function Module(_metadata: any) {
   return (_target: Function) => {};
 }
-
-export function RootModule(_metadata: any) {
-  return (_target: Function) => {};
-}

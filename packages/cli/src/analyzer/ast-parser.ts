@@ -1,33 +1,71 @@
+import { dirname, resolve } from 'path';
+
 import { parseSync } from 'oxc-parser';
 
-import type { ClassMetadata, DecoratorMetadata } from './structure/metadata.structure';
-import { TypeResolver, type TypeInfo } from './type-resolver/type-resolver';
-
-export type { ClassMetadata, DecoratorMetadata };
+import { AstTypeResolver, type TypeInfo } from './ast-type-resolver';
+import type { ClassMetadata, DecoratorMetadata } from './interfaces';
+import type { ParseResult, ReExport } from './parser-models';
 
 export class AstParser {
   private currentCode: string = '';
-  private typeResolver = new TypeResolver();
+  private typeResolver = new AstTypeResolver();
 
-  parse(filename: string, code: string): ClassMetadata[] {
+  parse(filename: string, code: string): ParseResult {
     this.currentCode = code;
     const result = parseSync(filename, code);
     const classes: ClassMetadata[] = [];
+    const reExports: ReExport[] = [];
+    const localExports: string[] = [];
     const imports: Record<string, string> = {};
 
     const traverse = (node: any) => {
+      // 1. Imports
       if (node.type === 'ImportDeclaration') {
         const source = node.source.value;
+        const resolvedSource = this.resolvePath(filename, source);
         (node.specifiers || []).forEach((spec: any) => {
-          imports[spec.local.name] = source;
+          imports[spec.local.name] = resolvedSource;
         });
       }
 
-      if (node.type === 'ExportNamedDeclaration' && node.declaration) {
-        traverse(node.declaration);
-        return;
+      // 2. Export All (export * from '...')
+      if (node.type === 'ExportAllDeclaration') {
+        const source = node.source.value;
+        const resolvedSource = this.resolvePath(filename, source);
+        reExports.push({
+          module: resolvedSource,
+          exportAll: true,
+        });
       }
 
+      // 3. Export Named (export { A } from '...' or export class ...)
+      if (node.type === 'ExportNamedDeclaration') {
+        if (node.source) {
+          // Re-export: export { A } from './a'
+          const source = node.source.value;
+          const resolvedSource = this.resolvePath(filename, source);
+          const names = (node.specifiers || []).map((spec: any) => ({
+            local: spec.local.name,
+            exported: spec.exported.name,
+          }));
+          reExports.push({
+            module: resolvedSource,
+            exportAll: false,
+            names,
+          });
+        } else if (node.declaration) {
+          // Local export: export class Foo ...
+          if (node.declaration.type === 'ClassDeclaration') {
+            localExports.push(node.declaration.id.name);
+            // Traverse into class to extract metadata
+            traverse(node.declaration);
+            return; // Don't traverse specific children again if handled
+          }
+          // Handle other declarations if needed (funcs, vars)
+        }
+      }
+
+      // 4. Class Declaration (captured even if not exported, but we track export status)
       if (node.type === 'ClassDeclaration') {
         const classMeta = this.extractClassMetadata(node);
         classMeta.imports = { ...imports };
@@ -40,7 +78,17 @@ export class AstParser {
     };
 
     traverse(result.program);
-    return classes;
+    return { classes, reExports, exports: localExports };
+  }
+
+  private resolvePath(sourcePath: string, importPath: string): string {
+    if (importPath.startsWith('.')) {
+      // Resolve to absolute
+      const absolute = resolve(dirname(sourcePath), importPath);
+      return absolute;
+    }
+    // Package import or Alias (leave as is for now, or handle aliases)
+    return importPath;
   }
 
   private extractClassMetadata(node: any): ClassMetadata {

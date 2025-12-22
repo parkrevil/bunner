@@ -15,7 +15,7 @@ export class Bunner {
   private static isShuttingDown = false;
   private static signalsInitialized = false;
 
-  static async create<TOpts, T extends BaseApplication<TOpts>>(
+  static async create<TOpts extends BunnerApplicationBaseOptions, T extends BaseApplication<TOpts>>(
     appCls: Class<T>,
     rootModuleCls: Class<BunnerModule>,
     options?: BunnerApplicationOptions,
@@ -31,6 +31,18 @@ export class Bunner {
     }
 
     const normalizedOptions = this.normalizeOptions<T, TOpts>(options);
+
+    // Worker Context Delegation
+    if (process.env.BUNNER_WORKER_ID) {
+      if ('createRuntime' in appCls) {
+        // Static method on Adapter Class to create Runtime
+        return (appCls as any).createRuntime(rootModuleCls, normalizedOptions, {
+          container: aotContainer,
+          manifestPath: aotManifestPath,
+          metadata: aotMetadata,
+        });
+      }
+    }
 
     if (this.apps.has(normalizedOptions.name)) {
       throw new Error(`Application with name "${normalizedOptions.name}" already exists`);

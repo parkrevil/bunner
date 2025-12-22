@@ -1,15 +1,17 @@
-import type { AnyFunction, RootModuleFile } from '@bunner/core';
+import type { AnyFunction, BunnerApplicationBaseOptions, Middleware, ErrorHandler } from '@bunner/core';
 
+import type { BunnerRequest } from './bunner-request';
+import type { BunnerResponse } from './bunner-response';
 import type { RouteHandlerParamType } from './decorators';
 
-export interface BunnerHttpServerOptions {
+export interface BunnerHttpServerOptions extends BunnerApplicationBaseOptions {
   port?: number;
   bodyLimit?: number;
   trustProxy?: boolean;
 }
 
 export interface WorkerInitParams {
-  rootModuleFile: RootModuleFile;
+  rootModuleClassName: string;
   options: WorkerOptions;
 }
 
@@ -26,6 +28,9 @@ export interface RouteHandlerEntry {
   paramRefs: any[];
   controllerClass: any;
   methodName: string;
+  middlewares: Middleware[];
+  errorHandlers: ErrorHandler[];
+  paramFactory: (req: BunnerRequest, res: BunnerResponse) => Promise<any[]>;
 }
 
 export interface ArgumentMetadata {

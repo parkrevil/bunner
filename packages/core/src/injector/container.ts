@@ -22,8 +22,6 @@ export class Container {
 
     const factory = this.factories.get(token);
     if (!factory) {
-      console.error(`[Container] Missing Provider: ${token}`);
-
       throw new Error(`No provider for token: ${token.name || token}`);
     }
 

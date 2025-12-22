@@ -1,27 +1,28 @@
-import { type Container } from '@bunner/core';
+import { type Container, type Middleware, type ErrorHandler } from '@bunner/core';
 import { Logger } from '@bunner/logger';
 
+import type { BunnerRequest } from './bunner-request';
+import type { BunnerResponse } from './bunner-response';
 import type { RouteHandlerEntry } from './interfaces';
+import { ValidationPipe } from './pipes/validation.pipe';
+import { Router } from './router';
+import type { HttpMethod } from './types';
 
 export interface MatchResult {
   entry: RouteHandlerEntry;
   params: Record<string, string>;
 }
 
-interface InternalRoute {
-  method: string;
-  path: string;
-  regex: RegExp;
-  paramNames: string[];
-  entry: RouteHandlerEntry;
-}
-
 export class RouteHandler {
   private container: Container;
   private metadataRegistry: Map<any, any>;
   private scopedKeys: Map<any, string>;
-  private routes: InternalRoute[] = [];
+  private router = new Router<MatchResult>({
+    ignoreTrailingSlash: true,
+    enableCache: true,
+  });
   private readonly logger = new Logger(RouteHandler.name);
+  private validationPipe = new ValidationPipe();
 
   constructor(container: Container, metadataRegistry: Map<any, any>, scopedKeys: Map<any, string> = new Map()) {
     this.container = container;
@@ -30,26 +31,7 @@ export class RouteHandler {
   }
 
   match(method: string, path: string): MatchResult | undefined {
-    const methodUpper = method.toUpperCase();
-
-    for (const route of this.routes) {
-      if (route.method !== methodUpper) {
-        continue;
-      }
-
-      const match = route.regex.exec(path);
-      if (match) {
-        const params: Record<string, string> = {};
-        route.paramNames.forEach((name, index) => {
-          params[name] = match[index + 1] || '';
-        });
-        return {
-          entry: route.entry,
-          params,
-        };
-      }
-    }
-    return undefined;
+    return this.router.match(method.toUpperCase() as HttpMethod, path) || undefined;
   }
 
   register() {
@@ -93,8 +75,6 @@ export class RouteHandler {
 
         this.logger.info(`🛣️  Route Registered: [${httpMethod}] ${fullPath} -> ${targetClass.name}.${method.name}`);
 
-        const { regex, paramNames } = this.pathToRegex(fullPath);
-
         const paramTypes = (method.parameters || [])
           .sort((a: any, b: any) => a.index - b.index)
           .map((p: any) => {
@@ -102,7 +82,97 @@ export class RouteHandler {
             return d ? d.name.toLowerCase() : 'unknown';
           });
 
-        const paramRefs = (method.parameters || []).sort((a: any, b: any) => a.index - b.index).map((p: any) => p.type);
+        const paramRefs = (method.parameters || [])
+          .sort((a: any, b: any) => a.index - b.index)
+          .map((p: any) => this.resolveParamType(p.type));
+
+        // Detect parameters early (moved into paramFactory closure)
+        const paramsConfig = (method.parameters || []).map((p: any, i: number) => {
+          const d = (p.decorators || [])[0];
+          return {
+            type: d ? d.name.toLowerCase() : undefined,
+            name: p.name,
+            metatype: this.resolveParamType(p.type),
+            index: i,
+          };
+        });
+
+        const paramFactory = async (req: BunnerRequest, res: BunnerResponse): Promise<any[]> => {
+          const params = [];
+          for (const config of paramsConfig) {
+            let paramValue = undefined;
+            const { type, metatype } = config;
+
+            let typeToUse = type;
+
+            // Fallback to name-based detection if no decorator
+            if (!typeToUse && config.name) {
+              const nameLower = config.name.toLowerCase();
+              if (nameLower === 'params' || nameLower === 'param') {
+                typeToUse = 'param';
+              } else if (nameLower === 'body') {
+                typeToUse = 'body';
+              } else if (nameLower === 'query' || nameLower === 'queries') {
+                typeToUse = 'query';
+              } else if (nameLower === 'headers' || nameLower === 'header') {
+                typeToUse = 'header';
+              } else if (nameLower === 'req' || nameLower === 'request') {
+                typeToUse = 'req';
+              } else if (nameLower === 'res' || nameLower === 'response') {
+                typeToUse = 'res';
+              }
+            }
+
+            switch (typeToUse) {
+              case 'body':
+                paramValue = req.body;
+                break;
+              case 'param':
+              case 'params':
+                paramValue = req.params;
+                break;
+              case 'query':
+              case 'queries':
+                paramValue = req.queryParams;
+                break;
+              case 'header':
+              case 'headers':
+                paramValue = req.headers;
+                break;
+              case 'cookie':
+              case 'cookies':
+                paramValue = req.cookies;
+                break;
+              case 'request':
+              case 'req':
+                paramValue = req;
+                break;
+              case 'response':
+              case 'res':
+                paramValue = res;
+                break;
+              case 'ip':
+                paramValue = req.ip;
+                break;
+              default:
+                paramValue = undefined;
+                break;
+            }
+
+            if (metatype && (type === 'body' || type === 'query')) {
+              paramValue = await this.validationPipe.transform(paramValue, {
+                type: type,
+                metatype,
+                data: undefined,
+              });
+            }
+            params.push(paramValue);
+          }
+          return params;
+        };
+
+        const middlewares = this.resolveMiddlewares(targetClass, method, meta);
+        const errorHandlers = this.resolveErrorHandlers(targetClass, method, meta);
 
         const entry: RouteHandlerEntry = {
           handler: instance[method.name].bind(instance),
@@ -110,29 +180,106 @@ export class RouteHandler {
           paramRefs,
           controllerClass: targetClass,
           methodName: method.name,
+          middlewares,
+          errorHandlers,
+          paramFactory,
         };
 
-        this.routes.push({
-          method: httpMethod,
-          path: fullPath,
-          regex,
-          paramNames,
+        this.router.add(httpMethod as HttpMethod, fullPath, params => ({
           entry,
-        });
+          params: params as Record<string, string>,
+        }));
+
+        this.logger.info(`🛣️  Route Registered: [${httpMethod}] ${fullPath} -> ${targetClass.name}.${method.name}`);
       }
     });
   }
 
-  private pathToRegex(path: string) {
-    const paramNames: string[] = [];
-    const pattern = path.replace(/[\\$.+*?^|[\](){}]/g, '\\$&').replace(/:([a-zA-Z0-9_]+)/g, (_, name) => {
-      paramNames.push(name);
-      return '([^/]+)';
+  private resolveMiddlewares(_targetClass: any, method: any, classMeta: any): Middleware[] {
+    const middlewares: Middleware[] = [];
+
+    // Method Level
+    const decs = (method.decorators || []).filter((d: any) => d.name === 'UseMiddlewares');
+    decs.forEach((d: any) => {
+      (d.arguments || []).forEach((arg: any) => {
+        try {
+          const mw = this.container.get(arg);
+          if (mw) {
+            middlewares.push(mw);
+          }
+        } catch {}
+      });
     });
 
-    return {
-      regex: new RegExp(`^${pattern}$`),
-      paramNames,
-    };
+    // Controller Level
+    if (classMeta) {
+      const decs = classMeta.decorators.filter((d: any) => d.name === 'UseMiddlewares');
+      decs.forEach((d: any) => {
+        (d.arguments || []).forEach((arg: any) => {
+          try {
+            const mw = this.container.get(arg);
+            if (mw) {
+              middlewares.push(mw);
+            }
+          } catch {}
+        });
+      });
+    }
+
+    return middlewares;
+  }
+
+  private resolveErrorHandlers(_targetClass: any, method: any, classMeta: any): ErrorHandler[] {
+    const handlers: ErrorHandler[] = [];
+
+    // Method handlers
+    const methodDecs = method.decorators.filter((d: any) => d.name === 'UseErrorHandlers');
+    methodDecs.forEach((d: any) =>
+      (d.arguments || []).forEach((arg: any) => {
+        try {
+          const h = this.container.get(arg);
+          if (h) {
+            handlers.push(h);
+          }
+        } catch {}
+      }),
+    );
+
+    // Controller handlers
+    if (classMeta) {
+      const decs = classMeta.decorators.filter((d: any) => d.name === 'UseErrorHandlers');
+      decs.forEach((d: any) =>
+        (d.arguments || []).forEach((arg: any) => {
+          try {
+            const h = this.container.get(arg);
+            if (h) {
+              handlers.push(h);
+            }
+          } catch {}
+        }),
+      );
+    }
+
+    return handlers;
+  }
+
+  private resolveParamType(type: any): any {
+    if (typeof type !== 'string') {
+      return type;
+    }
+
+    // Primitives
+    if (['string', 'number', 'boolean', 'any', 'object', 'array'].includes(type.toLowerCase())) {
+      return type;
+    }
+
+    // Lookup in registry
+    for (const [ctor, meta] of this.metadataRegistry.entries()) {
+      if (meta.className === type) {
+        return ctor;
+      }
+    }
+
+    return type;
   }
 }

@@ -26,7 +26,7 @@ export class BunnerRequest {
   readonly subdomains: string[];
 
   get method(): string {
-    return HttpMethod[this.httpMethod] || 'GET';
+    return this.httpMethod;
   }
 
   constructor(req: any) {

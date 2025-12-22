@@ -2,10 +2,7 @@ import { watch } from 'fs';
 
 import { Logger } from '@bunner/logger';
 
-export type FileChangePayload = {
-  eventType: 'change' | 'rename' | 'error';
-  filename: string | null;
-};
+import type { FileChangePayload } from './interfaces';
 
 export class ProjectWatcher {
   private watcher: any;

@@ -1,14 +1,10 @@
 import type { Class } from '../../common';
 import type { ProviderScope, Provider } from '../../injector';
 
-export interface RootModuleDecoratorOptions {
-  path: string;
-  providers?: Provider[];
-  controllers?: Class[];
+export interface ModuleDecoratorOptions {
   imports?: Class[];
-}
-
-export interface ModuleDecoratorOptions extends Omit<RootModuleDecoratorOptions, 'path'> {
+  controllers?: Class[];
+  providers?: Provider[];
   exports?: Provider[];
 }
 

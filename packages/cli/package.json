@@ -6,6 +6,12 @@
   "bin": {
     "bunner": "./src/bin/bunner.ts"
   },
+  "scripts": {
+    "test": "bun test",
+    "lint": "eslint . --fix",
+    "typecheck": "tsc --noEmit",
+    "build": "bun build ./src/bin/bunner.ts --compile --outfile dist/bunner"
+  },
   "devDependencies": {
     "@types/bun": "^1.3.0",
     "typescript": "^5"
