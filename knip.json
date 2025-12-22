@@ -10,5 +10,5 @@
     ".husky/**",
     ".lintstagedrc.json"
   ],
-  "ignoreDependencies": ["@commitlint/cli", "mitata", "comlink"]
+  "ignoreDependencies": ["@commitlint/cli", "mitata"]
 }
