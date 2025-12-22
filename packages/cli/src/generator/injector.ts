@@ -46,8 +46,32 @@ export class InjectorGenerator {
               const factoryBody = Array.isArray(ref.metadata.useClass) ? `[${instances.join(', ')}]` : instances[0];
               factoryEntries.push(`  container.set('${node.name}::${token}', (c) => ${factoryBody});`);
             } else if (ref.metadata.useFactory) {
-              const factoryFn = ref.metadata.useFactory.__bunner_factory_code;
+              let factoryFn = ref.metadata.useFactory.__bunner_factory_code;
+              const deps = ref.metadata.useFactory.__bunner_factory_deps || [];
+
               if (factoryFn) {
+                // Register dependencies and apply aliasing if needed
+                // replacements needed: []
+                const replacements: { start: number; end: number; content: string }[] = [];
+
+                deps.forEach((dep: any) => {
+                  const alias = registry.getAlias(dep.name, dep.path);
+                  if (alias !== dep.name) {
+                    replacements.push({
+                      start: dep.start,
+                      end: dep.end,
+                      content: alias,
+                    });
+                  }
+                });
+
+                // Apply replacements in reverse order
+                replacements
+                  .sort((a, b) => b.start - a.start)
+                  .forEach(rep => {
+                    factoryFn = factoryFn.slice(0, rep.start) + rep.content + factoryFn.slice(rep.end);
+                  });
+
                 const injectedArgs = (ref.metadata.inject || []).map((injectItem: any) => {
                   const tokenName = injectItem.__bunner_ref || injectItem;
                   const resolved = graph.resolveToken(node.name, tokenName) || tokenName;
@@ -90,8 +114,19 @@ export class InjectorGenerator {
           // handle dynamic imports (usually helpers).
           // For now left as is (assume lib call)
 
+          let callExpression = imp.__bunner_call;
+
+          if (imp.__bunner_import_source) {
+            const alias = registry.getAlias(className, imp.__bunner_import_source);
+            if (_methodName) {
+              callExpression = `${alias}.${_methodName}`;
+            } else {
+              callExpression = alias;
+            }
+          }
+
           const args = imp.args.map((a: any) => JSON.stringify(a)).join(', ');
-          dynamicEntries.push(`  const mod_${node.name}_${className} = await ${imp.__bunner_call}(${args});`);
+          dynamicEntries.push(`  const mod_${node.name}_${className} = await ${callExpression}(${args});`);
           dynamicEntries.push(`  await container.loadDynamicModule('${className}', mod_${node.name}_${className});`);
         }
       });
