@@ -1,4 +1,5 @@
 import { Middleware, type Context } from '@bunner/core';
+import { isHttpContext } from '@bunner/http-server';
 import { Logger } from '@bunner/logger';
 
 @Middleware()
@@ -6,7 +7,9 @@ export class LoggerMiddleware implements Middleware {
   private logger = new Logger('LoggerMiddleware');
 
   handle(ctx: Context) {
-    const req = ctx.getAdapter().getRequest();
-    this.logger.info(`[${req.method}] ${req.url}`);
+    if (isHttpContext(ctx)) {
+      const req = ctx.request;
+      this.logger.info(`[${req.method}] ${req.url}`);
+    }
   }
 }

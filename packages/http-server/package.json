@@ -15,7 +15,6 @@
     "typescript": "^5"
   },
   "dependencies": {
-    "comlink": "^4.4.2",
     "http-status-codes": "^2.3"
   },
   "peerDependencies": {
