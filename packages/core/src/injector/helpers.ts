@@ -1,6 +1,5 @@
 import type { ForwardRef, ProviderUseClass, ProviderUseExisting, ProviderUseFactory, ProviderUseValue } from '@bunner/common';
-
-import { isClass } from '../common/helpers';
+import { isClass } from '@bunner/common';
 
 export function isForwardRef(value: any): value is ForwardRef {
   return value && typeof value.forwardRef === 'function';

@@ -1,7 +1,6 @@
 export * from './src/bunner';
 export * from './src/application';
-export * from './src/runtime';
-export * from './src/common';
+
 export * from './src/injector';
 // export * from './src/errors';
 

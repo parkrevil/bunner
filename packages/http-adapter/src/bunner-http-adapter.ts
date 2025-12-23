@@ -1,13 +1,13 @@
 import type { BunnerAdapter } from '@bunner/common';
 import { ClusterManager, type ClusterBaseWorker, type BunnerApplicationNormalizedOptions } from '@bunner/core';
 
+import { BunnerHttpServer } from './bunner-http-server';
 import { type BunnerHttpServerOptions } from './interfaces';
-import { HttpRuntime } from './runtime';
 
 export class BunnerHttpAdapter implements BunnerAdapter {
   private options: BunnerApplicationNormalizedOptions & BunnerHttpServerOptions;
   private clusterManager: ClusterManager<ClusterBaseWorker>;
-  private localRuntime: HttpRuntime | undefined;
+  private httpServer: BunnerHttpServer | undefined;
 
   constructor(options: BunnerHttpServerOptions = {}) {
     this.options = {
@@ -26,8 +26,8 @@ export class BunnerHttpAdapter implements BunnerAdapter {
     const isSingleProcess = !workers || workers === 1;
 
     if (isSingleProcess) {
-      this.localRuntime = new HttpRuntime();
-      await this.localRuntime.boot(context.container, {
+      this.httpServer = new BunnerHttpServer();
+      await this.httpServer.boot(context.container, {
         ...this.options,
         metadata: (globalThis as any).__BUNNER_METADATA_REGISTRY__, // Fallback if not in context
       });

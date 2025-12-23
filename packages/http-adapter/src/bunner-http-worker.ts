@@ -1,11 +1,11 @@
 import { ClusterBaseWorker, type ClusterWorkerId, expose } from '@bunner/core';
 import { Logger } from '@bunner/logger';
 
-import { HttpRuntime } from './runtime';
+import { BunnerHttpServer } from './bunner-http-server';
 
 export class BunnerHttpWorker extends ClusterBaseWorker {
   private logger = new Logger(BunnerHttpWorker);
-  private runtime: HttpRuntime;
+  private httpServer: BunnerHttpServer;
 
   constructor() {
     super();
@@ -34,10 +34,10 @@ export class BunnerHttpWorker extends ClusterBaseWorker {
         await manifest.registerDynamicModules(container);
       }
 
-      this.runtime = new HttpRuntime();
+      this.httpServer = new BunnerHttpServer();
 
       // Pass combined options including metadata for Runtime to use
-      await this.runtime.boot(container, {
+      await this.httpServer.boot(container, {
         ...options,
         metadata: metadataRegistry,
         scopedKeys: scopedKeysMap,
@@ -54,10 +54,10 @@ export class BunnerHttpWorker extends ClusterBaseWorker {
         await import(entryModule.path);
       }
 
-      this.runtime = new HttpRuntime();
+      this.httpServer = new BunnerHttpServer();
 
       // Boot without pre-compiled metadata - Runtime will rely on what's available
-      await this.runtime.boot(container, options);
+      await this.httpServer.boot(container, options);
     }
   }
 
