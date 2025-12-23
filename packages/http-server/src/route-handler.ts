@@ -131,7 +131,7 @@ export class RouteHandler {
                 break;
               case 'query':
               case 'queries':
-                paramValue = req.queryParams;
+                paramValue = req.query;
                 break;
               case 'header':
               case 'headers':

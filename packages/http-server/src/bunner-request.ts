@@ -3,34 +3,34 @@ import { CookieMap } from 'bun';
 import { HttpMethod } from './enums';
 
 export class BunnerRequest {
-  readonly requestId: string;
-  readonly httpMethod: HttpMethod;
-  readonly url: string;
-  readonly path: string;
-  readonly headers: Headers;
-  readonly protocol: string | null;
-  readonly host: string | null;
-  readonly hostname: string | null;
-  readonly port: number | null;
-  readonly queryString: string | null;
-  readonly cookies: CookieMap;
-  readonly contentType: string | null;
-  readonly contentLength: number | null;
-  readonly charset: string | null;
-  readonly params: Record<string, any>;
-  readonly queryParams: Record<string, any>;
-  readonly body: unknown;
-  readonly ip: string | null;
-  readonly ips: string[];
-  readonly isTrustedProxy: boolean;
-  readonly subdomains: string[];
+  public readonly requestId: string;
+  public readonly httpMethod: HttpMethod;
+  public readonly url: string;
+  public readonly path: string;
+  public readonly headers: Headers;
+  public readonly protocol: string | null;
+  public readonly host: string | null;
+  public readonly hostname: string | null;
+  public readonly port: number | null;
+  public readonly queryString: string | null;
+  public readonly cookies: CookieMap;
+  public readonly contentType: string | null;
+  public readonly contentLength: number | null;
+  public readonly charset: string | null;
+  public readonly params: Record<string, any>;
+  public readonly body: unknown;
+  public readonly ip: string | null;
+  public readonly ips: string[];
+  public readonly isTrustedProxy: boolean;
+  public readonly subdomains: string[];
+  public query: Record<string, any>;
 
   get method(): string {
     return this.httpMethod;
   }
 
   constructor(req: any) {
-    const urlObj = new URL(req.url, 'http://localhost');
+    const urlObj = new URL(req.url);
 
     this.requestId = req.requestId || Math.random().toString(36).substring(7);
     this.httpMethod = req.httpMethod;
@@ -47,7 +47,7 @@ export class BunnerRequest {
     this.contentLength = this.headers.get('content-length') ? parseInt(this.headers.get('content-length')!) : null;
     this.charset = null;
     this.params = req.params || {};
-    this.queryParams = req.queryParams || {};
+    this.query = req.query || {};
     this.body = req.body ?? null;
     this.isTrustedProxy = req.isTrustedProxy || false;
     this.subdomains = [];
