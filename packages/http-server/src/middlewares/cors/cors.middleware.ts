@@ -109,8 +109,12 @@ export class CorsMiddleware implements Middleware {
   }
 
   private async matchOrigin(origin: string, options: CorsOptions): Promise<string | undefined> {
-    if (!options.origin || options.origin === '*') {
-      return '*';
+    if (options.origin === false) {
+      return undefined;
+    }
+
+    if (options.origin === undefined || options.origin === '*') {
+      return options.credentials ? origin : '*';
     }
 
     if (typeof options.origin === 'string') {
