@@ -115,23 +115,31 @@ export class OpenApiFactory {
     });
   }
 
-  private static getSchemaForType(typeName: string, _typeArgs: string[] | undefined, registry: Map<any, any>, doc: any): any {
-    if (['string', 'number', 'boolean'].includes(typeName.toLowerCase())) {
-      return { type: typeName.toLowerCase() };
+  private static getSchemaForType(typeName: any, _typeArgs: string[] | undefined, registry: Map<any, any>, doc: any): any {
+    if (!typeName) {
+      return { type: 'object' };
     }
 
-    if (doc.components.schemas[typeName]) {
-      return { $ref: `#/components/schemas/${typeName}` };
+    let targetName = typeName;
+    if (typeof typeName === 'function') {
+      targetName = typeName.name;
+    }
+
+    if (typeof targetName === 'string' && ['string', 'number', 'boolean'].includes(targetName.toLowerCase())) {
+      return { type: targetName.toLowerCase() };
+    }
+
+    if (doc.components.schemas[targetName]) {
+      return { $ref: `#/components/schemas/${targetName}` };
     }
 
     let targetMeta: any = null;
-    let targetName = typeName;
 
+    // If it's a reference (Function or String), find it in registry
     for (const [target, meta] of registry.entries()) {
-      const m = meta;
-      if (m.className === typeName || target.name === typeName) {
-        targetMeta = m;
-        targetName = m.className;
+      if (meta.className === targetName || target.name === targetName || target === typeName) {
+        targetMeta = meta;
+        targetName = meta.className; // Ensure we use the canonical class name for schema key
         break;
       }
     }

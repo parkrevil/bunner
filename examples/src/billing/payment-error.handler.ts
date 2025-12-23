@@ -1,5 +1,5 @@
 import { Catch, type Context, type ErrorHandler } from '@bunner/core';
-import { isHttpContext } from '@bunner/http-server';
+import { isHttpContext } from '@bunner/http-adapter';
 import { Logger } from '@bunner/logger';
 
 import { PaymentFailedError } from './payment-failed.error';

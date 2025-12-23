@@ -3,7 +3,7 @@ import type { BunnerResponse } from '../bunner-response';
 
 import type { HttpAdapter } from './http-adapter';
 
-export class BunnerHttpAdapter implements HttpAdapter {
+export class BunnerHttpContextAdapter implements HttpAdapter {
   constructor(
     private req: BunnerRequest,
     private res: BunnerResponse,

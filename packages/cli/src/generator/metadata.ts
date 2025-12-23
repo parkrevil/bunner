@@ -64,6 +64,64 @@ export class MetadataGenerator {
       return properties;
     };
 
+    const serializeValue = (value: any): string => {
+      if (value === null) {
+        return 'null';
+      }
+      if (value === undefined) {
+        return 'undefined';
+      }
+
+      if (Array.isArray(value)) {
+        return `[${value.map(v => serializeValue(v)).join(',')}]`;
+      }
+
+      if (typeof value === 'object') {
+        if (value.__bunner_ref) {
+          if (value.__bunner_import_source) {
+            registry.addImport(value.__bunner_ref, value.__bunner_import_source);
+          }
+          return value.__bunner_ref;
+        }
+
+        if (value.__bunner_factory_code) {
+          // Output the factory function code directly
+          return value.__bunner_factory_code;
+        }
+
+        if (value.__bunner_call) {
+          if (value.__bunner_import_source) {
+            // If the call base (e.g. ScalarModule) needs import
+            const root = value.__bunner_call.split('.')[0];
+            if (root !== value.__bunner_call) {
+              // If it's Dot notation, import the root
+              registry.addImport(root, value.__bunner_import_source);
+            } else {
+              registry.addImport(value.__bunner_call, value.__bunner_import_source);
+            }
+          }
+          const args = (value.args || []).map((a: any) => serializeValue(a)).join(', ');
+          return `${value.__bunner_call}(${args})`;
+        }
+
+        if (value.__bunner_new) {
+          const args = (value.args || []).map((a: any) => serializeValue(a)).join(', ');
+          return `new ${value.__bunner_new}(${args})`;
+        }
+
+        if (value.__bunner_forward_ref) {
+          return `forwardRef(() => ${value.__bunner_forward_ref})`;
+        }
+
+        const entries = Object.entries(value).map(([k, v]) => {
+          return `${k}: ${serializeValue(v)}`;
+        });
+        return `{${entries.join(',')}}`;
+      }
+
+      return JSON.stringify(value);
+    };
+
     classes.forEach(({ metadata, filePath }) => {
       const alias = registry.getAlias(metadata.className, filePath); // Use Alias
 
@@ -71,44 +129,28 @@ export class MetadataGenerator {
 
       const props = resolvedProperties.map(prop => {
         const isClassRef = availableClasses.has(prop.type);
-        // We use string name for type reference in metadata for now.
-        // It doesn't use the usage alias (e.g. UserModule_1).
-        // Runtime metadata usually stores constructors if possible, or strings.
-        // If string, collisions happen.
-        // Ideally we should output `type: () => Alias` (Lazy function)
-        // For CLI metadata, we just output string literal or boolean.
-        const typeValue = isClassRef ? `'${prop.type}'` : `'${prop.type}'`; // Always string for safety now?
-        // Original: const typeValue = isClassRef ? prop.type : `'${prop.type}'`;
-        // If we output `UserModule`, it refers to the imported Alias.
-        // If we aliased `UserModule` to `UserModule_1`, we must output `UserModule_1`.
-
-        // However, `prop.type` is just a string name from AST.
-        // We don't know WHICH `UserModule` (from /a or /b) it refers to without strict AST resolution.
-        // This confirms Heritage/Type Reference is weak.
-        // We keep it as is (Best Effort).
-
-        let finalTypeVal = typeValue;
-        if (isClassRef) {
-          // Try to find if we have an alias?
-          // We can't know which file it points to easily.
-          // We'll trust global uniqueness or let it reference the name (might be wrong reference if shadowed).
-          // Safe bet: Output String Name.
-          finalTypeVal = `'${prop.type}'`;
-        }
+        const typeValue = serializeValue(prop.type);
 
         let itemsStr = 'undefined';
         if (prop.items) {
+          // Items typeName also needs serialization if it's a ref??
+          // Current ast-parser doesn't convert items.typeName to ref object yet,
+          // but we can assume simple string for DTO items for now or strictly speaking we should handle it too.
+          // For now let's keep it simple as DTOs are mostly primitives or explicit refs handled by resolveMetadata?
+          // Actually resolveMetadata uses strings for DTO resolution.
+          // Let's stick to string for items.typeName for now unless it causes issues.
           const isItemRef = availableClasses.has(prop.items.typeName);
           const itemTypeVal = isItemRef ? `'${prop.items.typeName}'` : `'${prop.items.typeName}'`;
           itemsStr = `{ typeName: ${itemTypeVal} }`;
         }
 
+        // Use serializeValue for decorators to handle __bunner_ref
         return `{
           name: '${prop.name}',
-          type: ${finalTypeVal},
+          type: ${typeValue},
           isClass: ${isClassRef},
           typeArgs: ${JSON.stringify(prop.typeArgs)},
-          decorators: ${JSON.stringify(prop.decorators)},
+          decorators: ${serializeValue(prop.decorators)},
           isOptional: ${prop.isOptional},
           isArray: ${prop.isArray},
           isEnum: ${prop.isEnum},
@@ -119,9 +161,9 @@ export class MetadataGenerator {
 
       const serializedMeta = `{
         className: '${metadata.className}',
-        decorators: ${JSON.stringify(metadata.decorators)},
-        constructorParams: ${JSON.stringify(metadata.constructorParams)},
-        methods: ${JSON.stringify(metadata.methods)},
+        decorators: ${serializeValue(metadata.decorators)},
+        constructorParams: ${serializeValue(metadata.constructorParams)},
+        methods: ${serializeValue(metadata.methods)},
         properties: [${props.join(',')}]
       }`;
 

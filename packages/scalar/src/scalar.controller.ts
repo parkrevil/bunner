@@ -1,5 +1,5 @@
 import { Controller, Inject } from '@bunner/core';
-import { Get } from '@bunner/http-server';
+import { Get } from '@bunner/http-adapter';
 
 import { ScalarUiMiddleware } from './scalar-ui.middleware';
 import { ScalarService } from './scalar.service';

@@ -1,13 +1,14 @@
-import type { AnyFunction, BunnerApplicationBaseOptions, Middleware, ErrorHandler } from '@bunner/core';
+import type { AnyFunction, BunnerApplicationOptions, Middleware, ErrorHandler } from '@bunner/core';
 
 import type { BunnerRequest } from './bunner-request';
 import type { BunnerResponse } from './bunner-response';
 import type { RouteHandlerParamType } from './decorators';
 
-export interface BunnerHttpServerOptions extends BunnerApplicationBaseOptions {
+export interface BunnerHttpServerOptions extends BunnerApplicationOptions {
   port?: number;
   bodyLimit?: number;
   trustProxy?: boolean;
+  workers?: number;
 }
 
 export interface WorkerInitParams {

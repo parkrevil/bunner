@@ -1,5 +1,5 @@
 import { Middleware, type Context } from '@bunner/core';
-import { isHttpContext } from '@bunner/http-server';
+import { isHttpContext } from '@bunner/http-adapter';
 import { Logger } from '@bunner/logger';
 
 @Middleware()

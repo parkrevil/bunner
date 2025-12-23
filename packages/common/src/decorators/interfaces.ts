@@ -1,5 +1,4 @@
-import type { Class } from '../../common';
-import type { ProviderScope, Provider } from '../../injector';
+import type { Class, ProviderScope, Provider } from '../types';
 
 export interface ModuleDecoratorOptions {
   imports?: Class[];

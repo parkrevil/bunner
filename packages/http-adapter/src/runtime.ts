@@ -3,7 +3,7 @@ import { Logger } from '@bunner/logger';
 import type { Server } from 'bun';
 import { StatusCodes } from 'http-status-codes';
 
-import { BunnerHttpAdapter, BunnerHttpContext } from './adapter';
+import { BunnerHttpContextAdapter, BunnerHttpContext } from './adapter';
 import { BunnerRequest } from './bunner-request';
 import { BunnerResponse } from './bunner-response';
 import { HTTP_AFTER_RESPONSE, HTTP_BEFORE_REQUEST, HTTP_BEFORE_RESPONSE, HTTP_ERROR_HANDLER } from './constants';
@@ -119,7 +119,7 @@ export class HttpRuntime implements BunnerRuntime {
 
     const req = new BunnerRequest(adaptiveReq);
     const res = new BunnerResponse(req, { headers: new Headers(), status: 0 } as any);
-    const adapter = new BunnerHttpAdapter(req, res);
+    const adapter = new BunnerHttpContextAdapter(req, res);
     const context = new BunnerHttpContext(adapter);
 
     let matchResult: any = undefined;

@@ -1,4 +1,4 @@
-import { RestController, Delete, Get, Param, Post, Put, Body } from '@bunner/http-server';
+import { RestController, Delete, Get, Param, Post, Put, Body } from '@bunner/http-adapter';
 
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';

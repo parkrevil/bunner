@@ -1,6 +1,6 @@
 import { Injectable, Inject } from '@bunner/core';
 
-import { ScalarModuleOptions } from './scalar.module';
+import type { ScalarModuleOptions } from './scalar.module';
 import { OpenApiFactory } from './spec-factory';
 
 @Injectable()

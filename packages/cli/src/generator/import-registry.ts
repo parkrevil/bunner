@@ -32,6 +32,10 @@ export class ImportRegistry {
     return alias;
   }
 
+  public addImport(name: string, filePath: string): string {
+    return this.getAlias(name, filePath);
+  }
+
   public getImportStatements(): string[] {
     return Array.from(this.imports.values()).map(info => {
       if (info.alias === info.originalName) {

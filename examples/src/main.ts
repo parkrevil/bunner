@@ -1,17 +1,22 @@
 import { Bunner, LogLevel } from '@bunner/core';
-import { BunnerHttpServer } from '@bunner/http-server';
+import { BunnerHttpAdapter } from '@bunner/http-adapter';
 import { Logger } from '@bunner/logger';
 
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
-  const app = await Bunner.create(BunnerHttpServer, AppModule, {
+  const app = await Bunner.create(AppModule, {
+    logLevel: LogLevel.Debug,
+  });
+
+  const adapter = new BunnerHttpAdapter({
+    port: 5003,
     logLevel: LogLevel.Debug,
     workers: 1,
-    queueCapacity: 8192,
-    port: 5003,
   });
+
+  app.addAdapter(adapter);
 
   logger.info('🚀 Server is starting...');
 

@@ -23,9 +23,18 @@ export class AstParser {
     const traverse = (node: any) => {
       // 1. Imports
       if (node.type === 'ImportDeclaration') {
+        // Skip import type ...
+        if (node.importKind === 'type') {
+          return;
+        }
+
         const source = node.source.value;
         const resolvedSource = this.resolvePath(filename, source);
         (node.specifiers || []).forEach((spec: any) => {
+          // Skip import { type Foo } ...
+          if (spec.importKind === 'type') {
+            return;
+          }
           imports[spec.local.name] = resolvedSource;
           this.currentImports[spec.local.name] = resolvedSource;
         });
@@ -273,8 +282,13 @@ export class AstParser {
       case 'ArrayExpression':
         return (node.elements || []).map((el: any) => this.parseExpression(el));
 
-      case 'Identifier':
-        return { __bunner_ref: node.name };
+      case 'Identifier': {
+        const importSource = this.currentImports[node.name];
+        return {
+          __bunner_ref: node.name,
+          __bunner_import_source: importSource,
+        };
+      }
 
       case 'NewExpression':
         return {
@@ -407,9 +421,17 @@ export class AstParser {
         typeInfo = this.typeResolver.resolve(node.typeAnnotation.typeAnnotation);
       }
 
+      let typeValue: any = typeInfo.typeName;
+      if (typeof typeInfo.typeName === 'string' && this.currentImports[typeInfo.typeName]) {
+        typeValue = {
+          __bunner_ref: typeInfo.typeName,
+          __bunner_import_source: this.currentImports[typeInfo.typeName],
+        };
+      }
+
       return {
         name,
-        type: typeInfo.typeName,
+        type: typeValue,
         typeArgs: typeInfo.typeArgs,
         decorators,
       };

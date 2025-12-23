@@ -1,36 +1,11 @@
-import type { Class } from '../common/types';
+import type { Class, ProviderToken, Provider, ProviderScope } from '@bunner/common';
 
-import type { ModuleMetadata, ProviderToken, Provider, ProviderScope, DependencyProvider } from './types';
+import type { ModuleMetadata, DependencyProvider } from './types';
 
 export interface InjectMetadata {
   index: number;
-  token: ProviderToken | ForwardRef;
+  token: ProviderToken | import('@bunner/common').ForwardRef;
   provider: Class | undefined;
-}
-
-export interface ProviderBase {
-  token: ProviderToken;
-}
-
-export interface ProviderUseValue extends ProviderBase {
-  useValue: any;
-}
-
-export interface ProviderUseClass extends ProviderBase {
-  useClass: Class;
-}
-
-export interface ProviderUseExisting extends ProviderBase {
-  useExisting: Class;
-}
-
-export interface ProviderUseFactory extends ProviderBase {
-  useFactory: <T>(...args: any[]) => T | Promise<T>;
-  inject?: ProviderToken[];
-}
-
-export interface ForwardRef {
-  forwardRef: () => any;
 }
 
 export interface DependencyGraphBase {

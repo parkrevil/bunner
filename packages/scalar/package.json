@@ -6,7 +6,7 @@
   "types": "index.ts",
   "dependencies": {
     "@bunner/core": "workspace:*",
-    "@bunner/http-server": "workspace:*"
+    "@bunner/http-adapter": "workspace:*"
   },
   "peerDependencies": {
     "bun": "*"

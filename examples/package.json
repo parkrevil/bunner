@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@bunner/core": "workspace:*",
-    "@bunner/http-server": "workspace:*",
+    "@bunner/http-adapter": "workspace:*",
     "@bunner/logger": "workspace:*",
     "@bunner/scalar": "workspace:*"
   },

@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@bunner/logger": "workspace:*",
+    "@bunner/common": "workspace:*",
     "exponential-backoff": "^3.1.2"
   }
 }

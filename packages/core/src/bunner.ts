@@ -1,66 +1,36 @@
+import { LogLevel, type Class } from '@bunner/common';
 import { Logger } from '@bunner/logger';
 
-import {
-  type BaseApplication,
-  type BunnerApplicationBaseOptions,
-  type BunnerModule,
-  type CreateApplicationOptions,
-  type BunnerApplicationOptions,
-} from './application';
-import { LogLevel, type Class } from './common';
+import { type BunnerApplicationBaseOptions, type BunnerModule, type BunnerApplicationOptions } from './application';
+import { BunnerApplication } from './application/bunner-application';
 
 export class Bunner {
-  static apps: Map<string, BaseApplication> = new Map();
+  static apps: Map<string, BunnerApplication> = new Map();
   private static readonly logger = new Logger(Bunner.name);
   private static isShuttingDown = false;
   private static signalsInitialized = false;
 
-  static async create<TOpts extends BunnerApplicationBaseOptions, T extends BaseApplication<TOpts>>(
-    appCls: Class<T>,
-    rootModuleCls: Class<BunnerModule>,
-    options?: BunnerApplicationOptions,
-  ) {
+  static async create(rootModuleCls: Class<BunnerModule>, options?: BunnerApplicationOptions): Promise<BunnerApplication> {
     this.setupSignalHandlers();
 
-    const aotContainer = (globalThis as any).__BUNNER_CONTAINER__;
-    const aotManifestPath = (globalThis as any).__BUNNER_MANIFEST_PATH__;
-    const aotMetadata = (globalThis as any).__BUNNER_METADATA_REGISTRY__;
+    // In the new architecture, we treat AOT/JIT unify within the Scanner/Application.
+    // Worker logic is handled by individual adapters.
 
-    if (!aotContainer) {
-      this.logger.warn('⚠️ AOT Container not found.');
-    }
-
-    const normalizedOptions = this.normalizeOptions<T, TOpts>(options);
-
-    // Worker Context Delegation
-    if (process.env.BUNNER_WORKER_ID) {
-      if ('createRuntime' in appCls) {
-        // Static method on Adapter Class to create Runtime
-        return (appCls as any).createRuntime(rootModuleCls, normalizedOptions, {
-          container: aotContainer,
-          manifestPath: aotManifestPath,
-          metadata: aotMetadata,
-        });
-      }
-    }
+    // Normalize options
+    const normalizedOptions = this.normalizeOptions(options);
 
     if (this.apps.has(normalizedOptions.name)) {
       throw new Error(`Application with name "${normalizedOptions.name}" already exists`);
     }
 
-    const app = new appCls(
-      {
-        path: 'aot-generated',
-        className: rootModuleCls.name,
-        container: aotContainer,
-        manifestPath: aotManifestPath,
-        metadata: aotMetadata,
-      },
-      normalizedOptions,
-    );
+    const app = new BunnerApplication(rootModuleCls, normalizedOptions);
+
+    // We do NOT call app.start() here. User must call it.
+    // Use .init() if we want to bootstrap without starting adapters?
+    // Usually NestJS create() returns app, then user calls listen().
+    // Here user calls app.addAdapter() then app.start().
 
     await app.init();
-
     this.apps.set(normalizedOptions.name, app);
 
     return app;
@@ -86,9 +56,9 @@ export class Bunner {
     await Promise.all(
       apps.map(async app => {
         try {
-          await app.shutdown(true);
+          await app.stop();
         } catch (e) {
-          Bunner.logger.error('app shutdown failed', e);
+          Bunner.logger.error('app stop failed', e);
         }
       }),
     ).catch(e => Bunner.logger.error('Shutdown Error', e));
@@ -98,17 +68,11 @@ export class Bunner {
     return `bunner--${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
   }
 
-  private static normalizeOptions<T extends BaseApplication<any>, O = T extends BaseApplication<infer OO> ? OO : never>(
-    options?: BunnerApplicationOptions,
-  ): O & BunnerApplicationBaseOptions {
-    const {
-      name = this.generateApplicationDefaultName(),
-      logLevel = LogLevel.Debug,
-      ...appOptions
-    } = (options ?? {}) as O & CreateApplicationOptions;
+  private static normalizeOptions(options?: BunnerApplicationOptions): BunnerApplicationBaseOptions {
+    const { name = this.generateApplicationDefaultName(), logLevel = LogLevel.Debug, ...appOptions } = options ?? {};
 
     return {
-      ...(appOptions as O),
+      ...appOptions,
       name,
       logLevel,
     };

@@ -39,6 +39,10 @@ export class Container {
     return this.factories.has(token);
   }
 
+  getInstances(): IterableIterator<any> {
+    return this.instances.values();
+  }
+
   async loadDynamicModule(scope: string, dynamicModule: any) {
     if (!dynamicModule) {
       return;

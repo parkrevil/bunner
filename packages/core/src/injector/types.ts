@@ -1,22 +1,6 @@
-import type { InjectableDecoratorOptions, ModuleDecoratorOptions } from '../application/decorators';
-import type { Class } from '../common/types';
+import type { InjectableDecoratorOptions, ModuleDecoratorOptions, Class, ProviderToken, ForwardRef } from '@bunner/common';
 
-import type {
-  ProviderUseValue,
-  ProviderUseClass,
-  ProviderUseExisting,
-  ProviderUseFactory,
-  ForwardRef,
-  DependencyGraphModule,
-  DependencyGraphProvider,
-  DependencyGraphController,
-} from './interfaces';
-
-export type ProviderScope = 'singleton' | 'transient' | 'request';
-
-export type ProviderToken = string | symbol | Class;
-
-export type Provider = Class | ProviderUseValue | ProviderUseClass | ProviderUseExisting | ProviderUseFactory;
+import type { DependencyGraphModule, DependencyGraphProvider, DependencyGraphController } from './interfaces';
 
 export type RootModuleMetadata = Required<ModuleDecoratorOptions>;
 

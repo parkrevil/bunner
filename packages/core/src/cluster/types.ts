@@ -1,4 +1,4 @@
-import type { ClassProperties, MethodParams, MethodSecondParam } from '../common';
+import type { ClassProperties, MethodParams, MethodSecondParam } from '@bunner/common';
 
 export type ClusterWorkerId = number;
 

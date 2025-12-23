@@ -12,6 +12,7 @@ export interface RestControllerMetadata {
 }
 
 export interface HttpMethodDecoratorOptions {
+  path?: string;
   version?: string;
 }
 

@@ -1,4 +1,10 @@
+import type { ProviderUseValue, ProviderUseClass, ProviderUseExisting, ProviderUseFactory } from './interfaces';
+
 export type Class<T = any> = new (...args: any[]) => T;
+
+export type ProviderScope = 'singleton' | 'transient' | 'request';
+
+export type Provider = Class | ProviderUseValue | ProviderUseClass | ProviderUseExisting | ProviderUseFactory;
 
 export type ClassProperties<T> = {
   [K in keyof T]-?: T[K] extends (...args: any[]) => any ? K : never;

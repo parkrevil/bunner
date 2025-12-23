@@ -1,4 +1,4 @@
-import { RestController, Get, Post, Put, Delete } from '@bunner/http-server';
+import { RestController, Get, Post, Put, Delete } from '@bunner/http-adapter';
 import { Logger } from '@bunner/logger';
 
 import { CreateUserComplexDto, AddressDto, SocialDto } from './dto/complex.dto';
