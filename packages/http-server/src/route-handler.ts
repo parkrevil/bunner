@@ -73,8 +73,6 @@ export class RouteHandler {
         const subPath = routeDec.arguments[0] || '';
         const fullPath = '/' + [prefix, subPath].filter(Boolean).join('/').replace(/\/+/g, '/');
 
-        this.logger.info(`🛣️  Route Registered: [${httpMethod}] ${fullPath} -> ${targetClass.name}.${method.name}`);
-
         const paramTypes = (method.parameters || [])
           .sort((a: any, b: any) => a.index - b.index)
           .map((p: any) => {
