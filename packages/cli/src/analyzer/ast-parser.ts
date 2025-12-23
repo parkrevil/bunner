@@ -9,6 +9,7 @@ import type { ParseResult, ReExport } from './parser-models';
 export class AstParser {
   private currentCode: string = '';
   private typeResolver = new AstTypeResolver();
+  private currentImports: Record<string, string> = {};
 
   parse(filename: string, code: string): ParseResult {
     this.currentCode = code;
@@ -17,6 +18,7 @@ export class AstParser {
     const reExports: ReExport[] = [];
     const localExports: string[] = [];
     const imports: Record<string, string> = {};
+    this.currentImports = {};
 
     const traverse = (node: any) => {
       // 1. Imports
@@ -25,6 +27,7 @@ export class AstParser {
         const resolvedSource = this.resolvePath(filename, source);
         (node.specifiers || []).forEach((spec: any) => {
           imports[spec.local.name] = resolvedSource;
+          this.currentImports[spec.local.name] = resolvedSource;
         });
       }
 
@@ -281,10 +284,15 @@ export class AstParser {
 
       case 'CallExpression': {
         let calleeName = 'unknown';
+        let importSource: string | undefined;
         if (node.callee.type === 'MemberExpression') {
           calleeName = `${node.callee.object.name}.${node.callee.property.name}`;
+          if (node.callee.object.type === 'Identifier') {
+            importSource = this.currentImports[node.callee.object.name];
+          }
         } else if (node.callee.type === 'Identifier') {
           calleeName = node.callee.name;
+          importSource = this.currentImports[calleeName];
         }
 
         // Handle forwardRef(() => Module)
@@ -299,6 +307,7 @@ export class AstParser {
 
         return {
           __bunner_call: calleeName,
+          __bunner_import_source: importSource,
           args: (node.arguments || []).map((arg: any) => this.parseExpression(arg)),
         };
       }
@@ -308,12 +317,73 @@ export class AstParser {
         const start = node.start;
         const end = node.end;
         const factoryCode = this.currentCode.slice(start, end);
-        return { __bunner_factory_code: factoryCode };
+
+        const deps = this.extractDependencies(node, start);
+        return { __bunner_factory_code: factoryCode, __bunner_factory_deps: deps };
       }
 
       default:
         return null;
     }
+  }
+
+  private extractDependencies(funcNode: any, offset: number): any[] {
+    const deps: any[] = [];
+    const defined = new Set<string>();
+
+    // Recursively find identifiers
+    const visit = (n: any) => {
+      if (!n || typeof n !== 'object') {
+        return;
+      }
+
+      if (n.type === 'Identifier') {
+        // Check if it's a known import and not shadowed
+        if (this.currentImports[n.name] && !defined.has(n.name)) {
+          // It's an external dependency!
+          // We need its position relative to the factory start to replace it later if needed?
+          // Actually, injector needs absolute position or relative to factory string.
+          // factoryCode starts at `start`. Identifier is at `n.start`.
+          // Relative start = n.start - offset.
+          deps.push({
+            name: n.name,
+            path: this.currentImports[n.name],
+            start: n.start - offset,
+            end: n.end - offset,
+          });
+        }
+      }
+
+      // Scope tracking (Simplified - assumes no shadowing for now to save complexity,
+      // as usually middleware calls are simple)
+      // Ideally we track params and var decls.
+      if (n.type === 'ArrowFunctionExpression' || n.type === 'FunctionExpression') {
+        n.params.forEach((p: any) => {
+          if (p.type === 'Identifier') {
+            defined.add(p.name);
+          }
+        });
+        // Traverse body
+        visit(n.body);
+        return; // Don't traverse keys of function again
+      }
+
+      // Traverse children
+      Object.keys(n).forEach(key => {
+        if (key === 'type' || key === 'loc' || key === 'start' || key === 'end') {
+          return;
+        }
+        const val = n[key];
+        if (Array.isArray(val)) {
+          val.forEach(visit);
+        } else {
+          visit(val);
+        }
+      });
+    };
+
+    visit(funcNode.body);
+    return deps;
   }
 
   private extractParam(paramNode: any): any {

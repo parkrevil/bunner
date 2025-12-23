@@ -3,8 +3,7 @@ import { Logger } from '@bunner/logger';
 import type { Server } from 'bun';
 import { StatusCodes } from 'http-status-codes';
 
-import { BunnerHttpAdapter } from './adapter/bunner-http-adapter';
-import { HttpContext } from './adapter/http-context';
+import { BunnerHttpAdapter, BunnerHttpContext } from './adapter';
 import { BunnerRequest } from './bunner-request';
 import { BunnerResponse } from './bunner-response';
 import { HTTP_AFTER_RESPONSE, HTTP_BEFORE_REQUEST, HTTP_BEFORE_RESPONSE, HTTP_ERROR_HANDLER } from './constants';
@@ -121,44 +120,48 @@ export class HttpRuntime implements BunnerRuntime {
     const req = new BunnerRequest(adaptiveReq);
     const res = new BunnerResponse(req, { headers: new Headers(), status: 0 } as any);
     const adapter = new BunnerHttpAdapter(req, res);
-    const context = new HttpContext(adapter);
+    const context = new BunnerHttpContext(adapter);
 
     let matchResult: any = undefined;
 
     try {
       // 1. Global Before Request
-      await this.runMiddlewares(this.globalBeforeRequest, context);
+      const shouldContinue = await this.runMiddlewares(this.globalBeforeRequest, context);
 
-      // 2. Routing
-      matchResult = this.routeHandler.match(methodStr, path);
+      if (shouldContinue) {
+        // 2. Routing
+        matchResult = this.routeHandler.match(methodStr, path);
 
-      if (!matchResult) {
-        throw new Error(`Route not found: ${methodStr} ${path}`);
-      }
+        if (!matchResult) {
+          throw new Error(`Route not found: ${methodStr} ${path}`);
+        }
 
-      // @ts-expect-error: params is dynamically assigned from router
-      req.params = matchResult.params;
+        // @ts-expect-error: params is dynamically assigned from router
+        req.params = matchResult.params;
 
-      // 3. Scoped Middlewares (Before Handler) - Pre-calculated
-      const scopedMiddlewares = matchResult.entry.middlewares;
-      await this.runMiddlewares(scopedMiddlewares, context);
+        // 3. Scoped Middlewares (Before Handler) - Pre-calculated
+        const scopedMiddlewares = matchResult.entry.middlewares;
+        const scopedContinue = await this.runMiddlewares(scopedMiddlewares, context);
 
-      this.logger.debug(`Matched Route: ${methodStr}:${path}`);
+        if (scopedContinue) {
+          this.logger.debug(`Matched Route: ${methodStr}:${path}`);
 
-      // 4. Handler
-      const routeEntry = matchResult.entry;
-      const handlerArgs = await routeEntry.paramFactory(req, res);
+          // 4. Handler
+          const routeEntry = matchResult.entry;
+          const handlerArgs = await routeEntry.paramFactory(req, res);
 
-      const result = await routeEntry.handler(...handlerArgs);
+          const result = await routeEntry.handler(...handlerArgs);
 
-      if (result instanceof Response) {
-        return {
-          body: await result.text(),
-          init: { status: result.status, headers: result.headers.toJSON() },
-        };
-      }
-      if (result !== undefined) {
-        res.setBody(result);
+          if (result instanceof Response) {
+            return {
+              body: await result.text(),
+              init: { status: result.status, headers: result.headers.toJSON() },
+            };
+          }
+          if (result !== undefined) {
+            res.setBody(result);
+          }
+        }
       }
     } catch (e: any) {
       this.logger.error(`Error during processRequest: ${e.message}`, e.stack);
@@ -192,10 +195,14 @@ export class HttpRuntime implements BunnerRuntime {
     return res.end();
   }
 
-  private async runMiddlewares(middlewares: Middleware[], ctx: Context) {
+  private async runMiddlewares(middlewares: Middleware[], ctx: Context): Promise<boolean> {
     for (const mw of middlewares) {
-      await mw.handle(ctx);
+      const result = await mw.handle(ctx);
+      if (result === false) {
+        return false;
+      }
     }
+    return true;
   }
 
   private async runErrorHandlers(error: any, ctx: Context, entry?: RouteHandlerEntry): Promise<boolean> {

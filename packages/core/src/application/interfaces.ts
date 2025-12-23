@@ -3,8 +3,6 @@
 export interface BunnerApplicationBaseOptions {
   name: string;
   logLevel: string | number;
-  workers: number;
-  queueCapacity: number;
 }
 
 export type BunnerApplicationNormalizedOptions = BunnerApplicationBaseOptions & { [key: string]: any };
@@ -12,8 +10,6 @@ export type BunnerApplicationNormalizedOptions = BunnerApplicationBaseOptions & 
 export interface BunnerApplicationOptions {
   name?: string;
   logLevel?: string | number;
-  workers?: number | 'full' | 'half';
-  queueCapacity?: number;
   [key: string]: any;
 }
 

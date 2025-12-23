@@ -1,4 +1,5 @@
 import { Catch, type Context, type ErrorHandler } from '@bunner/core';
+import { isHttpContext } from '@bunner/http-server';
 import { Logger } from '@bunner/logger';
 
 import { PaymentFailedError } from './payment-failed.error';
@@ -9,14 +10,17 @@ export class PaymentErrorHandler implements ErrorHandler<PaymentFailedError> {
 
   catch(error: PaymentFailedError, ctx: Context) {
     this.logger.error(`[BILLING ERROR] ${error.message}`);
-    const res = ctx.getAdapter().getResponse();
 
-    res.setStatus(402); // Payment Required
-    return {
-      success: false,
-      error: 'PAYMENT_REQUIRED',
-      details: error.reason,
-      amount: error.amount,
-    };
+    if (isHttpContext(ctx)) {
+      const res = ctx.response;
+
+      res.setStatus(402); // Payment Required
+      return {
+        success: false,
+        error: 'PAYMENT_REQUIRED',
+        details: error.reason,
+        amount: error.amount,
+      };
+    }
   }
 }

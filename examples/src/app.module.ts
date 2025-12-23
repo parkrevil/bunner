@@ -1,5 +1,5 @@
 import { Module } from '@bunner/core';
-import { HTTP_BEFORE_REQUEST, HTTP_ERROR_HANDLER } from '@bunner/http-server';
+import { CorsMiddleware, HTTP_BEFORE_REQUEST, HTTP_ERROR_HANDLER, HttpMethod } from '@bunner/http-server';
 import { Logger } from '@bunner/logger';
 import { ScalarModule } from '@bunner/scalar';
 
@@ -22,6 +22,15 @@ import { UsersModule } from './users';
   ],
   providers: [
     { provide: HTTP_BEFORE_REQUEST, useClass: [LoggerMiddleware] },
+    {
+      provide: HTTP_BEFORE_REQUEST,
+      useFactory: () => [
+        new CorsMiddleware({
+          origin: '*',
+          methods: [HttpMethod.Get, HttpMethod.Post, HttpMethod.Put, HttpMethod.Delete, HttpMethod.Options],
+        }),
+      ],
+    },
     { provide: HTTP_ERROR_HANDLER, useClass: [HttpErrorHandler] },
   ],
 })

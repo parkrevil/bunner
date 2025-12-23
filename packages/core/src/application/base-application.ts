@@ -47,7 +47,8 @@ export abstract class BaseApplication<O extends BunnerApplicationBaseOptions = a
   }
 
   async init(): Promise<void> {
-    const isSingleProcess = this.options.workers === 1;
+    const workers = (this.options as any).workers;
+    const isSingleProcess = !workers || workers === 1;
 
     if (isSingleProcess) {
       // === Single Process Mode (In-Process) ===
@@ -75,7 +76,7 @@ export abstract class BaseApplication<O extends BunnerApplicationBaseOptions = a
 
     this.clusterManager = new ClusterManager<ClusterBaseWorker>({
       script,
-      size: this.options.workers as number,
+      size: workers,
     });
 
     // Sanitize EntryModuleMetadata

@@ -104,25 +104,13 @@ export class Bunner {
     const {
       name = this.generateApplicationDefaultName(),
       logLevel = LogLevel.Debug,
-      queueCapacity = 8192,
-      workers: workersInput = Math.floor(navigator.hardwareConcurrency / 2) ?? 1,
       ...appOptions
     } = (options ?? {}) as O & CreateApplicationOptions;
-
-    let workers: number | 'full' | 'half' = workersInput as any;
-
-    if (workers === 'full') {
-      workers = navigator.hardwareConcurrency;
-    } else if (workers === 'half') {
-      workers = Math.floor(navigator.hardwareConcurrency / 2) || 1;
-    }
 
     return {
       ...(appOptions as O),
       name,
       logLevel,
-      workers,
-      queueCapacity,
     };
   }
 

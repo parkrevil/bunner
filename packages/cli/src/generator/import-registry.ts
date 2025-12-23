@@ -23,7 +23,10 @@ export class ImportRegistry {
     this.fileClassMap.set(key, alias);
 
     // Determine relative path
-    const relativePath = PathResolver.getRelativeImportPath(this.outputDir + '/dummy.ts', filePath);
+    let relativePath = filePath;
+    if (filePath.startsWith('/') || filePath.startsWith('\\') || filePath.match(/^[a-zA-Z]:/)) {
+      relativePath = PathResolver.getRelativeImportPath(this.outputDir + '/dummy.ts', filePath);
+    }
     this.imports.set(alias, { path: relativePath, alias, originalName: className });
 
     return alias;

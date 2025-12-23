@@ -62,7 +62,7 @@ export async function build() {
   const userMain = join(srcDir, 'main.ts');
   const entryGen = new EntryGenerator();
 
-  const buildEntryContent = entryGen.generate(userMain, false);
+  const buildEntryContent = entryGen.generate(userMain, false, config);
   await Bun.write(entryPointFile, buildEntryContent);
 
   logger.info('📦 Bundling application, manifest, and workers...');
