@@ -1,4 +1,4 @@
-import { Module } from '@bunner/core';
+import { Module, type OnInit } from '@bunner/core';
 import { CorsMiddleware, HTTP_BEFORE_REQUEST, HTTP_ERROR_HANDLER, HttpMethod } from '@bunner/http-adapter';
 import { Logger } from '@bunner/logger';
 import { ScalarModule } from '@bunner/scalar';
@@ -34,7 +34,7 @@ import { UsersModule } from './users';
     { provide: HTTP_ERROR_HANDLER, useClass: HttpErrorHandler },
   ],
 })
-export class AppModule {
+export class AppModule implements OnInit {
   constructor(
     private readonly logger: Logger,
     // private readonly httpApp: BunnerHttpServer,
@@ -42,8 +42,8 @@ export class AppModule {
     this.logger.info('AppModule initialized');
   }
 
-  onModuleInit() {
-    this.logger.info('✨ AppModule.onModuleInit() triggered!');
+  onInit() {
+    this.logger.info('✨ AppModule.onInit() triggered!');
   }
 
   onApplicationInit() {

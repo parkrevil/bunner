@@ -1,4 +1,4 @@
-import type { BunnerAdapter, Context, OnModuleInit, OnApplicationBootstrap, OnApplicationShutdown, Class } from '@bunner/common';
+import type { BunnerAdapter, Context, OnInit, BeforeStart, OnStart, OnShutdown, OnDestroy, Class } from '@bunner/common';
 import { Logger } from '@bunner/logger';
 
 import { Container } from '../injector/container';
@@ -7,6 +7,7 @@ import { BunnerScanner } from '../injector/scanner'; // Import Scanner
 export class BunnerApplication {
   private readonly adapters: BunnerAdapter[] = [];
   private readonly container: Container;
+  private isInitialized = false;
 
   constructor(
     private readonly entryModule: Class,
@@ -26,12 +27,16 @@ export class BunnerApplication {
   }
 
   public async init(): Promise<this> {
+    if (this.isInitialized) {
+      return this;
+    }
+    this.isInitialized = true;
+
     // Initialize container (module scanning)
     const scanner = new BunnerScanner(this.container);
     await scanner.scan(this.entryModule);
 
     // Eager Load: Instantiate all providers to trigger lifecycle hooks
-    // This mimics NestJS behavior where singletons are created on bootstrap
     for (const token of this.container.keys()) {
       try {
         this.container.get(token);
@@ -40,15 +45,15 @@ export class BunnerApplication {
       }
     }
 
-    // Lifecycle: OnModuleInit
-    await this.callLifecycleHook('onModuleInit');
+    // Lifecycle: Init
+    await this.callLifecycleHook('onInit');
 
     return this;
   }
 
   public async start(): Promise<void> {
-    // Lifecycle: OnApplicationBootstrap
-    await this.callLifecycleHook('onApplicationBootstrap');
+    // Lifecycle: Pre-Start
+    await this.callLifecycleHook('beforeStart');
 
     // Create base context
     const context: Context & { entryModule: Class } = {
@@ -59,19 +64,22 @@ export class BunnerApplication {
     } as any;
 
     await Promise.all(this.adapters.map(adapter => adapter.start(context)));
+
+    // Lifecycle: Post-Start
+    await this.callLifecycleHook('onStart');
   }
 
   public async stop(): Promise<void> {
+    // Lifecycle: Pre-Shutdown
+    await this.callLifecycleHook('onShutdown');
+
     await Promise.all(this.adapters.map(adapter => adapter.stop()));
 
-    // Lifecycle: OnApplicationShutdown
-    await this.callLifecycleHook('onApplicationShutdown');
+    // Lifecycle: Destruction
+    await this.callLifecycleHook('onDestroy');
   }
 
-  private async callLifecycleHook(
-    method: keyof (OnModuleInit & OnApplicationBootstrap & OnApplicationShutdown),
-    args: any[] = [],
-  ) {
+  private async callLifecycleHook(method: keyof (OnInit & BeforeStart & OnStart & OnShutdown & OnDestroy), args: any[] = []) {
     const instances = this.container.getInstances();
     for (const instance of instances) {
       if (instance && typeof instance[method] === 'function') {

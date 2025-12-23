@@ -39,14 +39,22 @@ export interface ForwardRef {
 }
 
 // Lifecycle Interfaces
-export interface OnModuleInit {
-  onModuleInit(): Promise<void> | void;
+export interface OnInit {
+  onInit(): Promise<void> | void;
 }
 
-export interface OnApplicationBootstrap {
-  onApplicationBootstrap(): Promise<void> | void;
+export interface BeforeStart {
+  beforeStart(): Promise<void> | void;
 }
 
-export interface OnApplicationShutdown {
-  onApplicationShutdown(signal?: string): Promise<void> | void;
+export interface OnStart {
+  onStart(): Promise<void> | void;
+}
+
+export interface OnShutdown {
+  onShutdown(signal?: string): Promise<void> | void;
+}
+
+export interface OnDestroy {
+  onDestroy(): Promise<void> | void;
 }
