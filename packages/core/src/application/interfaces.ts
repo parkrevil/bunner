@@ -7,11 +7,7 @@ export interface BunnerApplicationBaseOptions {
 
 export type BunnerApplicationNormalizedOptions = BunnerApplicationBaseOptions & { [key: string]: any };
 
-export interface BunnerApplicationOptions {
-  name?: string;
-  logLevel?: string | number;
-  [key: string]: any;
-}
+
 
 // Simplified Module Interface
 export interface BunnerModule {

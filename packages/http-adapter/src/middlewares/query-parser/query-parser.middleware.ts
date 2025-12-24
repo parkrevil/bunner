@@ -1,42 +1,34 @@
-import { type Context, Middleware } from '@bunner/core';
-import { Inject } from '@bunner/core';
+import { Middleware, Inject } from '@bunner/common';
 
-import { isHttpContext } from '../../adapter';
+import type { BunnerHttpMiddleware, BunnerRequest, BunnerResponse } from '../../interfaces';
 
 import { QUERY_PARSER_OPTIONS } from './constants';
 import type { QueryParserOptions } from './interfaces';
 import { QueryParser } from './query-parser';
 
 @Middleware()
-export class QueryParserMiddleware implements Middleware {
+export class QueryParserMiddleware implements BunnerHttpMiddleware {
   private readonly parser: QueryParser;
 
   constructor(@Inject(QUERY_PARSER_OPTIONS) options: QueryParserOptions = {}) {
     this.parser = new QueryParser(options);
   }
 
-  public handle(ctx: Context): boolean | void {
-    if (!isHttpContext(ctx)) {
-      return;
-    }
-
-    const { request } = ctx;
-    const questionIndex = request.url.indexOf('?');
+  public handle(req: BunnerRequest, _res: BunnerResponse): void {
+    const questionIndex = req.url.indexOf('?');
 
     if (questionIndex === -1) {
-      request.query = {};
-
+      req.query = {};
       return;
     }
 
-    const queryString = request.url.slice(questionIndex + 1);
+    const queryString = req.url.slice(questionIndex + 1);
 
     if (queryString.length === 0) {
-      request.query = {};
-
+      req.query = {};
       return;
     }
 
-    request.query = this.parser.parse(queryString);
+    req.query = this.parser.parse(queryString);
   }
 }

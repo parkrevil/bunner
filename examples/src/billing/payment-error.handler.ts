@@ -1,4 +1,4 @@
-import { type Context } from '@bunner/core';
+import { type Context, type ErrorHandler, Catch } from '@bunner/common';
 import { isHttpContext } from '@bunner/http-adapter';
 import { Logger } from '@bunner/logger';
 

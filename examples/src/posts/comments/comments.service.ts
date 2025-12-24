@@ -1,4 +1,4 @@
-import { Injectable } from '@bunner/core';
+import { Injectable } from '@bunner/common';
 
 import { CommentRepository } from './comments.repository';
 

@@ -2,12 +2,20 @@ import type { BunnerAdapter } from '@bunner/common';
 import { ClusterManager, type ClusterBaseWorker, type BunnerApplicationNormalizedOptions } from '@bunner/core';
 
 import { BunnerHttpServer } from './bunner-http-server';
-import { type BunnerHttpServerOptions } from './interfaces';
+import { type BunnerHttpMiddleware, type BunnerHttpServerOptions } from './interfaces';
 
 export class BunnerHttpAdapter implements BunnerAdapter {
   private options: BunnerApplicationNormalizedOptions & BunnerHttpServerOptions;
   private clusterManager: ClusterManager<ClusterBaseWorker>;
   private httpServer: BunnerHttpServer | undefined;
+
+  private middlewares = {
+    beforeRequest: [] as BunnerHttpMiddleware[],
+    afterRequest: [] as BunnerHttpMiddleware[],
+    beforeHandler: [] as BunnerHttpMiddleware[],
+    beforeResponse: [] as BunnerHttpMiddleware[],
+    afterResponse: [] as BunnerHttpMiddleware[],
+  };
 
   constructor(options: BunnerHttpServerOptions = {}) {
     this.options = {
@@ -15,10 +23,40 @@ export class BunnerHttpAdapter implements BunnerAdapter {
       bodyLimit: 10 * 1024 * 1024,
       trustProxy: false,
       ...options,
-      // Default name/logLevel might be needed if Runtime expects them
       name: 'bunner-http',
+      protocol: 'http',
       logLevel: 'debug',
     } as any;
+  }
+
+  public use(...middlewares: BunnerHttpMiddleware[]): this {
+    this.middlewares.beforeRequest.push(...middlewares);
+    return this;
+  }
+
+  public beforeRequest(...middlewares: BunnerHttpMiddleware[]): this {
+    this.middlewares.beforeRequest.push(...middlewares);
+    return this;
+  }
+
+  public afterRequest(...middlewares: BunnerHttpMiddleware[]): this {
+    this.middlewares.afterRequest.push(...middlewares);
+    return this;
+  }
+
+  public beforeHandler(...middlewares: BunnerHttpMiddleware[]): this {
+    this.middlewares.beforeHandler.push(...middlewares);
+    return this;
+  }
+
+  public beforeResponse(...middlewares: BunnerHttpMiddleware[]): this {
+    this.middlewares.beforeResponse.push(...middlewares);
+    return this;
+  }
+
+  public afterResponse(...middlewares: BunnerHttpMiddleware[]): this {
+    this.middlewares.afterResponse.push(...middlewares);
+    return this;
   }
 
   async start(context: any): Promise<void> {
@@ -29,17 +67,13 @@ export class BunnerHttpAdapter implements BunnerAdapter {
       this.httpServer = new BunnerHttpServer();
       await this.httpServer.boot(context.container, {
         ...this.options,
-        metadata: (globalThis as any).__BUNNER_METADATA_REGISTRY__, // Fallback if not in context
+        metadata: (globalThis as any).__BUNNER_METADATA_REGISTRY__,
+        middlewares: this.middlewares,
       });
-      // HttpRuntime.boot creates server but doesn't log "initialized"?
-      // It logs "Server listening".
       return;
     }
 
     // === Multi Process Mode (Cluster) ===
-
-    // We need entryModule metadata for ClusterManager
-    // BunnerApplication passes entryModule in context
     const entryModule = context.entryModule;
 
     if (!entryModule) {
@@ -53,23 +87,26 @@ export class BunnerHttpAdapter implements BunnerAdapter {
       size: workers,
     });
 
-    // We need to construct EntryModuleMetadata format expected by ClusterManager
     const sanitizedEntryModule = {
-      path: 'unknown', // TODO: Need mechanism to get file path of entry module class?
-      // Or we assume JIT mode where script is process.argv[1]
+      path: 'unknown',
       className: entryModule.name,
-      // manifestPath?
     };
-
-    // Note: ClusterManager.init expects EntryModuleMetadata which has path/manifestPath.
-    // BaseApplication was getting it from constructor injection via Bunner.create.
-    // In new architecture, we might lose the 'path' info if just passed Class.
-    // However, for JIT (standard), 'script' (process.argv[1]) is what matters.
-    // 'sanitizedEntryModule' is passed to workers.
 
     await this.clusterManager.init({
       entryModule: sanitizedEntryModule as any,
-      options: this.options,
+      options: {
+        ...this.options,
+        middlewares: this.middlewares, // Pass middlewares to workers? 
+        // Note: Middlewares are instances, cannot be passed to workers via serializable options easily if they have state.
+        // For now, assuming they are re-instantiated or configuration-based in worker?
+        // Actually, ClusterManager serializes options. Middlewares (being classes/functions) won't serialize well.
+        // This is a limitation of Cluster mode without AOT/Code generation or re-configuration in worker.
+        // But for "Named Adapter Access", the user configures adapters in `configure` method.
+        // This `configure` runs in the Worker process too (since it runs App.init()).
+        // So the worker will rebuild the adapter and re-configure middlewares!
+        // So we DON'T strictly need to pass them here, as long as `configure` is deterministic.
+        // However, `this.options` changes made here (like port) need to be passed.
+      },
     });
 
     await this.clusterManager.bootstrap();
@@ -79,14 +116,11 @@ export class BunnerHttpAdapter implements BunnerAdapter {
     if (this.clusterManager) {
       await this.clusterManager.destroy();
     }
-    // Local runtime stop if exists? HttpRuntime doesn't expose stop/close yet specifically in interface?
-    // Server.stop() is implicit?
   }
 
   protected resolveWorkerScript(): URL {
     const hasAotManifest = !!(globalThis as any).__BUNNER_MANIFEST_PATH__;
     if (hasAotManifest) {
-      // AOT logic - simplified for now
       return new URL('./bunner-http-worker.ts', import.meta.url);
     }
     return new URL(process.argv[1] || '', 'file://');

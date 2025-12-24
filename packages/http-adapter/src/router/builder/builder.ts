@@ -100,7 +100,7 @@ export class Builder<T> {
     }
 
     if (index !== segments.length - 1) {
-      throw new Error("Wildcard '*' must be the last segment");
+      throw new Error('Wildcard \'*\' must be the last segment');
     }
 
     const name = segment.length > 1 ? segment.slice(1) : '*';
@@ -174,13 +174,13 @@ export class Builder<T> {
     } else {
       name = core.slice(1, braceIndex);
       if (!core.endsWith('}')) {
-        throw new Error("Parameter regex must close with '}'");
+        throw new Error('Parameter regex must close with \'}\'');
       }
       patternSrc = core.slice(braceIndex + 1, -1) || undefined;
     }
 
     if (!name) {
-      throw new Error("Parameter segment must have a name, eg ':id'");
+      throw new Error('Parameter segment must have a name, eg \':id\'');
     }
 
     // Validation

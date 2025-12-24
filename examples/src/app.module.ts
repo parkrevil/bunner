@@ -1,10 +1,10 @@
-import { Module, type OnInit } from '@bunner/core';
-import { CorsMiddleware, HTTP_BEFORE_REQUEST, HTTP_ERROR_HANDLER, HttpMethod } from '@bunner/http-adapter';
+import { Module, type OnInit, type Configurer, type AdapterCollection } from '@bunner/common';
+import { BunnerApplication } from '@bunner/core';
+import { CorsMiddleware, HttpMethod, type BunnerHttpAdapter } from '@bunner/http-adapter';
 import { Logger } from '@bunner/logger';
 import { ScalarModule } from '@bunner/scalar';
 
 import { BillingModule } from './billing/billing.module';
-import { HttpErrorHandler } from './filters/http-error.handler';
 import { LoggerMiddleware } from './middleware/logger.middleware';
 import { PostsModule } from './posts';
 import { UsersModule } from './users';
@@ -20,26 +20,27 @@ import { UsersModule } from './users';
       path: '/api-docs',
     }),
   ],
-  providers: [
-    {
-      provide: HTTP_BEFORE_REQUEST,
-      useFactory: () => [
-        new LoggerMiddleware(), // Manually instantiate for now
-        new CorsMiddleware({
-          origin: '*',
-          methods: [HttpMethod.Get, HttpMethod.Post, HttpMethod.Put, HttpMethod.Delete, HttpMethod.Options],
-        }),
-      ],
-    },
-    { provide: HTTP_ERROR_HANDLER, useClass: HttpErrorHandler },
-  ],
+  providers: [Logger],
 })
-export class AppModule implements OnInit {
+export class AppModule implements OnInit, Configurer {
   constructor(
     private readonly logger: Logger,
-    // private readonly httpApp: BunnerHttpServer,
   ) {
     this.logger.info('AppModule initialized');
+  }
+
+  configure(_app: BunnerApplication, adapters: AdapterCollection) {
+    const httpAdapter = adapters.http?.get('http-server') as BunnerHttpAdapter;
+    
+    if (httpAdapter) {
+        httpAdapter.use(
+            new LoggerMiddleware(),
+            new CorsMiddleware({
+              origin: '*',
+              methods: [HttpMethod.Get, HttpMethod.Post, HttpMethod.Put, HttpMethod.Delete, HttpMethod.Options],
+            }),
+        );
+    }
   }
 
   onInit() {
@@ -47,15 +48,6 @@ export class AppModule implements OnInit {
   }
 
   onApplicationInit() {
-    // this.httpApp
-    //   .addMiddleware(LifeCycle.BeforeRequest, [
-    //     CorsMiddleware.withOptions({
-    //       origin: true,
-    //       methods: [HttpMethod.Get, HttpMethod.Post, HttpMethod.Put, HttpMethod.Delete, HttpMethod.Options],
-    //     }),
-    //     QueryParserMiddleware.withOptions({
-    //
-    //     })
-    //   ]);
+    // Legacy code removed
   }
 }

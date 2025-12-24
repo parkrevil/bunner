@@ -1,23 +1,16 @@
-import { type Context, type Middleware } from '@bunner/core';
-
-import { isHttpContext } from '../../adapter';
+import type { BunnerRequest } from '../../bunner-request';
+import type { BunnerResponse } from '../../bunner-response';
 import { HeaderField, HttpMethod } from '../../enums';
+import type { BunnerHttpMiddleware } from '../../interfaces';
 
 import { CORS_DEFAULT_METHODS, CORS_DEFAULT_OPTIONS_SUCCESS_STATUS } from './constants';
 import type { CorsOptions } from './interfaces';
 import type { CustomOriginFn } from './types';
 
-export class CorsMiddleware implements Middleware {
+export class CorsMiddleware implements BunnerHttpMiddleware {
   constructor(private readonly options: CorsOptions = {}) {}
 
-  public async handle(ctx: Context): Promise<boolean | void> {
-    if (!isHttpContext(ctx)) {
-      return;
-    }
-
-    const req = ctx.request;
-    const res = ctx.response;
-
+  public async handle(req: BunnerRequest, res: BunnerResponse): Promise<void> {
     const origin = req.headers.get(HeaderField.Origin);
     const method = req.method;
 
@@ -104,7 +97,7 @@ export class CorsMiddleware implements Middleware {
 
       // End response with success status
       res.setStatus(optionsSuccessStatus);
-      return false;
+      return;
     }
   }
 

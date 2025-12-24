@@ -1,14 +1,25 @@
-import type { AnyFunction, BunnerApplicationOptions, Middleware, ErrorHandler } from '@bunner/core';
+import type { AnyFunction, BunnerApplicationOptions, ErrorHandler } from '@bunner/common';
 
 import type { BunnerRequest } from './bunner-request';
 import type { BunnerResponse } from './bunner-response';
 import type { RouteHandlerParamType } from './decorators';
+
+export interface BunnerHttpMiddleware {
+  handle(req: BunnerRequest, res: BunnerResponse): Promise<void> | void;
+}
 
 export interface BunnerHttpServerOptions extends BunnerApplicationOptions {
   port?: number;
   bodyLimit?: number;
   trustProxy?: boolean;
   workers?: number;
+  middlewares?: {
+    beforeRequest: BunnerHttpMiddleware[];
+    afterRequest: BunnerHttpMiddleware[];
+    beforeHandler: BunnerHttpMiddleware[];
+    beforeResponse: BunnerHttpMiddleware[];
+    afterResponse: BunnerHttpMiddleware[];
+  };
 }
 
 export interface WorkerInitParams {
@@ -29,7 +40,7 @@ export interface RouteHandlerEntry {
   paramRefs: any[];
   controllerClass: any;
   methodName: string;
-  middlewares: Middleware[];
+  middlewares: BunnerHttpMiddleware[];
   errorHandlers: ErrorHandler[];
   paramFactory: (req: BunnerRequest, res: BunnerResponse) => Promise<any[]>;
 }

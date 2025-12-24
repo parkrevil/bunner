@@ -49,4 +49,5 @@ export interface ClassMetadata {
     literals?: (string | number | boolean)[];
   }[];
   imports: Record<string, string>;
+  middlewares?: string[];
 }

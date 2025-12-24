@@ -12,11 +12,10 @@ async function bootstrap() {
 
   const adapter = new BunnerHttpAdapter({
     port: 5003,
-    logLevel: LogLevel.Debug,
     workers: 1,
   });
 
-  app.addAdapter(adapter);
+  app.addAdapter(adapter, { name: 'http-server' });
 
   logger.info('🚀 Server is starting...');
 

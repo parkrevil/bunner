@@ -1,7 +1,7 @@
-import { LogLevel, type Class } from '@bunner/common';
+import { LogLevel, type Class, type BunnerApplicationOptions } from '@bunner/common';
 import { Logger } from '@bunner/logger';
 
-import { type BunnerApplicationBaseOptions, type BunnerModule, type BunnerApplicationOptions } from './application';
+import { type BunnerApplicationBaseOptions, type BunnerModule } from './application';
 import { BunnerApplication } from './application/bunner-application';
 
 export class Bunner {
@@ -30,10 +30,9 @@ export class Bunner {
     // Usually NestJS create() returns app, then user calls listen().
     // Here user calls app.addAdapter() then app.start().
 
-    await app.init();
     this.apps.set(normalizedOptions.name, app);
 
-    return app;
+    return Promise.resolve(app);
   }
 
   static getApplications() {

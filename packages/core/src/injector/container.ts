@@ -1,7 +1,9 @@
+import type { BunnerContainer } from '@bunner/common';
+
 export type FactoryFn<T = any> = (container: Container) => T;
 export type Token = any;
 
-export class Container {
+export class Container implements BunnerContainer {
   private factories = new Map<Token, FactoryFn>();
   private instances = new Map<Token, any>();
 

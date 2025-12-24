@@ -1,4 +1,4 @@
-import { Module } from '@bunner/core';
+import { Module } from '@bunner/common';
 
 import { CommentRepository } from './comments.repository';
 import { CommentsService } from './comments.service';

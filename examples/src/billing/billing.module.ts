@@ -1,4 +1,4 @@
-import { Module } from '@bunner/core';
+import { Module } from '@bunner/common';
 
 import { AuditMiddleware } from './audit.middleware';
 import { BillingController } from './billing.controller';

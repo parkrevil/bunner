@@ -38,8 +38,10 @@ export class ModuleGraph {
       this.linkImports(node);
     });
 
+    this.validateMiddlewares();
+
     return this.modules;
-  }
+    }
 
   detectCycles(): CyclePath[] {
     const cycles: CyclePath[] = [];
@@ -285,5 +287,64 @@ export class ModuleGraph {
       return e.provide;
     }
     return null;
+  }
+
+  private validateMiddlewares() {
+    this.modules.forEach(node => {
+      const middlewares = node.metadata.middlewares || [];
+      if (middlewares.length === 0) {
+        return;
+      }
+
+      const importsMeta = node.metadata.imports || {};
+      
+      middlewares.forEach(mwName => {
+        let targetNode: ModuleNode | undefined;
+        
+        // 1. Check imports
+        const absPath = importsMeta[mwName];
+        if (absPath) {
+          // Find class in that file
+          const fileKey = this.findFileKey(absPath);
+          if (fileKey) {
+            // Find class in file's classes
+            const fileAnalysis = this.fileMap.get(fileKey)!;
+            // Handle re-exports if necessary (simplified direct export check first)
+            if (fileAnalysis.exports.includes(mwName)) {
+               targetNode = this.classMap.get(mwName);
+               // verify filePath matches to avoid name collision issues
+               if (targetNode && targetNode.filePath !== fileKey) {
+                 // Name collision with another file?
+                 // Try searching classMap by matching filePath?
+                 // classMap key is just ClassName. This is weak if multiple files have same class name.
+                 // But ModuleGraph already warns about this assumption.
+               }
+            } else {
+               // Check imports/re-exports of that file?
+               // Deep resolution might be needed, but let's stick to simple direct check for now.
+            }
+          }
+        } else {
+           // 2. Same file check
+           const sameFileNode = this.classMap.get(mwName);
+           if (sameFileNode && sameFileNode.filePath === node.filePath) {
+             targetNode = sameFileNode;
+           }
+        }
+
+        // If validation target found
+        if (targetNode) {
+          const hasDecorator = targetNode.metadata.decorators.some(d => d.name === 'Middleware');
+          if (!hasDecorator) {
+            throw new Error(
+              `[Bunner AOT] Middleware validation failed: Class '${mwName}' used in '${node.name}.configure()' is missing @Middleware() decorator. File: ${targetNode.filePath}`,
+            );
+          }
+        } else {
+          // Warn if we couldn't resolve it? 
+          // console.warn(`[Bunner AOT] Could not resolve middleware '${mwName}' for validation in ${node.name}`);
+        }
+      });
+    });
   }
 }

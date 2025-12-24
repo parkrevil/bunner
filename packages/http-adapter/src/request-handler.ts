@@ -1,4 +1,4 @@
-import type { Container, Context, ErrorHandler, Middleware } from '@bunner/core';
+import type { BunnerContainer, Context, ErrorHandler, BunnerMiddleware } from '@bunner/common';
 import { Logger } from '@bunner/logger';
 import { StatusCodes } from 'http-status-codes';
 
@@ -12,13 +12,13 @@ import type { RouteHandler } from './route-handler';
 
 export class RequestHandler {
   private readonly logger = new Logger(RequestHandler.name);
-  private globalBeforeRequest: Middleware[] = [];
-  private globalBeforeResponse: Middleware[] = [];
-  private globalAfterResponse: Middleware[] = [];
+  private globalBeforeRequest: BunnerMiddleware[] = [];
+  private globalBeforeResponse: BunnerMiddleware[] = [];
+  private globalAfterResponse: BunnerMiddleware[] = [];
   private globalErrorHandlers: ErrorHandler[] = [];
 
   constructor(
-    private readonly container: Container,
+    private readonly container: BunnerContainer,
     private readonly routeHandler: RouteHandler,
     private readonly metadataRegistry: Map<any, any>,
   ) {
@@ -102,7 +102,7 @@ export class RequestHandler {
     return res.end();
   }
 
-  private async runMiddlewares(middlewares: Middleware[], ctx: Context): Promise<boolean> {
+  private async runMiddlewares(middlewares: BunnerMiddleware[], ctx: Context): Promise<boolean> {
     for (const mw of middlewares) {
       const result = await mw.handle(ctx);
       if (result === false) {
@@ -140,9 +140,9 @@ export class RequestHandler {
   }
 
   private loadMiddlewares() {
-    this.globalBeforeRequest = this.resolveTokens<Middleware>(HTTP_BEFORE_REQUEST);
-    this.globalBeforeResponse = this.resolveTokens<Middleware>(HTTP_BEFORE_RESPONSE);
-    this.globalAfterResponse = this.resolveTokens<Middleware>(HTTP_AFTER_RESPONSE);
+    this.globalBeforeRequest = this.resolveTokens<BunnerMiddleware>(HTTP_BEFORE_REQUEST);
+    this.globalBeforeResponse = this.resolveTokens<BunnerMiddleware>(HTTP_BEFORE_RESPONSE);
+    this.globalAfterResponse = this.resolveTokens<BunnerMiddleware>(HTTP_AFTER_RESPONSE);
     this.globalErrorHandlers = this.resolveTokens<ErrorHandler>(HTTP_ERROR_HANDLER);
   }
 

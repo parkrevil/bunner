@@ -115,6 +115,7 @@ export class AstParser {
     const constructorParams: ClassMetadata['constructorParams'] = [];
     const methods: ClassMetadata['methods'] = [];
     const properties: ClassMetadata['properties'] = [];
+    let middlewares: string[] = [];
 
     node.body.body.forEach((member: any) => {
       if (member.type === 'MethodDefinition') {
@@ -136,6 +137,10 @@ export class AstParser {
               methodParams.push({ ...p, index });
             }
           });
+
+          if (methodName === 'configure') {
+            middlewares = this.extractMiddlewaresFromConfigure(member.value);
+          }
 
           if (methodDecorators.length > 0 || methodParams.some(p => p.decorators.length > 0)) {
             methods.push({
@@ -242,7 +247,61 @@ export class AstParser {
       methods,
       properties,
       imports: {},
+      middlewares,
     };
+  }
+
+  private extractMiddlewaresFromConfigure(funcNode: any): string[] {
+    const middlewares: string[] = [];
+    // Traverse body to find 'use', 'beforeRequest', etc calls on adapter
+    // This is a simplified traversal
+    const visit = (n: any) => {
+      if (!n || typeof n !== 'object') {
+        return;
+      }
+
+      if (n.type === 'CallExpression') {
+        // Check for adapters.http.use(Middleware)
+        // Callee could be MemberExpression chain
+        // adapters.http.use -> MemberExpression(MemberExpression(adapters, http), use)
+        
+        // Let's aggressively check for arguments that look like Middleware class references
+        // Only if the call looks like configuration (e.g. method name 'use', 'beforeRequest', etc)
+        const method = this.getMethodName(n.callee);
+        if (['use', 'beforeRequest', 'afterRequest', 'beforeHandler', 'beforeResponse', 'afterResponse'].includes(method)) {
+             (n.arguments || []).forEach((arg: any) => {
+               if (arg.type === 'Identifier') {
+                 // Check if likely a class (PascalCase) or imported
+                 // We can just capture it and ModuleGraph will verify if it maps to a class with @Middleware
+                 middlewares.push(arg.name);
+               }
+             });
+        }
+      }
+
+      // Traverse children
+      Object.keys(n).forEach(key => {
+        if (key === 'type' || key === 'loc' || key === 'start' || key === 'end') {
+          return;
+        }
+        const val = n[key];
+        if (Array.isArray(val)) {
+          val.forEach(visit);
+        } else {
+          visit(val);
+        }
+      });
+    };
+
+    visit(funcNode.body);
+    return middlewares;
+  }
+
+  private getMethodName(callee: any): string {
+    if (callee.type === 'MemberExpression') {
+      return callee.property.name;
+    }
+    return '';
   }
 
   private extractDecorator(decoratorNode: any): DecoratorMetadata {

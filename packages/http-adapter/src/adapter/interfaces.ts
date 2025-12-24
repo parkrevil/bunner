@@ -1,4 +1,4 @@
-import type { Context } from '@bunner/core';
+import type { Context } from '@bunner/common';
 
 import type { BunnerRequest } from '../bunner-request';
 import type { BunnerResponse } from '../bunner-response';

@@ -12,7 +12,7 @@ export class ValidatorCompiler {
     const lines: string[] = [];
 
     lines.push('const errors = [];');
-    lines.push("if (!obj || typeof obj !== 'object') return ['Invalid object'];");
+    lines.push('if (!obj || typeof obj !== \'object\') return [\'Invalid object\'];');
 
     for (const [propName, prop] of Object.entries(metadata.properties)) {
       const p = prop;

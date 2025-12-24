@@ -1,5 +1,5 @@
-import { Controller, UseMiddlewares, UseErrorHandlers } from '@bunner/core';
-import { Post, Get, Body } from '@bunner/http-adapter';
+import { UseMiddlewares, UseErrorHandlers } from '@bunner/common';
+import { Controller, Post, Get, Body } from '@bunner/http-adapter';
 import { Logger } from '@bunner/logger';
 
 import { AuditMiddleware } from './audit.middleware';

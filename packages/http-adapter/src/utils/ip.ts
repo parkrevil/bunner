@@ -160,7 +160,7 @@ function stripOptionalQuotes(value: string): string {
   while (result.length >= 2) {
     const first = result[0];
     const last = result[result.length - 1];
-    if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
+    if ((first === '"' && last === '"') || (first === '\'' && last === '\'')) {
       result = result.slice(1, -1);
       result = result.replace(/\\([\\"'])/g, '$1');
       result = result.trim();

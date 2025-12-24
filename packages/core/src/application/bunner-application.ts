@@ -1,11 +1,22 @@
-import type { BunnerAdapter, Context, OnInit, BeforeStart, OnStart, OnShutdown, OnDestroy, Class } from '@bunner/common';
+import type {
+  BunnerAdapter,
+  Context,
+  OnInit,
+  BeforeStart,
+  OnStart,
+  OnShutdown,
+  OnDestroy,
+  Class,
+  AdapterCollection,
+  Configurer,
+} from '@bunner/common';
 import { Logger } from '@bunner/logger';
 
 import { Container } from '../injector/container';
-import { BunnerScanner } from '../injector/scanner'; // Import Scanner
+import { BunnerScanner } from '../injector/scanner';
 
 export class BunnerApplication {
-  private readonly adapters: BunnerAdapter[] = [];
+  private readonly adapters: Map<string, Map<string, BunnerAdapter>> = new Map();
   private readonly container: Container;
   private isInitialized = false;
 
@@ -27,8 +38,15 @@ export class BunnerApplication {
     }
   }
 
-  public addAdapter(adapter: BunnerAdapter): this {
-    this.adapters.push(adapter);
+  public addAdapter(adapter: BunnerAdapter, options: { name?: string; protocol?: string } = {}): this {
+    const protocol = options.protocol || 'http';
+    const name = options.name || `adapter_${Math.random().toString(36).substr(2, 9)}`;
+
+    if (!this.adapters.has(protocol)) {
+      this.adapters.set(protocol, new Map());
+    }
+
+    this.adapters.get(protocol)!.set(name, adapter);
     return this;
   }
 
@@ -55,6 +73,16 @@ export class BunnerApplication {
       }
     }
 
+    // Configure Adapters via Modules
+    const adapterCollection = this.createAdapterCollection();
+    const instances = this.container.getInstances();
+    
+    for (const instance of instances) {
+      if (this.isConfigurer(instance)) {
+        instance.configure(this, adapterCollection);
+      }
+    }
+
     // Lifecycle: Init
     await this.callLifecycleHook('onInit');
 
@@ -62,6 +90,10 @@ export class BunnerApplication {
   }
 
   public async start(): Promise<void> {
+    if (!this.isInitialized) {
+      await this.init();
+    }
+
     // Lifecycle: Pre-Start
     await this.callLifecycleHook('beforeStart');
 
@@ -73,7 +105,8 @@ export class BunnerApplication {
       entryModule: this.entryModule,
     } as any;
 
-    await Promise.all(this.adapters.map(adapter => adapter.start(context)));
+    const allAdapters = this.getAllAdapters();
+    await Promise.all(allAdapters.map(adapter => adapter.start(context)));
 
     // Lifecycle: Post-Start
     await this.callLifecycleHook('onStart');
@@ -83,10 +116,37 @@ export class BunnerApplication {
     // Lifecycle: Pre-Shutdown
     await this.callLifecycleHook('onShutdown');
 
-    await Promise.all(this.adapters.map(adapter => adapter.stop()));
+    const allAdapters = this.getAllAdapters();
+    await Promise.all(allAdapters.map(adapter => adapter.stop()));
 
     // Lifecycle: Destruction
     await this.callLifecycleHook('onDestroy');
+  }
+
+  private getAllAdapters(): BunnerAdapter[] {
+    const adapters: BunnerAdapter[] = [];
+    this.adapters.forEach(protocolMap => {
+        protocolMap.forEach(adapter => adapters.push(adapter));
+    });
+    return adapters;
+  }
+
+  private createAdapterCollection(): AdapterCollection {
+    const collection: AdapterCollection = {};
+
+    this.adapters.forEach((groupApi, protocol) => {
+      collection[protocol] = {
+        get: (name: string) => groupApi.get(name),
+        all: () => Array.from(groupApi.values()),
+        forEach: (cb) => groupApi.forEach(cb),
+      };
+    });
+
+    return collection;
+  }
+
+  private isConfigurer(instance: any): instance is Configurer {
+    return instance && typeof (instance as Configurer).configure === 'function';
   }
 
   private async callLifecycleHook(method: keyof (OnInit & BeforeStart & OnStart & OnShutdown & OnDestroy), args: any[] = []) {

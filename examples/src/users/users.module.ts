@@ -1,4 +1,4 @@
-import { Module } from '@bunner/core';
+import { Module } from '@bunner/common';
 
 import { UsersController } from './users.controller';
 import { UserRepository } from './users.repository';

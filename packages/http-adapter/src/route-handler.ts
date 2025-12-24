@@ -1,4 +1,4 @@
-import { type Container, type Middleware, type ErrorHandler } from '@bunner/core';
+import { type BunnerContainer, type BunnerMiddleware, type ErrorHandler } from '@bunner/common';
 import { Logger } from '@bunner/logger';
 
 import type { BunnerRequest } from './bunner-request';
@@ -14,7 +14,7 @@ export interface MatchResult {
 }
 
 export class RouteHandler {
-  private container: Container;
+  private container: BunnerContainer;
   private metadataRegistry: Map<any, any>;
   private scopedKeys: Map<any, string>;
   private router = new Router<MatchResult>({
@@ -24,7 +24,7 @@ export class RouteHandler {
   private readonly logger = new Logger(RouteHandler.name);
   private validationPipe = new ValidationPipe();
 
-  constructor(container: Container, metadataRegistry: Map<any, any>, scopedKeys: Map<any, string> = new Map()) {
+  constructor(container: BunnerContainer, metadataRegistry: Map<any, any>, scopedKeys: Map<any, string> = new Map()) {
     this.container = container;
     this.metadataRegistry = metadataRegistry;
     this.scopedKeys = scopedKeys;
@@ -193,8 +193,8 @@ export class RouteHandler {
     });
   }
 
-  private resolveMiddlewares(_targetClass: any, method: any, classMeta: any): Middleware[] {
-    const middlewares: Middleware[] = [];
+  private resolveMiddlewares(_targetClass: any, method: any, classMeta: any): BunnerMiddleware[] {
+    const middlewares: BunnerMiddleware[] = [];
 
     // Method Level
     const decs = (method.decorators || []).filter((d: any) => d.name === 'UseMiddlewares');

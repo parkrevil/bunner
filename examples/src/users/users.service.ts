@@ -1,4 +1,4 @@
-import { Injectable } from '@bunner/core';
+import { Injectable } from '@bunner/common';
 import { Logger } from '@bunner/logger';
 
 import { UserRepository } from './users.repository';

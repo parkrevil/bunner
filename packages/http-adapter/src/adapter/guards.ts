@@ -1,4 +1,4 @@
-import type { Context } from '@bunner/core';
+import type { Context } from '@bunner/common';
 
 import { HTTP_CONTEXT_TYPE } from '../constants';
 
