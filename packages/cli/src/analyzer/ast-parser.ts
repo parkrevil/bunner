@@ -90,7 +90,7 @@ export class AstParser {
     };
 
     traverse(result.program);
-    return { classes, reExports, exports: localExports };
+    return { classes, reExports, exports: localExports, imports };
   }
 
   private resolvePath(sourcePath: string, importPath: string): string {
@@ -99,8 +99,14 @@ export class AstParser {
       const absolute = resolve(dirname(sourcePath), importPath);
       return absolute;
     }
-    // Package import or Alias (leave as is for now, or handle aliases)
-    return importPath;
+    // Package import
+    try {
+      // Resolve package to absolute path, relative to the source file
+      return Bun.resolveSync(importPath, dirname(sourcePath));
+    } catch (_e) {
+      // Fallback or built-ins
+      return importPath;
+    }
   }
 
   private extractClassMetadata(node: any): ClassMetadata {

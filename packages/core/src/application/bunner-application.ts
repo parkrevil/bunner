@@ -13,8 +13,18 @@ export class BunnerApplication {
     private readonly entryModule: Class,
     _options: any = {},
   ) {
-    this.container = new Container();
-    this.container.set(Logger, () => new Logger('App'));
+    const globalRef = globalThis as any;
+    if (globalRef.__BUNNER_CONTAINER__) {
+      this.container = globalRef.__BUNNER_CONTAINER__;
+    } else {
+      this.container = new Container();
+      globalRef.__BUNNER_CONTAINER__ = this.container;
+    }
+
+    // Ensure Logger is set if not already
+    if (!this.container.has(Logger)) {
+      this.container.set(Logger, () => new Logger('App'));
+    }
   }
 
   public addAdapter(adapter: BunnerAdapter): this {

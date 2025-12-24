@@ -8,4 +8,5 @@ export interface ParseResult {
   classes: import('./interfaces').ClassMetadata[];
   reExports: ReExport[];
   exports: string[]; // Names of things exported from this file (classes, consts, etc)
+  imports?: Record<string, string>;
 }

@@ -1,4 +1,4 @@
-import { join, resolve } from 'path';
+import { join, resolve, dirname } from 'path';
 
 import { Logger } from '@bunner/logger';
 import { Glob } from 'bun';
@@ -24,33 +24,107 @@ export async function build() {
   const parser = new AstParser();
   const manifestGen = new ManifestGenerator();
 
-  const glob = new Glob('**/*.ts');
   const fileMap = new Map<string, any>(); // Map<string, FileAnalysis>
   const allClasses: { metadata: ClassMetadata; filePath: string }[] = [];
 
   logger.info('🔍 Scanning source files...');
+
+  const userMain = join(srcDir, 'main.ts');
+  const visited = new Set<string>();
+  const queue: string[] = [userMain];
+
+  const glob = new Glob('**/*.ts');
   for await (const file of glob.scan(srcDir)) {
     const fullPath = join(srcDir, file);
-    try {
-      const fileContent = await Bun.file(fullPath).text();
-      const parseResult = parser.parse(fullPath, fileContent);
+    if (fullPath !== userMain) {
+      queue.push(fullPath);
+    }
+  }
 
-      const classInfos = parseResult.classes.map(meta => ({ metadata: meta, filePath: fullPath }));
+  while (queue.length > 0) {
+    const filePath = queue.shift()!;
+    if (visited.has(filePath)) {
+      continue;
+    }
+    visited.add(filePath);
+
+    // Filter: Only scan .ts files, ignore .d.ts
+    if (!filePath.endsWith('.ts') && !filePath.endsWith('.tsx')) {
+      continue;
+    }
+    if (filePath.endsWith('.d.ts')) {
+      continue;
+    }
+
+    try {
+      const fileContent = await Bun.file(filePath).text();
+      console.log('Scanning:', filePath);
+      const parseResult = parser.parse(filePath, fileContent);
+
+      const classInfos = parseResult.classes.map(meta => ({ metadata: meta, filePath }));
       allClasses.push(...classInfos);
 
-      fileMap.set(fullPath, {
-        filePath: fullPath,
-        classes: classInfos, // Use ClassInfo[]
+      fileMap.set(filePath, {
+        filePath,
+        classes: classInfos,
         reExports: parseResult.reExports,
         exports: parseResult.exports,
       });
-    } catch (e) {
-      logger.error(`⚠️ Failed to parse ${file}:`, e);
+
+      // Follow Imports
+      // Follow Imports
+      // Follow Imports & Re-Exports
+      const pathsToFollow = new Set<string>();
+
+      if (parseResult.imports) {
+        Object.values(parseResult.imports).forEach(p => pathsToFollow.add(p));
+      }
+      if (parseResult.reExports) {
+        parseResult.reExports.forEach(re => pathsToFollow.add(re.module));
+      }
+
+      for (const rawImportPath of pathsToFollow) {
+        let resolvedPath = rawImportPath;
+
+        // If not absolute, try to resolve via Bun
+        if (!resolvedPath.startsWith('/') && !resolvedPath.match(/^[a-zA-Z]:/)) {
+          try {
+            resolvedPath = Bun.resolveSync(resolvedPath, dirname(filePath));
+          } catch (_e) {
+            // console.warn(`Failed to resolve import: ${rawImportPath} from ${filePath}`);
+            continue; // Skip if unresolved
+          }
+        }
+
+        // Handle missing extensions
+        if (resolvedPath && !resolvedPath.endsWith('.ts') && !resolvedPath.endsWith('.tsx') && !resolvedPath.endsWith('.d.ts')) {
+          if (await Bun.file(resolvedPath + '.ts').exists()) {
+            resolvedPath += '.ts';
+          } else if (await Bun.file(resolvedPath + '.tsx').exists()) {
+            resolvedPath += '.tsx';
+          } else if (await Bun.file(resolvedPath + '/index.ts').exists()) {
+            resolvedPath += '/index.ts';
+          }
+        }
+
+        if (resolvedPath && !visited.has(resolvedPath)) {
+          // Allow scanning .ts/.tsx files.
+          if (
+            !resolvedPath.endsWith('.d.ts') &&
+            (resolvedPath.endsWith('.ts') || resolvedPath.endsWith('.tsx')) &&
+            !resolvedPath.includes('/node_modules/@types/') // Exclude type definitions
+          ) {
+            queue.push(resolvedPath);
+          }
+        }
+      }
+    } catch (_e) {
+      // logger.warn(`⚠️ Failed to parse ${filePath}: ${e.message}`);
     }
   }
 
   logger.info('🕸️  Building Module Graph...');
-  const graph = new ModuleGraph(fileMap); // Pass fileMap
+  const graph = new ModuleGraph(fileMap);
   graph.build();
 
   logger.info('🛠️  Generating intermediate manifests...');
@@ -59,7 +133,6 @@ export async function build() {
   await Bun.write(manifestFile, manifestCode);
 
   const entryPointFile = join(bunnerDir, 'entry.ts');
-  const userMain = join(srcDir, 'main.ts');
   const entryGen = new EntryGenerator();
 
   const buildEntryContent = entryGen.generate(userMain, false, config);

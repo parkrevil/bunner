@@ -22,11 +22,24 @@ export class ImportRegistry {
     this.aliases.add(alias);
     this.fileClassMap.set(key, alias);
 
-    // Determine relative path
+    // Try to resolve package imports to absolute paths
+    if (!filePath.startsWith('/') && !filePath.startsWith('\\') && !filePath.match(/^[a-zA-Z]:/)) {
+      try {
+        const resolved = Bun.resolveSync(filePath, process.cwd());
+        filePath = resolved;
+      } catch (_e) {
+        // Prepare to ignore built-in modules or unresolvable paths
+      }
+    }
+
+    // Determine import path
     let relativePath = filePath;
+
+    // Handle Absolute Paths - Convert to Relative Path from Output Dir
     if (filePath.startsWith('/') || filePath.startsWith('\\') || filePath.match(/^[a-zA-Z]:/)) {
       relativePath = PathResolver.getRelativeImportPath(this.outputDir + '/dummy.ts', filePath);
     }
+
     this.imports.set(alias, { path: relativePath, alias, originalName: className });
 
     return alias;
