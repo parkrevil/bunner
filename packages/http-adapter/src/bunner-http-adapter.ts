@@ -4,10 +4,30 @@ import { ClusterManager, type ClusterBaseWorker, type BunnerApplicationNormalize
 import { BunnerHttpServer } from './bunner-http-server';
 import { type BunnerHttpMiddleware, type BunnerHttpServerOptions } from './interfaces';
 
+const BUNNER_HTTP_INTERNAL = Symbol.for('bunner:http:internal');
+
+type InternalRouteMethod = 'GET';
+type InternalRouteHandler = (...args: readonly unknown[]) => unknown;
+type InternalRouteEntry = {
+  method: InternalRouteMethod;
+  path: string;
+  handler: InternalRouteHandler;
+};
+
+type BunnerHttpInternalChannel = {
+  get(path: string, handler: InternalRouteHandler): void;
+};
+
+type BunnerHttpInternalHost = {
+  [key: symbol]: BunnerHttpInternalChannel | undefined;
+};
+
 export class BunnerHttpAdapter implements BunnerAdapter {
   private options: BunnerApplicationNormalizedOptions & BunnerHttpServerOptions;
   private clusterManager: ClusterManager<ClusterBaseWorker>;
   private httpServer: BunnerHttpServer | undefined;
+
+  private internalRoutes: InternalRouteEntry[] = [];
 
   private middlewares = {
     beforeRequest: [] as BunnerHttpMiddleware[],
@@ -26,7 +46,15 @@ export class BunnerHttpAdapter implements BunnerAdapter {
       name: 'bunner-http',
       protocol: 'http',
       logLevel: 'debug',
-    } as any;
+    } as BunnerApplicationNormalizedOptions & BunnerHttpServerOptions;
+
+    const internalHost = this as unknown as BunnerHttpInternalHost;
+
+    internalHost[BUNNER_HTTP_INTERNAL] = {
+      get: (path: string, handler: InternalRouteHandler) => {
+        this.internalRoutes.push({ method: 'GET', path, handler });
+      },
+    };
   }
 
   public use(...middlewares: BunnerHttpMiddleware[]): this {
@@ -69,6 +97,7 @@ export class BunnerHttpAdapter implements BunnerAdapter {
         ...this.options,
         metadata: (globalThis as any).__BUNNER_METADATA_REGISTRY__,
         middlewares: this.middlewares,
+        internalRoutes: this.internalRoutes,
       });
       return;
     }
@@ -96,16 +125,7 @@ export class BunnerHttpAdapter implements BunnerAdapter {
       entryModule: sanitizedEntryModule as any,
       options: {
         ...this.options,
-        middlewares: this.middlewares, // Pass middlewares to workers? 
-        // Note: Middlewares are instances, cannot be passed to workers via serializable options easily if they have state.
-        // For now, assuming they are re-instantiated or configuration-based in worker?
-        // Actually, ClusterManager serializes options. Middlewares (being classes/functions) won't serialize well.
-        // This is a limitation of Cluster mode without AOT/Code generation or re-configuration in worker.
-        // But for "Named Adapter Access", the user configures adapters in `configure` method.
-        // This `configure` runs in the Worker process too (since it runs App.init()).
-        // So the worker will rebuild the adapter and re-configure middlewares!
-        // So we DON'T strictly need to pass them here, as long as `configure` is deterministic.
-        // However, `this.options` changes made here (like port) need to be passed.
+        middlewares: this.middlewares,
       },
     });
 

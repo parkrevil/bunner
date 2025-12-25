@@ -46,16 +46,61 @@ export class RouteHandler {
     }
   }
 
+  /**
+   * Undocumented/internal route registration channel.
+   * This is intentionally untyped at the package boundary.
+   */
+  registerInternalRoutes(
+    routes: ReadonlyArray<{ readonly method: string; readonly path: string; readonly handler: (...args: unknown[]) => unknown }>,
+  ): void {
+    for (const route of routes) {
+      const method = String(route.method || '').toUpperCase();
+
+      if (method !== 'GET') {
+        continue;
+      }
+
+      const fullPath = route.path.startsWith('/') ? route.path : `/${route.path}`;
+
+      const entry: RouteHandlerEntry = {
+        handler: route.handler,
+        paramType: [],
+        paramRefs: [],
+        controllerClass: null,
+        methodName: '__internal__',
+        middlewares: [],
+        errorHandlers: [],
+        paramFactory: (req: BunnerRequest, res: BunnerResponse) => {
+          const arity = typeof route.handler === 'function' ? route.handler.length : 0;
+          const args = arity >= 2 ? [req, res] : [req];
+
+          return Promise.resolve(args as unknown as any[]);
+        },
+      };
+
+      this.router.add(method as HttpMethod, fullPath, params => ({
+        entry,
+        params: params as Record<string, string>,
+      }));
+
+      this.logger.info(`🛣️  Internal Route Registered: [${method}] ${fullPath}`);
+    }
+  }
+
   private registerController(targetClass: any, meta: any, controllerDec: any) {
     const prefix = controllerDec.arguments[0] || '';
 
     const scopedKey = this.scopedKeys.get(targetClass);
     let instance;
 
-    if (scopedKey) {
-      instance = this.container.get(scopedKey);
-    } else {
-      instance = this.container.get(targetClass);
+    try {
+      if (scopedKey) {
+        instance = this.container.get(scopedKey);
+      } else {
+        instance = this.container.get(targetClass);
+      }
+    } catch {
+      instance = undefined;
     }
 
     if (!instance) {

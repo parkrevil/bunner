@@ -1,6 +1,8 @@
 import { Middleware, Inject } from '@bunner/common';
 
-import type { BunnerHttpMiddleware, BunnerRequest, BunnerResponse } from '../../interfaces';
+import type { BunnerRequest } from '../../bunner-request';
+import type { BunnerResponse } from '../../bunner-response';
+import type { BunnerHttpMiddleware } from '../../interfaces';
 
 import { QUERY_PARSER_OPTIONS } from './constants';
 import type { QueryParserOptions } from './interfaces';

@@ -131,7 +131,28 @@ export class RequestHandler {
       }
 
       if (shouldCatch) {
-        await handler.catch(error, ctx);
+        const handlerValue: unknown = handler as unknown;
+
+        if (typeof handlerValue === 'function') {
+          const ctxValue = ctx as unknown as Record<string, unknown>;
+          const req = ctxValue['request'];
+          const res = ctxValue['response'];
+          const next = ctxValue['next'];
+
+          const fn = handlerValue as (err: unknown, req: unknown, res: unknown, next?: unknown) => unknown;
+
+          await fn(error, req, res, next);
+        }
+
+        if (typeof handlerValue === 'object' && handlerValue !== null) {
+          const record = handlerValue as Record<string, unknown>;
+          const catchFn = record['catch'];
+
+          if (typeof catchFn === 'function') {
+            await (catchFn as (error: unknown, ctx: Context) => unknown)(error, ctx);
+          }
+        }
+
         return true;
       }
     }

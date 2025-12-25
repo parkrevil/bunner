@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'bun:test';
 
+import type { BunnerRequest } from '../../bunner-request';
+import type { BunnerResponse } from '../../bunner-response';
 import { BadRequestError } from '../../errors/errors';
-import type { BunnerRequest, BunnerResponse } from '../../interfaces';
 
 import { QueryParserMiddleware } from './query-parser.middleware';
 

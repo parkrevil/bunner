@@ -17,7 +17,7 @@ export class BunnerHttpServer {
   private requestHandler: RequestHandler;
   private logger = new Logger(BunnerHttpServer.name);
 
-  private options: BunnerHttpServerOptions; // Updated type
+  private options: BunnerHttpServerOptions;
   private server: Server<any>;
 
   private middlewares: {
@@ -34,7 +34,7 @@ export class BunnerHttpServer {
     afterResponse: [],
   };
 
-  async boot(container: BunnerContainer, options: any) {
+  async boot(container: BunnerContainer, options: any): Promise<void> {
     this.container = container;
     this.options = options.options || options; // Handle nested options
 
@@ -44,11 +44,15 @@ export class BunnerHttpServer {
 
     this.logger.info('🚀 BunnerHttpServer booting...');
 
-    const metadataRegistry = (options).metadata || new Map();
-    const scopedKeysMap = (options).scopedKeys || new Map();
+    const metadataRegistry = options.metadata || new Map();
+    const scopedKeysMap = options.scopedKeys || new Map();
 
     this.routeHandler = new RouteHandler(this.container, metadataRegistry, scopedKeysMap);
     this.routeHandler.register();
+
+    if (Array.isArray(options.internalRoutes) && options.internalRoutes.length > 0) {
+      this.routeHandler.registerInternalRoutes(options.internalRoutes);
+    }
 
     this.requestHandler = new RequestHandler(this.container, this.routeHandler, metadataRegistry);
 
@@ -130,13 +134,12 @@ export class BunnerHttpServer {
       await this.runMiddlewares(this.middlewares.beforeResponse, bunnerReq, bunnerRes);
 
       const response = new Response(workerRes.body, workerRes.init);
-      
-      // 5. afterResponse (Note: Response is immutable in standard Request/Response, 
+
+      // 5. afterResponse (Note: Response is immutable in standard Request/Response,
       // but we can execute logic here. However, we've already created the Response object.)
       await this.runMiddlewares(this.middlewares.afterResponse, bunnerReq, bunnerRes);
 
       return response;
-
     } catch (e: any) {
       this.logger.error('Fetch Error', e);
       return new Response('Internal server error', {

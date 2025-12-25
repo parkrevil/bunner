@@ -10,7 +10,7 @@ import type { CustomOriginFn } from './types';
 export class CorsMiddleware implements BunnerHttpMiddleware {
   constructor(private readonly options: CorsOptions = {}) {}
 
-  public async handle(req: BunnerRequest, res: BunnerResponse): Promise<void> {
+  public async handle(req: BunnerRequest, res: BunnerResponse): Promise<void | boolean> {
     const origin = req.headers.get(HeaderField.Origin);
     const method = req.method;
 
@@ -97,7 +97,7 @@ export class CorsMiddleware implements BunnerHttpMiddleware {
 
       // End response with success status
       res.setStatus(optionsSuccessStatus);
-      return;
+      return false;
     }
   }
 

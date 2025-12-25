@@ -48,11 +48,8 @@ describe('CorsMiddleware', () => {
       get: () => undefined,
       request: requestObj,
       response: responseObj,
-      response: responseObj,
     } as any;
   };
-
-
 
   const getResHeader = (ctx: any, name: string): string | null => {
     return ctx.response._testHeaders.get(name);
@@ -760,7 +757,7 @@ describe('CorsMiddleware', () => {
         [HeaderField.AccessControlRequestHeaders]: 'Content-Type,Authorization',
       });
 
-      const preflightResult = await middleware.handle(preflightCtx);
+      const preflightResult = await middleware.handle(preflightCtx.request, preflightCtx.response);
 
       expect(preflightResult).toBe(false);
       expect(getResHeader(preflightCtx, HeaderField.AccessControlAllowOrigin)).toBe('https://app.example.com');
@@ -775,7 +772,7 @@ describe('CorsMiddleware', () => {
         [HeaderField.Origin]: 'https://api.example.com',
       });
 
-      const actualResult = await middleware.handle(actualCtx);
+      const actualResult = await middleware.handle(actualCtx.request, actualCtx.response);
 
       expect(actualResult).toBeUndefined();
       expect(getResHeader(actualCtx, HeaderField.AccessControlAllowOrigin)).toBe('https://api.example.com');
@@ -802,11 +799,11 @@ describe('CorsMiddleware', () => {
       });
 
       const allowedCtx = createMockContext(HttpMethod.Get, { [HeaderField.Origin]: 'https://trusted.com' });
-      await middleware.handle(allowedCtx);
+      await middleware.handle(allowedCtx.request, allowedCtx.response);
       expect(getResHeader(allowedCtx, HeaderField.AccessControlAllowOrigin)).toBe('https://trusted.com');
 
       const blockedCtx = createMockContext(HttpMethod.Get, { [HeaderField.Origin]: 'https://untrusted.com' });
-      await middleware.handle(blockedCtx);
+      await middleware.handle(blockedCtx.request, blockedCtx.response);
       expect(getResHeader(blockedCtx, HeaderField.AccessControlAllowOrigin)).toBeNull();
     });
   });

@@ -5,7 +5,7 @@ import type { BunnerResponse } from './bunner-response';
 import type { RouteHandlerParamType } from './decorators';
 
 export interface BunnerHttpMiddleware {
-  handle(req: BunnerRequest, res: BunnerResponse): Promise<void> | void;
+  handle(req: BunnerRequest, res: BunnerResponse): Promise<void | boolean> | void | boolean;
 }
 
 export interface BunnerHttpServerOptions extends BunnerApplicationOptions {
