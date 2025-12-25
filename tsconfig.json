@@ -20,5 +20,6 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noPropertyAccessFromIndexSignature": false
-  }
+  },
+  "exclude": ["**/dist/**", "**/.bunner/**"]
 }
