@@ -8,6 +8,8 @@ import unusedImports from 'eslint-plugin-unused-imports';
 import globals from 'globals';
 import { plugin as tseslintPlugin, configs as tseslintConfigs } from 'typescript-eslint';
 
+import { statementGroupingPlugin } from './eslint';
+
 export default defineConfig([
   {
     ignores: ['node_modules', '**/node_modules/**', '**/*.js', '**/*.d.ts', 'bin', '**/bin/**', 'rust-packages', '**/.bunner/**'],
@@ -27,6 +29,7 @@ export default defineConfig([
     },
     plugins: {
       '@typescript-eslint': tseslintPlugin,
+      'statement-grouping': statementGroupingPlugin as any,
       'unused-imports': unusedImports,
     },
     extends: [
@@ -108,6 +111,23 @@ export default defineConfig([
       'block-spacing': 'error',
       'space-before-blocks': 'error',
       'brace-style': 'error',
+      'padding-line-between-statements': [
+        'error',
+        { blankLine: 'always', prev: ['const', 'let', 'var'], next: ['if', 'for', 'while', 'do', 'switch', 'try'] },
+        { blankLine: 'always', prev: ['if', 'for', 'while', 'do', 'switch', 'try'], next: ['const', 'let', 'var'] },
+        { blankLine: 'always', prev: ['const', 'let', 'var'], next: 'expression' },
+        { blankLine: 'always', prev: 'expression', next: ['const', 'let', 'var'] },
+        { blankLine: 'always', prev: ['if', 'for', 'while', 'do', 'switch', 'try'], next: 'expression' },
+        { blankLine: 'always', prev: 'expression', next: ['if', 'for', 'while', 'do', 'switch', 'try'] },
+        {
+          blankLine: 'always',
+          prev: ['if', 'for', 'while', 'do', 'switch', 'try'],
+          next: ['if', 'for', 'while', 'do', 'switch', 'try'],
+        },
+        { blankLine: 'never', prev: ['const', 'let', 'var'], next: ['const', 'let', 'var'] },
+        { blankLine: 'always', prev: '*', next: 'return' },
+      ],
+      'statement-grouping/blank-lines-between-statement-groups': 'error',
       'no-else-return': 'error',
       'no-unneeded-ternary': 'error',
       'default-case': 'error',
