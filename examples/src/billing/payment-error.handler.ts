@@ -1,11 +1,11 @@
-import { type Context, type ErrorHandler, Catch } from '@bunner/common';
+import { type Context, Catch } from '@bunner/common';
 import { isHttpContext } from '@bunner/http-adapter';
 import { Logger } from '@bunner/logger';
 
 import { PaymentFailedError } from './payment-failed.error';
 
 @Catch(PaymentFailedError)
-export class PaymentErrorHandler implements ErrorHandler<PaymentFailedError> {
+export class PaymentErrorHandler {
   private logger = new Logger('PaymentErrorHandler');
 
   catch(error: PaymentFailedError, ctx: Context) {

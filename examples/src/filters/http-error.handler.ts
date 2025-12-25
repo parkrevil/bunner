@@ -1,9 +1,9 @@
-import { type Context, type ErrorHandler, Catch } from '@bunner/common';
+import { type Context, Catch } from '@bunner/common';
 import { isHttpContext } from '@bunner/http-adapter';
 import { Logger } from '@bunner/logger';
 
 @Catch()
-export class HttpErrorHandler implements ErrorHandler {
+export class HttpErrorHandler {
   private logger = new Logger('HttpErrorHandler');
 
   catch(error: any, ctx: Context) {

@@ -9,6 +9,7 @@
     "start": "bun dist/entry.js"
   },
   "dependencies": {
+    "@bunner/common": "workspace:*",
     "@bunner/core": "workspace:*",
     "@bunner/http-adapter": "workspace:*",
     "@bunner/logger": "workspace:*",
