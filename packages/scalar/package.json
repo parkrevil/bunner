@@ -9,12 +9,9 @@
     "lint": "eslint . --fix",
     "tsc": "tsc --noEmit"
   },
-  "dependencies": {
-    "@bunner/common": "workspace:*",
-    "@bunner/core": "workspace:*",
-    "@bunner/http-adapter": "workspace:*"
-  },
+  "dependencies": {},
   "peerDependencies": {
-    "bun": "*"
+    "bun": "*",
+    "@bunner/common": "workspace:*"
   }
 }
