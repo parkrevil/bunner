@@ -64,11 +64,29 @@ export async function dev() {
     await Bun.write(join(outDir, 'index.ts'), indexContent);
   }
 
+  function shouldAnalyzeFile(filePath: string): boolean {
+    if (filePath.endsWith('.d.ts')) {
+      return false;
+    }
+
+    if (filePath.endsWith('.spec.ts') || filePath.endsWith('.test.ts')) {
+      return false;
+    }
+
+    return true;
+  }
+
   const glob = new Glob('**/*.ts');
   logger.info('🔍 Initial Scan...');
 
   for await (const file of glob.scan(srcDir)) {
-    await analyzeFile(join(srcDir, file));
+    const fullPath = join(srcDir, file);
+
+    if (!shouldAnalyzeFile(fullPath)) {
+      continue;
+    }
+
+    await analyzeFile(fullPath);
   }
 
   if (config.scanPaths) {
@@ -76,7 +94,13 @@ export async function dev() {
       const absPath = resolve(projectRoot, scanPath);
       logger.info(`🔍 Scanning additional path: ${scanPath}`);
       for await (const file of glob.scan(absPath)) {
-        await analyzeFile(join(absPath, file));
+        const fullPath = join(absPath, file);
+
+        if (!shouldAnalyzeFile(fullPath)) {
+          continue;
+        }
+
+        await analyzeFile(fullPath);
       }
     }
   }
