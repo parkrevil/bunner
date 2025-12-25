@@ -7,7 +7,6 @@ import { ensurePath, getControllerBasePath, getControllerTag, getHttpMethodDecor
 export function processController(doc: OpenApiDocument, meta: unknown, registry: Map<unknown, unknown>): void {
   const basePath = getControllerBasePath(meta);
   const tag = getControllerTag(meta);
-
   const methodsValue = isRecord(meta) ? meta['methods'] : undefined;
   const methods = Array.isArray(methodsValue) ? methodsValue : [];
 
@@ -22,15 +21,11 @@ export function processController(doc: OpenApiDocument, meta: unknown, registry:
     const methodPath = typeof methodPathRaw === 'string' && methodPathRaw.length > 0 ? methodPathRaw : '/';
     const httpMethod = String(httpMethodDec.name).toLowerCase();
     const fullPath = normalizeFullPath(basePath, methodPath);
-
     const pathItem = ensurePath(doc, fullPath);
-
     const classNameValue = isRecord(meta) ? meta['className'] : undefined;
     const className = typeof classNameValue === 'string' && classNameValue.length > 0 ? classNameValue : 'Controller';
-
     const methodNameValue = isRecord(method) ? method['name'] : undefined;
     const methodName = typeof methodNameValue === 'string' && methodNameValue.length > 0 ? methodNameValue : 'method';
-
     const operation: OpenApiOperation = {
       tags: [tag],
       operationId: `${className}_${methodName}`,

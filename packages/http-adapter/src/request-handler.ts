@@ -28,7 +28,6 @@ export class RequestHandler {
   public async handle(req: BunnerRequest, res: BunnerResponse, method: HttpMethod, path: string): Promise<HttpWorkerResponse> {
     const adapter = new BunnerHttpContextAdapter(req, res);
     const context = new BunnerHttpContext(adapter);
-
     let matchResult: any = undefined;
 
     try {
@@ -56,7 +55,6 @@ export class RequestHandler {
           // 4. Handler
           const routeEntry = matchResult.entry;
           const handlerArgs = await routeEntry.paramFactory(req, res);
-
           const result = await routeEntry.handler(...handlerArgs);
 
           if (result instanceof Response) {
@@ -65,6 +63,7 @@ export class RequestHandler {
               init: { status: result.status, headers: result.headers.toJSON() },
             };
           }
+
           if (result !== undefined) {
             res.setBody(result);
           }
@@ -72,9 +71,12 @@ export class RequestHandler {
       }
     } catch (e: any) {
       this.logger.error(`Error during processing: ${e.message}`, e.stack);
+
       const handled = await this.runErrorHandlers(e, context, matchResult?.entry);
+
       if (!handled) {
         this.logger.error('Unhandled Error', e);
+
         return {
           body: 'Internal Server Error',
           init: { status: StatusCodes.INTERNAL_SERVER_ERROR },
@@ -99,16 +101,19 @@ export class RequestHandler {
     if (res.isSent()) {
       return res.getWorkerResponse();
     }
+
     return res.end();
   }
 
   private async runMiddlewares(middlewares: BunnerMiddleware[], ctx: Context): Promise<boolean> {
     for (const mw of middlewares) {
       const result = await mw.handle(ctx);
+
       if (result === false) {
         return false;
       }
     }
+
     return true;
   }
 
@@ -122,8 +127,8 @@ export class RequestHandler {
     for (const handler of handlers) {
       const meta = this.metadataRegistry?.get(handler.constructor);
       const catchDec = meta?.decorators.find((d: any) => d.name === 'Catch');
-
       let shouldCatch = false;
+
       if (!catchDec || catchDec.arguments.length === 0) {
         shouldCatch = true; // Catch all
       } else {
@@ -138,7 +143,6 @@ export class RequestHandler {
           const req = ctxValue['request'];
           const res = ctxValue['response'];
           const next = ctxValue['next'];
-
           const fn = handlerValue as (err: unknown, req: unknown, res: unknown, next?: unknown) => unknown;
 
           await fn(error, req, res, next);
@@ -174,6 +178,7 @@ export class RequestHandler {
     if (this.container.has(token)) {
       try {
         const result = this.container.get(token);
+
         if (result) {
           if (Array.isArray(result)) {
             results.push(...result);
@@ -189,6 +194,7 @@ export class RequestHandler {
       if (typeof key === 'string' && key.endsWith(`::${token}`)) {
         try {
           const result = this.container.get(key);
+
           if (result) {
             if (Array.isArray(result)) {
               results.push(...result);

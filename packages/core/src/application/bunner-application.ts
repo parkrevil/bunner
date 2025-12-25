@@ -25,10 +25,12 @@ export class BunnerApplication {
     _options: any = {},
   ) {
     const globalRef = globalThis as any;
+
     if (globalRef.__BUNNER_CONTAINER__) {
       this.container = globalRef.__BUNNER_CONTAINER__;
     } else {
       this.container = new Container();
+
       globalRef.__BUNNER_CONTAINER__ = this.container;
     }
 
@@ -47,6 +49,7 @@ export class BunnerApplication {
     }
 
     this.adapters.get(protocol)!.set(name, adapter);
+
     return this;
   }
 
@@ -58,10 +61,12 @@ export class BunnerApplication {
     if (this.isInitialized) {
       return this;
     }
+
     this.isInitialized = true;
 
     // Initialize container (module scanning)
     const scanner = new BunnerScanner(this.container);
+
     await scanner.scan(this.entryModule);
 
     // Eager Load: Instantiate all providers to trigger lifecycle hooks
@@ -76,7 +81,7 @@ export class BunnerApplication {
     // Configure Adapters via Modules
     const adapterCollection = this.createAdapterCollection();
     const instances = this.container.getInstances();
-    
+
     for (const instance of instances) {
       if (this.isConfigurer(instance)) {
         instance.configure(this, adapterCollection);
@@ -104,10 +109,9 @@ export class BunnerApplication {
       container: this.container,
       entryModule: this.entryModule,
     } as any;
-
     const allAdapters = this.getAllAdapters();
-    await Promise.all(allAdapters.map(adapter => adapter.start(context)));
 
+    await Promise.all(allAdapters.map(adapter => adapter.start(context)));
     // Lifecycle: Post-Start
     await this.callLifecycleHook('onStart');
   }
@@ -117,17 +121,19 @@ export class BunnerApplication {
     await this.callLifecycleHook('onShutdown');
 
     const allAdapters = this.getAllAdapters();
-    await Promise.all(allAdapters.map(adapter => adapter.stop()));
 
+    await Promise.all(allAdapters.map(adapter => adapter.stop()));
     // Lifecycle: Destruction
     await this.callLifecycleHook('onDestroy');
   }
 
   private getAllAdapters(): BunnerAdapter[] {
     const adapters: BunnerAdapter[] = [];
+
     this.adapters.forEach(protocolMap => {
-        protocolMap.forEach(adapter => adapters.push(adapter));
+      protocolMap.forEach(adapter => adapters.push(adapter));
     });
+
     return adapters;
   }
 
@@ -138,7 +144,7 @@ export class BunnerApplication {
       collection[protocol] = {
         get: (name: string) => groupApi.get(name),
         all: () => Array.from(groupApi.values()),
-        forEach: (cb) => groupApi.forEach(cb),
+        forEach: cb => groupApi.forEach(cb),
       };
     });
 
@@ -151,6 +157,7 @@ export class BunnerApplication {
 
   private async callLifecycleHook(method: keyof (OnInit & BeforeStart & OnStart & OnShutdown & OnDestroy), args: any[] = []) {
     const instances = this.container.getInstances();
+
     for (const instance of instances) {
       if (instance && typeof instance[method] === 'function') {
         try {

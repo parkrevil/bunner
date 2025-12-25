@@ -21,6 +21,7 @@ export function decodeURIComponentSafe(value: string, behavior: EncodedSlashBeha
     if (failFast) {
       throw e;
     }
+
     return value;
   }
 }

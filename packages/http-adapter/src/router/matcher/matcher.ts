@@ -87,13 +87,10 @@ export class Matcher {
     this.stringTable = layout.stringTable;
     this.stringOffsets = layout.stringOffsets;
     this.rootIndex = layout.rootIndex;
-
     this.patternTesters = globalConfig.patternTesters;
     this.encodedSlashBehavior = globalConfig.encodedSlashBehavior;
     this.failFastOnBadEncoding = globalConfig.failFastOnBadEncoding;
-
     this.stack = new Int32Array(MAX_STACK_DEPTH * FRAME_SIZE);
-
     this.decodedStrings = [];
   }
 
@@ -106,9 +103,11 @@ export class Matcher {
     captureSnapshot: boolean,
   ): boolean {
     const code = METHOD_OFFSET[method];
+
     if (code === undefined) {
       return false;
     }
+
     this.methodCode = code;
     this.segments = segments;
     this.normalizedPath = normalizedPath;
@@ -128,6 +127,7 @@ export class Matcher {
 
     const bag: RouteParams = {};
     let snapshot: Array<[string, string | undefined]> | undefined;
+
     if (captureSnapshot) {
       snapshot = new Array(this.paramCount);
     }
@@ -135,7 +135,9 @@ export class Matcher {
     for (let i = 0; i < this.paramCount; i++) {
       const name = this.paramNames[i]!;
       const value = this.paramValues[i]!;
+
       bag[name] = value;
+
       if (snapshot) {
         snapshot[i] = [name, value];
       }
@@ -144,6 +146,7 @@ export class Matcher {
     this.resultHandlerIndex = handlerIndex;
     this.resultParams = bag;
     this.resultSnapshot = snapshot;
+
     return true;
   }
 
@@ -161,13 +164,17 @@ export class Matcher {
 
   private getString(id: number): string {
     const cached = this.decodedStrings[id];
+
     if (cached !== undefined) {
       return cached;
     }
+
     const start = this.stringOffsets[id]!;
     const end = this.stringOffsets[id + 1]!;
     const val = this.decoder.decode(this.stringTable.subarray(start, end));
+
     this.decodedStrings[id] = val;
+
     return val;
   }
 
@@ -176,11 +183,15 @@ export class Matcher {
       const segments = this.segments;
       const offsets = new Uint32Array(segments.length + 1);
       let ptr = 1;
+
       for (let i = 0; i < segments.length; i++) {
         offsets[i] = ptr;
+
         ptr += segments[i]!.length + 1;
       }
+
       offsets[segments.length] = ptr;
+
       this.suffixOffsets = offsets;
     }
 
@@ -195,18 +206,23 @@ export class Matcher {
     }
 
     const raw = this.segments[index];
+
     if (!decodeParams) {
       this.paramCache[index] = raw!;
+
       return raw;
     }
 
     const hints = this.segmentHints;
+
     if (!hints || hints[index] === 0) {
       this.paramCache[index] = raw!;
+
       return raw;
     }
 
     const decoded = decodeURIComponentSafe(raw!, this.encodedSlashBehavior, this.failFastOnBadEncoding);
+
     this.paramCache[index] = decoded;
 
     return decoded;
@@ -233,23 +249,29 @@ export class Matcher {
         if (segIdx === this.segments.length) {
           const base = nodeIdx * NODE_STRIDE;
           const methodsPtr = this.nodeBuffer[base + NODE_OFFSET_METHODS_PTR]!;
+
           if (methodsPtr > 0) {
             const mask = this.nodeBuffer[base + NODE_OFFSET_METHOD_MASK]!;
+
             if (this.methodCode < 31 && mask & (1 << this.methodCode)) {
               const meta = this.nodeBuffer[base + NODE_OFFSET_META]!;
               const methodCount = (meta & NODE_MASK_METHOD_COUNT) >>> NODE_SHIFT_METHOD_COUNT;
               let ptr = methodsPtr;
+
               for (let i = 0; i < methodCount; i++) {
                 if (this.methodsBuffer[ptr] === this.methodCode) {
                   return this.methodsBuffer[ptr + 1]!;
                 }
+
                 ptr += 2;
               }
             }
           }
+
           this.stack[framePtr + FRAME_OFFSET_STAGE] = STAGE_WILDCARD;
           continue;
         }
+
         this.stack[framePtr + FRAME_OFFSET_STAGE] = STAGE_STATIC;
         continue;
       } else if (stage === STAGE_STATIC) {
@@ -261,13 +283,14 @@ export class Matcher {
           this.stack[framePtr + FRAME_OFFSET_ITERATOR] = 0;
           continue;
         }
+
         this.stack[framePtr + FRAME_OFFSET_ITERATOR] = 1;
 
         const staticCount = this.nodeBuffer[base + NODE_OFFSET_STATIC_CHILD_COUNT]!;
+
         if (staticCount > 0) {
           const staticPtr = this.nodeBuffer[base + NODE_OFFSET_STATIC_CHILD_PTR]!;
           const segment = this.segments[segIdx]!;
-
           const childPtr = this.findStaticChild(staticPtr, staticCount, segment);
 
           if (childPtr !== -1) {
@@ -276,6 +299,7 @@ export class Matcher {
             this.stack[sp + FRAME_OFFSET_STAGE] = STAGE_ENTER;
             this.stack[sp + FRAME_OFFSET_PARAM_BASE] = this.paramCount;
             this.stack[sp + FRAME_OFFSET_ITERATOR] = 0;
+
             sp += FRAME_SIZE;
             continue;
           }
@@ -288,23 +312,22 @@ export class Matcher {
         const base = nodeIdx * NODE_STRIDE;
         const meta = this.nodeBuffer[base + NODE_OFFSET_META]!;
         const paramCount = (meta & NODE_MASK_PARAM_COUNT) >>> NODE_SHIFT_PARAM_COUNT;
-
         const iter = this.stack[framePtr + FRAME_OFFSET_ITERATOR]!;
+
         if (iter >= paramCount) {
           this.stack[framePtr + FRAME_OFFSET_STAGE] = STAGE_WILDCARD;
           continue;
         }
+
         this.stack[framePtr + FRAME_OFFSET_ITERATOR] = iter + 1;
 
         const paramPtr = this.nodeBuffer[base + NODE_OFFSET_PARAM_CHILD_PTR]!;
         const childIdx = this.paramChildrenBuffer[paramPtr + iter]!;
-
         const childBase = childIdx * NODE_STRIDE;
         const paramInfoIdx = this.nodeBuffer[childBase + NODE_OFFSET_MATCH_FUNC]!;
         const pBase = paramInfoIdx * PARAM_ENTRY_STRIDE;
         const nameID = this.paramsBuffer[pBase]!;
         const patternID = this.paramsBuffer[pBase + 1]!;
-
         const name = this.getString(nameID);
         const value = this.decodeAndCache(segIdx, decodeParams);
 
@@ -314,6 +337,7 @@ export class Matcher {
 
         if (patternID !== 0xffffffff) {
           const tester = this.patternTesters[patternID];
+
           if (tester && !tester(value)) {
             continue;
           }
@@ -321,6 +345,7 @@ export class Matcher {
 
         this.paramNames[this.paramCount] = name;
         this.paramValues[this.paramCount] = value;
+
         this.paramCount++;
 
         this.stack[sp + FRAME_OFFSET_NODE] = childIdx;
@@ -328,6 +353,7 @@ export class Matcher {
         this.stack[sp + FRAME_OFFSET_STAGE] = STAGE_ENTER;
         this.stack[sp + FRAME_OFFSET_PARAM_BASE] = this.paramCount;
         this.stack[sp + FRAME_OFFSET_ITERATOR] = 0;
+
         sp += FRAME_SIZE;
         continue;
       } else if (stage === STAGE_WILDCARD) {
@@ -338,22 +364,25 @@ export class Matcher {
           const childBase = wildcardPtr * NODE_STRIDE;
           const nameID = this.nodeBuffer[childBase + NODE_OFFSET_MATCH_FUNC]!;
           const name = this.getString(nameID);
-
           const value = this.getSuffixValue(segIdx);
 
           this.paramNames[this.paramCount] = name;
           this.paramValues[this.paramCount] = value;
+
           this.paramCount++;
 
           const childMethodsPtr = this.nodeBuffer[childBase + NODE_OFFSET_METHODS_PTR]!;
+
           if (childMethodsPtr > 0) {
             const mask = this.nodeBuffer[childBase + NODE_OFFSET_METHOD_MASK]!;
+
             if (this.methodCode < 31 && mask & (1 << this.methodCode)) {
               const meta = this.nodeBuffer[childBase + NODE_OFFSET_META]!;
               const origin = (meta & NODE_MASK_WILDCARD_ORIGIN) >>> NODE_SHIFT_WILDCARD_ORIGIN;
 
               if (origin === 1 && value.length === 0) {
                 sp -= FRAME_SIZE;
+
                 if (sp > 0) {
                   this.paramCount = this.stack[sp - FRAME_SIZE + FRAME_OFFSET_PARAM_BASE]!;
                 }
@@ -362,10 +391,12 @@ export class Matcher {
 
               const count = (meta & NODE_MASK_METHOD_COUNT) >>> NODE_SHIFT_METHOD_COUNT;
               let ptr = childMethodsPtr;
+
               for (let i = 0; i < count; i++) {
                 if (this.methodsBuffer[ptr] === this.methodCode) {
                   return this.methodsBuffer[ptr + 1]!;
                 }
+
                 ptr += 2;
               }
             }
@@ -373,23 +404,27 @@ export class Matcher {
         }
 
         sp -= FRAME_SIZE;
+
         if (sp > 0) {
           this.paramCount = this.stack[sp - FRAME_SIZE + FRAME_OFFSET_PARAM_BASE]!;
         }
       }
     }
+
     return null;
   }
 
   private findStaticChild(staticPtr: number, staticCount: number, segment: string): number {
     if (staticCount < 8) {
       let ptr = staticPtr;
+
       for (let i = 0; i < staticCount; i++) {
         const sID = this.staticChildrenBuffer[ptr]!;
 
         if (this.getString(sID) === segment) {
           return this.staticChildrenBuffer[ptr + 1]!;
         }
+
         ptr += 2;
       }
     } else {
@@ -413,6 +448,7 @@ export class Matcher {
         }
       }
     }
+
     return -1;
   }
 }

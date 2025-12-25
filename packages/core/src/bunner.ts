@@ -87,7 +87,6 @@ export class Bunner {
 
       try {
         Bunner.logger.info('🛑 Shutting down...');
-
         await Promise.race([
           this.shutdown(),
           new Promise((_, reject) => setTimeout(() => reject(new Error('shutdown timeout')), 10000)),

@@ -21,6 +21,7 @@ export class TypeResolver {
     }
 
     const sourceFile = this.program.getSourceFile(fileName);
+
     if (!sourceFile) {
       return null;
     }
@@ -30,6 +31,7 @@ export class TypeResolver {
     ts.forEachChild(sourceFile, node => {
       if (ts.isClassDeclaration(node) && node.name?.text === className) {
         const symbol = this.checker!.getSymbolAtLocation(node.name);
+
         if (symbol) {
           const type = this.checker!.getDeclaredTypeOfSymbol(symbol);
           const properties = type.getApparentProperties();
@@ -39,6 +41,7 @@ export class TypeResolver {
             properties: properties.map(prop => {
               const propDecl = prop.valueDeclaration;
               const propType = this.checker!.getTypeOfSymbolAtLocation(prop, propDecl!);
+
               return {
                 name: prop.getName(),
                 type: this.checker!.typeToString(propType),

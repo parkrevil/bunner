@@ -23,14 +23,15 @@ export class BunnerScanner {
 
     if (!moduleClass) {
       console.warn('[Scanner] Skipping undefined module. Check for circular dependencies.');
+
       return;
     }
 
     if (visited.has(moduleClass)) {
       return;
     }
-    visited.add(moduleClass);
 
+    visited.add(moduleClass);
     // Register the Module itself so it can be injected and have lifecycle hooks
     // Try/Catch in case it's a dynamic module object without constructor?
     // moduleClass is the Class constructor.
@@ -42,11 +43,13 @@ export class BunnerScanner {
         this.registerProvider(provider);
       }
     }
+
     if (dynamicMetadata.controllers) {
       for (const controller of dynamicMetadata.controllers) {
         this.registerProvider(controller);
       }
     }
+
     if (dynamicMetadata.imports) {
       for (const imported of dynamicMetadata.imports) {
         await this.scanModule(imported, visited);
@@ -54,6 +57,7 @@ export class BunnerScanner {
     }
 
     const registry = (globalThis as any).__BUNNER_METADATA_REGISTRY__;
+
     if (!registry || !registry.has(moduleClass)) {
       return;
     }
@@ -99,12 +103,14 @@ export class BunnerScanner {
       factory = (c: Container) => new provider(...this.resolveDepsFor(provider, c));
     } else if (provider.provide) {
       token = provider.provide;
+
       if (provider.useValue) {
         factory = () => provider.useValue;
       } else if (provider.useFactory) {
         factory = async (c: Container) => {
           // Resolve inject deps
           const args = (provider.inject || []).map((t: any) => c.get(t));
+
           return await provider.useFactory(...args);
         };
       } else if (provider.useClass) {
@@ -127,19 +133,21 @@ export class BunnerScanner {
   // Implementing here is fine.
   private resolveDepsFor(ctor: any, c: Container): any[] {
     const registry = (globalThis as any).__BUNNER_METADATA_REGISTRY__;
+
     if (!registry || !registry.has(ctor)) {
       return [];
     }
 
     const meta = registry.get(ctor);
+
     if (!meta.constructorParams) {
       return [];
     }
 
     return meta.constructorParams.map((param: any) => {
       let token = param.type;
-
       const injectDec = param.decorators?.find((d: any) => d.name === 'Inject');
+
       if (injectDec && injectDec.arguments?.length > 0) {
         token = injectDec.arguments[0];
       }
@@ -147,10 +155,12 @@ export class BunnerScanner {
       // Try get from container directly
       try {
         const instance = c.get(token);
+
         // console.log(`[Scanner] Resolved dependency for ${ctor.name} index ${index}:`, instance ? 'Found' : 'Undefined', 'Token:', token?.name || token);
         return instance;
       } catch (_e) {
         console.warn(`[Scanner] Failed to resolve dependency for ${ctor.name}. Token: ${token?.name || String(token)}`);
+
         return undefined;
       }
     });

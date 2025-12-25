@@ -15,8 +15,10 @@ export abstract class ClusterBaseWorker {
 
   async init<T>(id: number, _params: ClusterInitParams<T>) {
     globalThis.CLUSTER_WORKER_ID = id;
+
     this.id = id;
     this.prevCpu = process.cpuUsage();
+
     await Promise.resolve();
   }
 

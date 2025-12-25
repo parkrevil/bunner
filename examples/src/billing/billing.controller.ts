@@ -16,6 +16,7 @@ export class BillingController {
   @UseErrorHandlers(PaymentErrorHandler)
   charge(@Body() body: ChargeDto) {
     const amount = body.amount || 0;
+
     this.logger.info(`Attempting to charge $${amount}...`);
 
     if (amount <= 0) {

@@ -24,6 +24,7 @@ export class ClusterManager<T extends ClusterBaseWorker> {
 
   async destroy() {
     this.destroying = true;
+
     await Promise.all(this.workers.map((_, id) => this.destroyWorker(id)));
   }
 
@@ -31,17 +32,21 @@ export class ClusterManager<T extends ClusterBaseWorker> {
 
   async init(params?: ClusterInitParams<T>) {
     this.initParams = params;
+
     const tasks: Array<Promise<any>> = this.workers.map((worker, id) =>
       worker ? worker.remote.init(id, params) : Promise.resolve(),
     );
+
     await Promise.all(tasks);
   }
 
   async bootstrap(params?: ClusterBootstrapParams<T>) {
     this.bootstrapParams = params;
+
     const tasks: Array<Promise<any>> = this.workers.map(worker =>
       worker ? (worker.remote.bootstrap(params) as Promise<any>) : Promise.resolve(),
     );
+
     await Promise.all(tasks);
   }
 
@@ -108,6 +113,7 @@ export class ClusterManager<T extends ClusterBaseWorker> {
         await worker.remote.bootstrap(this.bootstrapParams as any);
 
         this.workers[id] = worker;
+
         this.reviving.delete(id);
       },
       {
@@ -132,9 +138,11 @@ export class ClusterManager<T extends ClusterBaseWorker> {
     }
 
     this.reviving.delete(id);
+
     try {
       await worker.remote.destroy();
     } catch {} // Optional: if worker process kills itself, this might fail/timeout
+
     worker.native.terminate();
     // worker.remote[releaseProxy](); // No longer needed for native wrapper
   }

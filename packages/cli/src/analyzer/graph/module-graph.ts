@@ -12,10 +12,10 @@ export class ModuleGraph {
     for (const [filePath, analysis] of this.fileMap.entries()) {
       analysis.classes.forEach(info => {
         const moduleDec = info.metadata.decorators.find(d => d.name === 'Module' || d.name === 'RootModule');
-
         // Create a wrapper node for every class to facilitate lookup by Injector
         // Even if it's not a Module, we need its metadata and file path.
         const node = new ModuleNode(info);
+
         node.filePath = filePath;
 
         // Index all classes
@@ -33,15 +33,13 @@ export class ModuleGraph {
     this.modules.forEach(node => {
       this.populateNode(node);
     });
-
     this.modules.forEach(node => {
       this.linkImports(node);
     });
-
     this.validateMiddlewares();
 
     return this.modules;
-    }
+  }
 
   detectCycles(): CyclePath[] {
     const cycles: CyclePath[] = [];
@@ -50,7 +48,6 @@ export class ModuleGraph {
       node.visited = false;
       node.visiting = false;
     });
-
     this.modules.forEach(node => {
       if (!node.visited) {
         this._detectCyclesRecursive(node, [], cycles);
@@ -62,6 +59,7 @@ export class ModuleGraph {
 
   resolveToken(moduleName: string, token: string): string | null {
     const node = this.classMap.get(moduleName);
+
     if (!node) {
       return null;
     }
@@ -83,6 +81,7 @@ export class ModuleGraph {
     if (visited.has(node.filePath)) {
       return false;
     }
+
     visited.add(node.filePath);
 
     if (node.exports.has(token)) {
@@ -96,16 +95,17 @@ export class ModuleGraph {
 
   private _detectCyclesRecursive(node: ModuleNode, stack: ModuleNode[], cycles: CyclePath[]) {
     node.visiting = true;
+
     stack.push(node);
 
     for (const neighbor of node.imports) {
       if (neighbor.visiting) {
         const cycleStartIndex = stack.findIndex(n => n === neighbor);
         const cycleNodes = stack.slice(cycleStartIndex);
+
         cycleNodes.push(neighbor);
 
         const pathNames = cycleNodes.map(n => n.name);
-
         const source = pathNames[0];
         const target = pathNames[1];
 
@@ -119,6 +119,7 @@ export class ModuleGraph {
     }
 
     stack.pop();
+
     node.visiting = false;
     node.visited = true;
   }
@@ -129,18 +130,19 @@ export class ModuleGraph {
 
     (args.providers || []).forEach((p: any) => {
       const ref = this.normalizeProvider(p);
+
       this.providersAdd(node, ref);
     });
-
     (args.controllers || []).forEach((c: any) => {
       const name = c.__bunner_ref || c;
+
       if (typeof name === 'string') {
         node.controllers.add(name);
       }
     });
-
     (args.exports || []).forEach((e: any) => {
       const token = this.extractToken(e);
+
       if (token) {
         node.exports.add(token);
       }
@@ -162,6 +164,7 @@ export class ModuleGraph {
         } else {
           // Same file Check
           const sameFileNode = this.classMap.get(importName);
+
           if (sameFileNode && sameFileNode.filePath === node.filePath) {
             node.imports.add(sameFileNode);
           }
@@ -176,6 +179,7 @@ export class ModuleGraph {
           this.resolveModuleFromPath(node, absPath, importName);
         } else {
           const sameFileNode = this.classMap.get(importName);
+
           if (sameFileNode && sameFileNode.filePath === node.filePath) {
             node.imports.add(sameFileNode);
           }
@@ -188,9 +192,11 @@ export class ModuleGraph {
     if (visited.has(targetPath)) {
       return;
     }
+
     visited.add(targetPath);
 
     const fileKey = this.findFileKey(targetPath);
+
     if (!fileKey) {
       return;
     }
@@ -200,12 +206,15 @@ export class ModuleGraph {
     // 1. Direct Export from File
     if (fileAnalysis.exports.includes(targetName)) {
       const cls = fileAnalysis.classes.find(c => c.metadata.className === targetName);
+
       if (cls) {
         // It's a class in this file. Is it a module?
         // We need to look up in classMap but verify filePath.
         const node = this.classMap.get(targetName);
+
         if (node && node.filePath === fileKey) {
           parentNode.imports.add(node);
+
           return;
         }
       }
@@ -217,9 +226,11 @@ export class ModuleGraph {
         this.resolveModuleFromPath(parentNode, re.module, targetName, visited);
       } else if (re.names) {
         const match = re.names.find(n => n.exported === targetName);
+
         if (match) {
           // Aliased export logic: find 'local' in 'module'
           this.resolveModuleFromPath(parentNode, re.module, match.local, visited);
+
           return;
         }
       }
@@ -231,10 +242,12 @@ export class ModuleGraph {
     if (this.fileMap.has(path)) {
       return path;
     }
+
     // Add extension
     if (this.fileMap.has(path + '.ts')) {
       return path + '.ts';
     }
+
     // Index
     if (this.fileMap.has(path + '/index.ts')) {
       return path + '/index.ts';
@@ -247,6 +260,7 @@ export class ModuleGraph {
         return key;
       }
     }
+
     return undefined;
   }
 
@@ -254,17 +268,21 @@ export class ModuleGraph {
     if (typeof p === 'string') {
       return { token: p, isExported: false };
     }
+
     if (p.__bunner_ref) {
       return { token: p.__bunner_ref, isExported: false };
     }
+
     if (p.provide) {
       return { token: p.provide, metadata: p, isExported: false };
     }
+
     return { token: 'UNKNOWN', isExported: false };
   }
 
   private providersAdd(node: ModuleNode, ref: ProviderRef) {
     let key = '';
+
     if (typeof ref.token === 'string') {
       key = ref.token;
     } else if (ref.token && ref.token.__bunner_ref) {
@@ -280,68 +298,77 @@ export class ModuleGraph {
     if (typeof e === 'string') {
       return e;
     }
+
     if (e.__bunner_ref) {
       return e.__bunner_ref;
     }
+
     if (e.provide) {
       return e.provide;
     }
+
     return null;
   }
 
   private validateMiddlewares() {
     this.modules.forEach(node => {
       const middlewares = node.metadata.middlewares || [];
+
       if (middlewares.length === 0) {
         return;
       }
 
       const importsMeta = node.metadata.imports || {};
-      
+
       middlewares.forEach(mwName => {
         let targetNode: ModuleNode | undefined;
-        
         // 1. Check imports
         const absPath = importsMeta[mwName];
+
         if (absPath) {
           // Find class in that file
           const fileKey = this.findFileKey(absPath);
+
           if (fileKey) {
             // Find class in file's classes
             const fileAnalysis = this.fileMap.get(fileKey)!;
+
             // Handle re-exports if necessary (simplified direct export check first)
             if (fileAnalysis.exports.includes(mwName)) {
-               targetNode = this.classMap.get(mwName);
-               // verify filePath matches to avoid name collision issues
-               if (targetNode && targetNode.filePath !== fileKey) {
-                 // Name collision with another file?
-                 // Try searching classMap by matching filePath?
-                 // classMap key is just ClassName. This is weak if multiple files have same class name.
-                 // But ModuleGraph already warns about this assumption.
-               }
+              targetNode = this.classMap.get(mwName);
+
+              // verify filePath matches to avoid name collision issues
+              if (targetNode && targetNode.filePath !== fileKey) {
+                // Name collision with another file?
+                // Try searching classMap by matching filePath?
+                // classMap key is just ClassName. This is weak if multiple files have same class name.
+                // But ModuleGraph already warns about this assumption.
+              }
             } else {
-               // Check imports/re-exports of that file?
-               // Deep resolution might be needed, but let's stick to simple direct check for now.
+              // Check imports/re-exports of that file?
+              // Deep resolution might be needed, but let's stick to simple direct check for now.
             }
           }
         } else {
-           // 2. Same file check
-           const sameFileNode = this.classMap.get(mwName);
-           if (sameFileNode && sameFileNode.filePath === node.filePath) {
-             targetNode = sameFileNode;
-           }
+          // 2. Same file check
+          const sameFileNode = this.classMap.get(mwName);
+
+          if (sameFileNode && sameFileNode.filePath === node.filePath) {
+            targetNode = sameFileNode;
+          }
         }
 
         // If validation target found
         if (targetNode) {
           const hasDecorator = targetNode.metadata.decorators.some(d => d.name === 'Middleware');
+
           if (!hasDecorator) {
             throw new Error(
               `[Bunner AOT] Middleware validation failed: Class '${mwName}' used in '${node.name}.configure()' is missing @Middleware() decorator. File: ${targetNode.filePath}`,
             );
           }
         } else {
-          // Warn if we couldn't resolve it? 
+          // Warn if we couldn't resolve it?
           // console.warn(`[Bunner AOT] Could not resolve middleware '${mwName}' for validation in ${node.name}`);
         }
       });

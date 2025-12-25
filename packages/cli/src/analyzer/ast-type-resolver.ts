@@ -32,6 +32,7 @@ export class AstTypeResolver {
 
     if (typeNode.type === 'TSArrayType') {
       const elementType = this.resolve(typeNode.elementType);
+
       return {
         typeName: 'Array',
         typeArgs: [elementType.typeName],
@@ -43,15 +44,19 @@ export class AstTypeResolver {
     if (typeNode.type === 'TSStringKeyword') {
       return { typeName: 'string' };
     }
+
     if (typeNode.type === 'TSNumberKeyword') {
       return { typeName: 'number' };
     }
+
     if (typeNode.type === 'TSBooleanKeyword') {
       return { typeName: 'boolean' };
     }
+
     if (typeNode.type === 'TSVoidKeyword') {
       return { typeName: 'void' };
     }
+
     if (typeNode.type === 'TSAnyKeyword') {
       return { typeName: 'any' };
     }
@@ -65,8 +70,8 @@ export class AstTypeResolver {
 
     if (typeNode.type === 'TSUnionType') {
       const types = (typeNode.types || []).map((t: any) => this.resolve(t));
-
       const allLiterals = types.every((t: TypeInfo) => t.literals && t.literals.length > 0);
+
       if (allLiterals) {
         return {
           typeName: types[0].typeName,
@@ -91,9 +96,11 @@ export class AstTypeResolver {
     if (node.type === 'Identifier') {
       return node.name;
     }
+
     if (node.type === 'TSQualifiedName') {
       return `${this.extractEntityName(node.left)}.${node.right.name}`;
     }
+
     return 'unknown';
   }
 }

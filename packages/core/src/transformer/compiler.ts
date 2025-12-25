@@ -10,22 +10,19 @@ export class TransformerCompiler {
     }
 
     const metadata = MetadataConsumer.getCombinedMetadata(target);
-
     const bodyLines: string[] = [];
+
     bodyLines.push('const instance = new Target();'); // Target will be passed as arg
-    bodyLines.push('if (!plain || typeof plain !== \'object\') return instance;');
+    bodyLines.push("if (!plain || typeof plain !== 'object') return instance;");
 
     for (const [propName, prop] of Object.entries(metadata.properties)) {
       const p = prop;
       const access = `plain['${propName}']`;
-
       // Determine conversion strategy based on Type
       // p.type is the Constructor Reference (if provided by CLI) or String
       // But in 'new Function', we can't easily reference external Constructors unless passed in 'context'.
-
       // Core Logic:
       // We will generate a function: (plain, Target, Converters) => instance
-
       // Check for @Transform
       const transformDec = p.decorators.find((d: any) => d.name === 'Transform');
 
@@ -86,6 +83,7 @@ export class TransformerCompiler {
           bodyLines.push(`  instance['${propName}'] = ${access};`);
         }
       }
+
       bodyLines.push('}');
     }
 
@@ -96,14 +94,16 @@ export class TransformerCompiler {
 
     // eslint-disable-next-line @typescript-eslint/no-implied-eval
     const fn = new Function('plain', 'Target', 'classRefs', 'validators', bodyLines.join('\n'));
-
     // Prepare Class Refs Map for this specific compilation
     const classRefs: Record<string, any> = {};
+
     for (const [propName, prop] of Object.entries(metadata.properties)) {
       const p = prop;
+
       if (p.isClass) {
         classRefs[propName] = p.type;
       }
+
       if (p.isArray && p.items && typeof p.items.typeName !== 'string') {
         // If items.typeName is a Reference
         classRefs[propName] = p.items.typeName; // For array items, we reuse the key?
@@ -118,6 +118,7 @@ export class TransformerCompiler {
     };
 
     this.p2iCache.set(target, closure);
+
     return closure;
   }
 
@@ -131,6 +132,7 @@ export class TransformerCompiler {
 
     const metadata = MetadataConsumer.getCombinedMetadata(target);
     const bodyLines: string[] = [];
+
     bodyLines.push('const plain = {};');
 
     for (const [propName, prop] of Object.entries(metadata.properties)) {
@@ -155,12 +157,13 @@ export class TransformerCompiler {
 
     // eslint-disable-next-line @typescript-eslint/no-implied-eval
     const fn = new Function('instance', 'converters', 'classRefs', bodyLines.join('\n'));
-
     const classRefs: Record<string, any> = {};
+
     for (const [propName, prop] of Object.entries(metadata.properties)) {
       if (prop.isClass) {
         classRefs[propName] = prop.type;
       }
+
       if (prop.isArray && prop.items?.typeName) {
         classRefs[propName] = prop.items.typeName;
       }
@@ -171,15 +174,18 @@ export class TransformerCompiler {
         if (!val) {
           return val;
         }
+
         if (Array.isArray(val)) {
           return val.map(v => (Target ? TransformerCompiler.compileInstanceToPlain(Target)(v) : v));
         }
+
         return Target ? TransformerCompiler.compileInstanceToPlain(Target)(val) : val;
       },
     };
-
     const closure = (instance: any) => fn(instance, converters, classRefs);
+
     this.i2pCache.set(target, closure);
+
     return closure;
   }
 }

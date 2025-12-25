@@ -17,6 +17,7 @@ function listAdapterNames(group: unknown): string[] {
 
       names.push(name);
     });
+
     return names;
   }
 
@@ -43,6 +44,7 @@ export function resolveHttpNamesForDocuments(adapters: AdapterCollectionLike, do
   }
 
   const selected = new Set<string>();
+
   for (const rule of rules) {
     if (!rule.names || rule.names.length === 0) {
       allHttpNames.forEach(name => selected.add(name));

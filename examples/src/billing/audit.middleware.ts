@@ -11,6 +11,7 @@ export class AuditMiddleware implements BunnerHttpMiddleware {
 
     // Simulate auditing check
     const headers = req.headers;
+
     if (!headers.get('x-transaction-id')) {
       this.logger.warn('[AUDIT] Missing Transaction ID');
     }

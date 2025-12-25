@@ -28,11 +28,13 @@ export class Router<R = any> {
       maxSegmentLength: options.maxSegmentLength ?? 256,
       failFastOnBadEncoding: options.failFastOnBadEncoding ?? false,
     };
+
     this.processor = new Processor(procConfig);
 
     if (options.enableCache) {
       this.cache = new RouterCache(options.cacheSize);
     }
+
     const buildConfig = {
       regexSafety: {
         mode: options.regexSafety?.mode ?? 'error',
@@ -46,6 +48,7 @@ export class Router<R = any> {
       optionalParamDefaults: new OptionalParamDefaults(options.optionalParamBehavior),
       strictParamNames: options.strictParamNames,
     };
+
     this.builder = new Builder<Handler<R>>(buildConfig);
   }
 
@@ -61,12 +64,15 @@ export class Router<R = any> {
 
     if (Array.isArray(method)) {
       method.forEach(m => this.addOne(m, path, handler));
+
       return;
     }
 
     if (method === '*') {
       const allMethods: HttpMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'];
+
       allMethods.forEach(m => this.addOne(m, path, handler));
+
       return;
     }
 
@@ -89,14 +95,16 @@ export class Router<R = any> {
     if (this.matcher) {
       return this;
     }
-    const layout = this.builder.build();
 
+    const layout = this.builder.build();
     const testers = layout.patterns.map(p => {
       if (!p.source) {
         return undefined;
       }
+
       // Re-compile regex for runtime
       const regex = new RegExp(`^(?:${p.source})$`, p.flags);
+
       return buildPatternTester(p.source, regex, undefined);
     });
 
@@ -105,6 +113,7 @@ export class Router<R = any> {
       encodedSlashBehavior: this.options.encodedSlashBehavior ?? 'decode',
       failFastOnBadEncoding: this.options.failFastOnBadEncoding ?? false,
     });
+
     return this;
   }
 
@@ -146,8 +155,10 @@ export class Router<R = any> {
     // We only check if searchPath starts with '/' to match our normalized keys.
     if (searchPath.charCodeAt(0) === 47 /* '/' */) {
       const staticHandlers = this.staticMap.get(searchPath);
+
       if (staticHandlers) {
         const handler = staticHandlers[METHOD_OFFSET[method]];
+
         if (handler) {
           return handler({}, { source: 'static-fast' });
         }
@@ -158,15 +169,19 @@ export class Router<R = any> {
     if (this.cache) {
       const cacheKey = `${method}:${searchPath}`;
       const cached = this.cache.get(cacheKey);
+
       if (cached !== undefined) {
         if (cached === null) {
           return null;
         }
+
         // Execute Handler
         const handler = this.builder.handlers[cached.handlerIndex];
+
         if (!handler) {
           return null;
         }
+
         // Params are cloned from cache for safety (users might mutate)
         return handler({ ...cached.params }, { source: 'cache' });
       }
@@ -185,8 +200,10 @@ export class Router<R = any> {
     // Only check if normalized != searchPath (otherwise we already checked)
     if (normalized !== searchPath) {
       const staticHandlers = this.staticMap.get(normalized);
+
       if (staticHandlers) {
         const handler = staticHandlers[METHOD_OFFSET[method]];
+
         if (handler) {
           return handler({}, { source: 'static-fast' });
         }
@@ -206,23 +223,26 @@ export class Router<R = any> {
     if (matched) {
       const handlerIndex = this.matcher!.getHandlerIndex();
       const params = this.matcher!.getParams();
-
       const defaults = this.builder.config.optionalParamDefaults;
+
       if (defaults) {
         defaults.apply(handlerIndex, params);
       }
 
       // Execute Handler
       const handler = this.builder.handlers[handlerIndex];
+
       // Handlers are guaranteed by build process but array access returns potential undefined
       if (!handler) {
         return null;
       }
+
       const meta: MatchResultMeta = { source: 'dynamic' };
 
       // Update Cache
       if (this.cache) {
         const cacheKey = `${method}:${searchPath}`;
+
         this.cache.set(cacheKey, {
           handlerIndex: handlerIndex,
           params: { ...params }, // Clone for safety
@@ -236,6 +256,7 @@ export class Router<R = any> {
     // Cache Miss
     if (this.cache) {
       const cacheKey = `${method}:${searchPath}`;
+
       this.cache.set(cacheKey, null);
     }
 
@@ -244,11 +265,12 @@ export class Router<R = any> {
 
   private addOne(method: HttpMethod, path: string, handler: Handler<R>): void {
     const { segments, normalized } = this.processor.normalize(path, false);
-
     // Check for dynamic segments (*, :)
     let isDynamic = false;
+
     for (const segment of segments) {
       const firstChar = segment.charCodeAt(0);
+
       if (firstChar === 42 || firstChar === 58) {
         // '*' or ':'
         isDynamic = true;
@@ -258,11 +280,15 @@ export class Router<R = any> {
 
     if (!isDynamic) {
       let handlers = this.staticMap.get(normalized);
+
       if (!handlers) {
         handlers = [];
+
         this.staticMap.set(normalized, handlers);
       }
+
       const mOffset = METHOD_OFFSET[method];
+
       if (mOffset !== undefined) {
         handlers[mOffset] = handler;
       }

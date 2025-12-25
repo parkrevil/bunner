@@ -11,6 +11,7 @@ export class HandlerRegistry<R = any> {
     if (this.handlers.has(id)) {
       throw new Error(`Handler ID '${id}' is already registered.`);
     }
+
     this.handlers.set(id, handler);
   }
 

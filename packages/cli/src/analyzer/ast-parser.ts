@@ -13,11 +13,13 @@ export class AstParser {
 
   parse(filename: string, code: string): ParseResult {
     this.currentCode = code;
+
     const result = parseSync(filename, code);
     const classes: ClassMetadata[] = [];
     const reExports: ReExport[] = [];
     const localExports: string[] = [];
     const imports: Record<string, string> = {};
+
     this.currentImports = {};
 
     const traverse = (node: any) => {
@@ -30,12 +32,15 @@ export class AstParser {
 
         const source = node.source.value;
         const resolvedSource = this.resolvePath(filename, source);
+
         (node.specifiers || []).forEach((spec: any) => {
           // Skip import { type Foo } ...
           if (spec.importKind === 'type') {
             return;
           }
+
           imports[spec.local.name] = resolvedSource;
+
           this.currentImports[spec.local.name] = resolvedSource;
         });
       }
@@ -44,6 +49,7 @@ export class AstParser {
       if (node.type === 'ExportAllDeclaration') {
         const source = node.source.value;
         const resolvedSource = this.resolvePath(filename, source);
+
         reExports.push({
           module: resolvedSource,
           exportAll: true,
@@ -60,6 +66,7 @@ export class AstParser {
             local: spec.local.name,
             exported: spec.exported.name,
           }));
+
           reExports.push({
             module: resolvedSource,
             exportAll: false,
@@ -71,6 +78,7 @@ export class AstParser {
             localExports.push(node.declaration.id.name);
             // Traverse into class to extract metadata
             traverse(node.declaration);
+
             return; // Don't traverse specific children again if handled
           }
           // Handle other declarations if needed (funcs, vars)
@@ -80,7 +88,9 @@ export class AstParser {
       // 4. Class Declaration (captured even if not exported, but we track export status)
       if (node.type === 'ClassDeclaration') {
         const classMeta = this.extractClassMetadata(node);
+
         classMeta.imports = { ...imports };
+
         classes.push(classMeta);
       }
 
@@ -90,6 +100,7 @@ export class AstParser {
     };
 
     traverse(result.program);
+
     return { classes, reExports, exports: localExports, imports };
   }
 
@@ -97,8 +108,10 @@ export class AstParser {
     if (importPath.startsWith('.')) {
       // Resolve to absolute
       const absolute = resolve(dirname(sourcePath), importPath);
+
       return absolute;
     }
+
     // Package import
     try {
       // Resolve package to absolute path, relative to the source file
@@ -122,6 +135,7 @@ export class AstParser {
         if (member.kind === 'constructor') {
           member.value.params.forEach((param: any) => {
             const paramData = this.extractParam(param);
+
             if (paramData) {
               constructorParams.push(paramData);
             }
@@ -133,6 +147,7 @@ export class AstParser {
 
           member.value.params.forEach((param: any, index: number) => {
             const p = this.extractParam(param);
+
             if (p) {
               methodParams.push({ ...p, index });
             }
@@ -153,8 +168,8 @@ export class AstParser {
       } else if (member.type === 'PropertyDefinition') {
         const propName = member.key.name;
         const propDecorators = (member.decorators || []).map((d: any) => this.extractDecorator(d));
-
         let typeInfo: TypeInfo = { typeName: 'any', typeArgs: undefined };
+
         if (member.typeAnnotation && member.typeAnnotation.typeAnnotation) {
           typeInfo = this.typeResolver.resolve(member.typeAnnotation.typeAnnotation);
         }
@@ -196,12 +211,14 @@ export class AstParser {
 
         if (node.superClass.type === 'TSTypeInstantiationExpression') {
           const baseName = node.superClass.expression.type === 'Identifier' ? node.superClass.expression.name : 'Unknown';
+
           if (['Partial', 'Pick', 'Omit', 'Required'].includes(baseName)) {
             const typeArgs = node.superClass.typeParameters.params.map((p: any) => {
               // Simple resolution for Identifier types as args
               if (p.type === 'TSTypeReference' && p.typeName.type === 'Identifier') {
                 return p.typeName.name;
               }
+
               return 'Unknown';
             });
 
@@ -227,6 +244,7 @@ export class AstParser {
               if (p.type === 'TSTypeReference' && p.typeName.type === 'Identifier') {
                 return p.typeName.name;
               }
+
               return 'Unknown';
             })
           : [];
@@ -264,18 +282,19 @@ export class AstParser {
         // Check for adapters.http.use(Middleware)
         // Callee could be MemberExpression chain
         // adapters.http.use -> MemberExpression(MemberExpression(adapters, http), use)
-        
+
         // Let's aggressively check for arguments that look like Middleware class references
         // Only if the call looks like configuration (e.g. method name 'use', 'beforeRequest', etc)
         const method = this.getMethodName(n.callee);
+
         if (['use', 'beforeRequest', 'afterRequest', 'beforeHandler', 'beforeResponse', 'afterResponse'].includes(method)) {
-             (n.arguments || []).forEach((arg: any) => {
-               if (arg.type === 'Identifier') {
-                 // Check if likely a class (PascalCase) or imported
-                 // We can just capture it and ModuleGraph will verify if it maps to a class with @Middleware
-                 middlewares.push(arg.name);
-               }
-             });
+          (n.arguments || []).forEach((arg: any) => {
+            if (arg.type === 'Identifier') {
+              // Check if likely a class (PascalCase) or imported
+              // We can just capture it and ModuleGraph will verify if it maps to a class with @Middleware
+              middlewares.push(arg.name);
+            }
+          });
         }
       }
 
@@ -284,7 +303,9 @@ export class AstParser {
         if (key === 'type' || key === 'loc' || key === 'start' || key === 'end') {
           return;
         }
+
         const val = n[key];
+
         if (Array.isArray(val)) {
           val.forEach(visit);
         } else {
@@ -294,6 +315,7 @@ export class AstParser {
     };
 
     visit(funcNode.body);
+
     return middlewares;
   }
 
@@ -301,6 +323,7 @@ export class AstParser {
     if (callee.type === 'MemberExpression') {
       return callee.property.name;
     }
+
     return '';
   }
 
@@ -335,12 +358,15 @@ export class AstParser {
 
       case 'ObjectExpression': {
         const obj: any = {};
+
         (node.properties || []).forEach((prop: any) => {
           if (prop.type === 'Property' || prop.type === 'ObjectProperty') {
             const key = prop.key.name || prop.key.value;
+
             obj[key] = this.parseExpression(prop.value);
           }
         });
+
         return obj;
       }
 
@@ -349,6 +375,7 @@ export class AstParser {
 
       case 'Identifier': {
         const importSource = this.currentImports[node.name];
+
         return {
           __bunner_ref: node.name,
           __bunner_import_source: importSource,
@@ -364,8 +391,10 @@ export class AstParser {
       case 'CallExpression': {
         let calleeName = 'unknown';
         let importSource: string | undefined;
+
         if (node.callee.type === 'MemberExpression') {
           calleeName = `${node.callee.object.name}.${node.callee.property.name}`;
+
           if (node.callee.object.type === 'Identifier') {
             importSource = this.currentImports[node.callee.object.name];
           }
@@ -377,6 +406,7 @@ export class AstParser {
         // Handle forwardRef(() => Module)
         if (calleeName === 'forwardRef' && node.arguments.length > 0) {
           const arg = node.arguments[0];
+
           if (arg.type === 'ArrowFunctionExpression' || arg.type === 'FunctionExpression') {
             if (arg.body.type === 'Identifier') {
               return { __bunner_forward_ref: arg.body.name };
@@ -396,8 +426,8 @@ export class AstParser {
         const start = node.start;
         const end = node.end;
         const factoryCode = this.currentCode.slice(start, end);
-
         const deps = this.extractDependencies(node, start);
+
         return { __bunner_factory_code: factoryCode, __bunner_factory_deps: deps };
       }
 
@@ -409,7 +439,6 @@ export class AstParser {
   private extractDependencies(funcNode: any, offset: number): any[] {
     const deps: any[] = [];
     const defined = new Set<string>();
-
     // Recursively find identifiers
     const visit = (n: any) => {
       if (!n || typeof n !== 'object') {
@@ -444,6 +473,7 @@ export class AstParser {
         });
         // Traverse body
         visit(n.body);
+
         return; // Don't traverse keys of function again
       }
 
@@ -452,7 +482,9 @@ export class AstParser {
         if (key === 'type' || key === 'loc' || key === 'start' || key === 'end') {
           return;
         }
+
         const val = n[key];
+
         if (Array.isArray(val)) {
           val.forEach(visit);
         } else {
@@ -462,17 +494,21 @@ export class AstParser {
     };
 
     visit(funcNode.body);
+
     return deps;
   }
 
   private extractParam(paramNode: any): any {
     if (paramNode.type === 'TSParameterProperty') {
       const param = this.extractParam(paramNode.parameter);
+
       if (param) {
         // Merge decorators from TSParameterProperty (parent)
         const parentDecorators = (paramNode.decorators || []).map((d: any) => this.extractDecorator(d));
+
         param.decorators = [...parentDecorators, ...param.decorators];
       }
+
       return param;
     }
 
@@ -480,13 +516,14 @@ export class AstParser {
       const node = paramNode.type === 'AssignmentPattern' ? paramNode.left : paramNode;
       const name = node.name;
       const decorators = (paramNode.decorators || []).map((d: any) => this.extractDecorator(d));
-
       let typeInfo: TypeInfo = { typeName: 'any', typeArgs: undefined };
+
       if (node.typeAnnotation && node.typeAnnotation.typeAnnotation) {
         typeInfo = this.typeResolver.resolve(node.typeAnnotation.typeAnnotation);
       }
 
       let typeValue: any = typeInfo.typeName;
+
       if (typeof typeInfo.typeName === 'string' && this.currentImports[typeInfo.typeName]) {
         typeValue = {
           __bunner_ref: typeInfo.typeName,
@@ -501,6 +538,7 @@ export class AstParser {
         decorators,
       };
     }
+
     return null;
   }
 }

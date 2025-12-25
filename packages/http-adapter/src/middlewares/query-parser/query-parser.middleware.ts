@@ -21,6 +21,7 @@ export class QueryParserMiddleware implements BunnerHttpMiddleware {
 
     if (questionIndex === -1) {
       req.query = {};
+
       return;
     }
 
@@ -28,6 +29,7 @@ export class QueryParserMiddleware implements BunnerHttpMiddleware {
 
     if (queryString.length === 0) {
       req.query = {};
+
       return;
     }
 

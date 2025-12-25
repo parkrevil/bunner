@@ -20,7 +20,6 @@ export class Processor {
 
     this.pipeline.push(stripQuery);
     this.pipeline.push(removeLeadingSlash);
-
     this.pipeline.push(splitPath);
 
     if (config.blockTraversal) {
@@ -42,7 +41,6 @@ export class Processor {
 
   normalize(path: string, stripQueryParam = true): NormalizedPathSegments {
     const ctx = new ProcessorContext(path, this.config);
-
     const startStepIndex = stripQueryParam ? 0 : 1;
 
     for (let i = startStepIndex; i < this.pipeline.length; i++) {

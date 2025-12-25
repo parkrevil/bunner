@@ -58,7 +58,6 @@ function getDecoratorOptions(dec: DecoratorMeta | undefined): Record<string, unk
 
 export function addOperationMetadata(operation: OpenApiOperation, method: unknown): void {
   const op = getDecorator(getDecorators(method), ['ApiOperation']);
-
   const opts = getDecoratorOptions(op);
 
   if (!opts) {
@@ -122,6 +121,7 @@ export function addOperationRequestBody(
         'application/json': { schema },
       },
     };
+
     return;
   }
 }
@@ -133,13 +133,13 @@ export function addOperationResponses(
   doc: OpenApiDocument,
 ): void {
   const decorators = getDecorators(method);
-
   const responseDecs: DecoratorMeta[] = decorators.filter(
     (d: DecoratorMeta) => d.name === 'ApiResponse' || d.name.endsWith('Response'),
   );
 
   if (responseDecs.length === 0) {
     operation['responses'] = { '200': { description: 'Success' } };
+
     return;
   }
 
@@ -147,7 +147,6 @@ export function addOperationResponses(
 
   for (const d of responseDecs) {
     const optsRaw = d.arguments?.[0] ?? {};
-
     const opts = isRecord(optsRaw) ? optsRaw : {};
     let status: number | undefined;
 

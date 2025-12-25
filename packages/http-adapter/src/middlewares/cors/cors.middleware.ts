@@ -13,7 +13,6 @@ export class CorsMiddleware implements BunnerHttpMiddleware {
   public async handle(req: BunnerRequest, res: BunnerResponse): Promise<void | boolean> {
     const origin = req.headers.get(HeaderField.Origin);
     const method = req.method;
-
     // Set defaults
     const allowedMethods = this.options.methods || CORS_DEFAULT_METHODS;
     const allowedHeaders = this.options.allowedHeaders;
@@ -36,6 +35,7 @@ export class CorsMiddleware implements BunnerHttpMiddleware {
     }
 
     res.setHeader(HeaderField.AccessControlAllowOrigin, allowedOrigin);
+
     // If we echo the origin, we must set Vary: Origin
     if (allowedOrigin !== '*') {
       res.appendHeader(HeaderField.Vary, HeaderField.Origin);
@@ -58,6 +58,7 @@ export class CorsMiddleware implements BunnerHttpMiddleware {
     if (method === (HttpMethod.Options as string)) {
       // Access-Control-Request-Method
       const requestMethod = req.headers.get(HeaderField.AccessControlRequestMethod);
+
       if (!requestMethod) {
         // Proceed if not a valid preflight
         return;
@@ -80,6 +81,7 @@ export class CorsMiddleware implements BunnerHttpMiddleware {
       } else {
         // If not specified, reflect request headers
         const requestHeaders = req.headers.get(HeaderField.AccessControlRequestHeaders);
+
         if (requestHeaders) {
           res.setHeader(HeaderField.AccessControlAllowHeaders, requestHeaders);
           res.appendHeader(HeaderField.Vary, HeaderField.AccessControlRequestHeaders);
@@ -97,6 +99,7 @@ export class CorsMiddleware implements BunnerHttpMiddleware {
 
       // End response with success status
       res.setStatus(optionsSuccessStatus);
+
       return false;
     }
   }
@@ -127,8 +130,10 @@ export class CorsMiddleware implements BunnerHttpMiddleware {
         if (o instanceof RegExp) {
           return o.test(origin);
         }
+
         return o === origin;
       });
+
       return matched ? origin : undefined;
     }
 

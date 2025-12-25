@@ -2,11 +2,13 @@ import type { ProcessorContext } from '../context';
 
 export function collapseSlashes(ctx: ProcessorContext): void {
   const result: string[] = [];
+
   for (let i = 0; i < ctx.segments.length; i++) {
     if (ctx.segments[i] !== '') {
       result.push(ctx.segments[i]!);
     }
   }
+
   ctx.segments = result;
 }
 

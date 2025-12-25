@@ -15,6 +15,7 @@ export class PaymentErrorHandler {
       const res = ctx.response;
 
       res.setStatus(402); // Payment Required
+
       return {
         success: false,
         error: 'PAYMENT_REQUIRED',

@@ -19,6 +19,7 @@ export class EntryGenerator {
         workersCount = 'Math.floor(navigator.hardwareConcurrency / 2) || 1';
       } else if (/^\d+\/\d+$/.test(workersConfig)) {
         const [num, denom] = workersConfig.split('/').map(Number);
+
         workersCount = `Math.floor(navigator.hardwareConcurrency * (${num} / ${denom})) || 1`;
       } else if (!isNaN(Number(workersConfig))) {
         workersCount = Number(workersConfig).toString();

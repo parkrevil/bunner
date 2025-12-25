@@ -17,20 +17,22 @@ export class BunnerHttpWorker extends ClusterBaseWorker {
 
   override async init(workerId: ClusterWorkerId, params: any) {
     await super.init(workerId, params);
+
     this.logger.info(`🔧 Bunner HTTP Worker #${workerId} is initializing...`);
 
     const { options, entryModule } = params;
 
     if (entryModule.manifestPath) {
       this.logger.info(`⚡ AOT Worker Load: ${entryModule.manifestPath}`);
-      const manifest = await import(entryModule.manifestPath);
 
+      const manifest = await import(entryModule.manifestPath);
       const container = manifest.createContainer();
       const metadataRegistry = manifest.createMetadataRegistry() || new Map();
       const scopedKeysMap = typeof manifest.createScopedKeysMap === 'function' ? manifest.createScopedKeysMap() : new Map();
 
       if (typeof manifest.registerDynamicModules === 'function') {
         this.logger.info('⚡ Loading Dynamic Modules...');
+
         await manifest.registerDynamicModules(container);
       }
 

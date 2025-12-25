@@ -11,12 +11,12 @@ export class ValidationPipe implements PipeTransform {
 
     const p2iFn = TransformerCompiler.compilePlainToInstance(metadata.metatype);
     const object = p2iFn(value);
-
     const validateFn = ValidatorCompiler.compile(metadata.metatype);
     const errors = validateFn(object);
 
     if (errors.length > 0) {
       const error: any = new Error('Validation failed');
+
       error.status = StatusCodes.BAD_REQUEST;
       error.details = errors;
       throw error;
@@ -27,6 +27,7 @@ export class ValidationPipe implements PipeTransform {
 
   private toValidate(metatype: Function): boolean {
     const types: Function[] = [String, Boolean, Number, Array, Object];
+
     return !types.includes(metatype);
   }
 }

@@ -31,21 +31,26 @@ export class Flattener {
 
     while (queue.length) {
       const node = queue.shift()!;
+
       if (nodeToIndex.has(node)) {
         continue;
       }
+
       nodeToIndex.set(node, nodes.length);
       nodes.push(node);
 
       const staticEntries = Array.from(node.staticChildren.entries());
+
       staticEntries.sort((a, b) => (a[0] < b[0] ? -1 : 1));
 
       for (const [, child] of staticEntries) {
         queue.push(child);
       }
+
       for (const child of node.paramChildren) {
         queue.push(child);
       }
+
       if (node.wildcardChild) {
         queue.push(node.wildcardChild);
       }
@@ -60,34 +65,38 @@ export class Flattener {
     const stringMap = new Map<string, number>();
     const patterns: SerializedPattern[] = [];
     const patternMap = new Map<string, number>();
-
     const getStringId = (str: string): number => {
       let id = stringMap.get(str);
+
       if (id === undefined) {
         id = stringList.length;
+
         stringList.push(str);
         stringMap.set(str, id);
       }
+
       return id;
     };
-
     const getPatternId = (source: string, flags: string): number => {
       const key = `${flags}|${source}`;
       let id = patternMap.get(key);
+
       if (id === undefined) {
         id = patterns.length;
+
         patterns.push({ source, flags });
         patternMap.set(key, id);
       }
+
       return id;
     };
 
     for (let i = 0; i < nodes.length; i++) {
       const node = nodes[i]!;
       const base = i * NODE_STRIDE;
-
       const kindCode = node.kind === NodeKind.Static ? 0 : node.kind === NodeKind.Param ? 1 : 2;
       let wildcardOriginCode = 0;
+
       if (node.wildcardOrigin === 'multi') {
         wildcardOriginCode = 1;
       } else if (node.wildcardOrigin === 'zero') {
@@ -96,8 +105,8 @@ export class Flattener {
 
       const paramCount = node.paramChildren.length;
       const methodCount = node.methods.byMethod.size;
-
       let meta = kindCode & NODE_MASK_KIND;
+
       meta |= (wildcardOriginCode << NODE_SHIFT_WILDCARD_ORIGIN) & NODE_MASK_WILDCARD_ORIGIN;
       meta |= (paramCount << NODE_SHIFT_PARAM_COUNT) & NODE_MASK_PARAM_COUNT;
       meta |= (methodCount << NODE_SHIFT_METHOD_COUNT) & NODE_MASK_METHOD_COUNT;
@@ -105,8 +114,10 @@ export class Flattener {
       nodeBuffer[base + NODE_OFFSET_META] = meta;
 
       let methodMask = 0;
+
       if (methodCount > 0) {
         const sortedEntries: { code: number; key: number }[] = [];
+
         for (const [method, key] of node.methods.byMethod.entries()) {
           const mCodeNum = METHOD_OFFSET[method];
 
@@ -114,12 +125,15 @@ export class Flattener {
             if (mCodeNum < 31) {
               methodMask |= 1 << mCodeNum;
             }
+
             sortedEntries.push({ code: mCodeNum, key });
           }
         }
+
         sortedEntries.sort((a, b) => a.code - b.code);
 
         nodeBuffer[base + NODE_OFFSET_METHODS_PTR] = methodsList.length;
+
         for (const entry of sortedEntries) {
           methodsList.push(entry.code);
           methodsList.push(entry.key);
@@ -127,6 +141,7 @@ export class Flattener {
       } else {
         nodeBuffer[base + NODE_OFFSET_METHODS_PTR] = 0;
       }
+
       nodeBuffer[base + NODE_OFFSET_METHOD_MASK] = methodMask;
 
       if (node.staticChildren.size > 0) {
@@ -134,6 +149,7 @@ export class Flattener {
         nodeBuffer[base + NODE_OFFSET_STATIC_CHILD_COUNT] = node.staticChildren.size;
 
         const staticEntries = Array.from(node.staticChildren.entries());
+
         staticEntries.sort((a, b) => (a[0] < b[0] ? -1 : 1));
 
         for (const [seg, child] of staticEntries) {
@@ -147,6 +163,7 @@ export class Flattener {
 
       if (node.paramChildren.length > 0) {
         nodeBuffer[base + NODE_OFFSET_PARAM_CHILD_PTR] = paramChildrenList.length;
+
         for (const child of node.paramChildren) {
           paramChildrenList.push(nodeToIndex.get(child)!);
         }
@@ -162,12 +179,17 @@ export class Flattener {
 
       if (node.kind === NodeKind.Param) {
         const paramIdx = paramsList.length / PARAM_ENTRY_STRIDE;
+
         paramsList.push(getStringId(node.segment));
+
         let patternId = 0xffffffff;
+
         if (node.patternSource) {
           patternId = getPatternId(node.patternSource, node.pattern?.flags ?? '');
         }
+
         paramsList.push(patternId);
+
         nodeBuffer[base + NODE_OFFSET_MATCH_FUNC] = paramIdx;
       } else {
         nodeBuffer[base + NODE_OFFSET_MATCH_FUNC] = getStringId(node.segment);
@@ -181,16 +203,22 @@ export class Flattener {
 
     for (const str of stringList) {
       offsets.push(currentOffset);
+
       const encoded = encoder.encode(str);
+
       encodedChunks.push(encoded);
+
       currentOffset += encoded.length;
     }
+
     offsets.push(currentOffset);
 
     const stringTable = new Uint8Array(currentOffset);
     let ptr = 0;
+
     for (const chunk of encodedChunks) {
       stringTable.set(chunk, ptr);
+
       ptr += chunk.length;
     }
 

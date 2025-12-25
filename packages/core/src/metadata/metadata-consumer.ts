@@ -17,6 +17,7 @@ export class MetadataConsumer {
     }
 
     const properties: Record<string, any> = {};
+
     if (Array.isArray(cliMeta.properties)) {
       cliMeta.properties.forEach((prop: any) => {
         properties[prop.name] = prop;

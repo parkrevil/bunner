@@ -57,6 +57,7 @@ export class QueryParser {
         this.processPair(res, qs, keyStart, keyEnd, valStart, i);
 
         paramCount++;
+
         if (paramCount >= this.options.parameterLimit) {
           break;
         }
@@ -77,6 +78,7 @@ export class QueryParser {
         keyEnd = len;
         valStart = len;
       }
+
       this.processPair(res, qs, keyStart, keyEnd, valStart, len);
     }
 
@@ -95,20 +97,25 @@ export class QueryParser {
 
     // Decode Value
     let val = '';
+
     if (valStart < valEnd) {
       const valRaw = qs.slice(valStart, valEnd);
+
       val = valRaw.indexOf('%') !== -1 ? decodeURIComponent(valRaw) : valRaw;
     }
 
     // Check for Nesting
     const braceIdx = key.indexOf('[');
+
     if (braceIdx === -1) {
       // Strict Mode: Check for unbalanced closing brackets even in flat keys
       if (this.options.strictMode && key.indexOf(']') !== -1) {
         throw new BadRequestError(`Malformed query string: unbalanced brackets in key "${key}"`);
       }
+
       // Simple assignment
       this.assignLeaf(res, key, val);
+
       return;
     }
 
@@ -117,26 +124,33 @@ export class QueryParser {
       if (this.options.strictMode) {
         // Check for unbalanced and nested brackets
         let open = 0;
+
         for (let i = 0; i < key.length; i++) {
           const char = key[i];
+
           if (char === '[') {
             if (open > 0) {
               throw new BadRequestError(`Malformed query string: nested brackets in key "${key}"`);
             }
+
             open++;
           } else if (char === ']') {
             open--;
+
             if (open < 0) {
               throw new BadRequestError(`Malformed query string: unbalanced brackets in key "${key}"`);
             }
           }
         }
+
         if (open !== 0) {
           throw new BadRequestError(`Malformed query string: unclosed bracket in key "${key}"`);
         }
       }
+
       // Treat as flat key if options disable array
       this.assignLeaf(res, key, val);
+
       return;
     }
 
@@ -148,7 +162,6 @@ export class QueryParser {
     let current = root;
     let depth = 0;
     const maxDepth = this.options.depth;
-
     // Root key part "user" from "user[name]"
     const rootKey = key.slice(0, firstBrace);
 
@@ -172,26 +185,29 @@ export class QueryParser {
     let i = firstBrace;
     const len = key.length;
     let partStart = -1;
-
     const keys: string[] = [rootKey];
 
     while (i < len) {
       const code = key.charCodeAt(i);
+
       if (code === 91) {
         // '['
         if (partStart !== -1 && this.options.strictMode) {
           throw new BadRequestError(`Malformed query string: nested brackets in key "${key}"`);
         }
+
         partStart = i + 1;
       } else if (code === 93) {
         // ']'
         if (partStart !== -1) {
           keys.push(key.slice(partStart, i));
+
           partStart = -1;
         } else if (this.options.strictMode) {
           throw new BadRequestError(`Malformed query string: unbalanced brackets in key "${key}"`);
         }
       }
+
       i++;
     }
 
@@ -200,20 +216,24 @@ export class QueryParser {
       if (this.options.strictMode) {
         throw new BadRequestError(`Malformed query string: unclosed bracket in key "${key}"`);
       }
+
       // Non-strict: treat as literal key if not properly closed
       this.assignLeaf(root, key, value);
+
       return;
     }
 
     // If no keys were extracted beyond root, it means something like "key[]" where only "key" was slice(0, firstBrace)
     if (keys.length === 1) {
       this.assignLeaf(root, key, value);
+
       return;
     }
 
     // Initialize/Validate root container
     if (!Object.prototype.hasOwnProperty.call(root, rootKey)) {
       const nextKey = keys[1]!;
+
       if (this.shouldCreateArray(nextKey)) {
         root[rootKey] = [];
       } else {
@@ -225,14 +245,17 @@ export class QueryParser {
         if (this.options.strictMode) {
           throw new BadRequestError(`Conflict: key "${rootKey}" is both a scalar and a nested structure`);
         }
+
         // Non-strict: overwrite scalar with container
         const nextKey = keys[1]!;
+
         root[rootKey] = this.shouldCreateArray(nextKey) ? [] : {};
       }
     }
 
     let parent = root;
     let parentKey: string | number = rootKey;
+
     current = root[rootKey]; // Move to first container
 
     // Now traverse and build from 2nd key match
@@ -249,6 +272,7 @@ export class QueryParser {
         if (this.options.strictMode) {
           throw new BadRequestError(`Conflict: non-numeric key "${prop}" used on an array structure at "${parentKey}"`);
         }
+
         current = this.arrayToMaybeObject(current);
         parent[parentKey] = current;
       }
@@ -259,6 +283,7 @@ export class QueryParser {
         // Create Next Container
         if (!Object.prototype.hasOwnProperty.call(current, prop)) {
           const nextKey = keys[k + 1]!;
+
           if (this.shouldCreateArray(nextKey)) {
             current[prop] = [];
           } else {
@@ -273,7 +298,9 @@ export class QueryParser {
             if (this.options.strictMode) {
               throw new BadRequestError(`Conflict: key "${prop}" is both a scalar and a nested structure`);
             }
+
             const nextKey = keys[k + 1]!;
+
             current[prop] = this.shouldCreateArray(nextKey) ? [] : {};
           }
         }
@@ -294,6 +321,7 @@ export class QueryParser {
           return;
         }
       }
+
       depth++;
     }
   }
@@ -303,11 +331,14 @@ export class QueryParser {
     if (nextKey === '') {
       return true;
     }
+
     // Index "[0]" -> array if limit satisfied
     if (this.isValidArrayIndex(nextKey)) {
       const n = parseInt(nextKey, 10);
+
       return n >= 0 && n <= this.options.arrayLimit;
     }
+
     return false;
   }
 
@@ -325,6 +356,7 @@ export class QueryParser {
 
     if (key === '' && Array.isArray(obj)) {
       obj.push(value);
+
       return;
     }
 
@@ -333,17 +365,21 @@ export class QueryParser {
       // We are in an array context (e.g. user[0]=val or user[]=val)
       if (this.isValidArrayIndex(key)) {
         const idx = parseInt(key, 10);
+
         if (idx > this.options.arrayLimit) {
           return;
         } // Sparse Array Protection
+
         obj[idx] = value;
       } else {
         // Mixed keys: Non-numeric key in array context
         if (this.options.strictMode) {
           throw new BadRequestError(`Conflict: non-numeric key "${key}" used on an array structure`);
         }
+
         (obj as any)[key] = value;
       }
+
       return;
     }
 
@@ -360,6 +396,7 @@ export class QueryParser {
           if (this.options.strictMode) {
             throw new BadRequestError(`Conflict: key "${key}" is a nested structure but being assigned a scalar value`);
           }
+
           if (this.options.hppMode !== 'last') {
             return;
           }
@@ -391,18 +428,23 @@ export class QueryParser {
     if (str === '' || str.length > 10) {
       return false;
     } // Max int length guard
+
     const code = str.charCodeAt(0);
+
     // First char must be 0-9
     if (code < 48 || code > 57) {
       return false;
     }
+
     // Check all chars are digits (no dots, signs, etc.)
     for (let i = 1; i < str.length; i++) {
       const c = str.charCodeAt(i);
+
       if (c < 48 || c > 57) {
         return false;
       }
     }
+
     return true;
   }
 
@@ -411,11 +453,13 @@ export class QueryParser {
    */
   private arrayToMaybeObject(arr: any[]): Record<string, any> {
     const obj: Record<string, any> = {};
+
     for (let i = 0; i < arr.length; i++) {
       if (arr[i] !== undefined) {
         obj[i.toString()] = arr[i];
       }
     }
+
     return obj;
   }
 }

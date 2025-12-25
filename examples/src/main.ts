@@ -9,7 +9,6 @@ async function bootstrap() {
   const app = await Bunner.create(AppModule, {
     logLevel: LogLevel.Debug,
   });
-
   const adapter = new BunnerHttpAdapter({
     port: 5003,
     workers: 1,
@@ -34,5 +33,6 @@ async function bootstrap() {
 
 bootstrap().catch(err => {
   const logger = new Logger('Bootstrap');
+
   logger.error('Bootstrap error', err);
 });

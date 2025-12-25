@@ -14,6 +14,7 @@ export class OptionalParamDefaults {
     if (this.behavior === 'omit') {
       return;
     }
+
     this.defaults.set(key, names);
   }
 
@@ -21,15 +22,19 @@ export class OptionalParamDefaults {
     if (this.behavior === 'omit' || !this.behavior) {
       return;
     }
+
     const defaults = this.defaults.get(key);
+
     if (!defaults) {
       return;
     }
 
     const val = this.defaultValue;
     const len = defaults.length;
+
     for (let i = 0; i < len; i++) {
       const name = defaults[i];
+
       if (name && !(name in params)) {
         params[name] = val;
       }

@@ -23,11 +23,13 @@ export class Container implements BunnerContainer {
     }
 
     const factory = this.factories.get(token);
+
     if (!factory) {
       throw new Error(`No provider for token: ${token.name || token}`);
     }
 
     const instance = factory(this);
+
     this.instances.set(token, instance);
 
     return instance;
@@ -49,6 +51,7 @@ export class Container implements BunnerContainer {
     if (!dynamicModule) {
       return;
     }
+
     await Promise.resolve();
 
     const providers = dynamicModule.providers || [];
@@ -62,11 +65,13 @@ export class Container implements BunnerContainer {
         factory = c => new p(...this.resolveDepsFor(p, scope, c));
       } else if (p.provide) {
         token = p.provide;
+
         if (p.useValue) {
           factory = () => p.useValue;
         } else if (p.useFactory) {
           factory = async c => {
             const args = (p.inject || []).map((t: any) => c.get(t));
+
             return await p.useFactory(...args);
           };
         } else {
@@ -75,6 +80,7 @@ export class Container implements BunnerContainer {
       }
 
       let keyStr = '';
+
       if (typeof token === 'string') {
         keyStr = `${scope}::${token}`;
       } else if (token.name) {
@@ -89,19 +95,21 @@ export class Container implements BunnerContainer {
 
   private resolveDepsFor(ctor: any, scope: string, _c: Container): any[] {
     const registry = (globalThis as any).__BUNNER_METADATA_REGISTRY__;
+
     if (!registry || !registry.has(ctor)) {
       return [];
     }
 
     const meta = registry.get(ctor);
+
     if (!meta.constructorParams) {
       return [];
     }
 
     return meta.constructorParams.map((param: any) => {
       let token = param.type;
-
       const injectDec = param.decorators?.find((d: any) => d.name === 'Inject');
+
       if (injectDec && injectDec.arguments?.length > 0) {
         token = injectDec.arguments[0];
       }

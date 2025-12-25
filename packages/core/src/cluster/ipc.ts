@@ -16,17 +16,20 @@ export function expose(obj: any) {
   self.addEventListener('message', (event: MessageEvent) => {
     void (async () => {
       const data = event.data as RPCMessage;
+
       if (!data || !data.id || !data.method) {
         return;
       }
 
       try {
         const fn = obj[data.method];
+
         if (typeof fn !== 'function') {
           throw new Error(`Method ${data.method} not found`);
         }
 
         const result = await fn(...(data.args || []));
+
         self.postMessage({ id: data.id, result } as RPCResponse);
       } catch (err: any) {
         self.postMessage({ id: data.id, error: err.message || 'Unknown error' } as RPCResponse);
@@ -44,17 +47,20 @@ export function wrap<T extends object>(worker: Worker): Promisified<T> {
 
   worker.addEventListener('message', (event: MessageEvent) => {
     const data = event.data as RPCResponse;
+
     if (!data || !data.id) {
       return;
     }
 
     const promise = pending.get(data.id);
+
     if (promise) {
       if (data.error) {
         promise.reject(new Error(data.error));
       } else {
         promise.resolve(data.result);
       }
+
       pending.delete(data.id);
     }
   });
@@ -68,6 +74,7 @@ export function wrap<T extends object>(worker: Worker): Promisified<T> {
       return (...args: any[]) => {
         return new Promise((resolve, reject) => {
           const id = crypto.randomUUID();
+
           pending.set(id, { resolve, reject });
           worker.postMessage({ id, method: prop as string, args } as RPCMessage);
         });

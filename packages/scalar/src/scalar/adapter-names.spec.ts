@@ -29,7 +29,6 @@ describe('resolveHttpNamesForDocuments', () => {
 
     expect(resolveHttpNamesForDocuments(adapters, 'all')).toEqual(['a', 'b']);
   });
-
   it('should filter targets by protocol=http', () => {
     const adapters = makeAdapters(['a', 'b']);
 
@@ -41,14 +40,12 @@ describe('resolveHttpNamesForDocuments', () => {
     ).toEqual(['b']);
   });
 });
-
 describe('resolveHttpNamesForHosting', () => {
   it('should return only selected names when httpTargets are valid', () => {
     const adapters = makeAdapters(['a', 'b']);
 
     expect(resolveHttpNamesForHosting(adapters, ['b'])).toEqual(['b']);
   });
-
   it('should throw when httpTargets contains a missing name', () => {
     const adapters = makeAdapters(['a']);
 

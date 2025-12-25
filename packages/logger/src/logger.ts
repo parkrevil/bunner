@@ -84,6 +84,7 @@ export class Logger {
   private isLevelEnabled(level: LogLevel): boolean {
     const levels: LogLevel[] = ['trace', 'debug', 'info', 'warn', 'error', 'fatal'];
     const configuredLevel = Logger.globalOptions.level || 'info';
+
     return levels.indexOf(level) >= levels.indexOf(configuredLevel);
   }
 

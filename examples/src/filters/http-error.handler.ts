@@ -14,6 +14,7 @@ export class HttpErrorHandler {
       this.logger.error('Caught error:', error);
 
       res.setStatus(500);
+
       return {
         statusCode: 500,
         message: error.message || 'Internal Server Error',

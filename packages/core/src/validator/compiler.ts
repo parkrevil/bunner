@@ -12,7 +12,7 @@ export class ValidatorCompiler {
     const lines: string[] = [];
 
     lines.push('const errors = [];');
-    lines.push('if (!obj || typeof obj !== \'object\') return [\'Invalid object\'];');
+    lines.push("if (!obj || typeof obj !== 'object') return ['Invalid object'];");
 
     for (const [propName, prop] of Object.entries(metadata.properties)) {
       const p = prop;
@@ -52,6 +52,7 @@ export class ValidatorCompiler {
           lines.push(`  if (${access} > ${args[0]}) errors.push('${msg}');`);
         } else if (name === 'IsIn') {
           const validValues = JSON.stringify(args[0]);
+
           lines.push(`  if (!${validValues}.includes(${access})) errors.push('${msg}');`);
         } else if (name === 'ValidateNested') {
           if (p.metatype) {
@@ -60,15 +61,16 @@ export class ValidatorCompiler {
           }
         }
       });
-
       lines.push('}');
     }
 
     lines.push('return errors;');
 
     const fnBody = lines.join('\n');
+
     try {
       const classRefs: Record<string, Function> = {};
+
       for (const [propName, prop] of Object.entries(metadata.properties)) {
         if (prop.metatype) {
           classRefs[propName] = prop.metatype;
@@ -80,30 +82,36 @@ export class ValidatorCompiler {
           if (!val || !Target) {
             return [];
           }
+
           if (Array.isArray(val)) {
             const allErrors: string[] = [];
+
             val.forEach((item, i) => {
               const errors = ValidatorCompiler.compile(Target)(item);
+
               allErrors.push(...errors.map(e => `[${i}].${e}`));
             });
+
             return allErrors;
           }
+
           return ValidatorCompiler.compile(Target)(val);
         },
       };
-
       // eslint-disable-next-line @typescript-eslint/no-implied-eval
       const fn = new Function('obj', 'validators', 'classRefs', fnBody) as (
         obj: any,
         validators: any,
         classRefs: any,
       ) => string[];
-
       const wrappedFn = (obj: any) => fn(obj, validators, classRefs);
+
       this.cache.set(target, wrappedFn);
+
       return wrappedFn;
     } catch (e) {
       console.error('Failed to compile validator', fnBody);
+
       throw e;
     }
   }

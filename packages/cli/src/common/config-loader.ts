@@ -14,16 +14,20 @@ export class ConfigLoader {
       if (await Bun.file(path).exists()) {
         try {
           this.logger.debug(`🔧 Loading config from ${path}`);
+
           const mod = await import(path);
+
           return mod.default ?? mod;
         } catch (error) {
           this.logger.error(`❌ Failed to load config at ${path}`, error);
+
           process.exit(1);
         }
       }
     }
 
     this.logger.warn('⚠️ No config found, using defaults.');
+
     return {
       entry: './src/main.ts',
     };

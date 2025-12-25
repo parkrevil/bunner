@@ -4,7 +4,6 @@ import type { Doc } from './interfaces';
 
 export function uiResponse(doc: Doc): Response {
   let title = 'API Docs';
-
   const spec = doc.spec;
 
   if (isRecord(spec)) {
@@ -20,7 +19,6 @@ export function uiResponse(doc: Doc): Response {
   }
 
   const embedded = JSON.stringify(spec).replace(/'/g, '&apos;');
-
   const html = `<!doctype html>
 <html>
   <head>

@@ -9,12 +9,14 @@ export class ImportRegistry {
 
   public getAlias(className: string, filePath: string): string {
     const key = `${filePath}::${className}`;
+
     if (this.fileClassMap.has(key)) {
       return this.fileClassMap.get(key)!;
     }
 
     let alias = className;
     let counter = 1;
+
     while (this.aliases.has(alias)) {
       alias = `${className}_${counter++}`;
     }
@@ -26,6 +28,7 @@ export class ImportRegistry {
     if (!filePath.startsWith('/') && !filePath.startsWith('\\') && !filePath.match(/^[a-zA-Z]:/)) {
       try {
         const resolved = Bun.resolveSync(filePath, process.cwd());
+
         filePath = resolved;
       } catch (_e) {
         // Prepare to ignore built-in modules or unresolvable paths
@@ -54,6 +57,7 @@ export class ImportRegistry {
       if (info.alias === info.originalName) {
         return `import { ${info.originalName} } from "${info.path}";`;
       }
+
       return `import { ${info.originalName} as ${info.alias} } from "${info.path}";`;
     });
   }

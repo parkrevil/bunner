@@ -10,23 +10,21 @@ import { ProjectWatcher } from '../watcher';
 
 export async function dev() {
   const logger = new Logger('CLI:Dev');
+
   logger.info('🚀 Starting Bunner Dev Server...');
 
   const config = await ConfigLoader.load();
   const projectRoot = process.cwd();
   const srcDir = resolve(projectRoot, 'src');
   const outDir = resolve(projectRoot, '.bunner');
-
   const parser = new AstParser();
   const manifestGen = new ManifestGenerator();
-
   const fileCache = new Map<string, any>(); // Map<string, FileAnalysis>
 
   async function analyzeFile(filePath: string) {
     try {
       const fileContent = await Bun.file(filePath).text();
       const parseResult = parser.parse(filePath, fileContent);
-
       const classInfos = parseResult.classes.map(meta => ({ metadata: meta, filePath: filePath }));
 
       fileCache.set(filePath, {
@@ -35,9 +33,11 @@ export async function dev() {
         reExports: parseResult.reExports,
         exports: parseResult.exports,
       });
+
       return true;
     } catch (e) {
       logger.error(`❌ Parse Error (${filePath})`, e);
+
       return false;
     }
   }
@@ -52,9 +52,11 @@ export async function dev() {
     // Create FileMap for Graph
     const fileMap = new Map(fileCache.entries());
     const graph = new ModuleGraph(fileMap);
+
     graph.build();
 
     const manifestCode = manifestGen.generate(graph, allClasses, outDir);
+
     await Bun.write(join(outDir, 'manifest.ts'), manifestCode);
 
     const userMain = join(srcDir, 'main.ts');
@@ -77,6 +79,7 @@ export async function dev() {
   }
 
   const glob = new Glob('**/*.ts');
+
   logger.info('🔍 Initial Scan...');
 
   for await (const file of glob.scan(srcDir)) {
@@ -92,7 +95,9 @@ export async function dev() {
   if (config.scanPaths) {
     for (const scanPath of config.scanPaths) {
       const absPath = resolve(projectRoot, scanPath);
+
       logger.info(`🔍 Scanning additional path: ${scanPath}`);
+
       for await (const file of glob.scan(absPath)) {
         const fullPath = join(absPath, file);
 
@@ -108,6 +113,7 @@ export async function dev() {
   await rebuild();
 
   const appEntry = join(outDir, 'index.ts');
+
   logger.info('🚀 Spawning App', { command: `bun run --watch ${appEntry}` });
 
   const appProc = Bun.spawn(['bun', 'run', '--watch', appEntry], {
@@ -115,23 +121,26 @@ export async function dev() {
     stderr: 'inherit',
     env: { ...process.env, FORCE_COLOR: '1' },
   });
-
   // 5. Watcher
   const projectWatcher = new ProjectWatcher(srcDir);
+
   projectWatcher.start(event => {
     void (async () => {
       const filename = event.filename;
+
       // Debounce or immediate? For now immediate.
       if (!filename) {
         return;
       }
 
       const fullPath = join(srcDir, filename);
+
       logger.debug(`🔄 [${event.eventType}] Detected change in: ${filename}`);
 
       if (event.eventType === 'rename' && !(await Bun.file(fullPath).exists())) {
         // Deleted
         logger.info(`🗑️ File deleted: ${filename}`);
+
         fileCache.delete(fullPath);
       } else {
         // Changed or Created
@@ -142,7 +151,6 @@ export async function dev() {
       await rebuild();
     })();
   });
-
   process.on('SIGINT', () => {
     projectWatcher.close();
     appProc.kill();

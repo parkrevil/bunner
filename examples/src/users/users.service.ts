@@ -22,6 +22,7 @@ export class UsersService {
 
   create(body: any) {
     this.logger.info('Creating user', body);
+
     this.userRepository.create(body);
   }
 

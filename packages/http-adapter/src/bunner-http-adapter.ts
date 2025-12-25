@@ -59,31 +59,37 @@ export class BunnerHttpAdapter implements BunnerAdapter {
 
   public use(...middlewares: BunnerHttpMiddleware[]): this {
     this.middlewares.beforeRequest.push(...middlewares);
+
     return this;
   }
 
   public beforeRequest(...middlewares: BunnerHttpMiddleware[]): this {
     this.middlewares.beforeRequest.push(...middlewares);
+
     return this;
   }
 
   public afterRequest(...middlewares: BunnerHttpMiddleware[]): this {
     this.middlewares.afterRequest.push(...middlewares);
+
     return this;
   }
 
   public beforeHandler(...middlewares: BunnerHttpMiddleware[]): this {
     this.middlewares.beforeHandler.push(...middlewares);
+
     return this;
   }
 
   public beforeResponse(...middlewares: BunnerHttpMiddleware[]): this {
     this.middlewares.beforeResponse.push(...middlewares);
+
     return this;
   }
 
   public afterResponse(...middlewares: BunnerHttpMiddleware[]): this {
     this.middlewares.afterResponse.push(...middlewares);
+
     return this;
   }
 
@@ -93,12 +99,14 @@ export class BunnerHttpAdapter implements BunnerAdapter {
 
     if (isSingleProcess) {
       this.httpServer = new BunnerHttpServer();
+
       await this.httpServer.boot(context.container, {
         ...this.options,
         metadata: (globalThis as any).__BUNNER_METADATA_REGISTRY__,
         middlewares: this.middlewares,
         internalRoutes: this.internalRoutes,
       });
+
       return;
     }
 
@@ -128,7 +136,6 @@ export class BunnerHttpAdapter implements BunnerAdapter {
         middlewares: this.middlewares,
       },
     });
-
     await this.clusterManager.bootstrap();
   }
 
@@ -140,9 +147,11 @@ export class BunnerHttpAdapter implements BunnerAdapter {
 
   protected resolveWorkerScript(): URL {
     const hasAotManifest = !!(globalThis as any).__BUNNER_MANIFEST_PATH__;
+
     if (hasAotManifest) {
       return new URL('./bunner-http-worker.ts', import.meta.url);
     }
+
     return new URL(process.argv[1] || '', 'file://');
   }
 }

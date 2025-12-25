@@ -11,12 +11,15 @@ function normalizeTypeName(typeName: unknown): string | null {
   if (!typeName) {
     return null;
   }
+
   if (typeof typeName === 'string') {
     return typeName;
   }
+
   if (typeof typeName === 'function') {
     return typeName.name;
   }
+
   return null;
 }
 
@@ -31,19 +34,21 @@ function findTypeMeta(registry: Map<unknown, unknown>, typeName: unknown): Recor
     if (isRecord(meta) && meta['className'] === normalized) {
       return meta;
     }
+
     if (typeof target === 'function' && normalized && target.name === normalized) {
       return isRecord(meta) ? meta : null;
     }
+
     if (target === typeName) {
       return isRecord(meta) ? meta : null;
     }
   }
+
   return null;
 }
 
 function buildPropertySchema(registry: Map<unknown, unknown>, doc: OpenApiDocument, prop: unknown): Record<string, unknown> {
   let propSchema: Record<string, unknown>;
-
   const isArrayValue = isRecord(prop) ? prop['isArray'] : undefined;
 
   if (isArrayValue === true) {
@@ -67,6 +72,7 @@ function buildPropertySchema(registry: Map<unknown, unknown>, doc: OpenApiDocume
     propSchema = getSchemaForType(registry, doc, typeValue);
   } else {
     const t = typeof typeValue === 'string' ? typeValue : 'string';
+
     propSchema = { type: t.toLowerCase() };
   }
 
@@ -97,6 +103,7 @@ function applyApiPropertyOptions(schema: Record<string, unknown>, apiProp: Decor
   }
 
   const description = optsRaw['description'];
+
   if (typeof description === 'string' && description.length > 0) {
     schema['description'] = description;
   }
@@ -154,7 +161,6 @@ export function getSchemaForType(
 
   const propsValue = meta['properties'];
   const props = Array.isArray(propsValue) ? propsValue : [];
-
   const properties = schema['properties'] as Record<string, unknown>;
 
   for (const prop of props) {

@@ -6,25 +6,18 @@ import type { ClientIpsResult } from './interfaces';
 
 export function getIps(request: Request, server: Server<unknown>, trustProxy?: boolean): ClientIpsResult {
   const shouldTrustProxy = trustProxy ?? false;
-
   const headers = request.headers;
   const socketAddress = server.requestIP(request) ?? undefined;
-
   const forwardedIps = shouldTrustProxy ? collectForwardedFor(headers.get(HeaderField.Forwarded)) : [];
   const xForwardedForIps = shouldTrustProxy ? collectXForwardedFor(headers.get(HeaderField.XForwardedFor)) : [];
-
   const dedupedForwardChain = dedupePreserveOrder([...forwardedIps, ...xForwardedForIps]);
-
   const xRealIp = shouldTrustProxy ? extractHeaderIp(headers.get(HeaderField.XRealIp)) : undefined;
-
   const socketIp = sanitizeIpCandidate(socketAddress?.address);
-
   const ipCandidates: Array<string | undefined> = [
     dedupedForwardChain[0],
     xRealIp,
     socketIp && isIpAddress(socketIp) ? socketIp : undefined,
   ];
-
   const ip = ipCandidates.find(candidate => Boolean(candidate));
 
   return {
@@ -42,23 +35,27 @@ function collectForwardedFor(headerValue: string | null): string[] {
 
   for (const entry of headerValue.split(',')) {
     const element = entry.trim();
+
     if (!element) {
       continue;
     }
 
     for (const segment of element.split(';')) {
       const separator = segment.indexOf('=');
+
       if (separator === -1) {
         continue;
       }
 
       const key = segment.slice(0, separator).trim().toLowerCase();
+
       if (key !== 'for') {
         continue;
       }
 
       const value = segment.slice(separator + 1);
       const ip = extractHeaderIp(value);
+
       if (ip) {
         results.push(ip);
       }
@@ -77,6 +74,7 @@ function collectXForwardedFor(headerValue: string | null): string[] {
 
   for (const token of headerValue.split(',')) {
     const ip = extractHeaderIp(token);
+
     if (ip) {
       results.push(ip);
     }
@@ -103,6 +101,7 @@ function dedupePreserveOrder(values: string[]): string[] {
 
 function extractHeaderIp(raw: string | undefined | null): string | undefined {
   const candidate = sanitizeIpCandidate(raw);
+
   if (!candidate || !isIpAddress(candidate)) {
     return undefined;
   }
@@ -116,22 +115,26 @@ function sanitizeIpCandidate(raw: string | undefined | null): string | undefined
   }
 
   let value = raw.trim();
+
   if (!value) {
     return undefined;
   }
 
   const isPlaceholder = (candidate: string): boolean => {
     const lower = candidate.toLowerCase();
+
     return lower === 'unknown' || lower === 'obfuscated' || lower === 'none' || candidate.startsWith('_');
   };
 
   value = stripOptionalQuotes(value);
+
   if (!value || isPlaceholder(value)) {
     return undefined;
   }
 
   if (value.startsWith('[')) {
     const closing = value.indexOf(']');
+
     if (closing > 0) {
       value = value.slice(1, closing);
     } else {
@@ -160,7 +163,8 @@ function stripOptionalQuotes(value: string): string {
   while (result.length >= 2) {
     const first = result[0];
     const last = result[result.length - 1];
-    if ((first === '"' && last === '"') || (first === '\'' && last === '\'')) {
+
+    if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
       result = result.slice(1, -1);
       result = result.replace(/\\([\\"'])/g, '$1');
       result = result.trim();
@@ -183,8 +187,10 @@ function stripPortSuffix(value: string): string {
   if (colonCount > 1) {
     const idx = value.lastIndexOf(':');
     const trailing = value.slice(idx + 1);
+
     if (/^\d+$/.test(trailing)) {
       const candidate = value.slice(0, idx);
+
       if (!isIpv6(value) && isIpv6(candidate)) {
         return candidate;
       }
@@ -200,6 +206,7 @@ function isIpAddress(value: string): boolean {
 
 function isIpv4(value: string): boolean {
   const parts = value.split('.');
+
   if (parts.length !== 4) {
     return false;
   }
@@ -208,16 +215,21 @@ function isIpv4(value: string): boolean {
     if (part.length === 0 || part.length > 3) {
       return false;
     }
+
     if (!/^[0-9]+$/.test(part)) {
       return false;
     }
+
     const number = Number(part);
+
     if (number < 0 || number > 255) {
       return false;
     }
+
     if (part.length > 1 && part.startsWith('0')) {
       return false;
     }
+
     return true;
   });
 }
@@ -228,21 +240,25 @@ function isIpv6(value: string): boolean {
   }
 
   const validChars = /^[0-9a-fA-F:]+$/;
+
   if (!validChars.test(value)) {
     return false;
   }
 
   const segments = value.split(':');
+
   if (segments.length > 8) {
     return false;
   }
 
   let emptyBlocks = 0;
+
   for (const segment of segments) {
     if (segment.length === 0) {
       emptyBlocks += 1;
       continue;
     }
+
     if (segment.length > 4) {
       return false;
     }

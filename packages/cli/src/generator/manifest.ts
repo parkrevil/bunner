@@ -19,7 +19,6 @@ export class ManifestGenerator {
 
     const injectorCode = this.injectorGen.generate(graph, registry);
     const metadataCode = this.metadataGen.generate(classes, registry);
-
     const scopedKeysEntries: string[] = [];
 
     graph.modules.forEach((node: ModuleNode) => {
@@ -41,8 +40,8 @@ export class ManifestGenerator {
         // But the current structure stores controllers as string names.
         // We should improve ModuleNode to store Metadata or Path for controllers.
         // Fallback: graph.classMap.get(ctrlName).
-
         const ctrlNode = graph.classMap.get(ctrlName);
+
         if (ctrlNode) {
           alias = registry.getAlias(ctrlName, ctrlNode.filePath);
         }

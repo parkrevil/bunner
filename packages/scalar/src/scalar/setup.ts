@@ -9,7 +9,6 @@ import type { AdapterCollectionLike } from './types';
 import { uiResponse } from './ui';
 
 const BUNNER_HTTP_INTERNAL = Symbol.for('bunner:http:internal');
-
 const boundAdapters = new WeakSet<object>();
 
 function jsonResponse(doc: Doc): Response {
@@ -30,11 +29,9 @@ function registerInternalRoutes(internal: InternalRouter, docs: Doc[], docsById:
 
     return indexResponse(docs);
   });
-
   internal.get('/api-docs/*', (req: unknown) => {
     const reqPath = isRecord(req) ? req['path'] : undefined;
     const path = typeof reqPath === 'string' ? reqPath : '';
-
     const resolved = resolveDocFromPath(path);
 
     if (!resolved) {
@@ -71,7 +68,6 @@ export function setupScalar(adapters: AdapterCollectionLike, options: ScalarSetu
   const httpDocNames = resolveHttpNamesForDocuments(adapters, options.documentTargets);
   const docs = buildDocsForHttpAdapters(httpDocNames);
   const docsById = new Map(docs.map(d => [d.docId, d] as const));
-
   const httpHostNames = resolveHttpNamesForHosting(adapters, options.httpTargets);
 
   if (httpHostNames.length === 0) {
@@ -108,7 +104,6 @@ export function setupScalar(adapters: AdapterCollectionLike, options: ScalarSetu
     }
 
     registerInternalRoutes(internalValue as unknown as InternalRouter, docs, docsById);
-
     boundAdapters.add(adapter);
   }
 }

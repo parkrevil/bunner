@@ -48,6 +48,7 @@ export class BunnerHttpServer {
     const scopedKeysMap = options.scopedKeys || new Map();
 
     this.routeHandler = new RouteHandler(this.container, metadataRegistry, scopedKeysMap);
+
     this.routeHandler.register();
 
     if (Array.isArray(options.internalRoutes) && options.internalRoutes.length > 0) {
@@ -64,7 +65,9 @@ export class BunnerHttpServer {
     };
 
     this.server = Bun.serve(serveOptions);
+
     this.logger.info(`✨ Server listening on port ${this.options.port}`);
+
     await Promise.resolve();
   }
 
@@ -80,7 +83,6 @@ export class BunnerHttpServer {
       ips: [] as string[],
       isTrustedProxy: this.options.trustProxy || false,
     };
-
     const bunnerReq = new BunnerRequest(adaptiveReq);
     const bunnerRes = new BunnerResponse(bunnerReq, { headers: new Headers(), status: 0 } as any);
 
@@ -90,8 +92,8 @@ export class BunnerHttpServer {
 
       const httpMethod = req.method.toUpperCase() as HttpMethod;
       let body: any = undefined;
-
       const contentType = req.headers.get('content-type') || '';
+
       if (
         httpMethod !== HttpMethod.Get &&
         httpMethod !== HttpMethod.Delete &&
@@ -120,10 +122,8 @@ export class BunnerHttpServer {
         ip,
         ips,
       });
-
       // 2. afterRequest (Post-Parsing)
       await this.runMiddlewares(this.middlewares.afterRequest, bunnerReq, bunnerRes);
-
       // 3. beforeHandler (Pre-Routing/Handling)
       await this.runMiddlewares(this.middlewares.beforeHandler, bunnerReq, bunnerRes);
 
@@ -142,6 +142,7 @@ export class BunnerHttpServer {
       return response;
     } catch (e: any) {
       this.logger.error('Fetch Error', e);
+
       return new Response('Internal server error', {
         status: StatusCodes.INTERNAL_SERVER_ERROR,
       });

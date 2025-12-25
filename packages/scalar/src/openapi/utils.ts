@@ -13,7 +13,6 @@ export function getDecorator(decorators: DecoratorMeta[] | undefined, names: str
 export function getControllerBasePath(meta: unknown): string {
   const metaDecoratorsValue = isRecord(meta) ? meta['decorators'] : undefined;
   const metaDecorators = Array.isArray(metaDecoratorsValue) ? (metaDecoratorsValue as DecoratorMeta[]) : undefined;
-
   const controller = getDecorator(metaDecorators, ['Controller', 'RestController']);
   const raw = controller?.arguments?.[0];
 
@@ -23,10 +22,8 @@ export function getControllerBasePath(meta: unknown): string {
 export function getControllerTag(meta: unknown): string {
   const metaDecoratorsValue = isRecord(meta) ? meta['decorators'] : undefined;
   const metaDecorators = Array.isArray(metaDecoratorsValue) ? (metaDecoratorsValue as DecoratorMeta[]) : undefined;
-
   const tags = getDecorator(metaDecorators, ['ApiTags']);
   const raw = tags?.arguments?.[0];
-
   const classNameValue = isRecord(meta) ? meta['className'] : undefined;
   const fallback = typeof classNameValue === 'string' ? classNameValue : 'Controller';
 

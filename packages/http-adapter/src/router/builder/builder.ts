@@ -28,6 +28,7 @@ export class Builder<T> {
 
   add(method: HttpMethod, segments: string[], handler: T): void {
     const handlerIndex = this.handlers.length;
+
     this.handlers.push(handler);
     this.addSegments(this.root, 0, new Set<string>(), [], method, handlerIndex, segments);
   }
@@ -47,6 +48,7 @@ export class Builder<T> {
   ): void {
     if (index === segments.length) {
       this.registerRoute(node, method, key, omittedOptionals, segments);
+
       return;
     }
 
@@ -55,11 +57,13 @@ export class Builder<T> {
 
     if (charCode === 42) {
       this.handleWildcard(node, index, activeParams, omittedOptionals, method, key, segments);
+
       return;
     }
 
     if (charCode === 58) {
       this.handleParam(node, index, activeParams, omittedOptionals, method, key, segments);
+
       return;
     }
 
@@ -68,6 +72,7 @@ export class Builder<T> {
 
   private registerRoute(node: Node, method: HttpMethod, key: number, omittedOptionals: string[], segments: string[]): void {
     const methodId = METHOD_OFFSET[method];
+
     if (methodId === undefined) {
       throw new Error(`Invalid HTTP method: ${method}`);
     }
@@ -100,24 +105,27 @@ export class Builder<T> {
     }
 
     if (index !== segments.length - 1) {
-      throw new Error('Wildcard \'*\' must be the last segment');
+      throw new Error("Wildcard '*' must be the last segment");
     }
 
     const name = segment.length > 1 ? segment.slice(1) : '*';
 
     if (node.wildcardChild) {
       const existing = node.wildcardChild;
+
       if (existing.wildcardOrigin !== 'star' || existing.segment !== name) {
         throw new Error(`Conflict: wildcard '${existing.segment}' already exists at '${this.getPathString(segments, index)}'`);
       }
     } else {
       this.registerGlobalParamName(name);
+
       node.wildcardChild = acquireNode(NodeKind.Wildcard, name);
       node.wildcardChild.wildcardOrigin = 'star';
     }
 
     // Recurse (to register route)
     const release = this.registerParamScope(name, activeParams, segments);
+
     try {
       this.addSegments(node.wildcardChild, index + 1, activeParams, omittedOptionals, method, key, segments);
     } finally {
@@ -138,7 +146,6 @@ export class Builder<T> {
     segments: string[],
   ): void {
     const segment = segments[index]!;
-
     // Parse decorators (?, +, *)
     let core = segment;
     let isOptional = false;
@@ -159,6 +166,7 @@ export class Builder<T> {
       isMulti = true;
       core = core.slice(0, -1);
     }
+
     if (core.endsWith('*')) {
       isZeroOrMore = true;
       core = core.slice(0, -1);
@@ -173,14 +181,16 @@ export class Builder<T> {
       name = core.slice(1);
     } else {
       name = core.slice(1, braceIndex);
+
       if (!core.endsWith('}')) {
-        throw new Error('Parameter regex must close with \'}\'');
+        throw new Error("Parameter regex must close with '}'");
       }
+
       patternSrc = core.slice(braceIndex + 1, -1) || undefined;
     }
 
     if (!name) {
-      throw new Error('Parameter segment must have a name, eg \':id\'');
+      throw new Error("Parameter segment must have a name, eg ':id'");
     }
 
     // Validation
@@ -191,6 +201,7 @@ export class Builder<T> {
     // Handle Optional Branch (skip this parameter)
     if (isOptional) {
       const nextOmitted = omittedOptionals.length ? [...omittedOptionals, name] : [name];
+
       // Branch 1: Skip the parameter (recurse to index + 1 on SAME node)
       // Wait, original logic recursed to index + 1 on SAME node ??
       // Original: this.addSegments(node, idx + 1, ...)
@@ -219,6 +230,7 @@ export class Builder<T> {
         segments,
         registerScope,
       );
+
       return;
     }
 
@@ -229,8 +241,8 @@ export class Builder<T> {
     if (!child) {
       // Conflict Checks
       this.ensureNoParamConflict(node, name, patternSrc, segments, index);
-
       this.registerGlobalParamName(name);
+
       child = acquireNode(NodeKind.Param, name);
 
       if (patternSrc) {
@@ -270,6 +282,7 @@ export class Builder<T> {
 
     if (!node.wildcardChild) {
       this.registerGlobalParamName(name);
+
       node.wildcardChild = acquireNode(NodeKind.Wildcard, name || '*');
       node.wildcardChild.wildcardOrigin = type;
     } else if (node.wildcardChild.wildcardOrigin !== type || node.wildcardChild.segment !== name) {
@@ -281,6 +294,7 @@ export class Builder<T> {
     }
 
     const release = registerScope();
+
     try {
       this.addSegments(node.wildcardChild, index + 1, activeParams, omittedOptionals, method, key, segments);
     } finally {
@@ -308,11 +322,13 @@ export class Builder<T> {
 
     if (child) {
       this.handleExistingStatic(child, index, activeParams, omittedOptionals, method, key, segments);
+
       return;
     }
 
     // New Static Node
     const newNode = acquireNode(NodeKind.Static, segment);
+
     node.staticChildren.set(segment, newNode);
     this.addSegments(newNode, index + 1, activeParams, omittedOptionals, method, key, segments);
   }
@@ -332,14 +348,18 @@ export class Builder<T> {
     // For now, consistent with previous logic:
     if (parts && parts.length > 1) {
       const matched = matchStaticParts(parts, segments, index);
+
       if (matched < parts.length) {
         splitStaticChain(child, matched);
       }
+
       if (matched > 1) {
         this.addSegments(child, index + matched, activeParams, omittedOptionals, method, key, segments);
+
         return;
       }
     }
+
     this.addSegments(child, index + 1, activeParams, omittedOptionals, method, key, segments);
   }
 
@@ -358,11 +378,13 @@ export class Builder<T> {
     index: number,
   ): void {
     const dup = node.paramChildren.find(c => c.segment === name && (c.pattern?.source ?? '') !== (patternSrc ?? ''));
+
     if (dup) {
       throw new Error(
         `Conflict: parameter ':${name}' with different regex already exists at '${this.getPathString(segments, index)}'`,
       );
     }
+
     if (node.wildcardChild) {
       throw new Error(
         `Conflict: adding parameter ':${name}' under existing wildcard at '${this.getPathString(segments, index)}'`,
@@ -372,9 +394,12 @@ export class Builder<T> {
 
   private applyParamRegex(node: Node, patternSrc: string): void {
     const normalizedPattern = this.patternUtils.normalizeParamPatternSource(patternSrc);
+
     this.ensureRegexSafe(normalizedPattern);
+
     const patternFlags = ''; // flags support could be added here
     const compiledPattern = this.patternUtils.acquireCompiledPattern(normalizedPattern, patternFlags);
+
     node.pattern = compiledPattern;
     node.patternSource = normalizedPattern;
   }
@@ -387,7 +412,9 @@ export class Builder<T> {
     if (activeParams.has(name)) {
       throw new Error(`Duplicate parameter name ':${name}' detected in path: /${segments.join('/')}`);
     }
+
     activeParams.add(name);
+
     return () => activeParams.delete(name);
   }
 
@@ -395,11 +422,13 @@ export class Builder<T> {
     if (this.config.strictParamNames && this.globalParamNames.has(name)) {
       throw new Error(`Parameter ':${name}' already registered (strict uniqueness enabled)`);
     }
+
     this.globalParamNames.add(name);
   }
 
   private ensureRegexSafe(patternSrc: string): void {
     const safety = this.config.regexSafety;
+
     if (!safety) {
       return;
     }
@@ -412,12 +441,14 @@ export class Builder<T> {
 
     if (!result.safe) {
       const msg = `Unsafe route regex '${patternSrc}' (${result.reason})`;
+
       if (safety.mode === 'warn') {
         this.logger.warn(msg);
       } else {
         throw new Error(msg);
       }
     }
+
     safety.validator?.(patternSrc);
   }
 

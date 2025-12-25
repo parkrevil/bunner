@@ -5,6 +5,7 @@ export function createIndexHtml(docs: Doc[]): string {
     .map(d => {
       const href = `/api-docs/${encodeURIComponent(d.docId)}`;
       const jsonHref = `/api-docs/${encodeURIComponent(d.docId)}.json`;
+
       return `<li><a href="${href}">${d.docId}</a> — <a href="${jsonHref}">json</a></li>`;
     })
     .join('');

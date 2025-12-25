@@ -36,11 +36,13 @@ export class RouteHandler {
 
   register() {
     this.logger.debug('🔍 Registering routes from metadata...');
+
     for (const [targetClass, meta] of this.metadataRegistry.entries()) {
       const controllerDec = (meta.decorators || []).find((d: any) => d.name === 'Controller' || d.name === 'RestController');
 
       if (controllerDec) {
         this.logger.debug(`FOUND Controller: ${meta.className}`);
+
         this.registerController(targetClass, meta, controllerDec);
       }
     }
@@ -61,7 +63,6 @@ export class RouteHandler {
       }
 
       const fullPath = route.path.startsWith('/') ? route.path : `/${route.path}`;
-
       const entry: RouteHandlerEntry = {
         handler: route.handler,
         paramType: [],
@@ -89,7 +90,6 @@ export class RouteHandler {
 
   private registerController(targetClass: any, meta: any, controllerDec: any) {
     const prefix = controllerDec.arguments[0] || '';
-
     const scopedKey = this.scopedKeys.get(targetClass);
     let instance;
 
@@ -105,6 +105,7 @@ export class RouteHandler {
 
     if (!instance) {
       this.logger.warn(`⚠️  Cannot resolve controller instance: ${meta.className} (Key: ${scopedKey || targetClass.name})`);
+
       return;
     }
 
@@ -117,21 +118,20 @@ export class RouteHandler {
         const httpMethod = routeDec.name.toUpperCase();
         const subPath = routeDec.arguments[0] || '';
         const fullPath = '/' + [prefix, subPath].filter(Boolean).join('/').replace(/\/+/g, '/');
-
         const paramTypes = (method.parameters || [])
           .sort((a: any, b: any) => a.index - b.index)
           .map((p: any) => {
             const d = (p.decorators || [])[0];
+
             return d ? d.name.toLowerCase() : 'unknown';
           });
-
         const paramRefs = (method.parameters || [])
           .sort((a: any, b: any) => a.index - b.index)
           .map((p: any) => this.resolveParamType(p.type));
-
         // Detect parameters early (moved into paramFactory closure)
         const paramsConfig = (method.parameters || []).map((p: any, i: number) => {
           const d = (p.decorators || [])[0];
+
           return {
             type: d ? d.name.toLowerCase() : undefined,
             name: p.name,
@@ -139,18 +139,18 @@ export class RouteHandler {
             index: i,
           };
         });
-
         const paramFactory = async (req: BunnerRequest, res: BunnerResponse): Promise<any[]> => {
           const params = [];
+
           for (const config of paramsConfig) {
             let paramValue = undefined;
             const { type, metatype } = config;
-
             let typeToUse = type;
 
             // Fallback to name-based detection if no decorator
             if (!typeToUse && config.name) {
               const nameLower = config.name.toLowerCase();
+
               if (nameLower === 'params' || nameLower === 'param') {
                 typeToUse = 'param';
               } else if (nameLower === 'body') {
@@ -209,14 +209,14 @@ export class RouteHandler {
                 data: undefined,
               });
             }
+
             params.push(paramValue);
           }
+
           return params;
         };
-
         const middlewares = this.resolveMiddlewares(targetClass, method, meta);
         const errorHandlers = this.resolveErrorHandlers(targetClass, method, meta);
-
         const entry: RouteHandlerEntry = {
           handler: instance[method.name].bind(instance),
           paramType: paramTypes,
@@ -240,13 +240,14 @@ export class RouteHandler {
 
   private resolveMiddlewares(_targetClass: any, method: any, classMeta: any): BunnerMiddleware[] {
     const middlewares: BunnerMiddleware[] = [];
-
     // Method Level
     const decs = (method.decorators || []).filter((d: any) => d.name === 'UseMiddlewares');
+
     decs.forEach((d: any) => {
       (d.arguments || []).forEach((arg: any) => {
         try {
           const mw = this.container.get(arg);
+
           if (mw) {
             middlewares.push(mw);
           }
@@ -257,10 +258,12 @@ export class RouteHandler {
     // Controller Level
     if (classMeta) {
       const decs = classMeta.decorators.filter((d: any) => d.name === 'UseMiddlewares');
+
       decs.forEach((d: any) => {
         (d.arguments || []).forEach((arg: any) => {
           try {
             const mw = this.container.get(arg);
+
             if (mw) {
               middlewares.push(mw);
             }
@@ -274,13 +277,14 @@ export class RouteHandler {
 
   private resolveErrorHandlers(_targetClass: any, method: any, classMeta: any): ErrorHandler[] {
     const handlers: ErrorHandler[] = [];
-
     // Method handlers
     const methodDecs = method.decorators.filter((d: any) => d.name === 'UseErrorHandlers');
+
     methodDecs.forEach((d: any) =>
       (d.arguments || []).forEach((arg: any) => {
         try {
           const h = this.container.get(arg);
+
           if (h) {
             handlers.push(h);
           }
@@ -291,10 +295,12 @@ export class RouteHandler {
     // Controller handlers
     if (classMeta) {
       const decs = classMeta.decorators.filter((d: any) => d.name === 'UseErrorHandlers');
+
       decs.forEach((d: any) =>
         (d.arguments || []).forEach((arg: any) => {
           try {
             const h = this.container.get(arg);
+
             if (h) {
               handlers.push(h);
             }

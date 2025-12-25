@@ -4,6 +4,7 @@ export class PaymentFailedError extends Error {
     public reason: string,
   ) {
     super(`Payment of $${amount} failed: ${reason}`);
+
     this.name = 'PaymentFailedError';
   }
 }

@@ -28,11 +28,15 @@ export class Node {
     this.kind = kind;
     this.segment = segment;
     this.staticChildren = new StaticChildMap();
+
     if (this.paramChildren.length) {
       this.paramChildren.length = 0;
     }
+
     this.wildcardChild = undefined;
+
     this.methods.byMethod.clear();
+
     this.pattern = undefined;
     this.patternSource = undefined;
     this.patternTester = undefined;
