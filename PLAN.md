@@ -1,255 +1,462 @@
-# Scalar 재설계 계획 (Module-less, Multi-Adapter Docs)
+# 미들웨어 재설계 계획 (단일 인터페이스 + DI 기반 등록 + AOT 정합성)
 
 ## 0. 요약
-이 문서는 지금까지의 대화에서 합의된 내용을 “실행 가능한 계획”으로 정리합니다.
 
-핵심 결론은 아래 3가지입니다.
+이 계획의 목표는 “미들웨어 계약/등록/실행/AOT 검증”을 하나의 일관된 모델로 통합해, 새로운 어댑터가 늘어나도 확장 가능하고 결정적인(Deterministic) DX를 제공하는 것이다.
 
-- Scalar는 **모듈/컨트롤러로 제공하지 않는다**(사용자는 `Configurer.configure()`에서 직접 설정).
-- Scalar가 사용자에게 노출하는 설정 축은 **2개만 유지**한다.
-  - `documentTargets`: 어떤 어댑터(들)의 문서를 만들 것인가
-  - `httpTargets`: 어떤 HTTP 서버(들)에 문서 URL을 호스팅할 것인가
-- HTTP 호스팅을 위해 `http-adapter`는 “컨트롤러 없이 라우트를 붙일 수 있는 채널”이 1개 필요하다.
-  - 사용자가 야매로 쓰지 못하도록 **undocumented/internal 채널**로 제공한다.
-  - JS/TS 특성상 “완전 비공개”는 불가능하므로, 현실적 비공개(심볼 기반/문서 비노출/타입 비노출)로 간다.
+핵심 결정(확정 사항):
+
+- `BunnerHttpMiddleware`는 완전히 제거한다. 미들웨어 인터페이스는 **1개**만 유지한다(컨텍스트 기반).
+- HTTP 어댑터의 `.use()/.beforeRequest()/.afterRequest()...` 형태의 API는 제거한다.
+- 대신 `addMiddleware(라이프사이클 enum, [미들웨어.withOptions(...) 또는 미들웨어 클래스])` 형태로 통일한다.
+- 미들웨어는 DI로 생성되므로, “`new Middleware()`로 인스턴스를 넘기는 방식”을 지원하지 않는다.
+- `ctx.toHttp()` 같은 고정 변환 메서드는 제공하지 않는다.
+  - 어댑터별로 `isHttpContext()` 같은 “타입가드/헬퍼”를 제공하고,
+  - 공용(공통) 레벨에서는 타입가드를 활용한 제네릭 유틸로 DX를 보강한다.
+
+이 문서는 PLAN.md만 보고 그대로 구현할 수 있도록 “파일 단위 변경 목록 + 타입 시그니처 + 런타임 흐름 + AOT 업데이트 + 마이그레이션 + 정리(클린업) 체크리스트”를 포함한다.
 
 ---
 
-## 1. 배경 및 문제 정의
+## 1. 배경(현재 문제)
 
-### 1.1 현재 Scalar의 문제
-현재 `@bunner/scalar`는 다음 형태를 가진다.
+### 1.1 계약이 2개라서 생기는 문제
 
-- `ScalarModule.forRoot()` (모듈 기반)
-- `ScalarController` (HTTP 컨트롤러 기반)
-- `ScalarService` (스펙 생성)
+현재는 미들웨어가 2종이다.
 
-이 구조는 Scalar의 목적(“여러 어댑터의 API 문서 생성/제공”)과 충돌한다.
+- 공용(컨텍스트 기반): `BunnerMiddleware.handle(context)`
+- HTTP 전용(req/res 기반): `BunnerHttpMiddleware.handle(req, res)`
 
-- 모듈/컨트롤러는 **특정 transport(http-adapter)와 구조적으로 결합**된다.
-- 다중 어댑터(HTTP 2개, WS/GRPC/Queue 등)에서
-  - 문서가 어느 서버에 붙는지 명확히 제어하기 어렵다.
-  - 문서가 여러 개 생기는 건 괜찮지만, “호스팅 대상 선택”이 1급 옵션이 아니다.
+이로 인해 다음 문제가 발생한다.
 
-### 1.2 패키지 경계(역할) 재확인
+- 라우트 스코프(`@UseMiddlewares`)는 실제 실행이 `handle(ctx)`인데, 타입은 `BunnerHttpMiddleware[]`로 되어 있어 계약이 깨져도 컴파일러가 못 잡는다.
+- HTTP 어댑터 등록은 인스턴스(`new`)를 넘기는 것이 일반적인데, CLI(AOT)는 `configure()`에서 `Identifier`만 추적/검증하므로 AOT 정합성이 깨진다.
+- 실행기(서버 스테이지 vs RequestHandler)가 단락(`false`) 처리 규칙이 서로 다르다.
 
-#### `@bunner/common`
-- 최하위 “계약/공유 레이어”
-- 다른 bunner 패키지에 의존하지 않는다.
-- 타입/인터페이스/데코레이터(표기용)/유틸 제공
+### 1.2 AOT/결정성 제약
 
-추가로 확인된 경계 위배(설계 냄새):
-- `packages/common/src/interfaces.ts`의 `ErrorHandler(err, req, res, next)`는 HTTP 전용 시그니처로 범용 레이어에 부적절.
+이 프로젝트는 런타임 스캔/반사가 아니라 CLI(AOT) 산출물 기반이 SSOT다.
 
-#### `@bunner/core`
-- 런타임 커널
-  - 앱 생성/종료
-  - DI/스캐닝
-  - 라이프사이클 훅 호출
-  - 어댑터 오케스트레이션
+따라서 미들웨어 등록은 다음을 만족해야 한다.
 
-#### `@bunner/http-adapter`
-- HTTP transport 구현
-- 미들웨어/라우팅/서버 부트
-
-#### `@bunner/scalar` (재정의)
-- “문서 생성 + 호스팅 오케스트레이션”
-- 호스팅은 HTTP 서버 위에서만 제공(문서 UI/JSON은 HTTP로 제공)
-- Scalar 자체는 서버/컨트롤러를 만들지 않음
+- `configure()`의 정적 분석으로 “어떤 미들웨어가 사용되는지”가 결정 가능해야 한다.
+- 등록 방식이 인스턴스 생성(`new`)에 의존하면 AOT가 추적할 수 없다.
 
 ---
 
 ## 2. 목표(Design Goals)
 
 ### 2.1 DX 목표
-- 사용자는 모듈 import 없이 `configure()`에서 한 번 호출로 끝낸다.
-- 다중 HTTP 서버(예: public/admin)에서
-  - 한쪽만 호스팅하거나
-  - 둘 다 호스팅할 수 있어야 한다.
-- 다중 어댑터(WS/GRPC/Queue 포함)에서도
-  - 문서가 여러 개 생성되는 건 허용
-  - 어떤 문서를 만들지 선택 가능해야 한다.
 
-### 2.2 비기능 목표
-- Scalar는 “진짜 private” 대신 “실질적 비공개(undocumented/internal)” 원칙을 따른다.
-- transport 확장은 어댑터별로 전용 컨트롤러를 만드는 게 아니라,
-  - “스펙 생산자(Producer)”를 추가하는 방식으로 확장한다.
+- 미들웨어 작성자는 “하나의 인터페이스”만 배우면 된다.
+- 애플리케이션 개발자는 “등록 API 하나(addMiddleware)”만 배우면 된다.
+- DI(주입)와 옵션(withOptions)이 자연스럽고, `new` 없이도 옵션을 넣을 수 있어야 한다.
+- AOT가 `configure()`를 통해 미들웨어 사용을 추적/검증할 수 있어야 한다.
+
+### 2.2 아키텍처 목표
+
+- 런타임 스캔/폴백 금지(SSOT는 AOT).
+- 어댑터가 늘어나도 공용 컨텍스트 계약은 유지되고, 어댑터별 접근은 “어댑터 패키지의 타입가드/헬퍼”로 확장한다.
 
 ---
 
-## 3. 최종 사용자 API(공개 DX) — 옵션은 2개만
+## 3. 최종 사용자 API (공개 DX)
 
-### 3.1 API 형태
-권장: 함수형 1-shot.
+### 3.1 등록 API (HTTP 어댑터)
+
+HTTP 어댑터는 다음 메서드만 제공한다.
 
 ```ts
-// 사용자는 configure 훅에서 단 한 번 호출
-Scalar.setup(adapters, {
-  documentTargets: 'all',
-  httpTargets: 'all',
-});
+httpAdapter.addMiddleware(HttpMiddlewareLifecycle.BeforeRequest, [LoggerMiddleware, CorsMiddleware.withOptions({ origin: '*' })]);
 ```
 
-### 3.2 `documentTargets` (문서 생성 대상)
-문서를 “어떤 어댑터/프로토콜/인스턴스”로부터 만들지 결정한다.
+규칙:
 
-권장 스펙(최소):
-- `'all'`
-- `{ protocol: string; names?: string[] }[]` 형태의 matcher
+- 두 번째 인자는 반드시 배열이다.
+- 배열 원소는 다음 중 하나만 허용한다.
+  - 미들웨어 클래스 토큰 (예: `LoggerMiddleware`)
+  - `withOptions()` 호출 결과(등록 디스크립터)
+- `new`로 만든 인스턴스 전달은 금지(지원하지 않음).
 
-예시:
+### 3.2 라이프사이클 enum (HTTP 전용)
+
+HTTP 어댑터 패키지 내부에 enum을 둔다.
 
 ```ts
-documentTargets: 'all'
-
-documentTargets: [
-  { protocol: 'http', names: ['public-http', 'admin-http'] },
-  { protocol: 'ws', names: ['chat-ws'] },
-  { protocol: 'grpc' },
-]
+export enum HttpMiddlewareLifecycle {
+  BeforeRequest = 'BeforeRequest',
+  AfterRequest = 'AfterRequest',
+  BeforeHandler = 'BeforeHandler',
+  BeforeResponse = 'BeforeResponse',
+  AfterResponse = 'AfterResponse',
+}
 ```
 
-### 3.3 `httpTargets` (문서 호스팅 대상)
-문서 URL을 실제로 “어느 HTTP 서버”에 붙일지 결정한다.
+---
 
-권장 스펙(최소):
-- `'all'`
-- `string[]` (http adapter name 리스트)
+## 4. 타입/계약 (SSOT)
 
-보안/의도 명확성 관점에서 권장 정책(협의 필요):
-- 기본값을 두지 않고, `httpTargets`는 명시를 강제한다.
-  - (개발 DX가 더 중요하면 기본값 `'all'`도 가능)
+### 4.1 단일 미들웨어 인터페이스
+
+`@bunner/common`에 단일 인터페이스만 남긴다.
+
+변경 대상: `packages/common/src/interfaces.ts`
+
+요구 시그니처:
+
+```ts
+export interface BunnerMiddleware {
+  handle(context: Context): void | boolean | Promise<void | boolean>;
+}
+```
+
+정책:
+
+- `false` 반환 시 체인 중단(다음 미들웨어/핸들러 실행 금지)
+- `void` 또는 `true`는 계속 진행
+
+### 4.2 Context 타입 최소 개선(미들웨어 계약에 직접 영향)
+
+현재 `Context.get<T = any>` 및 `BunnerMiddleware.handle(context: any)` 등 `any`가 많다.
+이번 변경에서 미들웨어 계약을 강제하기 위해 아래는 같이 수정한다.
+
+변경 대상: `packages/common/src/interfaces.ts`
+
+- `Context.get<T = unknown>(key: string): T | undefined`로 변경
+- `BunnerMiddleware.handle(context: Context)`로 변경
+
+주의: 다른 영역의 `any` 대청소는 범위 밖이다. “미들웨어 계약에 직접 연결된 부분”만 최소 변경한다.
 
 ---
 
-## 4. Scalar 내부 구조(모듈/컨트롤러 제거)
+## 5. 옵션(withOptions) 표준
 
-### 4.1 구성 요소
-Scalar는 3단으로 분리한다.
+### 5.1 목적
 
-1) DocumentBuilder
-- 입력: metadata registry + 어댑터별 producer
-- 출력: `Doc[]` (여러 문서)
+`new Middleware(opts)`를 금지하면 “옵션 전달”이 문제다.
+이를 DI 방식으로 풀기 위해 `withOptions()`는 “미들웨어 등록 디스크립터”를 반환한다.
 
-2) HostBinder
-- 입력: `Doc[]` + `httpTargets`
-- 출력: 선택된 http 서버에 라우트 등록
+### 5.2 표준 디스크립터 타입
 
-3) Public Facade
-- `Scalar.setup(adapters, { documentTargets, httpTargets })`
+변경/추가 대상(권장 위치): `packages/common/src/interfaces.ts` 또는 `packages/common/src/types.ts`
 
-### 4.2 문서 모델(권장)
-문서가 여러 개 제공되는 것을 전제로, 아래 3 엔드포인트 패턴을 권장한다.
+```ts
+export type MiddlewareToken = Class<BunnerMiddleware>;
 
-- 인덱스: `/api-docs`
-- UI: `/api-docs/{docId}`
-- 스펙 JSON: `/api-docs/{docId}.json`
+export interface MiddlewareRegistration {
+  token: MiddlewareToken;
+  providers?: readonly ProviderBase[];
+}
+```
 
-`docId`는 충돌 방지를 위해 규칙화한다.
-- 예: `${type}:${protocol}:${name}`
-  - `openapi:http:public-http`
-  - `asyncapi:ws:chat-ws`
+규칙:
 
-> NOTE: 현재 Scalar는 `path` 옵션을 가지고 있었으나, “옵션 2개만”을 위해 v1에서는 `/api-docs`로 고정한다.
-> 필요하면 v2에서 `basePath`를 추가(기본값 포함)하되, 핵심 DX를 해치지 않는 방향으로 확장한다.
+- `token`은 미들웨어 클래스(컨테이너가 생성할 대상)
+- `providers`는 옵션 토큰용 `useValue` 프로바이더만을 주로 사용
 
----
+### 5.3 withOptions 구현 규칙
 
-## 5. http-adapter가 제공해야 하는 내부 라우트 채널(undocumented)
+각 미들웨어는 필요 시 아래 형태를 제공한다.
 
-### 5.1 왜 필요한가
-현재 `BunnerHttpAdapter`는 미들웨어 체인만 제공하고, “외부 패키지가 임의 경로에 GET 라우트를 추가”할 방법이 없다.
-Scalar는 모듈/컨트롤러 없이 `/api-docs*`를 호스팅해야 하므로, 라우트 등록 채널이 1개 필요하다.
+```ts
+export class CorsMiddleware implements BunnerMiddleware {
+  public static withOptions(options: CorsOptions): MiddlewareRegistration {
+    return {
+      token: CorsMiddleware,
+      providers: [{ token: CORS_OPTIONS, useValue: options }],
+    };
+  }
 
-### 5.2 요구사항
-- 사용자에게는 문서/타입에서 노출하지 않는다.
-- 외부 패키지(Scalar)만 접근할 수 있는 ‘사실상 비공개’ 형태로 제공한다.
-- 최소 기능만 제공한다.
-  - `GET path -> handler(req) => Response` 정도면 충분
+  // handle(ctx) 구현
+}
+```
 
-### 5.3 추천 설계(심볼 기반 internal)
+주의:
 
-- `http-adapter` 내부에 심볼 키를 정의한다.
-  - `const INTERNAL = Symbol.for('bunner:http:internal')`
-- 어댑터 인스턴스에 `(adapter as any)[INTERNAL] = { route(...) }` 형태로 숨긴다.
-- Scalar는 같은 `Symbol.for(...)`로만 해당 훅을 찾아서 라우트를 등록한다.
-
-중요: 완전 차단은 불가능하지만,
-- 타입에 노출하지 않고
-- 문서에 노출하지 않으며
-- 심볼 문자열을 외부에 안내하지 않음
-으로 “야매 사용”을 사실상 억제한다.
+- `withOptions()`는 “등록 디스크립터 생성”만 한다. 인스턴스 생성(`new`)을 하면 안 된다.
+- 옵션은 DI 토큰으로 주입한다(이미 `@Inject(TOKEN)` 패턴이 존재).
 
 ---
 
-## 6. 의존성 정책 및 에러 정책
+## 6. 런타임 실행 흐름 (HTTP)
 
-### 6.1 의존성
-- `@bunner/scalar`는 `@bunner/http-adapter`에 의존적이어야 한다(호스팅이 HTTP 기반이므로).
-- 설치 전략(권장): `peerDependencies` 사용
-  - 프로젝트에 `@bunner/http-adapter`가 없으면 설치 단계에서 경고/에러 유도
-  - 런타임에서도 메시지를 명확히 제공
+### 6.1 변경 후 파이프라인(요약)
 
-### 6.2 런타임 에러 정책
-- `httpTargets`로 선택된 http 서버가 없으면 즉시 에러
-  - 예: "Scalar: no HTTP adapter selected/found. Install/add @bunner/http-adapter and register an http adapter."
-- 선택된 http 서버가 internal route 채널을 제공하지 않으면 에러
-  - 예: "Scalar: selected http adapter does not support internal route binding (upgrade http-adapter)."
+HTTP 서버는 모든 스테이지에서 동일한 실행기를 사용한다.
 
----
+- 입력: `BunnerMiddleware[]` + `Context`
+- 규칙: `false` 반환 시 즉시 중단
 
-## 7. 마이그레이션 계획
+### 6.2 BunnerHttpServer에서의 적용
 
-### 7.1 단계별 진행(권장)
+변경 대상: `packages/http-adapter/src/bunner-http-server.ts`
 
-1) `@bunner/http-adapter`
-- internal route 채널 추가(undocumented)
-- 최소 `GET` 등록 지원
+현재 문제:
 
-2) `@bunner/scalar`
-- `Scalar.setup(adapters, { documentTargets, httpTargets })` 추가
-- 기존 `ScalarModule/Controller/Service`는 **deprecated** 처리
-  - 단, 사용 금지 원칙이므로 예제/문서에서 제거
-  - 제거 시점은 major 버전에서 확정
+- 서버 스테이지가 `BunnerHttpMiddleware[]`를 실행하며 반환값을 무시한다.
 
-3) `examples`
-- `ScalarModule.forRoot(...)` 제거
-- `AppModule.configure()`에서 `Scalar.setup(...)` 사용
+변경 후:
 
-4) (선택) 경계 정리
-- `@bunner/common`의 HTTP 전용 `ErrorHandler`를 `http-adapter`로 이동 또는 이름/시그니처 변경
-- `@bunner/core`의 `export * from '@bunner/common'` 재-export는 패키지 경계를 흐리므로 재검토
+- 서버 스테이지도 `BunnerMiddleware[]`를 실행한다.
+- `BunnerHttpServer.boot(container, options)`에서 다음을 수행한다.
+  1. 옵션으로 전달된 stage별 `MiddlewareRegistration[]`를 수집한다.
+  2. 디스크립터에 포함된 `providers`를 컨테이너에 등록한다.
+  3. stage별 `token`을 컨테이너에서 resolve하여 `BunnerMiddleware[]`로 확정한다.
+  4. 확정된 `BunnerMiddleware[]`를 런타임 실행에 사용한다(요청마다 resolve하지 않음).
+
+중요: 컨테이너가 싱글턴/스코프를 어떻게 다루는지는 현재 구현에 따르되, 본 변경의 기본값은 “부팅 시 resolve 후 재사용”이다.
+
+### 6.3 RequestHandler와의 정합성
+
+변경 대상: `packages/http-adapter/src/request-handler.ts`, `packages/http-adapter/src/interfaces.ts`
+
+- `RequestHandler.runMiddlewares(middlewares: BunnerMiddleware[], ctx: Context)`는 이미 `false` 단락을 구현하고 있으므로 이를 SSOT로 삼는다.
+- `RouteHandlerEntry.middlewares`는 `BunnerMiddleware[]`로 바꿔서 “스코프 미들웨어는 항상 ctx 기반”을 타입으로 강제한다.
 
 ---
 
-## 8. 검증(Verification)
+## 7. 어댑터별 접근(DX) 설계: toXxx 금지, 타입가드+제네릭 유틸
 
-### 8.1 시나리오
-- HTTP adapter 2개(public/admin) 등록
-- WS/GRPC/QUEUE adapter 각각 1개 이상 등록(실제 구현/목업 무관)
-- Scalar 설정
-  - `documentTargets: 'all'`
-  - `httpTargets: ['public-http']` 또는 `'all'`
+### 7.1 원칙
 
-### 8.2 기대 결과
-- 선택한 HTTP 서버(들)에서만 `/api-docs`가 노출된다.
-- `/api-docs`는 문서 목록을 제공한다.
-- `/api-docs/{docId}` 및 `/{docId}.json`이 정상 반환된다.
-- http-adapter가 없거나 target이 잘못되면, 시작 시점에 명확한 에러가 발생한다.
+- 공용 컨텍스트는 어떤 어댑터가 늘어나도 고정 계약을 유지한다.
+- 특정 어댑터 기능(예: HTTP의 req/res)은 “해당 어댑터 패키지에서 제공하는 타입가드”로만 좁힌다.
+
+### 7.2 HTTP 어댑터 제공(현행 유지)
+
+변경 대상: `packages/http-adapter/src/adapter/guards.ts`
+
+- `isHttpContext(ctx): ctx is HttpContext`는 유지한다.
+
+### 7.3 공용 제네릭 유틸(추가)
+
+추가 대상(권장 위치): `packages/common/src/utils.ts` 또는 `packages/common/src/context/require-context.ts`(새 feature로 추가)
+
+목표: 어댑터별 고정 메서드를 만들지 않고도, 반복되는 패턴을 공용 DX로 단순화한다.
+
+요구 시그니처(예시):
+
+```ts
+export function requireContext<T extends Context>(ctx: Context, guard: (ctx: Context) => ctx is T, errorMessage: string): T;
+```
+
+사용 예:
+
+```ts
+const http = requireContext(ctx, isHttpContext, 'This middleware requires HTTP context.');
+http.response.setHeader('x', 'y');
+```
 
 ---
+
+## 8. AOT/CLI 업데이트 (configure 추출 규칙 변경)
+
+### 8.1 현행 제약
+
+현재 CLI는 `configure()` 본문에서 메서드명이 `use/beforeRequest/...`인 호출을 찾고, 인자가 `Identifier`인 것만 미들웨어로 추출한다.
+즉, `new Middleware()`는 AOT가 추적하지 못한다.
+
+### 8.2 변경 목표
+
+변경 대상: `packages/cli/src/analyzer/ast-parser.ts`
+
+- `extractMiddlewaresFromConfigure()`가 `addMiddleware(...)` 호출만 대상으로 한다.
+- 추출 대상 형태:
+  - `httpAdapter.addMiddleware(Lifecycle, [A, B.withOptions(...)])`
+  - 배열 원소가 `Identifier`면 해당 이름을 수집
+  - 배열 원소가 `CallExpression`이고 callee가 `MemberExpression(Identifier, 'withOptions')`면 “object Identifier”를 수집
+
+구체 AST 패턴(필수):
+
+- CallExpression
+  - callee: MemberExpression (property.name === 'addMiddleware')
+  - `arguments[1]`: ArrayExpression
+    - `elements[i]`:
+      - Identifier -> push(name)
+      - CallExpression where callee is MemberExpression and property.name === 'withOptions'
+        - callee.object is Identifier -> push(callee.object.name)
+
+지원하지 않는 패턴(명시적으로 무시 또는 실패):
+
+- SpreadElement
+- 동적 계산 specifier
+- 배열이 아닌 두 번째 인자
+
+### 8.3 그래프 검증
+
+변경 대상: `packages/cli/src/analyzer/graph/module-graph.ts`
+
+- 현재는 “추출된 클래스 이름이 @Middleware 데코레이터가 있는지”만 검증한다.
+- `addMiddleware`로 변경해도 같은 정책을 유지한다.
+- 단, 검증 메시지/설명은 `use()`가 아니라 `addMiddleware()` 기준으로 업데이트한다.
+
+---
+
+## 9. 코드 변경 목록(파일 단위)
+
+### 9.1 공용(common)
+
+- `packages/common/src/interfaces.ts`
+  - `BunnerMiddleware.handle(context: Context): void | boolean | Promise<void | boolean>`로 변경
+  - `Context.get<T = unknown>`로 변경
+  - `MiddlewareToken`, `MiddlewareRegistration` 타입 추가(적절한 위치에 배치)
+
+### 9.2 HTTP 어댑터
+
+- `packages/http-adapter/src/interfaces.ts`
+  - `BunnerHttpMiddleware` 제거
+  - `HttpMiddlewareLifecycle` 추가
+  - `RouteHandlerEntry.middlewares: BunnerMiddleware[]`로 변경
+  - `BunnerHttpServerOptions.middlewares` 타입을 stage별 `MiddlewareRegistration[]`(또는 token 배열)로 변경
+
+- `packages/http-adapter/src/bunner-http-adapter.ts`
+  - `.use/.beforeRequest/.afterRequest/.beforeHandler/.beforeResponse/.afterResponse` 제거
+  - `addMiddleware(lifecycle: HttpMiddlewareLifecycle, middlewares: readonly (MiddlewareToken | MiddlewareRegistration)[]): this` 추가
+  - 내부 저장 구조는 “stage별 등록 디스크립터 배열”로 유지
+
+- `packages/http-adapter/src/bunner-http-server.ts`
+  - stage 실행을 `BunnerMiddleware[] + Context` 기반으로 통일
+  - boot 시점에 등록 디스크립터 → 컨테이너 등록 → 인스턴스 resolve → stage별 실행 리스트 확정
+  - 실행기는 `false` 단락을 존중
+
+- `packages/http-adapter/src/request-handler.ts`
+  - `RouteHandlerEntry` 타입 변경에 맞춘 정합성 수정
+  - (필요 시) runMiddlewares를 공용 유틸로 올리거나 서버가 동일 로직을 사용하도록 정리
+
+- `packages/http-adapter/src/middlewares/**`
+  - 파일 위치는 유지한다(요구사항)
+  - 각 미들웨어는 `BunnerMiddleware`를 구현하도록 변경
+  - HTTP 전용 접근은 `isHttpContext(ctx)`로 좁혀 `ctx.request/ctx.response`를 사용
+  - 옵션이 필요한 미들웨어는 `static withOptions()` 제공
+
+### 9.3 CLI
+
+- `packages/cli/src/analyzer/ast-parser.ts`
+  - `extractMiddlewaresFromConfigure()`가 `addMiddleware()` + 배열 인자 + withOptions 패턴을 추출하도록 변경
+
+- `packages/cli/src/analyzer/graph/module-graph.ts`
+  - 검증 메시지/설명 업데이트(필요 시)
+
+### 9.4 예제
+
+- `examples/src/app.module.ts`
+  - `httpAdapter.use(new ...)` 제거
+  - `httpAdapter.addMiddleware(HttpMiddlewareLifecycle.BeforeRequest, [...])` 형태로 교체
+  - `withOptions()`를 사용하도록 교체
+
+---
+
+## 10. 마이그레이션 가이드(사용자 코드)
+
+### 10.1 등록 API
+
+Before:
+
+```ts
+httpAdapter.use(new LoggerMiddleware(), new CorsMiddleware({ origin: '*' }));
+```
+
+After:
+
+```ts
+httpAdapter.addMiddleware(HttpMiddlewareLifecycle.BeforeRequest, [LoggerMiddleware, CorsMiddleware.withOptions({ origin: '*' })]);
+```
+
+### 10.2 미들웨어 구현
+
+Before:
+
+```ts
+export class CorsMiddleware implements BunnerHttpMiddleware {
+  handle(req, res) { ... }
+}
+```
+
+After:
+
+```ts
+export class CorsMiddleware implements BunnerMiddleware {
+  public async handle(ctx: Context): Promise<void | boolean> {
+    if (!isHttpContext(ctx)) {
+      return;
+    }
+
+    const req = ctx.request;
+    const res = ctx.response;
+    ...
+  }
+}
+```
+
+---
+
+## 11. 정리(클린업) 단계: 불필요해진 파일/코드 제거 체크리스트
+
+모든 기능 변경이 끝난 뒤, 아래를 “정리 전용 커밋/작업”으로 수행한다.
+
+- `BunnerHttpMiddleware` 정의/exports/사용처가 완전히 사라졌는지 전수 확인
+  - `packages/http-adapter/src/interfaces.ts`
+  - `packages/http-adapter/src/bunner-http-adapter.ts`
+  - `packages/http-adapter/src/bunner-http-server.ts`
+  - `packages/http-adapter/src/middlewares/**`
+  - `examples/**`
+- 제거된 `.use/.beforeRequest/...`가 문서/예제/테스트에 남아있는지 전수 확인
+- CLI analyzer가 더 이상 `use/beforeRequest/...`를 추출하지 않는지 확인
+- 타입 정합성:
+  - `RouteHandlerEntry.middlewares`가 `BunnerMiddleware[]`로 고정됐는지
+  - 서버 스테이지 실행기가 `false` 단락을 존중하는지
+- public facade(index.ts)에서 불필요한 export가 남지 않았는지 확인(명시 export 유지)
+
+---
+
+## 12. 검증(Verification)
+
+최소 검증 시나리오(반드시 통과해야 함):
+
+1. AOT 분석
+
+- `Configurer.configure()`에 `addMiddleware()`가 있는 예제를 만들어 CLI 분석이 미들웨어 클래스를 정확히 추출하는지 확인
+- `withOptions()` 패턴도 추출되는지 확인
+
+2. 런타임 HTTP
+
+- `BeforeRequest`에 CORS/QueryParser 같은 미들웨어를 등록하고 실제 요청에서 동작 확인
+- 미들웨어가 `false`를 반환하면 핸들러가 호출되지 않는지 확인
+
+3. 타입 안전
+
+- 라우트 스코프 `@UseMiddlewares`에 req/res 기반 구현을 붙일 수 없게(컴파일 단계에서) 막히는지 확인
+
+4. 회귀
+
+- `bun test` / `tsc` / `eslint`가 통과하는지 확인
+
+---
+
+## 13. 구현 순서(권장)
+
+1. common 계약/타입 추가(단일 미들웨어 인터페이스 확정)
+2. http-adapter: interfaces.ts 타입 변경 + addMiddleware API 추가(아직 실행기는 구버전일 수 있음)
+3. http-adapter: server 실행기 ctx 기반으로 통합 + stage 단락 처리 통일
+4. http-adapter: built-in middlewares를 단일 인터페이스로 마이그레이션 + withOptions 도입
+5. cli: addMiddleware 추출/검증으로 업데이트
+6. examples: addMiddleware로 마이그레이션
+7. 정리(클린업) 전수 확인 및 불필요 코드 제거
 
 ## 9. 오픈 이슈(결정 필요)
 
-1) `httpTargets` 기본값
+1. `httpTargets` 기본값
+
 - 안전 우선: 기본값 없음(명시 강제)
 - DX 우선: 기본값 `'all'`
 
-2) base path(`/api-docs`) 커스터마이즈
+2. base path(`/api-docs`) 커스터마이즈
+
 - v1: 고정
 - v2: `basePath` 옵션 추가(옵션 증가)
 
-3) 문서 생성 소스
+3. 문서 생성 소스
+
 - 현재는 `globalThis.__BUNNER_METADATA_REGISTRY__` 기반(OpenAPIFactory)
 - WS/GRPC/QUEUE는 producer 확장 포인트를 어떻게 표준화할지
 
@@ -262,12 +469,14 @@ Scalar는 모듈/컨트롤러 없이 `/api-docs*`를 호스팅해야 하므로, 
 ### 10.1 Adapter / Plugin / Module 정의
 
 #### Adapter (어댑터)
+
 - **정의**: `BunnerAdapter`를 구현하고 `start(context)` / `stop()`으로 **런타임 리소스(서버/워커/리스너)를 직접 실행/중지**하는 단위
 - **소유권**: 프로세스/네트워크/워커 등 “실행 단위”를 소유한다.
 - **부착 지점**: `BunnerApplication.addAdapter()`로 등록되며, `AdapterCollection`을 통해 이름으로 선택된다.
 - **예시**: HTTP, WS, gRPC, Queue 어댑터
 
 #### Plugin (플러그인)
+
 - **정의**: 어댑터 또는 컨테이너에 **설치(attach/setup)** 되어 기능을 확장하지만, 스스로 `BunnerAdapter`로서 서버/워커를 “실행”하지는 않는 단위
 - **소유권**: 실행 단위를 소유하지 않고, 기존 실행 단위에 기능을 “붙인다”.
 - **부착 지점**: 명확해야 한다.
@@ -276,6 +485,7 @@ Scalar는 모듈/컨트롤러 없이 `/api-docs*`를 호스팅해야 하므로, 
 - **예시**: 문서 호스팅, 메트릭/트레이싱 설치, DB 연결/Repository 설치
 
 #### Module (모듈)
+
 - **정의**: DI 스캐너가 읽는 **구성 그래프 단위**(controllers/providers/imports)
 - **역할**: 앱 기능 조립(비즈니스 로직 구성)과 의존 주입 관계를 선언한다.
 - **원칙**: 인프라를 “켜는 행위(연결/호스팅/마이그레이션 실행 등)”를 모듈이 숨기지 않는다.
@@ -285,13 +495,16 @@ Scalar는 모듈/컨트롤러 없이 `/api-docs*`를 호스팅해야 하므로, 
 
 아래 질문으로 분류가 결정된다.
 
-1) `start/stop`으로 서버/워커/리스너를 직접 실행해야 하는가?
+1. `start/stop`으로 서버/워커/리스너를 직접 실행해야 하는가?
+
 - Yes => Adapter
 
-2) DI 그래프(controllers/providers/imports)를 구성하는가?
+2. DI 그래프(controllers/providers/imports)를 구성하는가?
+
 - Yes => Module
 
-3) 기존 실행 단위(어댑터/컨테이너)에 설치되어 기능을 추가하는가?
+3. 기존 실행 단위(어댑터/컨테이너)에 설치되어 기능을 추가하는가?
+
 - Yes => Plugin
 
 > NOTE: 하나의 기능이 Module+Plugin처럼 보이면, “인프라를 켜는 부분”은 Plugin으로 분리하고,
@@ -314,5 +527,3 @@ Scalar는 모듈/컨트롤러 없이 `/api-docs*`를 호스팅해야 하므로, 
   - 역할: DataSource/Repository 설치, 연결 라이프사이클, (선택) 마이그레이션
   - 부착 지점: Container(또는 App)
   - 도메인 모듈은 TypeORM을 “설치”하지 않고 주입받아 사용만 한다.
-
-
