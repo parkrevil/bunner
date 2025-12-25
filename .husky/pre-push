@@ -1,4 +1,4 @@
 #!/usr/bin/env sh
 set -eu
 
-# bunx knip --dependencies
+bunx knip --dependencies
