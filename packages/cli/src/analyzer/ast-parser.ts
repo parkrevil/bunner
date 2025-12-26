@@ -129,6 +129,7 @@ export class AstParser {
     const methods: ClassMetadata['methods'] = [];
     const properties: ClassMetadata['properties'] = [];
     let middlewares: ClassMetadata['middlewares'] = [];
+    let errorFilters: ClassMetadata['errorFilters'] = [];
 
     node.body.body.forEach((member: any) => {
       if (member.type === 'MethodDefinition') {
@@ -155,6 +156,7 @@ export class AstParser {
 
           if (methodName === 'configure') {
             middlewares = this.extractMiddlewaresFromConfigure(member.value);
+            errorFilters = this.extractErrorFiltersFromConfigure(member.value);
           }
 
           if (methodDecorators.length > 0 || methodParams.some(p => p.decorators.length > 0)) {
@@ -266,7 +268,70 @@ export class AstParser {
       properties,
       imports: {},
       middlewares,
+      errorFilters,
     };
+  }
+
+  private extractErrorFiltersFromConfigure(funcNode: any): ClassMetadata['errorFilters'] {
+    const errorFilters: ClassMetadata['errorFilters'] = [];
+    const error = () => {
+      throw new Error('[Bunner AOT] addErrorFilters는 리터럴 배열 + Identifier만 지원합니다.');
+    };
+    const visit = (n: any) => {
+      if (!n || typeof n !== 'object') {
+        return;
+      }
+
+      if (n.type === 'CallExpression' && n.callee?.type === 'MemberExpression') {
+        const method = n.callee.property?.name;
+
+        if (method === 'addErrorFilters') {
+          const arrayArg = n.arguments?.[0];
+
+          if (!arrayArg || arrayArg.type !== 'ArrayExpression') {
+            error();
+          }
+
+          (arrayArg.elements || []).forEach((el: any, index: number) => {
+            if (!el) {
+              error();
+            }
+
+            if (el.type === 'SpreadElement') {
+              error();
+            }
+
+            if (el.type === 'Identifier') {
+              errorFilters?.push({ name: el.name, index });
+
+              return;
+            }
+
+            error();
+          });
+
+          return;
+        }
+      }
+
+      Object.keys(n).forEach(key => {
+        if (['type', 'loc', 'start', 'end'].includes(key)) {
+          return;
+        }
+
+        const val = n[key];
+
+        if (Array.isArray(val)) {
+          val.forEach(visit);
+        } else {
+          visit(val);
+        }
+      });
+    };
+
+    visit(funcNode.body);
+
+    return errorFilters;
   }
 
   private extractMiddlewaresFromConfigure(funcNode: any): ClassMetadata['middlewares'] {

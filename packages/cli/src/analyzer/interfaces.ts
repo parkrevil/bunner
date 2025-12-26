@@ -13,6 +13,11 @@ export interface MiddlewareUsage {
   index: number;
 }
 
+export interface ErrorFilterUsage {
+  name: string;
+  index: number;
+}
+
 export interface DecoratorMetadata {
   name: string;
   arguments: any[];
@@ -56,4 +61,5 @@ export interface ClassMetadata {
   }[];
   imports: Record<string, string>;
   middlewares?: MiddlewareUsage[];
+  errorFilters?: ErrorFilterUsage[];
 }

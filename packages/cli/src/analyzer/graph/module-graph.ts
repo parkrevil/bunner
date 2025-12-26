@@ -37,6 +37,7 @@ export class ModuleGraph {
       this.linkImports(node);
     });
     this.validateMiddlewares();
+    this.validateErrorFilters();
 
     return this.modules;
   }
@@ -374,5 +375,107 @@ export class ModuleGraph {
         }
       });
     });
+  }
+
+  private validateErrorFilters() {
+    this.validateGlobalErrorFilters();
+    this.validateScopedErrorFilters();
+  }
+
+  private validateGlobalErrorFilters() {
+    this.modules.forEach(node => {
+      const errorFilters = node.metadata.errorFilters || [];
+
+      if (errorFilters.length === 0) {
+        return;
+      }
+
+      errorFilters.forEach(ef => {
+        const targetNode = this.resolveClassNodeFromImports(node, ef.name);
+
+        if (!targetNode) {
+          return;
+        }
+
+        const hasDecorator = targetNode.metadata.decorators.some(d => d.name === 'Catch');
+
+        if (!hasDecorator) {
+          throw new Error(
+            `[Bunner AOT] ErrorFilter validation failed: Class '${ef.name}' (index: ${ef.index}) used in '${node.name}.configure()' via addErrorFilters() is missing @Catch(). File: ${targetNode.filePath}`,
+          );
+        }
+      });
+    });
+  }
+
+  private validateScopedErrorFilters() {
+    this.classMap.forEach(node => {
+      const methods = node.metadata.methods || [];
+
+      if (methods.length === 0) {
+        return;
+      }
+
+      methods.forEach(m => {
+        const decs = m.decorators || [];
+
+        decs
+          .filter(d => d.name === 'UseErrorFilters')
+          .forEach(d => {
+            (d.arguments || []).forEach((arg: any, index: number) => {
+              const name = typeof arg === 'string' ? arg : arg?.__bunner_ref;
+
+              if (!name || typeof name !== 'string') {
+                throw new Error(
+                  `[Bunner AOT] @UseErrorFilters() only supports Identifier tokens. Found unsupported argument at ${node.name}.${m.name} index ${index}. File: ${node.filePath}`,
+                );
+              }
+
+              const targetNode = this.resolveClassNodeFromImports(node, name);
+
+              if (!targetNode) {
+                return;
+              }
+
+              const hasDecorator = targetNode.metadata.decorators.some(dd => dd.name === 'Catch');
+
+              if (!hasDecorator) {
+                throw new Error(
+                  `[Bunner AOT] ErrorFilter validation failed: Class '${name}' used in @UseErrorFilters() at ${node.name}.${m.name} is missing @Catch(). File: ${targetNode.filePath}`,
+                );
+              }
+            });
+          });
+      });
+    });
+  }
+
+  private resolveClassNodeFromImports(contextNode: ModuleNode, className: string): ModuleNode | undefined {
+    const importsMeta = contextNode.metadata.imports || {};
+    const absPath = importsMeta[className];
+
+    if (absPath) {
+      const fileKey = this.findFileKey(absPath);
+
+      if (fileKey) {
+        const fileAnalysis = this.fileMap.get(fileKey)!;
+
+        if (fileAnalysis.exports.includes(className)) {
+          const targetNode = this.classMap.get(className);
+
+          if (targetNode && targetNode.filePath === fileKey) {
+            return targetNode;
+          }
+        }
+      }
+    }
+
+    const sameFileNode = this.classMap.get(className);
+
+    if (sameFileNode && sameFileNode.filePath === contextNode.filePath) {
+      return sameFileNode;
+    }
+
+    return undefined;
   }
 }
