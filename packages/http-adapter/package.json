@@ -2,9 +2,6 @@
   "name": "@bunner/http-adapter",
   "module": "index.ts",
   "type": "module",
-  "bin": {
-    "bunner-http-snapshot": "./bin/generate-snapshot.ts"
-  },
   "scripts": {},
   "devDependencies": {
     "@types/bun": "^1.3.0",
