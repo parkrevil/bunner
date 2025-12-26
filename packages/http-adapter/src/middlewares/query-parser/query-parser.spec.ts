@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 
 import { QueryParser } from './query-parser';
 
-describe('BunnerQueryParser (Strict Implementation)', () => {
+describe('QueryParser', () => {
   // ============================================
   // 1. Core RFC3986 Compliance
   // ============================================
