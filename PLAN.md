@@ -1,535 +1,396 @@
-# 미들웨어 재설계 계획 (단일 인터페이스 + DI 기반 등록 + AOT 정합성)
+# ErrorFilter 표준화 계획 (ErrorHandler 완전 제거)
 
-## 0. 요약
-
-이 계획의 목표는 “미들웨어 계약/등록/실행/AOT 검증”을 하나의 일관된 모델로 통합해, 새로운 어댑터가 늘어나도 확장 가능하고 결정적인(Deterministic) DX를 제공하는 것이다.
-
-핵심 결정(확정 사항):
-
-- `BunnerHttpMiddleware`는 완전히 제거한다. 미들웨어 계약은 **단일 추상 클래스** `BunnerMiddleware<TOptions = void>`만 유지한다(컨텍스트 기반).
-- HTTP 어댑터의 `.use()/.beforeRequest()/.afterRequest()...` 형태의 API는 제거한다.
-- 대신 `addMiddlewares(라이프사이클 enum, [미들웨어.withOptions(...) 또는 미들웨어 클래스])` 형태로 통일한다.
-- 미들웨어는 DI로 생성되며, `withOptions`는 베이스 클래스의 static 메서드를 그대로 사용한다(각 미들웨어가 재정의할 필요 없음). 옵션은 프레임워크가 결정적으로 생성한 토큰으로 자동 주입한다(@InjectOptions 불필요).
-- `ctx.to()`는 변환 실패 시 `BunnerContextError`(메시지만 포함)를 던진다. `tryTo`나 `isHttpContext` 같은 안전/가드 API는 제공하지 않는다.
-
-이 문서는 PLAN.md만 보고 그대로 구현할 수 있도록 “파일 단위 변경 목록 + 타입 시그니처 + 런타임 흐름 + AOT 업데이트 + 마이그레이션 + 정리(클린업) 체크리스트”를 포함한다.
+이 문서는 **ErrorFilter 관련 내용만** 포함한다.
+미들웨어/스칼라/용어 정의 등 다른 계획은 이 문서에서 다루지 않는다.
 
 ---
 
-## 1. 배경(현재 문제)
+## 0. 목표와 범위
 
-### 1.1 계약이 2개라서 생기는 문제
+### 0.1 목표
 
-현재는 미들웨어가 2종이다.
+- 기존 `ErrorHandler` 기반 에러 처리(타입/데코레이터/런타임 실행)를 **ErrorFilter 단일 모델**로 표준화한다.
+- 결정적인 실행 규칙을 제공한다(arity 추론/런타임 스캔/묵시적 동작 제거).
+- `@bunner/common`은 transport-agnostic 경계를 유지한다(HTTP 시그니처 금지).
+- AOT(CLI)에서 사용된 Filter 토큰이 유효한지 검증 가능해야 한다.
 
-- 공용(컨텍스트 기반): `BunnerMiddleware.handle(context)`
-- HTTP 전용(req/res 기반): `BunnerHttpMiddleware.handle(req, res)`
+### 0.2 비목표
 
-이로 인해 다음 문제가 발생한다.
-
-- 라우트 스코프(`@UseMiddlewares`)는 실제 실행이 `handle(ctx)`인데, 타입은 `BunnerHttpMiddleware[]`로 되어 있어 계약이 깨져도 컴파일러가 못 잡는다.
-- HTTP 어댑터 등록은 인스턴스(`new`)를 넘기는 것이 일반적인데, CLI(AOT)는 `configure()`에서 `Identifier`만 추적/검증하므로 AOT 정합성이 깨진다.
-- 실행기(서버 스테이지 vs RequestHandler)가 단락(`false`) 처리 규칙이 서로 다르다.
-
-### 1.2 AOT/결정성 제약
-
-이 프로젝트는 런타임 스캔/반사가 아니라 CLI(AOT) 산출물 기반이 SSOT다.
-
-따라서 미들웨어 등록은 다음을 만족해야 한다.
-
-- `configure()`의 정적 분석으로 “어떤 미들웨어가 사용되는지”가 결정 가능해야 한다.
-- 등록 방식이 인스턴스 생성(`new`)에 의존하면 AOT가 추적할 수 없다.
+- “필터가 응답 body를 자동으로 만들어 주는” 규칙을 표준으로 넣지 않는다.
+- 런타임 reflection/scan(`reflect-metadata`)은 하지 않는다(레지스트리 소비만).
 
 ---
 
-## 2. 목표(Design Goals)
+## 1. 핵심 결정(확정)
 
-### 2.1 DX 목표
+1. `ErrorHandler`는 **완전히 제거**하고 `ErrorFilter`로 네이밍을 통일한다(레거시/호환 API 금지).
 
-- 미들웨어 작성자는 “하나의 인터페이스”만 배우면 된다.
-- 애플리케이션 개발자는 “등록 API 하나(addMiddlewares)”만 배우면 된다.
-- DI(주입)와 옵션(withOptions)이 자연스럽고, `new` 없이도 옵션을 넣을 수 있어야 한다.
-- AOT가 `configure()`를 통해 미들웨어 사용을 추적/검증할 수 있어야 한다.
+2. ErrorFilter는 DI 기반으로 생성된다.
 
-### 2.2 아키텍처 목표
-
-- 런타임 스캔/폴백 금지(SSOT는 AOT).
-- 어댑터가 늘어나도 공용 컨텍스트 계약은 유지되고, 어댑터별 접근은 “어댑터 패키지의 타입가드/헬퍼”로 확장한다.
-
----
-
-## 3. 최종 사용자 API (공개 DX)
-
-### 3.1 등록 API (HTTP 어댑터)
-
-HTTP 어댑터는 다음 메서드만 제공한다.
+3. ErrorFilter의 실행 메서드는 `catch()`이며 반환값은 없다.
 
 ```ts
-httpAdapter.addMiddlewares(HttpMiddlewareLifecycle.BeforeRequest, [
-  LoggerMiddleware,
-  CorsMiddleware.withOptions({ origin: '*' }),
-]);
+catch(error, context): void | Promise<void>
+```
+
+4. ErrorFilter는 `@Catch(...)`로 식별한다.
+
+5. 등록 API는 다음 2가지가 SSOT이다.
+
+- 스코프(Controller/Method): `@UseErrorFilters(...)`
+- 전역(HTTP Adapter): `httpAdapter.addErrorFilters([...])`
+
+6. ErrorFilter는 **beforeResponse 직전까지 발생한 에러만** 처리한다.
+
+- `beforeResponse` / `afterResponse` 단계에서 발생한 에러는 ErrorFilter로 절대 넘기지 않는다.
+- 해당 단계 에러는 (가능하면) `status=500`만 설정하고, **body는 설정하지 않는다**.
+
+---
+
+## 2. 공개 DX (사용자 API)
+
+### 2.1 ErrorFilter 선언
+
+```ts
+@Catch()
+export class UnknownErrorFilter extends BunnerErrorFilter {
+  public async catch(error: unknown, ctx: Context): Promise<void> {
+    // HTTP에서 응답을 만들고 싶으면:
+    // const http = ctx.to(BunnerHttpContext);
+    // http.response.setStatus(500);
+  }
+}
 ```
 
 규칙:
 
-- 두 번째 인자는 반드시 배열이다.
-- 배열 원소는 다음 중 하나만 허용한다.
-  - 미들웨어 클래스 토큰 (예: `LoggerMiddleware`)
-  - `withOptions()` 호출 결과(등록 디스크립터)
-- `new`로 만든 인스턴스 전달은 금지(지원하지 않음).
+- ErrorFilter는 반드시 클래스여야 한다(함수형 핸들러 금지).
+- 인스턴스를 `new`로 직접 넘기는 등록 방식은 금지한다(DI로만 생성).
 
-### 3.2 라이프사이클 enum (HTTP 전용)
-
-HTTP 어댑터 패키지 내부에 enum을 둔다.
+### 2.2 스코프 등록(Decorator)
 
 ```ts
-export enum HttpMiddlewareLifecycle {
-  BeforeRequest = 'BeforeRequest',
-  AfterRequest = 'AfterRequest',
-  BeforeHandler = 'BeforeHandler',
-  BeforeResponse = 'BeforeResponse',
-  AfterResponse = 'AfterResponse',
-}
+@UseErrorFilters(PaymentErrorFilter)
+export class BillingController {}
 ```
+
+규칙:
+
+- `@UseErrorFilters(...)` 인자는 반드시 클래스 토큰(Identifier)이어야 한다(AOT 결정을 위해).
+
+### 2.3 전역 등록(HTTP Adapter)
+
+```ts
+httpAdapter.addErrorFilters([HttpErrorFilter, PaymentErrorFilter, UnknownErrorFilter]);
+```
+
+규칙:
+
+- 인자는 배열 1개만 받는다.
+- 배열 원소는 ErrorFilter “클래스 토큰”만 허용한다.
 
 ---
 
-## 4. 타입/계약 (SSOT)
+## 3. 공용 계약(SSOT): @bunner/common
 
-### 4.1 단일 미들웨어 계약(추상 클래스 + 제네릭 옵션)
+### 3.1 타입/클래스 추가 위치
 
-`@bunner/common`에는 추상 클래스 하나만 남긴다.
+- SSOT: `packages/common/src/interfaces.ts`
 
-변경 대상: `packages/common/src/interfaces.ts` (또는 `base-middleware.ts`로 분리 후 재export)
-
-요구 시그니처:
+### 3.2 ErrorFilter 베이스 클래스
 
 ```ts
-export abstract class BunnerMiddleware<TOptions = void> {
-  public static withOptions<T extends typeof BunnerMiddleware, TOptions>(
-    this: T,
-    options: TOptions,
-  ): MiddlewareRegistration<TOptions> {
-    return {
-      token: this,
-      options,
-    };
-  }
-
-  public abstract handle(context: Context): void | boolean | Promise<void | boolean>;
+export abstract class BunnerErrorFilter<TError = unknown> {
+  public abstract catch(error: TError, context: Context): void | Promise<void>;
 }
 ```
 
 정책:
 
-- `false` 반환 시 체인 중단(다음 미들웨어/핸들러 실행 금지)
-- `void` 또는 `true`는 계속 진행
-- `withOptions`는 베이스 클래스 제공 메서드를 그대로 사용한다(미들웨어별 재정의 불필요)
+- 기본 `TError = unknown`이지만 작성자가 직접 지정할 수 있다.
+- 런타임에서 들어오는 값이 `Error`일 필요는 없다(매칭 규칙으로 실행 대상을 결정).
 
-### 4.2 Context 타입 최소 개선(미들웨어 계약에 직접 영향)
-
-현재 `Context.get<T = any>` 및 `BunnerMiddleware.handle(context: any)` 등 `any`가 많다.
-이번 변경에서 미들웨어 계약을 강제하기 위해 아래는 같이 수정한다.
-
-- 변경 대상: `packages/common/src/interfaces.ts`
-
-- `Context.get<T = unknown>(key: string): T | undefined`로 변경
-- `BunnerMiddleware<TOptions>` 추상 클래스 도입에 맞춰 관련 타입을 제네릭으로 전파
-
-주의: 다른 영역의 `any` 대청소는 범위 밖이다. “미들웨어 계약에 직접 연결된 부분”만 최소 변경한다.
-
----
-
-## 5. 옵션(withOptions) 표준
-
-### 5.1 목적
-
-`new Middleware(opts)`를 금지하면 “옵션 전달”이 문제다.
-이를 DI 방식으로 풀기 위해 `withOptions()`는 “옵션만 담은 등록값”을 반환하고, DI 토큰/프로바이더 구성은 프레임워크(어댑터/서버)가 내부에서 결정적으로 처리한다. `@InjectOptions` 같은 데코레이터 없이도 자동 주입된다.
-
-### 5.2 표준 디스크립터 타입
-
-변경/추가 대상(권장 위치): `packages/common/src/interfaces.ts` 또는 `packages/common/src/types.ts`
+### 3.3 토큰 타입
 
 ```ts
-export type MiddlewareToken<TOptions = unknown> = Class<BunnerMiddleware<TOptions>>;
-
-export interface MiddlewareRegistration<TOptions = unknown> {
-  token: MiddlewareToken<TOptions>;
-  options?: TOptions;
-}
-```
-
-규칙:
-
-- `token`은 미들웨어 클래스(컨테이너가 생성할 대상)
-- `options`는 미들웨어 옵션 데이터만 담는다(Provider/Token 노출 금지)
-- 옵션 주입을 위한 토큰 생성/등록은 런타임에서 결정적으로 수행되어야 한다(비결정적/랜덤 토큰 금지). `@InjectOptions`는 필요하지 않으며, 프레임워크가 옵션 토큰을 생성해 생성자 인자에 직접 바인딩한다.
-- 옵션 토큰 네이밍은 `Symbol.for('middleware:<ClassName>:options:<index>')` 같은 결정적 규약을 사용해 다중 등록 시에도 충돌을 방지한다.
-- 동일 미들웨어를 여러 번 등록할 수 있으며, 각 등록은 index 기반 옵션 토큰으로 분리된다. 옵션 제네릭을 선언만 하고 실제로 주입받지 않아도 허용된다(사용자가 주입을 생략할 수 있음).
-- 미들웨어 인스턴스 토큰도 등록별로 분리한다(예: `Symbol.for('middleware:<ClassName>:instance:<index>')`). 컨테이너 캐시는 토큰 단위로 싱글턴이므로, 멀티 옵션 등록 시 인스턴스를 분리하려면 토큰이 달라야 한다.
-- 옵션 주입 위치는 CLI/타입 분석으로 결정하며, 사용자가 별도 데코레이터나 위치 규약을 맞출 필요가 없다.
-
-### 5.3 withOptions 구현 규칙
-
-각 미들웨어는 필요 시 아래 형태를 제공한다.
-
-```ts
-export class CorsMiddleware extends BunnerMiddleware<CorsOptions> {
-  // handle(ctx) 구현
-}
+export type ErrorFilterToken = Class<BunnerErrorFilter> | symbol;
 ```
 
 주의:
 
-- `withOptions()`는 “옵션만 담은 등록값 생성”만 한다. 인스턴스 생성(`new`)을 하면 안 된다.
-- 옵션을 DI로 주입하는 구체 방법(토큰/프로바이더 등록)은 프레임워크가 내부에서 처리한다. 멀티 등록 시 옵션 토큰/인스턴스 토큰을 등록 순번으로 분리해 충돌을 방지한다.
+- HTTP 전용 시그니처(`err, req, res, next`)는 `@bunner/common`에 존재하면 안 된다.
 
 ---
 
-## 6. 런타임 실행 흐름 (HTTP)
+## 4. 데코레이터(SSOT): @bunner/common
 
-### 6.1 변경 후 파이프라인(요약)
+변경 대상: `packages/common/src/decorators/exception.decorator.ts`
 
-HTTP 서버는 모든 스테이지에서 동일한 실행기를 사용한다.
+### 4.1 `@Catch(...)`
 
-- 입력: `BunnerMiddleware[]` + `Context`
-- 규칙: `false` 반환 시 즉시 중단
-- 미들웨어 인스턴스 스코프 기본값은 싱글턴으로 둔다(성능/경량 우선). 주입받는 서비스는 자신의 선언 스코프를 따른다. 요청 스코프 미들웨어가 필요할 경우 별도 옵션/설정을 통해 opt-in하도록 한다.
-- 동일 미들웨어의 다중 등록(옵션 차이 포함)은 등록별 인스턴스 토큰을 분리해 각각 싱글턴 캐시를 갖도록 한다.
+- 식별자이며 런타임 구현은 no-op이어도 된다(레지스트리 기반).
 
-### 6.2 BunnerHttpServer에서의 적용
+### 4.2 `@UseErrorHandlers` 제거, `@UseErrorFilters` 추가
 
-변경 대상: `packages/http-adapter/src/bunner-http-server.ts`
-
-현재 문제:
-
-- 서버 스테이지가 `BunnerHttpMiddleware[]`를 실행하며 반환값을 무시한다.
-
-변경 후:
-
-- 서버 스테이지도 `BunnerMiddleware[]`를 실행한다.
-- `BunnerHttpServer.boot(container, options)`에서 다음을 수행한다.
-  1. 옵션으로 전달된 stage별 `MiddlewareRegistration[]`를 수집한다.
-  2. 등록 순번별 옵션 토큰(`Symbol.for('middleware:<Class>:options:<index>')`)을 값 프로바이더로 컨테이너에 등록한다.
-  3. 등록 순번별 미들웨어 인스턴스 토큰(`Symbol.for('middleware:<Class>:instance:<index>')`)을 컨테이너에 등록하여, 각기 별도 인스턴스로 resolve한다(캐시는 토큰 단위 싱글턴).
-  4. stage별 미들웨어 인스턴스를 컨테이너에서 resolve하여 `BunnerMiddleware[]`로 확정한다.
-  5. 확정된 `BunnerMiddleware[]`를 런타임 실행에 사용한다(요청마다 resolve하지 않음).
-
-중요: 컨테이너가 싱글턴/스코프를 어떻게 다루는지는 현재 구현에 따르되, 본 변경의 기본값은 “부팅 시 resolve 후 재사용”이다.
-
-### 6.3 RequestHandler와의 정합성
-
-변경 대상: `packages/http-adapter/src/request-handler.ts`, `packages/http-adapter/src/interfaces.ts`
-
-- `RequestHandler.runMiddlewares(middlewares: BunnerMiddleware[], ctx: Context)`는 이미 `false` 단락을 구현하고 있으므로 이를 SSOT로 삼는다.
-- `RouteHandlerEntry.middlewares`는 `BunnerMiddleware[]`로 바꿔서 “스코프 미들웨어는 항상 ctx 기반”을 타입으로 강제한다.
+- `UseErrorHandlers`는 완전히 제거한다(alias/Deprecated 금지).
+- `UseErrorFilters(...filters)`를 추가한다.
 
 ---
 
-## 7. 어댑터별 접근(DX) 설계: toXxx 금지, 클래스 토큰 기반 변환
+## 5. 런타임(HTTP Adapter): 에러 파이프라인 확정
 
-### 7.1 원칙
+### 5.1 요청 처리 흐름(요약)
 
-- 공용 컨텍스트는 어떤 어댑터가 늘어나도 고정 계약을 유지한다.
-- 특정 어댑터 기능(예: HTTP의 req/res)은 `ctx.to(HttpContext)`처럼 “어댑터가 제공하는 컨텍스트 클래스”로 좁힌다.
+정상 경로:
 
-### 7.2 사용 예
-
-```ts
-const http = ctx.to(HttpContext);
-http.response.setHeader('x', 'y');
+```text
+beforeRequest middlewares
+  -> routing
+    -> scoped middlewares
+      -> handler
+        -> beforeResponse middlewares
+          -> afterResponse middlewares
+            -> response end
 ```
 
-### 7.3 실패 시 동작
+에러 경로(탈출로):
 
-- `ctx.to(SomeContext)` 실패 시 `BunnerContextError`(메시지만 포함, 코드 없음)를 던진다.
-- `tryTo`/`isHttpContext` 같은 안전/가드 API는 제공하지 않는다.
+- 위 정상 경로 중 **beforeResponse 직전까지** throw/reject가 발생하면 ErrorFilter로 이동한다.
+- ErrorFilter가 실행되면 정상 흐름으로 되돌아가지 않는다.
+
+### 5.2 실행 대상(순서)
+
+1. 스코프(라우트) ErrorFilters
+2. 전역(어댑터 등록) ErrorFilters
+
+### 5.3 매칭 규칙(@Catch)
+
+메타데이터 레지스트리에서 해당 Filter 클래스의 `@Catch(...)` 인자를 읽어 매칭한다.
+
+- `@Catch()` (인자 없음): 모든 에러를 매칭
+- `@Catch(SomeClass)`: `error instanceof SomeClass`
+- `@Catch(String)`: `typeof error === 'string'` 또는 `error instanceof String`
+- `@Catch(Number)`: `typeof error === 'number'` 또는 `error instanceof Number`
+- `@Catch(Boolean)`: `typeof error === 'boolean'` 또는 `error instanceof Boolean`
+- `@Catch('LITERAL')`: `error === 'LITERAL'`
+
+### 5.4 호출 규칙
+
+- 항상 `filter.catch(error, ctx)`로만 호출한다.
+- arity(`fn.length`) 기반 분기/HTTP 시그니처 호출은 존재하면 안 된다.
+
+### 5.5 전파/종료 규칙 (NestJS 대비: Bunner 선택)
+
+NestJS는 “매칭된 필터가 응답을 안 쓰고 return 하면 요청이 멈출 수 있는 모델”을 채택한다.
+
+Bunner는 DX/안정성 관점에서 다음 규칙을 공식 정의로 채택한다.
+
+확정(요약):
+
+- ErrorFilter에서 발생한 throw/reject는 다음 ErrorFilter로 전파될 수 있다(의도/버그 구분 없음).
+- 전파가 끝날 때까지도 처리되지 않으면 최종 책임은 어댑터(Default Error Handler)다.
+
+전제(중요):
+
+- ErrorFilter는 **항상 beforeResponse 이전 단계**에서만 실행된다.
+- 따라서 ErrorFilter는 “응답을 전송(send)해서 종결”하는 컴포넌트가 아니다.
+  - ErrorFilter의 역할은 **(transport별 컨텍스트를 통해) 응답 상태를 ‘조정’**하는 것에 한정된다.
+  - 이후 파이프라인은 **항상** `beforeResponse -> afterResponse -> response end`로 진행된다.
+- `catch()`는 반환값으로 처리 여부를 표현하지 않는다(`return true/false` 같은 모델 금지).
+
+실행 규칙:
+
+1. 선언 순서대로 “매칭되는 필터”만 실행한다.
+
+2. 매칭된 filter 실행 중 throw가 발생하면:
+
+이 시점에서 “사용자 의도 위임(=rethrow)”과 “필터 버그”를 런타임이 구분하는 것은 원칙적으로 불가능하다.
+따라서 Bunner는 **NestJS와 유사하게** throw/reject 자체를 “다음 필터로 전달되는 에러 값”으로 취급한다.
+
+- (규칙) Filter 내부에서 throw/reject가 발생하면:
+  - 그 값을 “새 error”로 간주하고 다음 ErrorFilter 매칭/실행을 계속한다.
+
+관측 가능성(권장):
+
+- 런타임은 내부적으로 `(originalError -> thrownError -> ...)` 형태의 체인을 로깅에 남길 수 있다.
+- 다만 매칭 규칙의 결정성을 해치지 않기 위해, 기본적으로 다음 필터로 전달되는 error 자체를 임의 wrapper로 바꿔치기하지 않는다.
+
+3. filter가 정상 종료했을 때:
+
+- 해당 filter의 역할은 “그 시점에서 끝”이다.
+- 다음 filter 실행 여부는 **매칭 규칙**과 **선언 순서**에 의해 결정된다.
+
+4. 모든 filter 실행이 끝나면:
+
+- 요청은 **항상** `beforeResponse` 단계로 진행한다(정상 흐름으로 “복귀”가 아니라, 응답을 마무리하는 고정된 후속 단계).
+
+추가 규칙(운영 안정성 / 기본 에러 응답 보장):
+
+- ErrorFilter 체인 이후에도 응답 상태가 “결정되지 않은” 경우를 허용하지 않는다.
+- 이때의 “결정”은 transport별이지만, HTTP에서는 최소한 아래를 보장한다.
+  - (필수) 에러 경로로 진입한 경우, 사용자가 명시적으로 status를 설정하지 않았다면 어댑터가 `status=500`을 설정한다.
+  - body는 프레임워크가 임의로 풍부하게 만들지 않는다(최소/보수적으로).
+
+참고(HTTP Adapter의 기본 동작 예):
+
+- 에러 경로로 진입했는데 status가 설정되지 않았다면 `status=500`을 설정한다.
+- 이후 `beforeResponse/afterResponse`를 실행하고, 마지막에 `response end`로 종료한다.
+
+### 5.6 무한루프/재진입 방지(강제)
+
+- `runErrorFilters()`는 재진입을 금지한다(플래그로 1회만 진입).
+- ErrorFilter 실행기 내부에서 예외가 나거나, 필터 내부 예외가 연쇄로 터지는 경우:
+  - ErrorFilter를 다시 호출하지 않는다(무한루프 차단).
+  - 즉시 “Adapter Default Error Handler(=Emergency Handler)”로 위임한다.
+
+추가 규칙(관측 가능성):
+
+- Emergency Fallback은 “사용자 로직이 개입할 수 없는 시스템 경로”임을 명시한다.
+- 이 경로에서는 최소한 아래 정보가 로그/메트릭에 남아야 한다.
+  - stage(어떤 단계에서 터졌는지)
+  - filterToken(필터 실행 중이었다면)
+  - originalError/thrownError(해당 시)
+
+### 5.7 beforeResponse/afterResponse 에러 정책(재확정)
+
+확정(요약):
+
+- beforeResponse/afterResponse 단계에서 발생한 에러는 “시스템 에러”로 분류한다.
+- 이 에러는 ErrorFilter로 절대 넘기지 않으며, 어댑터(Default Error Handler)가 처리한다.
+
+개발자 인지(문서 강제):
+
+- 이 구간의 에러는 사용자 ErrorFilter가 처리할 수 없다.
+- 대신 프레임워크(어댑터)는 이를 “시스템 장애 경로”로 분류하고 Default Error Handler에서 반드시 처리한다.
+- 즉, 이 정책은 “무한루프 방지/일관성”을 위한 의도된 트레이드오프이며, 사용자는 이 구간에서 에러를 ‘커스텀 응답’으로 바꾸는 것을 기대하면 안 된다.
+
+### 5.8 Adapter Default Error Handler (강제 계약)
+
+모든 어댑터는 “필터 밖 에러”를 종결시키는 Default Error Handler를 반드시 제공해야 한다.
+
+확정(요약):
+
+- ErrorFilter 체인이 끝날 때까지 처리되지 않은 에러의 최종 종착점은 어댑터(Default Error Handler)다.
+- 시스템 에러 구간(beforeResponse/afterResponse)의 에러도 어댑터(Default Error Handler)에서 처리한다.
+
+역할:
+
+- (필수) 아래 케이스에서 **기본 실패 응답/실패 상태를 결정적으로 보장**한다.
+  1. ErrorFilter가 없거나, 있더라도 응답 상태를 명시적으로 결정하지 않음(HTTP: status 미설정)
+  2. ErrorFilter 체인 실행 중/이후에 추가 에러가 발생하여 “시스템 장애 경로”로 분류됨
+  3. beforeResponse/afterResponse 등 필터 금지 구간에서 발생한 에러
+
+요구사항:
+
+- transport별로 “실패 보장”의 의미가 다르므로, 구체 동작은 어댑터가 정의한다.
+  - HTTP: 에러 경로 + status 미설정이면 `status=500`을 강제 설정(정책에 따라 body는 최소/보수)
+  - 그 외 어댑터: 해당 transport의 실패 응답/ack/nack/종료 규약에 따라 처리
+- 이 경로는 사용자 ErrorFilter를 다시 호출하지 않는다(무한루프 방지).
+- 반드시 로깅/메트릭이 남아야 한다(stage 포함).
 
 ---
 
-## 8. AOT/CLI 업데이트 (configure 추출 규칙 변경)
+## 6. HTTP Adapter 공개 API: addErrorFilters
 
-### 8.1 현행 제약
+변경 대상: `packages/http-adapter/src/bunner-http-adapter.ts`, `packages/http-adapter/src/bunner-http-server.ts`
 
-현재 CLI는 `configure()` 본문에서 메서드명이 `use/beforeRequest/...`인 호출을 찾고, 인자가 `Identifier`인 것만 미들웨어로 추출한다.
-즉, `new Middleware()`는 AOT가 추적하지 못한다.
+요구 API:
 
-### 8.2 변경 목표
+```ts
+addErrorFilters(filters: readonly ErrorFilterToken[]): this;
+```
 
-변경 대상: `packages/cli/src/analyzer/ast-parser.ts`
+등록 처리(결정성):
 
-- `extractMiddlewaresFromConfigure()`가 `addMiddlewares(...)` 호출만 대상으로 한다.
-- 추출 대상 형태:
-  - `httpAdapter.addMiddlewares(Lifecycle, [A, B.withOptions(...)])`
-  - 배열 원소가 `Identifier`면 해당 이름을 수집
-  - 배열 원소가 `CallExpression`이고 callee가 `MemberExpression(Identifier, 'withOptions')`면 “object Identifier”를 수집
-
-구체 AST 패턴(필수):
-
-- CallExpression
-  - callee: MemberExpression (property.name === 'addMiddlewares')
-  - `arguments[1]`: ArrayExpression
-    - `elements[i]`:
-      - Identifier -> push(name)
-      - CallExpression where callee is MemberExpression and property.name === 'withOptions'
-        - callee.object is Identifier -> push(callee.object.name)
-
-지원하지 않는 패턴(명시적으로 무시 또는 실패):
-
-- SpreadElement
-- 동적 계산 specifier
-- 배열이 아닌 두 번째 인자
-- 위 패턴이 감지되면 “addMiddlewares는 리터럴 배열 + Identifier/withOptions만 지원” 형태의 오류를 명시적으로 발생시킨다(조용한 누락 금지).
-- `withOptions` 호출은 베이스 클래스 static 호출(`Identifier.withOptions(...)`)을 포함하며, 배열 내 각 요소의 index를 함께 기록해 옵션/인스턴스 토큰을 결정한다.
-
-### 8.3 그래프 검증
-
-변경 대상: `packages/cli/src/analyzer/graph/module-graph.ts`
-
-- 현재는 “추출된 클래스 이름이 @Middleware 데코레이터가 있는지”만 검증한다.
-- `addMiddlewares`로 변경해도 같은 정책을 유지한다.
-- 단, 검증 메시지/설명은 `use()`가 아니라 `addMiddlewares()` 기준으로 업데이트한다.
+- `addErrorFilters([...])`는 토큰 목록만 저장한다.
+- 서버 부팅 시점에 컨테이너로 resolve하여 전역 ErrorFilter 인스턴스를 확정한다.
+- `RequestHandler`는 토큰(`HTTP_ERROR_FILTER`)을 통해 전역 필터를 로드한다.
 
 ---
 
-## 9. 코드 변경 목록(파일 단위)
+## 7. AOT/CLI 검증
 
-### 9.1 공용(common)
+변경 대상(예): `packages/cli/src/analyzer/graph/module-graph.ts`, `packages/cli/src/analyzer/ast-parser.ts`
+
+검증 목표:
+
+- `@UseErrorFilters(Foo)`로 참조된 `Foo`는 반드시 `@Catch(...)`를 가진 클래스여야 한다.
+- `configure()`에서 `addErrorFilters([...])`로 참조된 토큰도 동일하게 검증한다.
+
+주의:
+
+- 런타임 스캔/reflect-metadata 금지. CLI는 AST 기반으로 “사용된 토큰”을 결정적으로 수집해야 한다.
+
+---
+
+## 8. 코드 변경 목록(파일 단위)
+
+### 8.1 common
 
 - `packages/common/src/interfaces.ts`
-  - `BunnerMiddleware<TOptions = void>` 추상 클래스 + `static withOptions` 추가
-  - `handle(context: Context): void | boolean | Promise<void | boolean>` 유지
-  - `Context.get<T = unknown>`로 변경
-  - `MiddlewareToken<TOptions>`, `MiddlewareRegistration<TOptions>` 제네릭 타입 추가(적절한 위치에 배치)
-  - `BunnerContextError` 타입 정의 추가(메시지 필드만, 코드 없음) — `ctx.to()` 실패 시 사용
+  - `BunnerErrorFilter<TError = unknown>` 추가
+  - `ErrorFilterToken` 추가
+  - `ErrorHandler` 및 HTTP 전용 시그니처 제거
+- `packages/common/src/decorators/exception.decorator.ts`
+  - `UseErrorHandlers` 제거
+  - `UseErrorFilters` 추가
+  - `Catch` 유지
+- `packages/common/index.ts`
+  - 공개 export 목록에서 `ErrorHandler` 제거 및 ErrorFilter 관련 export 추가
 
-### 9.2 HTTP 어댑터
+### 8.2 http-adapter
 
+- `packages/http-adapter/src/constants.ts`
+  - `HTTP_ERROR_HANDLER` -> `HTTP_ERROR_FILTER`
 - `packages/http-adapter/src/interfaces.ts`
-  - `BunnerHttpMiddleware` 제거
-  - `HttpMiddlewareLifecycle` 추가
-  - `RouteHandlerEntry.middlewares: BunnerMiddleware[]`로 변경
-  - `BunnerHttpServerOptions.middlewares` 타입을 stage별 `MiddlewareRegistration[]`(또는 token 배열)로 변경
-
-- `packages/http-adapter/src/bunner-http-adapter.ts`
-  - `.use/.beforeRequest/.afterRequest/.beforeHandler/.beforeResponse/.afterResponse` 제거
-  - `addMiddlewares(lifecycle: HttpMiddlewareLifecycle, middlewares: readonly (MiddlewareToken | MiddlewareRegistration)[]): this` 추가
-  - 내부 저장 구조는 “stage별 등록 디스크립터 배열”로 유지
-
-- `packages/http-adapter/src/bunner-http-server.ts`
-  - stage 실행을 `BunnerMiddleware[] + Context` 기반으로 통일
-  - boot 시점에 등록 디스크립터 → 컨테이너 등록 → 인스턴스 resolve → stage별 실행 리스트 확정
-  - 실행기는 `false` 단락을 존중
-
+  - `RouteHandlerEntry.errorHandlers` 제거
+  - `RouteHandlerEntry.errorFilters` 추가
+- `packages/http-adapter/src/route-handler.ts`
+  - `UseErrorHandlers` 참조 제거 -> `UseErrorFilters`
+  - resolve 함수/필드명을 ErrorFilters로 통일
+  - resolve 실패를 조용히 삼키지 않고 명확한 에러로 실패
 - `packages/http-adapter/src/request-handler.ts`
-  - `RouteHandlerEntry` 타입 변경에 맞춘 정합성 수정
-  - (필요 시) runMiddlewares를 공용 유틸로 올리거나 서버가 동일 로직을 사용하도록 정리
+  - `runErrorHandlers` 제거 -> `runErrorFilters` 구현
+  - arity 추론/req-res-next 호출 제거
+  - 재진입 방지 + Emergency Fallback 구현
 
-- `packages/http-adapter/src/middlewares/**`
-  - 파일 위치는 유지한다(요구사항)
-  - 각 미들웨어는 `BunnerMiddleware`를 구현하도록 변경
-  - HTTP 전용 접근은 `ctx.to(HttpContext)`로 좁힌다(실패 시 예외).
-  - 옵션이 필요한 미들웨어는 베이스 클래스의 `static withOptions()`를 그대로 사용한다(재정의 불필요).
+### 8.3 examples
 
-### 9.3 CLI
-
-- `packages/cli/src/analyzer/ast-parser.ts`
-  - `extractMiddlewaresFromConfigure()`가 `addMiddlewares()` + 배열 인자 + withOptions 패턴을 추출하며, 배열 index를 함께 기록해 옵션/인스턴스 토큰 결정에 활용
-
-- `packages/cli/src/analyzer/graph/module-graph.ts`
-  - 검증 메시지/설명 업데이트(필요 시)
-
-### 9.4 예제
-
-- `examples/src/app.module.ts`
-  - `httpAdapter.use(new ...)` 제거
-  - `httpAdapter.addMiddlewares(HttpMiddlewareLifecycle.BeforeRequest, [...])` 형태로 교체
-  - `withOptions()`를 사용하도록 교체
+- `examples/src/filters/http-error.handler.ts` 등
+  - ErrorHandler -> ErrorFilter로 rename
+  - `@UseErrorHandlers` -> `@UseErrorFilters`
 
 ---
 
-## 10. 마이그레이션 가이드(사용자 코드)
+## 9. 마이그레이션 가이드(레거시 미유지)
 
-### 10.1 등록 API
+### 9.1 사용자 코드
 
-Before:
+- `@UseErrorHandlers(...)` -> `@UseErrorFilters(...)`
+- `ErrorHandler` 타입/함수형 핸들러 제거 -> 클래스 기반 `BunnerErrorFilter` 구현
+- `catch(error, ctx)` 내부에서 HTTP 응답이 필요하면 `ctx.to(BunnerHttpContext)`를 통해 직접 설정
 
-```ts
-httpAdapter.use(new LoggerMiddleware(), new CorsMiddleware({ origin: '*' }));
-```
+### 9.2 프레임워크 내부
 
-After:
-
-```ts
-httpAdapter.addMiddlewares(HttpMiddlewareLifecycle.BeforeRequest, [
-  LoggerMiddleware,
-  CorsMiddleware.withOptions({ origin: '*' }),
-]);
-```
-
-### 10.2 미들웨어 구현
-
-Before:
-
-```ts
-export class CorsMiddleware implements BunnerHttpMiddleware {
-  handle(req, res) { ... }
-}
-```
-
-After:
-
-```ts
-export class CorsMiddleware extends BunnerMiddleware<CorsOptions> {
-  public async handle(ctx: Context): Promise<void | boolean> {
-    const http = ctx.to(HttpContext);
-
-    const req = http.request;
-    const res = http.response;
-    ...
-  }
-}
-```
+- `HTTP_ERROR_HANDLER` 및 관련 로직/타입 제거
+- `RouteHandlerEntry.errorHandlers` 제거
 
 ---
 
-## 11. 정리(클린업) 단계: 불필요해진 파일/코드 제거 체크리스트
+## 10. 클린업 체크리스트
 
-모든 기능 변경이 끝난 뒤, 아래를 “정리 전용 커밋/작업”으로 수행한다.
-
-- `BunnerHttpMiddleware` 정의/exports/사용처가 완전히 사라졌는지 전수 확인
-  - `packages/http-adapter/src/interfaces.ts`
-  - `packages/http-adapter/src/bunner-http-adapter.ts`
-  - `packages/http-adapter/src/bunner-http-server.ts`
-  - `packages/http-adapter/src/middlewares/**`
-  - `examples/**`
-- 제거된 `.use/.beforeRequest/...`가 문서/예제/테스트에 남아있는지 전수 확인
-- CLI analyzer가 더 이상 `use/beforeRequest/...`를 추출하지 않는지 확인
-- 타입 정합성:
-  - `RouteHandlerEntry.middlewares`가 `BunnerMiddleware[]`로 고정됐는지
-  - 서버 스테이지 실행기가 `false` 단락을 존중하는지
-- public facade(index.ts)에서 불필요한 export가 남지 않았는지 확인(명시 export 유지)
+- `ErrorHandler`, `UseErrorHandlers`, `HTTP_ERROR_HANDLER`, `runErrorHandlers`가 저장소에 남지 않도록 전수 제거
+- `@bunner/common`에 HTTP 전용 시그니처가 남지 않도록 확인
+- `any` 노출 API가 생기지 않도록 public export 점검
 
 ---
 
-## 12. 검증(Verification)
+## 11. 검증(Verification)
 
-최소 검증 시나리오(반드시 통과해야 함):
-
-1. AOT 분석
-
-- `Configurer.configure()`에 `addMiddlewares()`가 있는 예제를 만들어 CLI 분석이 미들웨어 클래스를 정확히 추출하는지 확인
-- `withOptions()` 패턴도 추출되는지 확인
-
-2. 런타임 HTTP
-
-- `BeforeRequest`에 CORS/QueryParser 같은 미들웨어를 등록하고 실제 요청에서 동작 확인
-- 미들웨어가 `false`를 반환하면 핸들러가 호출되지 않는지 확인
-- 잘못된 컨텍스트에서 `ctx.to(HttpContext)` 호출 시 `BunnerContextError`가 발생하는지 확인
-
-3. 타입 안전
-
-- 라우트 스코프 `@UseMiddlewares`에 req/res 기반 구현을 붙일 수 없게(컴파일 단계에서) 막히는지 확인
-
-4. 회귀
-
-- `bun test` / `tsc` / `eslint`가 통과하는지 확인
-
----
-
-## 13. 구현 순서(권장)
-
-1. common 계약/타입 추가(단일 미들웨어 인터페이스 확정)
-2. http-adapter: interfaces.ts 타입 변경 + addMiddlewares API 추가(아직 실행기는 구버전일 수 있음)
-3. http-adapter: server 실행기 ctx 기반으로 통합 + stage 단락 처리 통일
-4. http-adapter: built-in middlewares를 단일 인터페이스로 마이그레이션 + withOptions 도입
-5. cli: addMiddlewares 추출/검증으로 업데이트
-6. examples: addMiddlewares로 마이그레이션
-7. 정리(클린업) 전수 확인 및 불필요 코드 제거
-
-## 9. 오픈 이슈(결정 필요)
-
-1. `httpTargets` 기본값
-
-- 안전 우선: 기본값 없음(명시 강제)
-- DX 우선: 기본값 `'all'`
-
-2. base path(`/api-docs`) 커스터마이즈
-
-- v1: 고정
-- v2: `basePath` 옵션 추가(옵션 증가)
-
-3. 문서 생성 소스
-
-- 현재는 `globalThis.__BUNNER_METADATA_REGISTRY__` 기반(OpenAPIFactory)
-- WS/GRPC/QUEUE는 producer 확장 포인트를 어떻게 표준화할지
-
----
-
-## 10. 용어 및 경계 정의(필수 규범)
-
-이 프로젝트는 NestJS에서 애매했던 경계를 명확히 하기 위해 아래 규칙을 “공식 정의”로 채택한다.
-
-### 10.1 Adapter / Plugin / Module 정의
-
-#### Adapter (어댑터)
-
-- **정의**: `BunnerAdapter`를 구현하고 `start(context)` / `stop()`으로 **런타임 리소스(서버/워커/리스너)를 직접 실행/중지**하는 단위
-- **소유권**: 프로세스/네트워크/워커 등 “실행 단위”를 소유한다.
-- **부착 지점**: `BunnerApplication.addAdapter()`로 등록되며, `AdapterCollection`을 통해 이름으로 선택된다.
-- **예시**: HTTP, WS, gRPC, Queue 어댑터
-
-#### Plugin (플러그인)
-
-- **정의**: 어댑터 또는 컨테이너에 **설치(attach/setup)** 되어 기능을 확장하지만, 스스로 `BunnerAdapter`로서 서버/워커를 “실행”하지는 않는 단위
-- **소유권**: 실행 단위를 소유하지 않고, 기존 실행 단위에 기능을 “붙인다”.
-- **부착 지점**: 명확해야 한다.
-  - 예: `Scalar -> (선택된) HTTP adapter(들)`
-  - 예: `TypeORM -> Container(또는 App)`
-- **예시**: 문서 호스팅, 메트릭/트레이싱 설치, DB 연결/Repository 설치
-
-#### Module (모듈)
-
-- **정의**: DI 스캐너가 읽는 **구성 그래프 단위**(controllers/providers/imports)
-- **역할**: 앱 기능 조립(비즈니스 로직 구성)과 의존 주입 관계를 선언한다.
-- **원칙**: 인프라를 “켜는 행위(연결/호스팅/마이그레이션 실행 등)”를 모듈이 숨기지 않는다.
-- **예시**: Users/Posts/Billing 같은 도메인 모듈
-
-### 10.2 판정 규칙(결정 트리)
-
-아래 질문으로 분류가 결정된다.
-
-1. `start/stop`으로 서버/워커/리스너를 직접 실행해야 하는가?
-
-- Yes => Adapter
-
-2. DI 그래프(controllers/providers/imports)를 구성하는가?
-
-- Yes => Module
-
-3. 기존 실행 단위(어댑터/컨테이너)에 설치되어 기능을 추가하는가?
-
-- Yes => Plugin
-
-> NOTE: 하나의 기능이 Module+Plugin처럼 보이면, “인프라를 켜는 부분”은 Plugin으로 분리하고,
-> Module은 주입받아 사용하는 쪽만 남긴다.
-
-### 10.3 금지 규칙(경계 강제)
-
-- (금지) Plugin을 Module로 위장하여 `imports: [XxxModule.forRoot()]`로 인프라 설치를 숨기지 않는다.
-  - 예: DB 연결/문서 호스팅/트레이싱 설치를 Module import로 해결하는 패턴 금지
-- (금지) Adapter가 도메인 기능을 직접 포함하지 않는다.
-  - Adapter는 transport 실행과 요청/메시지 전달에 집중한다.
-
-### 10.4 이 문서 범위에서의 확정 분류
-
-- Scalar: **Plugin**
-  - 역할: 문서 생성 대상 선택(`documentTargets`) + HTTP 호스팅 대상 선택(`httpTargets`)
-  - 부착 지점: 선택된 HTTP adapter(들)
-
-- TypeORM 통합: **Plugin**
-  - 역할: DataSource/Repository 설치, 연결 라이프사이클, (선택) 마이그레이션
-  - 부착 지점: Container(또는 App)
-  - 도메인 모듈은 TypeORM을 “설치”하지 않고 주입받아 사용만 한다.
+- 타입/빌드: `bun run tsc`
+- 린트: `bun run lint`
+- 예제 앱 실행 후:
+  - handler에서 throw 시 ErrorFilter가 호출되는지
+  - beforeResponse/afterResponse 에러가 ErrorFilter로 재진입하지 않는지
+  - 필터 no-op이면 다음 필터로 넘어가고, 최종적으로 hang가 발생하지 않는지
+  - 필터 내부 throw가 다음 필터로 전파되는지
