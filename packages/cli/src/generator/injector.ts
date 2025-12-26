@@ -82,7 +82,7 @@ export class InjectorGenerator {
                 return `c.get('${resolved}')`;
               });
 
-              factoryEntries.push(`  container.set('${node.name}::${token}', async (c) => {
+              factoryEntries.push(`  container.set('${node.name}::${token}', (c) => {
                         const factory = ${factoryFn};
                         return factory(${injectedArgs.join(', ')});
                     });`);

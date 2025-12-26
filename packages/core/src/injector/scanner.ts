@@ -107,11 +107,11 @@ export class BunnerScanner {
       if (provider.useValue) {
         factory = () => provider.useValue;
       } else if (provider.useFactory) {
-        factory = async (c: Container) => {
+        factory = (c: Container) => {
           // Resolve inject deps
           const args = (provider.inject || []).map((t: any) => c.get(t));
 
-          return await provider.useFactory(...args);
+          return provider.useFactory(...args);
         };
       } else if (provider.useClass) {
         factory = (c: Container) => new provider.useClass(...this.resolveDepsFor(provider.useClass, c));
