@@ -6,6 +6,7 @@ import { StatusCodes } from 'http-status-codes';
 import { BunnerHttpContext, BunnerHttpContextAdapter } from './adapter';
 import { BunnerRequest } from './bunner-request';
 import { BunnerResponse } from './bunner-response';
+import { HTTP_ERROR_FILTER } from './constants';
 import { HttpMethod } from './enums';
 import type {
   BunnerHttpServerOptions,
@@ -38,6 +39,14 @@ export class BunnerHttpServer {
     }
 
     this.logger.info('🚀 BunnerHttpServer booting...');
+
+    if (Array.isArray((this.options as any).errorFilters) && (this.options as any).errorFilters.length > 0) {
+      const tokens = (this.options as any).errorFilters as readonly any[];
+
+      this.container.set(HTTP_ERROR_FILTER, (c: BunnerContainer) => {
+        return tokens.map(token => c.get(token));
+      });
+    }
 
     const metadataRegistry = options.metadata || new Map();
     const scopedKeysMap = options.scopedKeys || new Map();
@@ -140,18 +149,31 @@ export class BunnerHttpServer {
 
       // Handle Request
       const workerRes = await this.requestHandler.handle(bunnerReq, bunnerRes, httpMethod, path, context);
-      // 4. beforeResponse
-      const continueBeforeResponse = await this.runMiddlewares(HttpMiddlewareLifecycle.BeforeResponse, context);
 
-      if (!continueBeforeResponse) {
-        return this.toResponse(bunnerRes.end());
+      // 4. beforeResponse
+      try {
+        const continueBeforeResponse = await this.runMiddlewares(HttpMiddlewareLifecycle.BeforeResponse, context);
+
+        if (!continueBeforeResponse) {
+          return this.toResponse(bunnerRes.end());
+        }
+      } catch (e) {
+        this.logger.error('Error in beforeResponse', e);
+
+        if (bunnerRes.getStatus() === 0) {
+          bunnerRes.setStatus(StatusCodes.INTERNAL_SERVER_ERROR);
+        }
       }
 
       const response = this.toResponse(workerRes);
 
       // 5. afterResponse (Note: Response is immutable in standard Request/Response,
       // but we can execute logic here. However, we've already created the Response object.)
-      await this.runMiddlewares(HttpMiddlewareLifecycle.AfterResponse, context);
+      try {
+        await this.runMiddlewares(HttpMiddlewareLifecycle.AfterResponse, context);
+      } catch (e) {
+        this.logger.error('Error in afterResponse', e);
+      }
 
       return response;
     } catch (e: any) {

@@ -1,10 +1,10 @@
-import { UseMiddlewares, UseErrorHandlers } from '@bunner/common';
+import { UseMiddlewares, UseErrorFilters } from '@bunner/common';
 import { Controller, Post, Get, Body } from '@bunner/http-adapter';
 import { Logger } from '@bunner/logger';
 
 import { AuditMiddleware } from './audit.middleware';
 import { ChargeDto } from './charge.dto';
-import { PaymentErrorHandler } from './payment-error.handler';
+import { PaymentErrorFilter } from './payment-error.filter';
 import { PaymentFailedError } from './payment-failed.error';
 
 @Controller('billing')
@@ -13,7 +13,7 @@ export class BillingController {
   private logger = new Logger('BillingController');
 
   @Post('charge')
-  @UseErrorHandlers(PaymentErrorHandler)
+  @UseErrorFilters(PaymentErrorFilter)
   charge(@Body() body: ChargeDto) {
     const amount = body.amount || 0;
 

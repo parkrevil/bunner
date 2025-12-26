@@ -1,10 +1,12 @@
 import type {
   AnyFunction,
   BunnerApplicationOptions,
+  BunnerErrorFilter,
   BunnerMiddleware,
-  ErrorHandler,
+  ErrorFilterToken,
   MiddlewareRegistration,
   MiddlewareToken,
+  Context,
 } from '@bunner/common';
 
 import type { RouteHandlerParamType } from './decorators';
@@ -27,6 +29,7 @@ export interface BunnerHttpServerOptions extends BunnerApplicationOptions {
   trustProxy?: boolean;
   workers?: number;
   middlewares?: HttpMiddlewareRegistry;
+  errorFilters?: readonly ErrorFilterToken[];
 }
 
 export interface WorkerInitParams {
@@ -48,8 +51,12 @@ export interface RouteHandlerEntry {
   controllerClass: any;
   methodName: string;
   middlewares: BunnerMiddleware[];
-  errorHandlers: ErrorHandler[];
+  errorFilters: BunnerErrorFilter[];
   paramFactory: (req: any, res: any) => Promise<any[]>;
+}
+
+export abstract class SystemErrorHandler {
+  public abstract handle(error: unknown, ctx: Context): void | Promise<void>;
 }
 
 export interface ArgumentMetadata {

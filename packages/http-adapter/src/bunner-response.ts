@@ -10,8 +10,8 @@ export class BunnerResponse {
   private _body: any;
   private _cookies: CookieMap;
   private _headers: Headers;
-  private _status: StatusCodes;
-  private _statusText: string;
+  private _status: StatusCodes | 0 = 0;
+  private _statusText: string | undefined;
   private _workerResponse: HttpWorkerResponse;
 
   constructor(req: BunnerRequest, res: Response) {

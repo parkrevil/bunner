@@ -118,4 +118,8 @@ export interface BunnerContainer {
   keys(): IterableIterator<any>;
 }
 
-export type ErrorHandler = ((err: any, req: any, res: any, next?: any) => any) | { catch: (error: any, ctx: Context) => any };
+export abstract class BunnerErrorFilter<TError = unknown> {
+  public abstract catch(error: TError, context: Context): void | Promise<void>;
+}
+
+export type ErrorFilterToken = Class<BunnerErrorFilter>;

@@ -1,4 +1,4 @@
-import type { BunnerAdapter } from '@bunner/common';
+import type { BunnerAdapter, ErrorFilterToken } from '@bunner/common';
 import { ClusterManager, type ClusterBaseWorker, type BunnerApplicationNormalizedOptions } from '@bunner/core';
 
 import { BunnerHttpServer } from './bunner-http-server';
@@ -36,6 +36,8 @@ export class BunnerHttpAdapter implements BunnerAdapter {
 
   private middlewareRegistry: HttpMiddlewareRegistry = {};
 
+  private errorFilterTokens: ErrorFilterToken[] = [];
+
   constructor(options: BunnerHttpServerOptions = {}) {
     this.options = {
       port: 5000,
@@ -66,6 +68,12 @@ export class BunnerHttpAdapter implements BunnerAdapter {
     return this;
   }
 
+  public addErrorFilters(filters: readonly ErrorFilterToken[]): this {
+    this.errorFilterTokens.push(...filters);
+
+    return this;
+  }
+
   async start(context: any): Promise<void> {
     const workers = (this.options as any).workers;
     const isSingleProcess = !workers || workers === 1;
@@ -77,6 +85,7 @@ export class BunnerHttpAdapter implements BunnerAdapter {
         ...this.options,
         metadata: (globalThis as any).__BUNNER_METADATA_REGISTRY__,
         middlewares: this.middlewareRegistry,
+        errorFilters: this.errorFilterTokens,
         internalRoutes: this.internalRoutes,
       });
 
@@ -107,6 +116,7 @@ export class BunnerHttpAdapter implements BunnerAdapter {
       options: {
         ...this.options,
         middlewares: this.middlewareRegistry,
+        errorFilters: this.errorFilterTokens,
       },
     });
     await this.clusterManager.bootstrap();

@@ -11,13 +11,14 @@ import { Logger } from '@bunner/logger';
 import { Scalar } from '@bunner/scalar';
 
 import { BillingModule } from './billing/billing.module';
+import { HttpErrorFilter } from './filters/http-error.filter';
 import { LoggerMiddleware } from './middleware/logger.middleware';
 import { PostsModule } from './posts';
 import { UsersModule } from './users';
 
 @Module({
   imports: [UsersModule, PostsModule, BillingModule],
-  providers: [{ provide: Logger, useFactory: () => new Logger('AppModule') }],
+  providers: [HttpErrorFilter, { provide: Logger, useFactory: () => new Logger('AppModule') }],
 })
 export class AppModule implements OnInit, Configurer {
   constructor(private readonly logger: Logger) {
@@ -41,7 +42,8 @@ export class AppModule implements OnInit, Configurer {
             methods: [HttpMethod.Get, HttpMethod.Post, HttpMethod.Put, HttpMethod.Delete, HttpMethod.Options],
           }),
         ])
-        .addMiddlewares(HttpMiddlewareLifecycle.AfterRequest, [QueryParserMiddleware]);
+        .addMiddlewares(HttpMiddlewareLifecycle.AfterRequest, [QueryParserMiddleware])
+        .addErrorFilters([HttpErrorFilter]);
     }
   }
 

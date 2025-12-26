@@ -1,4 +1,5 @@
-import { Bunner, LogLevel } from '@bunner/core';
+import { LogLevel } from '@bunner/common';
+import { Bunner } from '@bunner/core';
 import { BunnerHttpAdapter } from '@bunner/http-adapter';
 import { Logger } from '@bunner/logger';
 

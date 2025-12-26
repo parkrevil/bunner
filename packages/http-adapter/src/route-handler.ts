@@ -1,4 +1,4 @@
-import { type BunnerContainer, type BunnerMiddleware, type ErrorHandler } from '@bunner/common';
+import { type BunnerContainer, type BunnerMiddleware, type BunnerErrorFilter } from '@bunner/common';
 import { Logger } from '@bunner/logger';
 
 import type { BunnerRequest } from './bunner-request';
@@ -6,6 +6,7 @@ import type { BunnerResponse } from './bunner-response';
 import type { RouteHandlerEntry } from './interfaces';
 import { ValidationPipe } from './pipes/validation.pipe';
 import { Router } from './router';
+import type { RouterOptions } from './router/types';
 import type { HttpMethod } from './types';
 
 export interface MatchResult {
@@ -17,17 +18,24 @@ export class RouteHandler {
   private container: BunnerContainer;
   private metadataRegistry: Map<any, any>;
   private scopedKeys: Map<any, string>;
-  private router = new Router<MatchResult>({
-    ignoreTrailingSlash: true,
-    enableCache: true,
-  });
+  private router: Router<MatchResult>;
   private readonly logger = new Logger(RouteHandler.name);
   private validationPipe = new ValidationPipe();
 
-  constructor(container: BunnerContainer, metadataRegistry: Map<any, any>, scopedKeys: Map<any, string> = new Map()) {
+  constructor(
+    container: BunnerContainer,
+    metadataRegistry: Map<any, any>,
+    scopedKeys: Map<any, string> = new Map(),
+    routerOptions?: RouterOptions,
+  ) {
     this.container = container;
     this.metadataRegistry = metadataRegistry;
     this.scopedKeys = scopedKeys;
+    this.router = new Router<MatchResult>({
+      ignoreTrailingSlash: true,
+      enableCache: true,
+      ...routerOptions,
+    });
   }
 
   match(method: string, path: string): MatchResult | undefined {
@@ -70,7 +78,7 @@ export class RouteHandler {
         controllerClass: null,
         methodName: '__internal__',
         middlewares: [],
-        errorHandlers: [],
+        errorFilters: [],
         paramFactory: (req: BunnerRequest, res: BunnerResponse) => {
           const arity = typeof route.handler === 'function' ? route.handler.length : 0;
           const args = arity >= 2 ? [req, res] : [req];
@@ -216,7 +224,7 @@ export class RouteHandler {
           return params;
         };
         const middlewares = this.resolveMiddlewares(targetClass, method, meta);
-        const errorHandlers = this.resolveErrorHandlers(targetClass, method, meta);
+        const errorFilters = this.resolveErrorFilters(targetClass, method, meta);
         const entry: RouteHandlerEntry = {
           handler: instance[method.name].bind(instance),
           paramType: paramTypes,
@@ -224,7 +232,7 @@ export class RouteHandler {
           controllerClass: targetClass,
           methodName: method.name,
           middlewares,
-          errorHandlers,
+          errorFilters,
           paramFactory,
         };
 
@@ -275,41 +283,65 @@ export class RouteHandler {
     return middlewares;
   }
 
-  private resolveErrorHandlers(_targetClass: any, method: any, classMeta: any): ErrorHandler[] {
-    const handlers: ErrorHandler[] = [];
-    // Method handlers
-    const methodDecs = method.decorators.filter((d: any) => d.name === 'UseErrorHandlers');
+  private resolveErrorFilters(targetClass: any, method: any, classMeta: any): BunnerErrorFilter[] {
+    const tokens: any[] = [];
+    const methodDecs = (method.decorators || []).filter((d: any) => d.name === 'UseErrorFilters');
 
-    methodDecs.forEach((d: any) =>
+    methodDecs.forEach((d: any) => {
       (d.arguments || []).forEach((arg: any) => {
-        try {
-          const h = this.container.get(arg);
+        tokens.push(arg);
+      });
+    });
 
-          if (h) {
-            handlers.push(h);
-          }
-        } catch {}
-      }),
-    );
-
-    // Controller handlers
     if (classMeta) {
-      const decs = classMeta.decorators.filter((d: any) => d.name === 'UseErrorHandlers');
+      const classDecs = classMeta.decorators.filter((d: any) => d.name === 'UseErrorFilters');
 
-      decs.forEach((d: any) =>
+      classDecs.forEach((d: any) => {
         (d.arguments || []).forEach((arg: any) => {
-          try {
-            const h = this.container.get(arg);
-
-            if (h) {
-              handlers.push(h);
-            }
-          } catch {}
-        }),
-      );
+          tokens.push(arg);
+        });
+      });
     }
 
-    return handlers;
+    const seen = new Set<any>();
+    const dedupedTokens = tokens.filter(t => {
+      if (seen.has(t)) {
+        return false;
+      }
+
+      seen.add(t);
+
+      return true;
+    });
+    const resolved: BunnerErrorFilter[] = [];
+
+    for (const token of dedupedTokens) {
+      if (!token) {
+        continue;
+      }
+
+      if (!this.container.has(token)) {
+        throw new Error(
+          `Cannot resolve ErrorFilter token for ${targetClass?.name || 'UnknownController'}.${method?.name || 'unknown'}: ${String(
+            token?.name || token,
+          )}`,
+        );
+      }
+
+      const instance = this.container.get(token);
+
+      if (!instance) {
+        throw new Error(
+          `Resolved ErrorFilter token but got empty instance for ${targetClass?.name || 'UnknownController'}.${
+            method?.name || 'unknown'
+          }: ${String(token?.name || token)}`,
+        );
+      }
+
+      resolved.push(instance);
+    }
+
+    return resolved;
   }
 
   private resolveParamType(type: any): any {
