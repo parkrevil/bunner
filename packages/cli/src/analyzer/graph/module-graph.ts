@@ -320,7 +320,8 @@ export class ModuleGraph {
 
       const importsMeta = node.metadata.imports || {};
 
-      middlewares.forEach(mwName => {
+      middlewares.forEach(mw => {
+        const mwName = mw.name;
         let targetNode: ModuleNode | undefined;
         // 1. Check imports
         const absPath = importsMeta[mwName];
@@ -364,7 +365,7 @@ export class ModuleGraph {
 
           if (!hasDecorator) {
             throw new Error(
-              `[Bunner AOT] Middleware validation failed: Class '${mwName}' used in '${node.name}.configure()' is missing @Middleware() decorator. File: ${targetNode.filePath}`,
+              `[Bunner AOT] Middleware validation failed: Class '${mwName}' (lifecycle: ${mw.lifecycle ?? 'unknown'}, index: ${mw.index}) used in '${node.name}.configure()' via addMiddlewares() is missing @Middleware() decorator. File: ${targetNode.filePath}`,
             );
           }
         } else {

@@ -133,6 +133,7 @@ export class BunnerScanner {
   // Implementing here is fine.
   private resolveDepsFor(ctor: any, c: Container): any[] {
     const registry = (globalThis as any).__BUNNER_METADATA_REGISTRY__;
+    const scopedKeys = (globalThis as any).__BUNNER_SCOPED_KEYS__ as Map<any, string> | undefined;
 
     if (!registry || !registry.has(ctor)) {
       return [];
@@ -146,23 +147,82 @@ export class BunnerScanner {
 
     return meta.constructorParams.map((param: any) => {
       let token = param.type;
+
+      if (token && typeof token === 'object') {
+        if (token.__bunner_ref) {
+          token = token.__bunner_ref;
+        } else if (token.__bunner_forward_ref) {
+          token = token.__bunner_forward_ref;
+        }
+      }
+
       const injectDec = param.decorators?.find((d: any) => d.name === 'Inject');
 
       if (injectDec && injectDec.arguments?.length > 0) {
         token = injectDec.arguments[0];
+
+        if (token && typeof token === 'object') {
+          if (token.__bunner_forward_ref) {
+            token = token.__bunner_forward_ref;
+          } else if (token.__bunner_ref) {
+            token = token.__bunner_ref;
+          }
+        }
+      }
+
+      const normalizedToken = this.normalizeToken(token);
+      const scopedKey = scopedKeys?.get(token) || (normalizedToken ? scopedKeys?.get(normalizedToken) : undefined);
+
+      if (scopedKey) {
+        try {
+          return c.get(scopedKey);
+        } catch (_e) {
+          console.warn(`[Scanner] Failed to resolve dependency for ${ctor.name}. Token: ${normalizedToken ?? String(token)}`);
+
+          return undefined;
+        }
       }
 
       // Try get from container directly
       try {
-        const instance = c.get(token);
+        const instance = c.get(normalizedToken ?? token);
 
-        // console.log(`[Scanner] Resolved dependency for ${ctor.name} index ${index}:`, instance ? 'Found' : 'Undefined', 'Token:', token?.name || token);
         return instance;
       } catch (_e) {
-        console.warn(`[Scanner] Failed to resolve dependency for ${ctor.name}. Token: ${token?.name || String(token)}`);
+        console.warn(`[Scanner] Failed to resolve dependency for ${ctor.name}. Token: ${normalizedToken ?? String(token)}`);
 
         return undefined;
       }
     });
+  }
+
+  private normalizeToken(token: any): string | undefined {
+    if (!token) {
+      return undefined;
+    }
+
+    if (typeof token === 'string') {
+      return token;
+    }
+
+    if (typeof token === 'function' && token.name) {
+      return token.name;
+    }
+
+    if (typeof token === 'object') {
+      if (token.__bunner_ref) {
+        return token.__bunner_ref;
+      }
+
+      if (token.__bunner_forward_ref) {
+        return token.__bunner_forward_ref;
+      }
+
+      if (typeof token.name === 'string') {
+        return token.name;
+      }
+    }
+
+    return undefined;
   }
 }

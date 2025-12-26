@@ -7,6 +7,12 @@ export interface TypeMetadata {
   }[];
 }
 
+export interface MiddlewareUsage {
+  name: string;
+  lifecycle?: string;
+  index: number;
+}
+
 export interface DecoratorMetadata {
   name: string;
   arguments: any[];
@@ -49,5 +55,5 @@ export interface ClassMetadata {
     literals?: (string | number | boolean)[];
   }[];
   imports: Record<string, string>;
-  middlewares?: string[];
+  middlewares?: MiddlewareUsage[];
 }

@@ -1,25 +1,32 @@
-import type { AnyFunction, BunnerApplicationOptions, ErrorHandler } from '@bunner/common';
+import type {
+  AnyFunction,
+  BunnerApplicationOptions,
+  BunnerMiddleware,
+  ErrorHandler,
+  MiddlewareRegistration,
+  MiddlewareToken,
+} from '@bunner/common';
 
-import type { BunnerRequest } from './bunner-request';
-import type { BunnerResponse } from './bunner-response';
 import type { RouteHandlerParamType } from './decorators';
 
-export interface BunnerHttpMiddleware {
-  handle(req: BunnerRequest, res: BunnerResponse): Promise<void | boolean> | void | boolean;
+export enum HttpMiddlewareLifecycle {
+  BeforeRequest = 'BeforeRequest',
+  AfterRequest = 'AfterRequest',
+  BeforeHandler = 'BeforeHandler',
+  BeforeResponse = 'BeforeResponse',
+  AfterResponse = 'AfterResponse',
 }
+
+export type MiddlewareRegistrationInput<TOptions = unknown> = MiddlewareRegistration<TOptions> | MiddlewareToken<TOptions>;
+
+export type HttpMiddlewareRegistry = Partial<Record<HttpMiddlewareLifecycle, readonly MiddlewareRegistrationInput[]>>;
 
 export interface BunnerHttpServerOptions extends BunnerApplicationOptions {
   port?: number;
   bodyLimit?: number;
   trustProxy?: boolean;
   workers?: number;
-  middlewares?: {
-    beforeRequest: BunnerHttpMiddleware[];
-    afterRequest: BunnerHttpMiddleware[];
-    beforeHandler: BunnerHttpMiddleware[];
-    beforeResponse: BunnerHttpMiddleware[];
-    afterResponse: BunnerHttpMiddleware[];
-  };
+  middlewares?: HttpMiddlewareRegistry;
 }
 
 export interface WorkerInitParams {
@@ -40,9 +47,9 @@ export interface RouteHandlerEntry {
   paramRefs: any[];
   controllerClass: any;
   methodName: string;
-  middlewares: BunnerHttpMiddleware[];
+  middlewares: BunnerMiddleware[];
   errorHandlers: ErrorHandler[];
-  paramFactory: (req: BunnerRequest, res: BunnerResponse) => Promise<any[]>;
+  paramFactory: (req: any, res: any) => Promise<any[]>;
 }
 
 export interface ArgumentMetadata {

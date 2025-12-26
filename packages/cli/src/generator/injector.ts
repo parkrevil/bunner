@@ -20,6 +20,78 @@ export class InjectorGenerator {
 
     graph.modules.forEach((node: ModuleNode) => {
       node.providers.forEach((ref: ProviderRef, token: string) => {
+        const metaProvider = ref.metadata;
+
+        if (metaProvider) {
+          if (metaProvider.useValue) {
+            factoryEntries.push(`  container.set('${node.name}::${token}', () => ${JSON.stringify(metaProvider.useValue)});`);
+
+            return;
+          }
+
+          if (metaProvider.useClass) {
+            const classes = Array.isArray(metaProvider.useClass) ? metaProvider.useClass : [metaProvider.useClass];
+            const instances = classes.map((clsItem: any) => {
+              const className = clsItem.__bunner_ref || clsItem;
+              const clsNode = graph.classMap.get(className);
+
+              if (!clsNode) {
+                return 'undefined'; // Should ideally warn
+              }
+
+              const alias = getAlias(clsNode.metadata.className, clsNode.filePath);
+              const deps = this.resolveConstructorDeps(clsNode.metadata, node, graph);
+
+              return `new ${alias}(${deps.join(', ')})`;
+            });
+            const factoryBody = Array.isArray(metaProvider.useClass) ? `[${instances.join(', ')}]` : instances[0];
+
+            factoryEntries.push(`  container.set('${node.name}::${token}', (c) => ${factoryBody});`);
+
+            return;
+          }
+
+          if (metaProvider.useFactory) {
+            let factoryFn = metaProvider.useFactory.__bunner_factory_code;
+            const deps = metaProvider.useFactory.__bunner_factory_deps || [];
+
+            if (factoryFn) {
+              const replacements: { start: number; end: number; content: string }[] = [];
+
+              deps.forEach((dep: any) => {
+                const alias = registry.getAlias(dep.name, dep.path);
+
+                if (alias !== dep.name) {
+                  replacements.push({
+                    start: dep.start,
+                    end: dep.end,
+                    content: alias,
+                  });
+                }
+              });
+              replacements
+                .sort((a, b) => b.start - a.start)
+                .forEach(rep => {
+                  factoryFn = factoryFn.slice(0, rep.start) + rep.content + factoryFn.slice(rep.end);
+                });
+
+              const injectedArgs = (metaProvider.inject || []).map((injectItem: any) => {
+                const tokenName = injectItem.__bunner_ref || injectItem;
+                const resolved = graph.resolveToken(node.name, tokenName) || tokenName;
+
+                return `c.get('${resolved}')`;
+              });
+
+              factoryEntries.push(`  container.set('${node.name}::${token}', async (c) => {
+                        const factory = ${factoryFn};
+                        return factory(${injectedArgs.join(', ')});
+                    });`);
+
+              return;
+            }
+          }
+        }
+
         const classInfo = graph.classMap.get(token);
         // Note: graph.classMap is ClassName based.
         // If duplicates exist, it returns ONE of them.
@@ -27,69 +99,6 @@ export class InjectorGenerator {
         // For standard usage, it matches.
 
         if (!classInfo) {
-          if (ref.metadata) {
-            if (ref.metadata.useValue) {
-              factoryEntries.push(`  container.set('${node.name}::${token}', () => ${JSON.stringify(ref.metadata.useValue)});`);
-            } else if (ref.metadata.useClass) {
-              const classes = Array.isArray(ref.metadata.useClass) ? ref.metadata.useClass : [ref.metadata.useClass];
-              const instances = classes.map((clsItem: any) => {
-                const className = clsItem.__bunner_ref || clsItem;
-                const clsNode = graph.classMap.get(className);
-
-                if (!clsNode) {
-                  return 'undefined'; // Should ideally warn
-                }
-
-                const alias = getAlias(clsNode.metadata.className, clsNode.filePath);
-                const deps = this.resolveConstructorDeps(clsNode.metadata, node, graph);
-
-                return `new ${alias}(${deps.join(', ')})`;
-              });
-              const factoryBody = Array.isArray(ref.metadata.useClass) ? `[${instances.join(', ')}]` : instances[0];
-
-              factoryEntries.push(`  container.set('${node.name}::${token}', (c) => ${factoryBody});`);
-            } else if (ref.metadata.useFactory) {
-              let factoryFn = ref.metadata.useFactory.__bunner_factory_code;
-              const deps = ref.metadata.useFactory.__bunner_factory_deps || [];
-
-              if (factoryFn) {
-                // Register dependencies and apply aliasing if needed
-                // replacements needed: []
-                const replacements: { start: number; end: number; content: string }[] = [];
-
-                deps.forEach((dep: any) => {
-                  const alias = registry.getAlias(dep.name, dep.path);
-
-                  if (alias !== dep.name) {
-                    replacements.push({
-                      start: dep.start,
-                      end: dep.end,
-                      content: alias,
-                    });
-                  }
-                });
-                // Apply replacements in reverse order
-                replacements
-                  .sort((a, b) => b.start - a.start)
-                  .forEach(rep => {
-                    factoryFn = factoryFn.slice(0, rep.start) + rep.content + factoryFn.slice(rep.end);
-                  });
-
-                const injectedArgs = (ref.metadata.inject || []).map((injectItem: any) => {
-                  const tokenName = injectItem.__bunner_ref || injectItem;
-                  const resolved = graph.resolveToken(node.name, tokenName) || tokenName;
-
-                  return `c.get('${resolved}')`;
-                });
-
-                factoryEntries.push(`  container.set('${node.name}::${token}', async (c) => {
-                        const factory = ${factoryFn};
-                        return factory(${injectedArgs.join(', ')});
-                    });`);
-              }
-            }
-          }
-
           return;
         }
 
@@ -168,6 +177,14 @@ ${dynamicEntries.join('\n')}
     return meta.constructorParams.map((param: any) => {
       let token = param.type;
 
+      if (token && typeof token === 'object') {
+        if (token.__bunner_ref) {
+          token = token.__bunner_ref;
+        } else if (token.__bunner_forward_ref) {
+          token = token.__bunner_forward_ref;
+        }
+      }
+
       if (token === 'Logger') {
         this.hasLogger = true;
 
@@ -182,10 +199,12 @@ ${dynamicEntries.join('\n')}
 
         if (typeof arg === 'string') {
           token = arg;
-        } else if (arg.__bunner_forward_ref) {
-          token = arg.__bunner_forward_ref;
-        } else if (arg.__bunner_ref) {
-          token = arg.__bunner_ref;
+        } else if (arg && typeof arg === 'object') {
+          if (arg.__bunner_forward_ref) {
+            token = arg.__bunner_forward_ref;
+          } else if (arg.__bunner_ref) {
+            token = arg.__bunner_ref;
+          }
         }
       }
 

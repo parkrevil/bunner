@@ -1,3 +1,5 @@
+import type { Class } from './types';
+
 export interface BunnerAdapter {
   start(context: any): Promise<void>;
   stop(): Promise<void>;
@@ -5,12 +7,11 @@ export interface BunnerAdapter {
 
 export interface Context {
   getType(): string;
-  get<T = any>(key: string): T | undefined;
+  get<T = unknown>(key: string): T | undefined;
+  to<TContext>(ctor: Class<TContext>): TContext;
 }
 
 // DI Interfaces
-import type { Class } from './types';
-
 export type ProviderToken = string | symbol | Class;
 
 export interface ProviderBase {
@@ -80,9 +81,33 @@ export interface BunnerApplicationOptions {
   [key: string]: any;
 }
 
+export class BunnerContextError extends Error {
+  constructor(message: string) {
+    super(message);
 
-export interface BunnerMiddleware {
-  handle(context: any): any;
+    this.name = 'BunnerContextError';
+  }
+}
+
+export abstract class BunnerMiddleware<TOptions = void> {
+  public static withOptions<T extends typeof BunnerMiddleware, TOptions>(
+    this: T,
+    options: TOptions,
+  ): MiddlewareRegistration<TOptions> {
+    return {
+      token: this as unknown as MiddlewareToken<TOptions>,
+      options,
+    };
+  }
+
+  public abstract handle(context: Context, options?: TOptions): void | boolean | Promise<void | boolean>;
+}
+
+export type MiddlewareToken<TOptions = unknown> = Class<BunnerMiddleware<TOptions>> | symbol;
+
+export interface MiddlewareRegistration<TOptions = unknown> {
+  token: MiddlewareToken<TOptions>;
+  options?: TOptions;
 }
 
 export interface BunnerContainer {
@@ -93,4 +118,4 @@ export interface BunnerContainer {
   keys(): IterableIterator<any>;
 }
 
-export type ErrorHandler = (err: any, req: any, res: any, next?: any) => any;
+export type ErrorHandler = ((err: any, req: any, res: any, next?: any) => any) | { catch: (error: any, ctx: Context) => any };

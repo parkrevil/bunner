@@ -1,22 +1,23 @@
-import { Middleware, Inject } from '@bunner/common';
+import { Middleware, BunnerMiddleware, type Context } from '@bunner/common';
 
-import type { BunnerRequest } from '../../bunner-request';
-import type { BunnerResponse } from '../../bunner-response';
-import type { BunnerHttpMiddleware } from '../../interfaces';
+import { BunnerHttpContext } from '../../adapter';
 
-import { QUERY_PARSER_OPTIONS } from './constants';
 import type { QueryParserOptions } from './interfaces';
 import { QueryParser } from './query-parser';
 
 @Middleware()
-export class QueryParserMiddleware implements BunnerHttpMiddleware {
+export class QueryParserMiddleware extends BunnerMiddleware<QueryParserOptions> {
   private readonly parser: QueryParser;
 
-  constructor(@Inject(QUERY_PARSER_OPTIONS) options: QueryParserOptions = {}) {
+  constructor(options: QueryParserOptions = {}) {
+    super();
+
     this.parser = new QueryParser(options);
   }
 
-  public handle(req: BunnerRequest, _res: BunnerResponse): void {
+  public handle(context: Context): void {
+    const http = context.to(BunnerHttpContext);
+    const req = http.request;
     const questionIndex = req.url.indexOf('?');
 
     if (questionIndex === -1) {

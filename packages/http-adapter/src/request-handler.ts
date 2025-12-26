@@ -25,14 +25,19 @@ export class RequestHandler {
     this.loadMiddlewares();
   }
 
-  public async handle(req: BunnerRequest, res: BunnerResponse, method: HttpMethod, path: string): Promise<HttpWorkerResponse> {
-    const adapter = new BunnerHttpContextAdapter(req, res);
-    const context = new BunnerHttpContext(adapter);
+  public async handle(
+    req: BunnerRequest,
+    res: BunnerResponse,
+    method: HttpMethod,
+    path: string,
+    context?: BunnerHttpContext,
+  ): Promise<HttpWorkerResponse> {
+    const ctx = context ?? new BunnerHttpContext(new BunnerHttpContextAdapter(req, res));
     let matchResult: any = undefined;
 
     try {
       // 1. Global Before Request
-      const shouldContinue = await this.runMiddlewares(this.globalBeforeRequest, context);
+      const shouldContinue = await this.runMiddlewares(this.globalBeforeRequest, ctx);
 
       if (shouldContinue) {
         // 2. Routing
@@ -47,7 +52,7 @@ export class RequestHandler {
 
         // 3. Scoped Middlewares (Before Handler) - Pre-calculated
         const scopedMiddlewares = matchResult.entry.middlewares;
-        const scopedContinue = await this.runMiddlewares(scopedMiddlewares, context);
+        const scopedContinue = await this.runMiddlewares(scopedMiddlewares, ctx);
 
         if (scopedContinue) {
           this.logger.debug(`Matched Route: ${method}:${path}`);
@@ -72,7 +77,7 @@ export class RequestHandler {
     } catch (e: any) {
       this.logger.error(`Error during processing: ${e.message}`, e.stack);
 
-      const handled = await this.runErrorHandlers(e, context, matchResult?.entry);
+      const handled = await this.runErrorHandlers(e, ctx, matchResult?.entry);
 
       if (!handled) {
         this.logger.error('Unhandled Error', e);
@@ -86,14 +91,14 @@ export class RequestHandler {
 
     // 5. Before Response
     try {
-      await this.runMiddlewares(this.globalBeforeResponse, context);
+      await this.runMiddlewares(this.globalBeforeResponse, ctx);
     } catch (e) {
       this.logger.error('Error in beforeResponse', e);
     }
 
     // 6. After Response
     try {
-      await this.runMiddlewares(this.globalAfterResponse, context);
+      await this.runMiddlewares(this.globalAfterResponse, ctx);
     } catch (e) {
       this.logger.error('Error in afterResponse', e);
     }
@@ -117,48 +122,36 @@ export class RequestHandler {
     return true;
   }
 
-  private async runErrorHandlers(error: any, ctx: Context, entry?: RouteHandlerEntry): Promise<boolean> {
-    // 1. Scoped Handlers (Pre-calculated)
-    let handlers: ErrorHandler[] = entry ? entry.errorHandlers : [];
-
-    // 2. Global Handlers
-    handlers = [...handlers, ...this.globalErrorHandlers];
+  private async runErrorHandlers(error: unknown, ctx: Context, entry?: RouteHandlerEntry): Promise<boolean> {
+    const handlers: ErrorHandler[] = [...(entry?.errorHandlers ?? []), ...this.globalErrorHandlers];
 
     for (const handler of handlers) {
-      const meta = this.metadataRegistry?.get(handler.constructor);
+      const meta = this.metadataRegistry?.get((handler as any).constructor);
       const catchDec = meta?.decorators.find((d: any) => d.name === 'Catch');
-      let shouldCatch = false;
+      const shouldCatch =
+        !catchDec ||
+        catchDec.arguments.length === 0 ||
+        catchDec.arguments.some((exceptionType: any) => error instanceof exceptionType);
 
-      if (!catchDec || catchDec.arguments.length === 0) {
-        shouldCatch = true; // Catch all
+      if (!shouldCatch) {
+        continue;
+      }
+
+      const fn = typeof handler === 'function' ? handler : (handler as any).catch;
+
+      if (typeof fn !== 'function') {
+        continue;
+      }
+
+      const ctxValue = ctx as unknown as Record<string, unknown>;
+
+      if (fn.length >= 2) {
+        await fn.call(handler, error, ctxValue['request'], ctxValue['response'], ctxValue['next']);
       } else {
-        shouldCatch = catchDec.arguments.some((exceptionType: any) => error instanceof exceptionType);
+        await fn.call(handler, error, ctx);
       }
 
-      if (shouldCatch) {
-        const handlerValue: unknown = handler as unknown;
-
-        if (typeof handlerValue === 'function') {
-          const ctxValue = ctx as unknown as Record<string, unknown>;
-          const req = ctxValue['request'];
-          const res = ctxValue['response'];
-          const next = ctxValue['next'];
-          const fn = handlerValue as (err: unknown, req: unknown, res: unknown, next?: unknown) => unknown;
-
-          await fn(error, req, res, next);
-        }
-
-        if (typeof handlerValue === 'object' && handlerValue !== null) {
-          const record = handlerValue as Record<string, unknown>;
-          const catchFn = record['catch'];
-
-          if (typeof catchFn === 'function') {
-            await (catchFn as (error: unknown, ctx: Context) => unknown)(error, ctx);
-          }
-        }
-
-        return true;
-      }
+      return true;
     }
 
     return false;

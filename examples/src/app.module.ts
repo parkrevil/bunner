@@ -1,6 +1,12 @@
 import { Module, type OnInit, type Configurer, type AdapterCollection } from '@bunner/common';
 import { BunnerApplication } from '@bunner/core';
-import { CorsMiddleware, HttpMethod, type BunnerHttpAdapter } from '@bunner/http-adapter';
+import {
+  CorsMiddleware,
+  HttpMethod,
+  HttpMiddlewareLifecycle,
+  QueryParserMiddleware,
+  type BunnerHttpAdapter,
+} from '@bunner/http-adapter';
 import { Logger } from '@bunner/logger';
 import { Scalar } from '@bunner/scalar';
 
@@ -11,7 +17,7 @@ import { UsersModule } from './users';
 
 @Module({
   imports: [UsersModule, PostsModule, BillingModule],
-  providers: [Logger],
+  providers: [{ provide: Logger, useFactory: () => new Logger('AppModule') }],
 })
 export class AppModule implements OnInit, Configurer {
   constructor(private readonly logger: Logger) {
@@ -27,13 +33,15 @@ export class AppModule implements OnInit, Configurer {
     const httpAdapter = adapters.http?.get('http-server') as BunnerHttpAdapter;
 
     if (httpAdapter) {
-      httpAdapter.use(
-        new LoggerMiddleware(),
-        new CorsMiddleware({
-          origin: '*',
-          methods: [HttpMethod.Get, HttpMethod.Post, HttpMethod.Put, HttpMethod.Delete, HttpMethod.Options],
-        }),
-      );
+      httpAdapter
+        .addMiddlewares(HttpMiddlewareLifecycle.BeforeRequest, [
+          LoggerMiddleware,
+          CorsMiddleware.withOptions({
+            origin: '*',
+            methods: [HttpMethod.Get, HttpMethod.Post, HttpMethod.Put, HttpMethod.Delete, HttpMethod.Options],
+          }),
+        ])
+        .addMiddlewares(HttpMiddlewareLifecycle.AfterRequest, [QueryParserMiddleware]);
     }
   }
 

@@ -2,7 +2,12 @@ import type { BunnerAdapter } from '@bunner/common';
 import { ClusterManager, type ClusterBaseWorker, type BunnerApplicationNormalizedOptions } from '@bunner/core';
 
 import { BunnerHttpServer } from './bunner-http-server';
-import { type BunnerHttpMiddleware, type BunnerHttpServerOptions } from './interfaces';
+import {
+  HttpMiddlewareLifecycle,
+  type BunnerHttpServerOptions,
+  type HttpMiddlewareRegistry,
+  type MiddlewareRegistrationInput,
+} from './interfaces';
 
 const BUNNER_HTTP_INTERNAL = Symbol.for('bunner:http:internal');
 
@@ -29,13 +34,7 @@ export class BunnerHttpAdapter implements BunnerAdapter {
 
   private internalRoutes: InternalRouteEntry[] = [];
 
-  private middlewares = {
-    beforeRequest: [] as BunnerHttpMiddleware[],
-    afterRequest: [] as BunnerHttpMiddleware[],
-    beforeHandler: [] as BunnerHttpMiddleware[],
-    beforeResponse: [] as BunnerHttpMiddleware[],
-    afterResponse: [] as BunnerHttpMiddleware[],
-  };
+  private middlewareRegistry: HttpMiddlewareRegistry = {};
 
   constructor(options: BunnerHttpServerOptions = {}) {
     this.options = {
@@ -57,38 +56,12 @@ export class BunnerHttpAdapter implements BunnerAdapter {
     };
   }
 
-  public use(...middlewares: BunnerHttpMiddleware[]): this {
-    this.middlewares.beforeRequest.push(...middlewares);
+  public addMiddlewares(lifecycle: HttpMiddlewareLifecycle, middlewares: readonly MiddlewareRegistrationInput[]): this {
+    this.middlewareRegistry[lifecycle] ??= [];
 
-    return this;
-  }
+    const current = this.middlewareRegistry[lifecycle] as MiddlewareRegistrationInput[];
 
-  public beforeRequest(...middlewares: BunnerHttpMiddleware[]): this {
-    this.middlewares.beforeRequest.push(...middlewares);
-
-    return this;
-  }
-
-  public afterRequest(...middlewares: BunnerHttpMiddleware[]): this {
-    this.middlewares.afterRequest.push(...middlewares);
-
-    return this;
-  }
-
-  public beforeHandler(...middlewares: BunnerHttpMiddleware[]): this {
-    this.middlewares.beforeHandler.push(...middlewares);
-
-    return this;
-  }
-
-  public beforeResponse(...middlewares: BunnerHttpMiddleware[]): this {
-    this.middlewares.beforeResponse.push(...middlewares);
-
-    return this;
-  }
-
-  public afterResponse(...middlewares: BunnerHttpMiddleware[]): this {
-    this.middlewares.afterResponse.push(...middlewares);
+    current.push(...middlewares);
 
     return this;
   }
@@ -103,7 +76,7 @@ export class BunnerHttpAdapter implements BunnerAdapter {
       await this.httpServer.boot(context.container, {
         ...this.options,
         metadata: (globalThis as any).__BUNNER_METADATA_REGISTRY__,
-        middlewares: this.middlewares,
+        middlewares: this.middlewareRegistry,
         internalRoutes: this.internalRoutes,
       });
 
@@ -133,7 +106,7 @@ export class BunnerHttpAdapter implements BunnerAdapter {
       entryModule: sanitizedEntryModule as any,
       options: {
         ...this.options,
-        middlewares: this.middlewares,
+        middlewares: this.middlewareRegistry,
       },
     });
     await this.clusterManager.bootstrap();

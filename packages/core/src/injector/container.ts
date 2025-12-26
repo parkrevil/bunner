@@ -79,13 +79,8 @@ export class Container implements BunnerContainer {
         }
       }
 
-      let keyStr = '';
-
-      if (typeof token === 'string') {
-        keyStr = `${scope}::${token}`;
-      } else if (token.name) {
-        keyStr = `${scope}::${token.name}`;
-      }
+      const normalizedToken = this.normalizeToken(token);
+      const keyStr = normalizedToken ? `${scope}::${normalizedToken}` : '';
 
       if (keyStr && factory) {
         this.set(keyStr, factory);
@@ -108,23 +103,75 @@ export class Container implements BunnerContainer {
 
     return meta.constructorParams.map((param: any) => {
       let token = param.type;
+
+      if (token && typeof token === 'object') {
+        if (token.__bunner_ref) {
+          token = token.__bunner_ref;
+        } else if (token.__bunner_forward_ref) {
+          token = token.__bunner_forward_ref;
+        }
+      }
+
       const injectDec = param.decorators?.find((d: any) => d.name === 'Inject');
 
       if (injectDec && injectDec.arguments?.length > 0) {
         token = injectDec.arguments[0];
-      }
 
-      const key = `${scope}::${token}`;
-
-      try {
-        return this.get(key);
-      } catch (_e) {
-        try {
-          return this.get(token);
-        } catch (_e2) {
-          return undefined;
+        if (token && typeof token === 'object') {
+          if (token.__bunner_forward_ref) {
+            token = token.__bunner_forward_ref;
+          } else if (token.__bunner_ref) {
+            token = token.__bunner_ref;
+          }
         }
       }
+
+      const tokenName = this.normalizeToken(token);
+      const key = tokenName ? `${scope}::${tokenName}` : '';
+
+      if (key && this.has(key)) {
+        return this.get(key);
+      }
+
+      if (!tokenName) {
+        return undefined;
+      }
+
+      try {
+        return this.get(tokenName);
+      } catch (_e2) {
+        return undefined;
+      }
     });
+  }
+
+  private normalizeToken(token: any): string | undefined {
+    if (!token) {
+      return undefined;
+    }
+
+    if (typeof token === 'string') {
+      return token;
+    }
+
+    if (typeof token === 'function' && token.name) {
+      return token.name;
+    }
+
+    if (typeof token === 'object') {
+      if (token.__bunner_ref) {
+        return token.__bunner_ref;
+      }
+
+      if (token.__bunner_forward_ref) {
+        return token.__bunner_forward_ref;
+      }
+
+      if (typeof token.name === 'string') {
+        return token.name;
+      }
+    }
+
+    return undefined;
   }
 }

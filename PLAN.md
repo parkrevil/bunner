@@ -6,13 +6,11 @@
 
 핵심 결정(확정 사항):
 
-- `BunnerHttpMiddleware`는 완전히 제거한다. 미들웨어 인터페이스는 **1개**만 유지한다(컨텍스트 기반).
+- `BunnerHttpMiddleware`는 완전히 제거한다. 미들웨어 계약은 **단일 추상 클래스** `BunnerMiddleware<TOptions = void>`만 유지한다(컨텍스트 기반).
 - HTTP 어댑터의 `.use()/.beforeRequest()/.afterRequest()...` 형태의 API는 제거한다.
-- 대신 `addMiddleware(라이프사이클 enum, [미들웨어.withOptions(...) 또는 미들웨어 클래스])` 형태로 통일한다.
-- 미들웨어는 DI로 생성되므로, “`new Middleware()`로 인스턴스를 넘기는 방식”을 지원하지 않는다.
-- `ctx.toHttp()` 같은 고정 변환 메서드는 제공하지 않는다.
-  - 어댑터별로 `isHttpContext()` 같은 “타입가드/헬퍼”를 제공하고,
-  - 공용(공통) 레벨에서는 타입가드를 활용한 제네릭 유틸로 DX를 보강한다.
+- 대신 `addMiddlewares(라이프사이클 enum, [미들웨어.withOptions(...) 또는 미들웨어 클래스])` 형태로 통일한다.
+- 미들웨어는 DI로 생성되며, `withOptions`는 베이스 클래스의 static 메서드를 그대로 사용한다(각 미들웨어가 재정의할 필요 없음). 옵션은 프레임워크가 결정적으로 생성한 토큰으로 자동 주입한다(@InjectOptions 불필요).
+- `ctx.to()`는 변환 실패 시 `BunnerContextError`(메시지만 포함)를 던진다. `tryTo`나 `isHttpContext` 같은 안전/가드 API는 제공하지 않는다.
 
 이 문서는 PLAN.md만 보고 그대로 구현할 수 있도록 “파일 단위 변경 목록 + 타입 시그니처 + 런타임 흐름 + AOT 업데이트 + 마이그레이션 + 정리(클린업) 체크리스트”를 포함한다.
 
@@ -49,7 +47,7 @@
 ### 2.1 DX 목표
 
 - 미들웨어 작성자는 “하나의 인터페이스”만 배우면 된다.
-- 애플리케이션 개발자는 “등록 API 하나(addMiddleware)”만 배우면 된다.
+- 애플리케이션 개발자는 “등록 API 하나(addMiddlewares)”만 배우면 된다.
 - DI(주입)와 옵션(withOptions)이 자연스럽고, `new` 없이도 옵션을 넣을 수 있어야 한다.
 - AOT가 `configure()`를 통해 미들웨어 사용을 추적/검증할 수 있어야 한다.
 
@@ -67,7 +65,10 @@
 HTTP 어댑터는 다음 메서드만 제공한다.
 
 ```ts
-httpAdapter.addMiddleware(HttpMiddlewareLifecycle.BeforeRequest, [LoggerMiddleware, CorsMiddleware.withOptions({ origin: '*' })]);
+httpAdapter.addMiddlewares(HttpMiddlewareLifecycle.BeforeRequest, [
+  LoggerMiddleware,
+  CorsMiddleware.withOptions({ origin: '*' }),
+]);
 ```
 
 규칙:
@@ -96,17 +97,27 @@ export enum HttpMiddlewareLifecycle {
 
 ## 4. 타입/계약 (SSOT)
 
-### 4.1 단일 미들웨어 인터페이스
+### 4.1 단일 미들웨어 계약(추상 클래스 + 제네릭 옵션)
 
-`@bunner/common`에 단일 인터페이스만 남긴다.
+`@bunner/common`에는 추상 클래스 하나만 남긴다.
 
-변경 대상: `packages/common/src/interfaces.ts`
+변경 대상: `packages/common/src/interfaces.ts` (또는 `base-middleware.ts`로 분리 후 재export)
 
 요구 시그니처:
 
 ```ts
-export interface BunnerMiddleware {
-  handle(context: Context): void | boolean | Promise<void | boolean>;
+export abstract class BunnerMiddleware<TOptions = void> {
+  public static withOptions<T extends typeof BunnerMiddleware, TOptions>(
+    this: T,
+    options: TOptions,
+  ): MiddlewareRegistration<TOptions> {
+    return {
+      token: this,
+      options,
+    };
+  }
+
+  public abstract handle(context: Context): void | boolean | Promise<void | boolean>;
 }
 ```
 
@@ -114,16 +125,17 @@ export interface BunnerMiddleware {
 
 - `false` 반환 시 체인 중단(다음 미들웨어/핸들러 실행 금지)
 - `void` 또는 `true`는 계속 진행
+- `withOptions`는 베이스 클래스 제공 메서드를 그대로 사용한다(미들웨어별 재정의 불필요)
 
 ### 4.2 Context 타입 최소 개선(미들웨어 계약에 직접 영향)
 
 현재 `Context.get<T = any>` 및 `BunnerMiddleware.handle(context: any)` 등 `any`가 많다.
 이번 변경에서 미들웨어 계약을 강제하기 위해 아래는 같이 수정한다.
 
-변경 대상: `packages/common/src/interfaces.ts`
+- 변경 대상: `packages/common/src/interfaces.ts`
 
 - `Context.get<T = unknown>(key: string): T | undefined`로 변경
-- `BunnerMiddleware.handle(context: Context)`로 변경
+- `BunnerMiddleware<TOptions>` 추상 클래스 도입에 맞춰 관련 타입을 제네릭으로 전파
 
 주의: 다른 영역의 `any` 대청소는 범위 밖이다. “미들웨어 계약에 직접 연결된 부분”만 최소 변경한다.
 
@@ -134,47 +146,45 @@ export interface BunnerMiddleware {
 ### 5.1 목적
 
 `new Middleware(opts)`를 금지하면 “옵션 전달”이 문제다.
-이를 DI 방식으로 풀기 위해 `withOptions()`는 “미들웨어 등록 디스크립터”를 반환한다.
+이를 DI 방식으로 풀기 위해 `withOptions()`는 “옵션만 담은 등록값”을 반환하고, DI 토큰/프로바이더 구성은 프레임워크(어댑터/서버)가 내부에서 결정적으로 처리한다. `@InjectOptions` 같은 데코레이터 없이도 자동 주입된다.
 
 ### 5.2 표준 디스크립터 타입
 
 변경/추가 대상(권장 위치): `packages/common/src/interfaces.ts` 또는 `packages/common/src/types.ts`
 
 ```ts
-export type MiddlewareToken = Class<BunnerMiddleware>;
+export type MiddlewareToken<TOptions = unknown> = Class<BunnerMiddleware<TOptions>>;
 
-export interface MiddlewareRegistration {
-  token: MiddlewareToken;
-  providers?: readonly ProviderBase[];
+export interface MiddlewareRegistration<TOptions = unknown> {
+  token: MiddlewareToken<TOptions>;
+  options?: TOptions;
 }
 ```
 
 규칙:
 
 - `token`은 미들웨어 클래스(컨테이너가 생성할 대상)
-- `providers`는 옵션 토큰용 `useValue` 프로바이더만을 주로 사용
+- `options`는 미들웨어 옵션 데이터만 담는다(Provider/Token 노출 금지)
+- 옵션 주입을 위한 토큰 생성/등록은 런타임에서 결정적으로 수행되어야 한다(비결정적/랜덤 토큰 금지). `@InjectOptions`는 필요하지 않으며, 프레임워크가 옵션 토큰을 생성해 생성자 인자에 직접 바인딩한다.
+- 옵션 토큰 네이밍은 `Symbol.for('middleware:<ClassName>:options:<index>')` 같은 결정적 규약을 사용해 다중 등록 시에도 충돌을 방지한다.
+- 동일 미들웨어를 여러 번 등록할 수 있으며, 각 등록은 index 기반 옵션 토큰으로 분리된다. 옵션 제네릭을 선언만 하고 실제로 주입받지 않아도 허용된다(사용자가 주입을 생략할 수 있음).
+- 미들웨어 인스턴스 토큰도 등록별로 분리한다(예: `Symbol.for('middleware:<ClassName>:instance:<index>')`). 컨테이너 캐시는 토큰 단위로 싱글턴이므로, 멀티 옵션 등록 시 인스턴스를 분리하려면 토큰이 달라야 한다.
+- 옵션 주입 위치는 CLI/타입 분석으로 결정하며, 사용자가 별도 데코레이터나 위치 규약을 맞출 필요가 없다.
 
 ### 5.3 withOptions 구현 규칙
 
 각 미들웨어는 필요 시 아래 형태를 제공한다.
 
 ```ts
-export class CorsMiddleware implements BunnerMiddleware {
-  public static withOptions(options: CorsOptions): MiddlewareRegistration {
-    return {
-      token: CorsMiddleware,
-      providers: [{ token: CORS_OPTIONS, useValue: options }],
-    };
-  }
-
+export class CorsMiddleware extends BunnerMiddleware<CorsOptions> {
   // handle(ctx) 구현
 }
 ```
 
 주의:
 
-- `withOptions()`는 “등록 디스크립터 생성”만 한다. 인스턴스 생성(`new`)을 하면 안 된다.
-- 옵션은 DI 토큰으로 주입한다(이미 `@Inject(TOKEN)` 패턴이 존재).
+- `withOptions()`는 “옵션만 담은 등록값 생성”만 한다. 인스턴스 생성(`new`)을 하면 안 된다.
+- 옵션을 DI로 주입하는 구체 방법(토큰/프로바이더 등록)은 프레임워크가 내부에서 처리한다. 멀티 등록 시 옵션 토큰/인스턴스 토큰을 등록 순번으로 분리해 충돌을 방지한다.
 
 ---
 
@@ -186,6 +196,8 @@ HTTP 서버는 모든 스테이지에서 동일한 실행기를 사용한다.
 
 - 입력: `BunnerMiddleware[]` + `Context`
 - 규칙: `false` 반환 시 즉시 중단
+- 미들웨어 인스턴스 스코프 기본값은 싱글턴으로 둔다(성능/경량 우선). 주입받는 서비스는 자신의 선언 스코프를 따른다. 요청 스코프 미들웨어가 필요할 경우 별도 옵션/설정을 통해 opt-in하도록 한다.
+- 동일 미들웨어의 다중 등록(옵션 차이 포함)은 등록별 인스턴스 토큰을 분리해 각각 싱글턴 캐시를 갖도록 한다.
 
 ### 6.2 BunnerHttpServer에서의 적용
 
@@ -200,9 +212,10 @@ HTTP 서버는 모든 스테이지에서 동일한 실행기를 사용한다.
 - 서버 스테이지도 `BunnerMiddleware[]`를 실행한다.
 - `BunnerHttpServer.boot(container, options)`에서 다음을 수행한다.
   1. 옵션으로 전달된 stage별 `MiddlewareRegistration[]`를 수집한다.
-  2. 디스크립터에 포함된 `providers`를 컨테이너에 등록한다.
-  3. stage별 `token`을 컨테이너에서 resolve하여 `BunnerMiddleware[]`로 확정한다.
-  4. 확정된 `BunnerMiddleware[]`를 런타임 실행에 사용한다(요청마다 resolve하지 않음).
+  2. 등록 순번별 옵션 토큰(`Symbol.for('middleware:<Class>:options:<index>')`)을 값 프로바이더로 컨테이너에 등록한다.
+  3. 등록 순번별 미들웨어 인스턴스 토큰(`Symbol.for('middleware:<Class>:instance:<index>')`)을 컨테이너에 등록하여, 각기 별도 인스턴스로 resolve한다(캐시는 토큰 단위 싱글턴).
+  4. stage별 미들웨어 인스턴스를 컨테이너에서 resolve하여 `BunnerMiddleware[]`로 확정한다.
+  5. 확정된 `BunnerMiddleware[]`를 런타임 실행에 사용한다(요청마다 resolve하지 않음).
 
 중요: 컨테이너가 싱글턴/스코프를 어떻게 다루는지는 현재 구현에 따르되, 본 변경의 기본값은 “부팅 시 resolve 후 재사용”이다.
 
@@ -215,37 +228,24 @@ HTTP 서버는 모든 스테이지에서 동일한 실행기를 사용한다.
 
 ---
 
-## 7. 어댑터별 접근(DX) 설계: toXxx 금지, 타입가드+제네릭 유틸
+## 7. 어댑터별 접근(DX) 설계: toXxx 금지, 클래스 토큰 기반 변환
 
 ### 7.1 원칙
 
 - 공용 컨텍스트는 어떤 어댑터가 늘어나도 고정 계약을 유지한다.
-- 특정 어댑터 기능(예: HTTP의 req/res)은 “해당 어댑터 패키지에서 제공하는 타입가드”로만 좁힌다.
+- 특정 어댑터 기능(예: HTTP의 req/res)은 `ctx.to(HttpContext)`처럼 “어댑터가 제공하는 컨텍스트 클래스”로 좁힌다.
 
-### 7.2 HTTP 어댑터 제공(현행 유지)
-
-변경 대상: `packages/http-adapter/src/adapter/guards.ts`
-
-- `isHttpContext(ctx): ctx is HttpContext`는 유지한다.
-
-### 7.3 공용 제네릭 유틸(추가)
-
-추가 대상(권장 위치): `packages/common/src/utils.ts` 또는 `packages/common/src/context/require-context.ts`(새 feature로 추가)
-
-목표: 어댑터별 고정 메서드를 만들지 않고도, 반복되는 패턴을 공용 DX로 단순화한다.
-
-요구 시그니처(예시):
+### 7.2 사용 예
 
 ```ts
-export function requireContext<T extends Context>(ctx: Context, guard: (ctx: Context) => ctx is T, errorMessage: string): T;
-```
-
-사용 예:
-
-```ts
-const http = requireContext(ctx, isHttpContext, 'This middleware requires HTTP context.');
+const http = ctx.to(HttpContext);
 http.response.setHeader('x', 'y');
 ```
+
+### 7.3 실패 시 동작
+
+- `ctx.to(SomeContext)` 실패 시 `BunnerContextError`(메시지만 포함, 코드 없음)를 던진다.
+- `tryTo`/`isHttpContext` 같은 안전/가드 API는 제공하지 않는다.
 
 ---
 
@@ -260,16 +260,16 @@ http.response.setHeader('x', 'y');
 
 변경 대상: `packages/cli/src/analyzer/ast-parser.ts`
 
-- `extractMiddlewaresFromConfigure()`가 `addMiddleware(...)` 호출만 대상으로 한다.
+- `extractMiddlewaresFromConfigure()`가 `addMiddlewares(...)` 호출만 대상으로 한다.
 - 추출 대상 형태:
-  - `httpAdapter.addMiddleware(Lifecycle, [A, B.withOptions(...)])`
+  - `httpAdapter.addMiddlewares(Lifecycle, [A, B.withOptions(...)])`
   - 배열 원소가 `Identifier`면 해당 이름을 수집
   - 배열 원소가 `CallExpression`이고 callee가 `MemberExpression(Identifier, 'withOptions')`면 “object Identifier”를 수집
 
 구체 AST 패턴(필수):
 
 - CallExpression
-  - callee: MemberExpression (property.name === 'addMiddleware')
+  - callee: MemberExpression (property.name === 'addMiddlewares')
   - `arguments[1]`: ArrayExpression
     - `elements[i]`:
       - Identifier -> push(name)
@@ -281,14 +281,16 @@ http.response.setHeader('x', 'y');
 - SpreadElement
 - 동적 계산 specifier
 - 배열이 아닌 두 번째 인자
+- 위 패턴이 감지되면 “addMiddlewares는 리터럴 배열 + Identifier/withOptions만 지원” 형태의 오류를 명시적으로 발생시킨다(조용한 누락 금지).
+- `withOptions` 호출은 베이스 클래스 static 호출(`Identifier.withOptions(...)`)을 포함하며, 배열 내 각 요소의 index를 함께 기록해 옵션/인스턴스 토큰을 결정한다.
 
 ### 8.3 그래프 검증
 
 변경 대상: `packages/cli/src/analyzer/graph/module-graph.ts`
 
 - 현재는 “추출된 클래스 이름이 @Middleware 데코레이터가 있는지”만 검증한다.
-- `addMiddleware`로 변경해도 같은 정책을 유지한다.
-- 단, 검증 메시지/설명은 `use()`가 아니라 `addMiddleware()` 기준으로 업데이트한다.
+- `addMiddlewares`로 변경해도 같은 정책을 유지한다.
+- 단, 검증 메시지/설명은 `use()`가 아니라 `addMiddlewares()` 기준으로 업데이트한다.
 
 ---
 
@@ -297,9 +299,11 @@ http.response.setHeader('x', 'y');
 ### 9.1 공용(common)
 
 - `packages/common/src/interfaces.ts`
-  - `BunnerMiddleware.handle(context: Context): void | boolean | Promise<void | boolean>`로 변경
+  - `BunnerMiddleware<TOptions = void>` 추상 클래스 + `static withOptions` 추가
+  - `handle(context: Context): void | boolean | Promise<void | boolean>` 유지
   - `Context.get<T = unknown>`로 변경
-  - `MiddlewareToken`, `MiddlewareRegistration` 타입 추가(적절한 위치에 배치)
+  - `MiddlewareToken<TOptions>`, `MiddlewareRegistration<TOptions>` 제네릭 타입 추가(적절한 위치에 배치)
+  - `BunnerContextError` 타입 정의 추가(메시지 필드만, 코드 없음) — `ctx.to()` 실패 시 사용
 
 ### 9.2 HTTP 어댑터
 
@@ -311,7 +315,7 @@ http.response.setHeader('x', 'y');
 
 - `packages/http-adapter/src/bunner-http-adapter.ts`
   - `.use/.beforeRequest/.afterRequest/.beforeHandler/.beforeResponse/.afterResponse` 제거
-  - `addMiddleware(lifecycle: HttpMiddlewareLifecycle, middlewares: readonly (MiddlewareToken | MiddlewareRegistration)[]): this` 추가
+  - `addMiddlewares(lifecycle: HttpMiddlewareLifecycle, middlewares: readonly (MiddlewareToken | MiddlewareRegistration)[]): this` 추가
   - 내부 저장 구조는 “stage별 등록 디스크립터 배열”로 유지
 
 - `packages/http-adapter/src/bunner-http-server.ts`
@@ -326,13 +330,13 @@ http.response.setHeader('x', 'y');
 - `packages/http-adapter/src/middlewares/**`
   - 파일 위치는 유지한다(요구사항)
   - 각 미들웨어는 `BunnerMiddleware`를 구현하도록 변경
-  - HTTP 전용 접근은 `isHttpContext(ctx)`로 좁혀 `ctx.request/ctx.response`를 사용
-  - 옵션이 필요한 미들웨어는 `static withOptions()` 제공
+  - HTTP 전용 접근은 `ctx.to(HttpContext)`로 좁힌다(실패 시 예외).
+  - 옵션이 필요한 미들웨어는 베이스 클래스의 `static withOptions()`를 그대로 사용한다(재정의 불필요).
 
 ### 9.3 CLI
 
 - `packages/cli/src/analyzer/ast-parser.ts`
-  - `extractMiddlewaresFromConfigure()`가 `addMiddleware()` + 배열 인자 + withOptions 패턴을 추출하도록 변경
+  - `extractMiddlewaresFromConfigure()`가 `addMiddlewares()` + 배열 인자 + withOptions 패턴을 추출하며, 배열 index를 함께 기록해 옵션/인스턴스 토큰 결정에 활용
 
 - `packages/cli/src/analyzer/graph/module-graph.ts`
   - 검증 메시지/설명 업데이트(필요 시)
@@ -341,7 +345,7 @@ http.response.setHeader('x', 'y');
 
 - `examples/src/app.module.ts`
   - `httpAdapter.use(new ...)` 제거
-  - `httpAdapter.addMiddleware(HttpMiddlewareLifecycle.BeforeRequest, [...])` 형태로 교체
+  - `httpAdapter.addMiddlewares(HttpMiddlewareLifecycle.BeforeRequest, [...])` 형태로 교체
   - `withOptions()`를 사용하도록 교체
 
 ---
@@ -359,7 +363,10 @@ httpAdapter.use(new LoggerMiddleware(), new CorsMiddleware({ origin: '*' }));
 After:
 
 ```ts
-httpAdapter.addMiddleware(HttpMiddlewareLifecycle.BeforeRequest, [LoggerMiddleware, CorsMiddleware.withOptions({ origin: '*' })]);
+httpAdapter.addMiddlewares(HttpMiddlewareLifecycle.BeforeRequest, [
+  LoggerMiddleware,
+  CorsMiddleware.withOptions({ origin: '*' }),
+]);
 ```
 
 ### 10.2 미들웨어 구현
@@ -375,14 +382,12 @@ export class CorsMiddleware implements BunnerHttpMiddleware {
 After:
 
 ```ts
-export class CorsMiddleware implements BunnerMiddleware {
+export class CorsMiddleware extends BunnerMiddleware<CorsOptions> {
   public async handle(ctx: Context): Promise<void | boolean> {
-    if (!isHttpContext(ctx)) {
-      return;
-    }
+    const http = ctx.to(HttpContext);
 
-    const req = ctx.request;
-    const res = ctx.response;
+    const req = http.request;
+    const res = http.response;
     ...
   }
 }
@@ -415,13 +420,14 @@ export class CorsMiddleware implements BunnerMiddleware {
 
 1. AOT 분석
 
-- `Configurer.configure()`에 `addMiddleware()`가 있는 예제를 만들어 CLI 분석이 미들웨어 클래스를 정확히 추출하는지 확인
+- `Configurer.configure()`에 `addMiddlewares()`가 있는 예제를 만들어 CLI 분석이 미들웨어 클래스를 정확히 추출하는지 확인
 - `withOptions()` 패턴도 추출되는지 확인
 
 2. 런타임 HTTP
 
 - `BeforeRequest`에 CORS/QueryParser 같은 미들웨어를 등록하고 실제 요청에서 동작 확인
 - 미들웨어가 `false`를 반환하면 핸들러가 호출되지 않는지 확인
+- 잘못된 컨텍스트에서 `ctx.to(HttpContext)` 호출 시 `BunnerContextError`가 발생하는지 확인
 
 3. 타입 안전
 
@@ -436,11 +442,11 @@ export class CorsMiddleware implements BunnerMiddleware {
 ## 13. 구현 순서(권장)
 
 1. common 계약/타입 추가(단일 미들웨어 인터페이스 확정)
-2. http-adapter: interfaces.ts 타입 변경 + addMiddleware API 추가(아직 실행기는 구버전일 수 있음)
+2. http-adapter: interfaces.ts 타입 변경 + addMiddlewares API 추가(아직 실행기는 구버전일 수 있음)
 3. http-adapter: server 실행기 ctx 기반으로 통합 + stage 단락 처리 통일
 4. http-adapter: built-in middlewares를 단일 인터페이스로 마이그레이션 + withOptions 도입
-5. cli: addMiddleware 추출/검증으로 업데이트
-6. examples: addMiddleware로 마이그레이션
+5. cli: addMiddlewares 추출/검증으로 업데이트
+6. examples: addMiddlewares로 마이그레이션
 7. 정리(클린업) 전수 확인 및 불필요 코드 제거
 
 ## 9. 오픈 이슈(결정 필요)

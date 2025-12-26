@@ -22,6 +22,13 @@ export class ManifestGenerator {
     const scopedKeysEntries: string[] = [];
 
     graph.modules.forEach((node: ModuleNode) => {
+      node.providers.forEach((_ref, token: string) => {
+        const providerNode = graph.classMap.get(token);
+        const alias = providerNode ? registry.getAlias(providerNode.metadata.className, providerNode.filePath) : token;
+
+        scopedKeysEntries.push(`  map.set(${alias}, '${node.name}::${token}');`);
+        scopedKeysEntries.push(`  map.set('${token}', '${node.name}::${token}');`);
+      });
       node.controllers.forEach((ctrlName: string) => {
         // Resolve controller alias
         // We know node has controllers (ClassName). We need their FilePath.
@@ -47,6 +54,7 @@ export class ManifestGenerator {
         }
 
         scopedKeysEntries.push(`  map.set(${alias}, '${node.name}::${ctrlName}');`);
+        scopedKeysEntries.push(`  map.set('${ctrlName}', '${node.name}::${ctrlName}');`);
       });
     });
 

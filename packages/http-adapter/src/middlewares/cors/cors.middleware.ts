@@ -1,16 +1,21 @@
-import type { BunnerRequest } from '../../bunner-request';
-import type { BunnerResponse } from '../../bunner-response';
+import { BunnerMiddleware, type Context } from '@bunner/common';
+
+import { BunnerHttpContext } from '../../adapter';
 import { HeaderField, HttpMethod } from '../../enums';
-import type { BunnerHttpMiddleware } from '../../interfaces';
 
 import { CORS_DEFAULT_METHODS, CORS_DEFAULT_OPTIONS_SUCCESS_STATUS } from './constants';
 import type { CorsOptions } from './interfaces';
 import type { CustomOriginFn } from './types';
 
-export class CorsMiddleware implements BunnerHttpMiddleware {
-  constructor(private readonly options: CorsOptions = {}) {}
+export class CorsMiddleware extends BunnerMiddleware<CorsOptions> {
+  constructor(private readonly options: CorsOptions = {}) {
+    super();
+  }
 
-  public async handle(req: BunnerRequest, res: BunnerResponse): Promise<void | boolean> {
+  public async handle(context: Context): Promise<void | boolean> {
+    const http = context.to(BunnerHttpContext);
+    const req = http.request;
+    const res = http.response;
     const origin = req.headers.get(HeaderField.Origin);
     const method = req.method;
     // Set defaults

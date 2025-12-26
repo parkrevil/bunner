@@ -1,12 +1,19 @@
-import { type BunnerContainer } from '@bunner/common';
+import { type BunnerContainer, type BunnerMiddleware, type MiddlewareRegistration } from '@bunner/common';
 import { Logger } from '@bunner/logger';
 import type { Server } from 'bun';
 import { StatusCodes } from 'http-status-codes';
 
+import { BunnerHttpContext, BunnerHttpContextAdapter } from './adapter';
 import { BunnerRequest } from './bunner-request';
 import { BunnerResponse } from './bunner-response';
 import { HttpMethod } from './enums';
-import type { BunnerHttpMiddleware, BunnerHttpServerOptions } from './interfaces';
+import type {
+  BunnerHttpServerOptions,
+  HttpMiddlewareRegistry,
+  HttpWorkerResponse,
+  MiddlewareRegistrationInput,
+} from './interfaces';
+import { HttpMiddlewareLifecycle } from './interfaces';
 import { RequestHandler } from './request-handler';
 import { RouteHandler } from './route-handler';
 import { getIps } from './utils';
@@ -20,26 +27,14 @@ export class BunnerHttpServer {
   private options: BunnerHttpServerOptions;
   private server: Server<any>;
 
-  private middlewares: {
-    beforeRequest: BunnerHttpMiddleware[];
-    afterRequest: BunnerHttpMiddleware[];
-    beforeHandler: BunnerHttpMiddleware[]; // Not used yet? Plan implies usage.
-    beforeResponse: BunnerHttpMiddleware[];
-    afterResponse: BunnerHttpMiddleware[];
-  } = {
-    beforeRequest: [],
-    afterRequest: [],
-    beforeHandler: [],
-    beforeResponse: [],
-    afterResponse: [],
-  };
+  private middlewares: Partial<Record<HttpMiddlewareLifecycle, BunnerMiddleware[]>> = {};
 
   async boot(container: BunnerContainer, options: any): Promise<void> {
     this.container = container;
     this.options = options.options || options; // Handle nested options
 
     if ((this.options as any).middlewares) {
-      this.middlewares = (this.options as any).middlewares;
+      this.prepareMiddlewares((this.options as any).middlewares as HttpMiddlewareRegistry);
     }
 
     this.logger.info('🚀 BunnerHttpServer booting...');
@@ -87,8 +82,14 @@ export class BunnerHttpServer {
     const bunnerRes = new BunnerResponse(bunnerReq, { headers: new Headers(), status: 0 } as any);
 
     try {
+      const adapter = new BunnerHttpContextAdapter(bunnerReq, bunnerRes);
+      const context = new BunnerHttpContext(adapter);
       // 1. beforeRequest
-      await this.runMiddlewares(this.middlewares.beforeRequest, bunnerReq, bunnerRes);
+      const continueBeforeRequest = await this.runMiddlewares(HttpMiddlewareLifecycle.BeforeRequest, context);
+
+      if (!continueBeforeRequest) {
+        return this.toResponse(bunnerRes.end());
+      }
 
       const httpMethod = req.method.toUpperCase() as HttpMethod;
       let body: any = undefined;
@@ -122,22 +123,35 @@ export class BunnerHttpServer {
         ip,
         ips,
       });
+
       // 2. afterRequest (Post-Parsing)
-      await this.runMiddlewares(this.middlewares.afterRequest, bunnerReq, bunnerRes);
+      const continueAfterRequest = await this.runMiddlewares(HttpMiddlewareLifecycle.AfterRequest, context);
+
+      if (!continueAfterRequest) {
+        return this.toResponse(bunnerRes.end());
+      }
+
       // 3. beforeHandler (Pre-Routing/Handling)
-      await this.runMiddlewares(this.middlewares.beforeHandler, bunnerReq, bunnerRes);
+      const continueBeforeHandler = await this.runMiddlewares(HttpMiddlewareLifecycle.BeforeHandler, context);
+
+      if (!continueBeforeHandler) {
+        return this.toResponse(bunnerRes.end());
+      }
 
       // Handle Request
-      const workerRes = await this.requestHandler.handle(bunnerReq, bunnerRes, httpMethod, path);
-
+      const workerRes = await this.requestHandler.handle(bunnerReq, bunnerRes, httpMethod, path, context);
       // 4. beforeResponse
-      await this.runMiddlewares(this.middlewares.beforeResponse, bunnerReq, bunnerRes);
+      const continueBeforeResponse = await this.runMiddlewares(HttpMiddlewareLifecycle.BeforeResponse, context);
 
-      const response = new Response(workerRes.body, workerRes.init);
+      if (!continueBeforeResponse) {
+        return this.toResponse(bunnerRes.end());
+      }
+
+      const response = this.toResponse(workerRes);
 
       // 5. afterResponse (Note: Response is immutable in standard Request/Response,
       // but we can execute logic here. However, we've already created the Response object.)
-      await this.runMiddlewares(this.middlewares.afterResponse, bunnerReq, bunnerRes);
+      await this.runMiddlewares(HttpMiddlewareLifecycle.AfterResponse, context);
 
       return response;
     } catch (e: any) {
@@ -149,9 +163,91 @@ export class BunnerHttpServer {
     }
   }
 
-  private async runMiddlewares(middlewares: BunnerHttpMiddleware[], req: BunnerRequest, res: BunnerResponse): Promise<void> {
-    for (const middleware of middlewares) {
-      await middleware.handle(req, res);
+  private async runMiddlewares(lifecycle: HttpMiddlewareLifecycle, ctx: BunnerHttpContext): Promise<boolean> {
+    const list = this.middlewares[lifecycle] || [];
+
+    for (const middleware of list) {
+      const result = await middleware.handle(ctx);
+
+      if (result === false) {
+        return false;
+      }
     }
+
+    return true;
+  }
+
+  private prepareMiddlewares(registry: HttpMiddlewareRegistry): void {
+    const resolved: Partial<Record<HttpMiddlewareLifecycle, BunnerMiddleware[]>> = {};
+
+    (Object.values(HttpMiddlewareLifecycle) as HttpMiddlewareLifecycle[]).forEach(lifecycle => {
+      const entries = registry[lifecycle];
+
+      if (!entries) {
+        return;
+      }
+
+      const instances: BunnerMiddleware[] = [];
+
+      entries.forEach((entry, index) => {
+        const normalized = this.normalizeRegistration(entry);
+        const optionToken = Symbol.for(`middleware:${this.getTokenName(normalized.token)}:options:${index}`);
+        const instanceToken = Symbol.for(`middleware:${this.getTokenName(normalized.token)}:instance:${index}`);
+
+        if (normalized.options !== undefined) {
+          if (!this.container.has(optionToken)) {
+            this.container.set(optionToken, () => normalized.options);
+          }
+        }
+
+        if (!this.container.has(instanceToken)) {
+          this.container.set(instanceToken, (c: BunnerContainer) => {
+            if (c.has(normalized.token)) {
+              return c.get(normalized.token);
+            }
+
+            const ctor = normalized.token as any;
+
+            try {
+              if (normalized.options !== undefined) {
+                return new ctor(normalized.options);
+              }
+
+              return new ctor();
+            } catch (_e) {
+              return new ctor();
+            }
+          });
+        }
+
+        const instance = this.container.get<BunnerMiddleware>(instanceToken);
+
+        instances.push(instance);
+      });
+
+      resolved[lifecycle] = instances;
+    });
+
+    this.middlewares = resolved;
+  }
+
+  private normalizeRegistration(entry: MiddlewareRegistrationInput): MiddlewareRegistration {
+    if (typeof entry === 'function' || typeof entry === 'symbol') {
+      return { token: entry };
+    }
+
+    return entry;
+  }
+
+  private getTokenName(token: MiddlewareRegistration['token']): string {
+    if (typeof token === 'symbol') {
+      return token.description || 'symbol';
+    }
+
+    return (token as any).name || 'anonymous';
+  }
+
+  private toResponse(workerRes: HttpWorkerResponse): Response {
+    return new Response(workerRes.body, workerRes.init);
   }
 }

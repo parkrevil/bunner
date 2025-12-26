@@ -128,7 +128,7 @@ export class AstParser {
     const constructorParams: ClassMetadata['constructorParams'] = [];
     const methods: ClassMetadata['methods'] = [];
     const properties: ClassMetadata['properties'] = [];
-    let middlewares: string[] = [];
+    let middlewares: ClassMetadata['middlewares'] = [];
 
     node.body.body.forEach((member: any) => {
       if (member.type === 'MethodDefinition') {
@@ -269,38 +269,64 @@ export class AstParser {
     };
   }
 
-  private extractMiddlewaresFromConfigure(funcNode: any): string[] {
-    const middlewares: string[] = [];
-    // Traverse body to find 'use', 'beforeRequest', etc calls on adapter
-    // This is a simplified traversal
+  private extractMiddlewaresFromConfigure(funcNode: any): ClassMetadata['middlewares'] {
+    const middlewares: ClassMetadata['middlewares'] = [];
+    const error = () => {
+      throw new Error('[Bunner AOT] addMiddlewares는 리터럴 배열 + Identifier/withOptions만 지원합니다.');
+    };
     const visit = (n: any) => {
       if (!n || typeof n !== 'object') {
         return;
       }
 
-      if (n.type === 'CallExpression') {
-        // Check for adapters.http.use(Middleware)
-        // Callee could be MemberExpression chain
-        // adapters.http.use -> MemberExpression(MemberExpression(adapters, http), use)
+      if (n.type === 'CallExpression' && n.callee?.type === 'MemberExpression') {
+        const method = n.callee.property?.name;
 
-        // Let's aggressively check for arguments that look like Middleware class references
-        // Only if the call looks like configuration (e.g. method name 'use', 'beforeRequest', etc)
-        const method = this.getMethodName(n.callee);
+        if (method === 'addMiddlewares') {
+          const lifecycleArg = n.arguments?.[0];
+          const lifecycle = lifecycleArg?.type === 'Identifier' ? lifecycleArg.name : undefined;
+          const arrayArg = n.arguments?.[1];
 
-        if (['use', 'beforeRequest', 'afterRequest', 'beforeHandler', 'beforeResponse', 'afterResponse'].includes(method)) {
-          (n.arguments || []).forEach((arg: any) => {
-            if (arg.type === 'Identifier') {
-              // Check if likely a class (PascalCase) or imported
-              // We can just capture it and ModuleGraph will verify if it maps to a class with @Middleware
-              middlewares.push(arg.name);
+          if (!arrayArg || arrayArg.type !== 'ArrayExpression') {
+            error();
+          }
+
+          (arrayArg.elements || []).forEach((el: any, index: number) => {
+            if (!el) {
+              error();
             }
+
+            if (el.type === 'SpreadElement') {
+              error();
+            }
+
+            if (el.type === 'Identifier') {
+              middlewares?.push({ name: el.name, lifecycle, index });
+
+              return;
+            }
+
+            if (el.type === 'CallExpression' && el.callee?.type === 'MemberExpression') {
+              const calleeObj = el.callee.object;
+              const calleeProp = el.callee.property;
+
+              if (calleeObj?.type === 'Identifier' && calleeProp?.name === 'withOptions') {
+                middlewares?.push({ name: calleeObj.name, lifecycle, index });
+
+                return;
+              }
+            }
+
+            error();
           });
+
+          // Do not traverse deeper inside this CallExpression to avoid duplicate matches
+          return;
         }
       }
 
-      // Traverse children
       Object.keys(n).forEach(key => {
-        if (key === 'type' || key === 'loc' || key === 'start' || key === 'end') {
+        if (['type', 'loc', 'start', 'end'].includes(key)) {
           return;
         }
 
@@ -317,14 +343,6 @@ export class AstParser {
     visit(funcNode.body);
 
     return middlewares;
-  }
-
-  private getMethodName(callee: any): string {
-    if (callee.type === 'MemberExpression') {
-      return callee.property.name;
-    }
-
-    return '';
   }
 
   private extractDecorator(decoratorNode: any): DecoratorMetadata {

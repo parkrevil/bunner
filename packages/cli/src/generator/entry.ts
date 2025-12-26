@@ -58,12 +58,12 @@ async function bootstrap() {
     // === Bootstrapping ===
     console.log("${isDev ? '🌟 Bunner Server Starting...' : '[Entry] Server Initializing...'}");
 
-    const { createMetadataRegistry, createScopedKeysMap, registerDynamicModules } = await import("./manifest");
+    const { createContainer, createMetadataRegistry, createScopedKeysMap, registerDynamicModules } = await import("./manifest");
     const { Container } = await import("@bunner/core");
     
     globalThis.__BUNNER_MANIFEST_PATH__ = import.meta.resolve("./manifest.${manifestExt}"); 
     
-    container = new Container();
+    container = createContainer();
     metadata = createMetadataRegistry();
     const scopedKeys = createScopedKeysMap();
   

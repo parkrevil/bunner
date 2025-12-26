@@ -8,5 +8,3 @@ export const DEFAULT_QUERY_PARSER_OPTIONS: Required<QueryParserOptions> = {
   hppMode: 'first',
   strictMode: false,
 };
-
-export const QUERY_PARSER_OPTIONS = Symbol('QUERY_PARSER_OPTIONS');
