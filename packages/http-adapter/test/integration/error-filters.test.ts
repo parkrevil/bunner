@@ -1,9 +1,11 @@
 import { BunnerErrorFilter } from '@bunner/common';
+import { Container } from '@bunner/core';
 import { describe, expect, it, mock } from 'bun:test';
 import { StatusCodes } from 'http-status-codes';
 
-import { createHttpTestHarness, handleRequest, withGlobalMiddlewares } from '../http-test-kit';
-import { BunnerHttpContext, type BunnerResponse, HttpMethod } from '../index';
+import { BunnerHttpAdapter } from '../../index';
+import { createHttpTestHarness, createRequest, createResponse, handleRequest, withGlobalMiddlewares } from '../http-test-kit';
+import { BunnerHttpContext, type BunnerResponse, HttpMethod, RequestHandler, RouteHandler } from '../index';
 
 class ErrorController {
   boom(): void {
@@ -192,6 +194,86 @@ function createRegistry(params: {
   return registry;
 }
 
+class AdapterController {
+  boom(): void {
+    throw new Error('boom');
+  }
+}
+
+class AdapterGlobalErrorFilter extends BunnerErrorFilter {
+  constructor(private readonly onCall: () => void) {
+    super();
+  }
+
+  catch(_error: any, ctx: any): void {
+    this.onCall();
+
+    const http = ctx.to(BunnerHttpContext);
+
+    http.response.setStatus(StatusCodes.IM_A_TEAPOT);
+    http.response.setBody('adapter-filtered');
+  }
+}
+
+function createAdapterRegistry(): Map<any, any> {
+  const registry = new Map<any, any>();
+
+  registry.set(AdapterController, {
+    className: 'AdapterController',
+    decorators: [{ name: 'Controller', arguments: ['adapter'] }],
+    methods: [
+      {
+        name: 'boom',
+        decorators: [{ name: 'Get', arguments: ['boom'] }],
+        parameters: [],
+      },
+    ],
+  });
+
+  return registry;
+}
+
+describe('BunnerHttpAdapter.addErrorFilters', () => {
+  it('should register global ErrorFilters via addErrorFilters', async () => {
+    const onCall = mock(() => {});
+    const metadataRegistry = createAdapterRegistry();
+
+    (globalThis as any).__BUNNER_METADATA_REGISTRY__ = metadataRegistry;
+
+    const container = new Container();
+
+    container.set(AdapterGlobalErrorFilter, () => new AdapterGlobalErrorFilter(onCall));
+    container.set(AdapterController, () => new AdapterController());
+
+    const originalServe = (Bun as any).serve;
+    const serveMock = mock((_opts: any) => ({ stop: mock(() => {}) }) as any);
+
+    (Bun as any).serve = serveMock;
+
+    try {
+      const adapter = new BunnerHttpAdapter({ port: 0 });
+
+      adapter.addErrorFilters([AdapterGlobalErrorFilter]);
+      await adapter.start({ container } as any);
+    } finally {
+      (Bun as any).serve = originalServe;
+    }
+
+    const routeHandler = new RouteHandler(container, metadataRegistry, new Map());
+
+    routeHandler.register();
+
+    const requestHandler = new RequestHandler(container, routeHandler, metadataRegistry);
+    const req = createRequest({ method: HttpMethod.Get, url: 'http://localhost/adapter/boom' });
+    const res = createResponse(req);
+    const workerResponse = await requestHandler.handle(req, res, HttpMethod.Get, '/adapter/boom');
+
+    expect(onCall).toHaveBeenCalledTimes(1);
+    expect(serveMock).toHaveBeenCalledTimes(1);
+    expect(workerResponse.init.status).toBe(StatusCodes.IM_A_TEAPOT);
+    expect(workerResponse.body).toBe('adapter-filtered');
+  });
+});
 describe('RequestHandler.handle', () => {
   it('should throw during route registration when a UseErrorFilters token is not resolvable', () => {
     class MissingFilterToken extends BunnerErrorFilter {
@@ -206,6 +288,73 @@ describe('RequestHandler.handle', () => {
         providers: [...withGlobalMiddlewares({}), { token: ErrorController, value: new ErrorController() }],
       });
     }).toThrow();
+  });
+  it('should call ErrorFilter.catch with exactly (error, ctx)', async () => {
+    const receivedArgs: any[][] = [];
+
+    class ArityCaptureFilter extends BunnerErrorFilter {
+      catch(...args: any[]): void {
+        receivedArgs.push(args);
+      }
+    }
+
+    const metadataRegistry = createRegistry({ useErrorFilters: [], includeOkRoute: false });
+    const harness = createHttpTestHarness({
+      metadataRegistry,
+      providers: [
+        ...withGlobalMiddlewares({ errorFilters: [new ArityCaptureFilter()] }),
+        { token: ErrorController, value: new ErrorController() },
+      ],
+    });
+
+    await handleRequest({
+      harness,
+      method: HttpMethod.Get,
+      path: '/err/boom',
+      url: 'http://localhost/err/boom',
+    });
+    expect(receivedArgs).toHaveLength(1);
+    expect(receivedArgs[0]).toHaveLength(2);
+    expect(receivedArgs[0]?.[0]).toBeInstanceOf(Error);
+    expect(typeof receivedArgs[0]?.[1]?.to).toBe('function');
+  });
+  it('should combine @UseErrorFilters in method -> controller order', async () => {
+    const calls: string[] = [];
+
+    class MethodFilterToken extends BunnerErrorFilter {
+      catch(): void {
+        calls.push('method');
+      }
+    }
+
+    class ControllerFilterToken extends BunnerErrorFilter {
+      catch(): void {
+        calls.push('controller');
+      }
+    }
+
+    const metadataRegistry = createRegistry({
+      useErrorFilters: [MethodFilterToken],
+      useControllerFilters: [ControllerFilterToken],
+      includeOkRoute: false,
+    });
+    const harness = createHttpTestHarness({
+      metadataRegistry,
+      providers: [
+        ...withGlobalMiddlewares({}),
+        { token: MethodFilterToken, value: new MethodFilterToken() },
+        { token: ControllerFilterToken, value: new ControllerFilterToken() },
+        { token: ErrorController, value: new ErrorController() },
+      ],
+    });
+
+    await handleRequest({
+      harness,
+      method: HttpMethod.Get,
+      path: '/err/boom',
+      url: 'http://localhost/err/boom',
+    });
+    expect(calls).toEqual(['method', 'controller']);
   });
   it('should run route-level ErrorFilters before global ErrorFilters', async () => {
     const calledRoute = mock(() => {});
@@ -386,6 +535,27 @@ describe('RequestHandler.handle', () => {
       url: 'http://localhost/err/boom',
     });
 
+    expect(workerResponse.init.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
+    expect(workerResponse.body).toBe('Internal Server Error');
+  });
+  it('should fall back to DefaultErrorHandler when ErrorFilter engine fails', async () => {
+    const onCall = mock(() => {});
+    const metadataRegistry = createRegistry({ includeOkRoute: true });
+    const harness = createHttpTestHarness({
+      metadataRegistry,
+      providers: [
+        ...withGlobalMiddlewares({ errorFilters: [null as any, new SetStatusFilter(onCall)] }),
+        { token: ErrorController, value: new ErrorController() },
+      ],
+    });
+    const { workerResponse } = await handleRequest({
+      harness,
+      method: HttpMethod.Get,
+      path: '/err/boom',
+      url: 'http://localhost/err/boom',
+    });
+
+    expect(onCall).toHaveBeenCalledTimes(0);
     expect(workerResponse.init.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
     expect(workerResponse.body).toBe('Internal Server Error');
   });

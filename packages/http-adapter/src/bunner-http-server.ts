@@ -163,6 +163,8 @@ export class BunnerHttpServer {
         if (bunnerRes.getStatus() === 0) {
           bunnerRes.setStatus(StatusCodes.INTERNAL_SERVER_ERROR);
         }
+
+        return this.toResponse(bunnerRes.end());
       }
 
       const response = this.toResponse(workerRes);

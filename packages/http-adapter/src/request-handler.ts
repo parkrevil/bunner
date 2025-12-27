@@ -42,6 +42,7 @@ export class RequestHandler {
     const ctx = context ?? new BunnerHttpContext(new BunnerHttpContextAdapter(req, res));
     let matchResult: any = undefined;
     let systemErrorHandlerCalled = false;
+    let errorFiltersCalled = false;
     let processingError: unknown = undefined;
     const applyDefaultErrorHandler = (params: {
       readonly error: unknown;
@@ -147,21 +148,32 @@ export class RequestHandler {
 
       let currentError: unknown = e;
 
-      try {
-        const result = await this.runErrorFilters({
-          error: e,
-          ctx,
-          entry: matchResult?.entry,
-        });
-
-        currentError = result.currentError;
-      } catch (errorFilterEngineError) {
-        this.logger.error('ErrorFilter engine failed', {
+      if (errorFiltersCalled) {
+        this.logger.error('runErrorFilters reentry blocked', {
+          stage: 'runErrorFilters:reentryBlocked',
           originalError: e,
-          errorFilterEngineError,
+          currentError,
         });
+      } else {
+        errorFiltersCalled = true;
 
-        currentError = errorFilterEngineError;
+        try {
+          const result = await this.runErrorFilters({
+            error: e,
+            ctx,
+            entry: matchResult?.entry,
+          });
+
+          currentError = result.currentError;
+        } catch (errorFilterEngineError) {
+          this.logger.error('ErrorFilter engine failed', {
+            stage: 'runErrorFilters:failed',
+            originalError: e,
+            errorFilterEngineError,
+          });
+
+          currentError = errorFilterEngineError;
+        }
       }
 
       processingError = currentError;

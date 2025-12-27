@@ -1,4 +1,4 @@
-import { BunnerMiddleware } from '@bunner/common';
+import { BunnerErrorFilter, BunnerMiddleware } from '@bunner/common';
 import { describe, expect, it, mock } from 'bun:test';
 import { StatusCodes } from 'http-status-codes';
 
@@ -252,6 +252,50 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.OK);
     expect(workerResponse.body).toBe('{"ok":true}');
   });
+  it('should not invoke ErrorFilters for beforeResponse errors', async () => {
+    const onErrorFilter = mock(() => {});
+
+    class GlobalErrorFilter extends BunnerErrorFilter {
+      catch(): void {
+        onErrorFilter();
+      }
+    }
+
+    class BeforeRequestStopMiddleware extends BunnerMiddleware {
+      handle(): boolean {
+        return false;
+      }
+    }
+
+    class BeforeResponseThrowingMiddleware extends BunnerMiddleware {
+      handle(): void {
+        throw new Error('beforeResponse failed');
+      }
+    }
+
+    const metadataRegistry = createRegistry({ useScopedMiddleware: [] });
+    const harness = createHttpTestHarness({
+      metadataRegistry,
+      providers: [
+        ...withGlobalMiddlewares({
+          beforeRequest: [new BeforeRequestStopMiddleware()],
+          beforeResponse: [new BeforeResponseThrowingMiddleware() as any],
+          errorFilters: [new GlobalErrorFilter()],
+        }),
+        { token: MiddlewareController, value: new MiddlewareController() },
+      ],
+    });
+    const { workerResponse } = await handleRequest({
+      harness,
+      method: HttpMethod.Get,
+      path: '/mw/ok',
+      url: 'http://localhost/mw/ok',
+    });
+
+    expect(onErrorFilter).toHaveBeenCalledTimes(0);
+    expect(workerResponse.init.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
+    expect(workerResponse.body).toBeUndefined();
+  });
   it('should set status to 500 without setting body when a beforeResponse middleware throws while status is unset', async () => {
     class BeforeRequestStopMiddleware extends BunnerMiddleware {
       handle(): boolean {
@@ -308,6 +352,43 @@ describe('RequestHandler.handle', () => {
       url: 'http://localhost/mw/ok',
     });
 
+    expect(workerResponse.init.status).toBe(StatusCodes.OK);
+    expect(workerResponse.body).toBe('{"ok":true}');
+  });
+  it('should not invoke ErrorFilters for afterResponse errors', async () => {
+    const onErrorFilter = mock(() => {});
+
+    class GlobalErrorFilter extends BunnerErrorFilter {
+      catch(): void {
+        onErrorFilter();
+      }
+    }
+
+    class AfterResponseThrowingMiddleware extends BunnerMiddleware {
+      handle(): void {
+        throw new Error('afterResponse failed');
+      }
+    }
+
+    const metadataRegistry = createRegistry({ useScopedMiddleware: [] });
+    const harness = createHttpTestHarness({
+      metadataRegistry,
+      providers: [
+        ...withGlobalMiddlewares({
+          afterResponse: [new AfterResponseThrowingMiddleware() as any],
+          errorFilters: [new GlobalErrorFilter()],
+        }),
+        { token: MiddlewareController, value: new MiddlewareController() },
+      ],
+    });
+    const { workerResponse } = await handleRequest({
+      harness,
+      method: HttpMethod.Get,
+      path: '/mw/ok',
+      url: 'http://localhost/mw/ok',
+    });
+
+    expect(onErrorFilter).toHaveBeenCalledTimes(0);
     expect(workerResponse.init.status).toBe(StatusCodes.OK);
     expect(workerResponse.body).toBe('{"ok":true}');
   });
