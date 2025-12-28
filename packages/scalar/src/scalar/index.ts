@@ -2,9 +2,11 @@ export { resolveHttpNamesForDocuments, resolveHttpNamesForHosting } from './adap
 export { buildDocsForHttpAdapters } from './docs';
 export { createIndexHtml, indexResponse } from './index-html';
 export { resolveDocFromPath } from './routing';
-export { Scalar } from './scalar';
 export { setupScalar } from './setup';
 export { uiResponse } from './ui';
+export { provideScalar } from './provide-scalar';
+export { ScalarConfigurer } from './scalar-configurer';
+export { ScalarSetupOptionsToken } from './tokens';
 
 export type { AdapterCollectionLike, DocumentTargets, HttpTargets } from './types';
 export type { Doc, ScalarSetupOptions } from './interfaces';

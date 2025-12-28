@@ -8,7 +8,7 @@ export function buildDocsForHttpAdapters(httpAdapterNames: string[]): Doc[] {
   const registryValue = globalRecord['__BUNNER_METADATA_REGISTRY__'];
 
   if (!registryValue) {
-    throw new Error('Scalar: No Metadata Registry found. Ensure app.init() runs before Scalar.setup().');
+    throw new Error('Scalar: No Metadata Registry found. Ensure app.init() completes before Scalar binding.');
   }
 
   if (!isMap(registryValue)) {

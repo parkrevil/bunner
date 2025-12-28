@@ -84,6 +84,7 @@ export class BunnerHttpAdapter implements BunnerAdapter {
       await this.httpServer.boot(context.container, {
         ...this.options,
         metadata: (globalThis as any).__BUNNER_METADATA_REGISTRY__,
+        scopedKeys: (globalThis as any).__BUNNER_SCOPED_KEYS__,
         middlewares: this.middlewareRegistry,
         errorFilters: this.errorFilterTokens,
         internalRoutes: this.internalRoutes,

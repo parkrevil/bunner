@@ -2,7 +2,6 @@ import type { GenerateConfig } from './interfaces';
 
 export class EntryGenerator {
   generate(userMainImportPath: string, isDev: boolean, config: GenerateConfig = {}): string {
-    const manifestExt = isDev ? 'ts' : 'js';
     const workersConfig = config.workers;
     let workersCount = 'Math.floor(navigator.hardwareConcurrency / 2) || 1';
 
@@ -28,65 +27,69 @@ export class EntryGenerator {
       workersCount = workersConfig.length.toString();
     }
 
-    // Simplified Entry: No ClusterManager, just straight boot
     return `
 const isWorker = !!process.env.BUNNER_WORKER_ID;
 
 if (!isWorker) {
-  // === Main Process ===
   const workersCount = ${workersCount};
-  
-  console.log(\`[Cluster] Master process starting with \${workersCount} workers...\`);
-  
-  const { ClusterManager } = await import("@bunner/core");
-  
-  new ClusterManager({
-    size: workersCount,
-    script: new URL(import.meta.url),
-  });
+  if (workersCount <= 1) {
+    await bootstrap();
+  } else {
+    console.log(\`[Cluster] Master process starting with \${workersCount} workers...\`);
 
+    const { ClusterManager } = await import("@bunner/core");
+
+    new ClusterManager({
+      size: workersCount,
+      script: new URL(import.meta.url),
+    });
+  }
 } else {
-  // === Worker Process ===
   await bootstrap();
 }
 
 async function bootstrap() {
-  let container;
-  let metadata;
-
   try {
-    // === Bootstrapping ===
-    console.log("${isDev ? '🌟 Bunner Server Starting...' : '[Entry] Server Initializing...'}");
+    console.log("${isDev ? '🌟 Bunner Server Starting (AOT)...' : '[Entry] Server Initializing...'}");
 
-    const { createContainer, createMetadataRegistry, createScopedKeysMap, registerDynamicModules } = await import("./manifest");
-    const { Container } = await import("@bunner/core");
-    
-    globalThis.__BUNNER_MANIFEST_PATH__ = import.meta.resolve("./manifest.${manifestExt}"); 
-    
-    container = createContainer();
-    metadata = createMetadataRegistry();
-    const scopedKeys = createScopedKeysMap();
-  
-    globalThis.__BUNNER_CONTAINER__ = container;
-    globalThis.__BUNNER_METADATA_REGISTRY__ = metadata;
-    globalThis.__BUNNER_SCOPED_KEYS__ = scopedKeys;
-    
-    if (typeof registerDynamicModules === 'function') {
-       await registerDynamicModules(container);
+    const manifestFileName = ${isDev ? "'./manifest.ts'" : "'./manifest.js'"};
+    const manifestUrl = new URL(manifestFileName, import.meta.url);
+
+    (globalThis as any).__BUNNER_MANIFEST_PATH__ = manifestUrl.href;
+
+    const manifest = await import(manifestFileName);
+
+    if (typeof (manifest as any).createScopedKeysMap === 'function') {
+      (globalThis as any).__BUNNER_SCOPED_KEYS__ = (manifest as any).createScopedKeysMap();
     }
-  
+
+    const injector = {
+      createContainer: (manifest as any).createContainer,
+      adapterConfig: (manifest as any).adapterConfig,
+      registerDynamicModules: (manifest as any).registerDynamicModules,
+    };
+    const { BunnerApplication } = await import("@bunner/core");
+    
+    const container = injector.createContainer();
+    
+    // Set Global Container for BunnerApplication to pick up
+    globalThis.__BUNNER_CONTAINER__ = container;
+    
+    // Configure Adapters (Global Defaults from AOT)
+    // We can expose adapterConfig globally or let the app handle it.
+    // For now, let's just make it available if needed.
+    globalThis.__BUNNER_ADAPTER_CONFIG__ = injector.adapterConfig;
+
     console.log("[Entry] Loading Application Module...");
-  
+
     // Load User Entry (runs Bunner.create -> BunnerApplication.init)
     await import("${userMainImportPath}");
-  
+
   } catch (err) {
     console.error('[Entry Error] Failed to bootstrap application:', err);
     throw err;
   }
 }
-
-${isDev ? 'export { container, metadata };' : ''}
 `;
   }
 }

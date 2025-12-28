@@ -3,7 +3,9 @@ import { Logger } from '@bunner/logger';
 
 import { UserRepository } from './users.repository';
 
-@Injectable()
+@Injectable({
+  visibility: 'exported',
+})
 export class UsersService {
   constructor(
     private readonly userRepository: UserRepository,

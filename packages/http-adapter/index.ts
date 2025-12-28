@@ -1,4 +1,5 @@
 export { BunnerHttpAdapter } from './src/bunner-http-adapter';
+export { bunnerHttpAdapter } from './src/bunner-http-adapter-factory';
 
 export { BunnerHttpContext } from './src/adapter/http-context';
 export { BunnerHttpContextAdapter } from './src/adapter/bunner-http-context-adapter';

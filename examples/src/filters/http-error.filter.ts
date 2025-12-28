@@ -10,12 +10,15 @@ export class HttpErrorFilter extends BunnerErrorFilter {
     const http = ctx.to(BunnerHttpContext);
     const res = http.response;
     const req = http.request;
+    const errorStatus = (error as any)?.status;
+    const status =
+      typeof errorStatus === 'number' && errorStatus !== 101 && errorStatus >= 200 && errorStatus <= 599 ? errorStatus : 500;
 
     this.logger.error('Caught error:', error);
 
-    res.setStatus(500);
+    res.setStatus(status as any);
     res.setBody({
-      statusCode: 500,
+      statusCode: status,
       message: (error as any)?.message || 'Internal Server Error',
       path: req.url,
     });

@@ -6,55 +6,32 @@ import type { ModuleMetadata } from './types';
 export class BunnerScanner {
   constructor(private readonly container: Container) {}
 
-  public async scan(module: Class): Promise<void> {
-    await this.scanModule(module);
+  public async scan(module: unknown): Promise<void> {
+    const visited = new Set<unknown>();
+
+    await this.scanModule(module, visited);
   }
 
-  private async scanModule(moduleOrDynamic: any, visited: Set<Class> = new Set()) {
-    let moduleClass: Class;
-    let dynamicMetadata: any = {};
-
-    if (moduleOrDynamic && moduleOrDynamic.module) {
-      moduleClass = moduleOrDynamic.module;
-      dynamicMetadata = moduleOrDynamic;
-    } else {
-      moduleClass = moduleOrDynamic;
+  private async scanModule(moduleOrDynamic: any, visited: Set<unknown>) {
+    if (!moduleOrDynamic) {
+      return;
     }
 
-    if (!moduleClass) {
-      console.warn('[Scanner] Skipping undefined module. Check for circular dependencies.');
+    if (visited.has(moduleOrDynamic)) {
+      return;
+    }
+
+    visited.add(moduleOrDynamic);
+
+    if (typeof moduleOrDynamic !== 'function') {
+      await this.scanModuleObject(moduleOrDynamic, visited);
 
       return;
     }
 
-    if (visited.has(moduleClass)) {
-      return;
-    }
+    const moduleClass: Class = moduleOrDynamic;
 
-    visited.add(moduleClass);
-    // Register the Module itself so it can be injected and have lifecycle hooks
-    // Try/Catch in case it's a dynamic module object without constructor?
-    // moduleClass is the Class constructor.
     this.registerProvider(moduleClass);
-
-    // Register Dynamic Module Providers/Controllers FIRST
-    if (dynamicMetadata.providers) {
-      for (const provider of dynamicMetadata.providers) {
-        this.registerProvider(provider);
-      }
-    }
-
-    if (dynamicMetadata.controllers) {
-      for (const controller of dynamicMetadata.controllers) {
-        this.registerProvider(controller);
-      }
-    }
-
-    if (dynamicMetadata.imports) {
-      for (const imported of dynamicMetadata.imports) {
-        await this.scanModule(imported, visited);
-      }
-    }
 
     const registry = (globalThis as any).__BUNNER_METADATA_REGISTRY__;
 
@@ -115,6 +92,8 @@ export class BunnerScanner {
         };
       } else if (provider.useClass) {
         factory = (c: Container) => new provider.useClass(...this.resolveDepsFor(provider.useClass, c));
+      } else if (provider.useExisting) {
+        factory = (c: Container) => c.get(provider.useExisting);
       } else {
         factory = () => null;
       }
@@ -224,5 +203,23 @@ export class BunnerScanner {
     }
 
     return undefined;
+  }
+
+  private async scanModuleObject(moduleObj: any, visited: Set<unknown>): Promise<void> {
+    const providers = Array.isArray(moduleObj.providers) ? moduleObj.providers : [];
+    const controllers = Array.isArray(moduleObj.controllers) ? moduleObj.controllers : [];
+    const imports = Array.isArray(moduleObj.imports) ? moduleObj.imports : [];
+
+    for (const provider of providers) {
+      this.registerProvider(provider);
+    }
+
+    for (const controller of controllers) {
+      this.registerProvider(controller);
+    }
+
+    for (const imported of imports) {
+      await this.scanModule(imported, visited);
+    }
   }
 }

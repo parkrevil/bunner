@@ -1,7 +1,7 @@
-import { LogLevel, type Class, type BunnerApplicationOptions } from '@bunner/common';
+import { LogLevel, type BunnerApplicationOptions } from '@bunner/common';
 import { Logger } from '@bunner/logger';
 
-import { type BunnerApplicationBaseOptions, type BunnerModule } from './application';
+import { type BunnerApplicationBaseOptions } from './application';
 import { BunnerApplication } from './application/bunner-application';
 
 export class Bunner {
@@ -10,7 +10,7 @@ export class Bunner {
   private static isShuttingDown = false;
   private static signalsInitialized = false;
 
-  static async create(rootModuleCls: Class<BunnerModule>, options?: BunnerApplicationOptions): Promise<BunnerApplication> {
+  static async create(entry: unknown, options?: BunnerApplicationOptions): Promise<BunnerApplication> {
     this.setupSignalHandlers();
 
     // In the new architecture, we treat AOT/JIT unify within the Scanner/Application.
@@ -23,7 +23,7 @@ export class Bunner {
       throw new Error(`Application with name "${normalizedOptions.name}" already exists`);
     }
 
-    const app = new BunnerApplication(rootModuleCls, normalizedOptions);
+    const app = new BunnerApplication(entry, normalizedOptions);
 
     // We do NOT call app.start() here. User must call it.
     // Use .init() if we want to bootstrap without starting adapters?

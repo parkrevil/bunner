@@ -1,39 +1,56 @@
 import { LogLevel } from '@bunner/common';
-import { Bunner } from '@bunner/core';
-import { BunnerHttpAdapter } from '@bunner/http-adapter';
-import { Logger } from '@bunner/logger';
+import { bootstrapApplication } from '@bunner/core';
+import { bunnerHttpAdapter } from '@bunner/http-adapter';
 
-import { AppModule } from './app.module';
+import { rootModule } from './__module__';
+import { ConfigNamespace } from './core/config/config-namespace';
+import type { SomeConfig } from './core/config/some-config';
+import { SomeConfig as SomeConfigImpl } from './core/config/some-config';
 
-async function bootstrap() {
-  const logger = new Logger('Bootstrap');
-  const app = await Bunner.create(AppModule, {
-    logLevel: LogLevel.Debug,
-  });
-  const adapter = new BunnerHttpAdapter({
-    port: 5003,
-    workers: 1,
-  });
+await bootstrapApplication(rootModule, {
+  name: 'examples',
+  logLevel: LogLevel.Debug,
+  workers: 6,
+  env: {
+    dotenvFile: '.env',
+    includeProcessEnv: true,
+  },
+  config: {
+    loaders: [
+      ({ env }) => {
+        return {
+          [ConfigNamespace.USER_HTTP]: new SomeConfigImpl({
+            host: env.get('USER_HTTP_HOST', '0.0.0.0'),
+            port: env.getInt('USER_HTTP_PORT', 5001),
+          }),
+          [ConfigNamespace.ADMIN_HTTP]: new SomeConfigImpl({
+            host: env.get('ADMIN_HTTP_HOST', '0.0.0.0'),
+            port: env.getInt('ADMIN_HTTP_PORT', 5002),
+          }),
+        };
+      },
+    ],
+  },
+  adapters: [
+    bunnerHttpAdapter(configService => {
+      const httpConfig = configService.get<SomeConfig>(ConfigNamespace.USER_HTTP);
 
-  app.addAdapter(adapter, { name: 'http-server' });
+      return {
+        name: 'user-api-server',
+        workers: 1,
+        port: httpConfig.get('port', 5001),
+        host: httpConfig.get('host', '0.0.0.0'),
+      };
+    }),
+    bunnerHttpAdapter(configService => {
+      const httpConfig = configService.get<SomeConfig>(ConfigNamespace.ADMIN_HTTP);
 
-  logger.info('🚀 Server is starting...');
-
-  await app.start();
-
-  logger.info('🚀 Server is running on port 5003');
-
-  setInterval(() => {
-    const mem = process.memoryUsage();
-
-    logger.info(
-      `rss: ${(mem.rss / 1024 / 1024).toFixed(2)}MB, heapTotal: ${(mem.heapTotal / 1024 / 1024).toFixed(2)}MB, heapUsed: ${(mem.heapUsed / 1024 / 1024).toFixed(2)}MB`,
-    );
-  }, 1000);
-}
-
-bootstrap().catch(err => {
-  const logger = new Logger('Bootstrap');
-
-  logger.error('Bootstrap error', err);
+      return {
+        name: 'admin-api-server',
+        workers: 1,
+        port: httpConfig.get('port', 5002),
+        host: httpConfig.get('host', '0.0.0.0'),
+      };
+    }),
+  ],
 });

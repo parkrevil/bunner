@@ -23,8 +23,8 @@ export class ManifestGenerator {
 
     graph.modules.forEach((node: ModuleNode) => {
       node.providers.forEach((_ref, token: string) => {
-        const providerNode = graph.classMap.get(token);
-        const alias = providerNode ? registry.getAlias(providerNode.metadata.className, providerNode.filePath) : token;
+        const providerDef = graph.classDefinitions.get(token);
+        const alias = providerDef ? registry.getAlias(providerDef.metadata.className, providerDef.filePath) : token;
 
         scopedKeysEntries.push(`  map.set(${alias}, '${node.name}::${token}');`);
         scopedKeysEntries.push(`  map.set('${token}', '${node.name}::${token}');`);
@@ -47,10 +47,10 @@ export class ManifestGenerator {
         // But the current structure stores controllers as string names.
         // We should improve ModuleNode to store Metadata or Path for controllers.
         // Fallback: graph.classMap.get(ctrlName).
-        const ctrlNode = graph.classMap.get(ctrlName);
+        const ctrlDef = graph.classDefinitions.get(ctrlName);
 
-        if (ctrlNode) {
-          alias = registry.getAlias(ctrlName, ctrlNode.filePath);
+        if (ctrlDef) {
+          alias = registry.getAlias(ctrlName, ctrlDef.filePath);
         }
 
         scopedKeysEntries.push(`  map.set(${alias}, '${node.name}::${ctrlName}');`);

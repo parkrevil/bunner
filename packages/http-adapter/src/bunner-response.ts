@@ -176,13 +176,21 @@ export class BunnerResponse {
       this.setHeader(HeaderField.SetCookie, this._cookies.toSetCookieHeaders().join(', '));
     }
 
+    const baseInit: ResponseInit = {
+      headers: this._headers.toJSON(),
+    };
+    const init: ResponseInit =
+      this._status !== 0
+        ? {
+            ...baseInit,
+            status: this._status,
+            statusText: this._statusText,
+          }
+        : baseInit;
+
     this._workerResponse = {
       body: this._body,
-      init: {
-        status: this._status,
-        statusText: this._statusText,
-        headers: this._headers.toJSON(),
-      },
+      init,
     };
 
     return this;

@@ -1,11 +1,9 @@
-import { Module } from '@bunner/common';
+import type { BunnerModule } from '@bunner/common';
 
 import { CommentRepository } from './comments.repository';
 import { CommentsService } from './comments.service';
 
-@Module({
-  controllers: [],
+export const module: BunnerModule = {
+  name: 'CommentsModule',
   providers: [CommentsService, CommentRepository],
-  exports: [CommentsService],
-})
-export class CommentsModule {}
+};

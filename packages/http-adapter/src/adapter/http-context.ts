@@ -20,7 +20,7 @@ export class BunnerHttpContext implements HttpContext {
   }
 
   to<TContext>(ctor: new (...args: any[]) => TContext): TContext {
-    if (ctor === BunnerHttpContext) {
+    if (ctor === BunnerHttpContext || ctor?.name === BunnerHttpContext.name) {
       return this as unknown as TContext;
     }
 

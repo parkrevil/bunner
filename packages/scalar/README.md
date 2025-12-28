@@ -4,5 +4,5 @@ Scalar API documentation integration for Bunner.
 
 ## Public API
 
-- `Scalar.setup(adapters, options)`
+- `provideScalar(options) => Provider[]`
 - Decorators: `ApiProperty`, `ApiOperation`, `ApiResponse`, `ApiTags`, `ApiQuery`, `ApiParam`, `ApiBody`, `ApiBearerAuth`

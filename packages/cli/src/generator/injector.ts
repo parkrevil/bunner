@@ -3,12 +3,9 @@ import { type ClassMetadata, ModuleGraph, type ProviderRef, type ModuleNode } fr
 import type { ImportRegistry } from './import-registry';
 
 export class InjectorGenerator {
-  private hasLogger = false;
-
   generate(graph: ModuleGraph, registry: ImportRegistry): string {
-    this.hasLogger = false;
-
     const factoryEntries: string[] = [];
+    const adapterConfigs: string[] = [];
     // Helper to get alias
     const getAlias = (name: string, path?: string) => {
       if (!path) {
@@ -19,12 +16,15 @@ export class InjectorGenerator {
     };
 
     graph.modules.forEach((node: ModuleNode) => {
+      // 1. Providers Generation
       node.providers.forEach((ref: ProviderRef, token: string) => {
         const metaProvider = ref.metadata;
 
         if (metaProvider) {
-          if (metaProvider.useValue) {
-            factoryEntries.push(`  container.set('${node.name}::${token}', () => ${JSON.stringify(metaProvider.useValue)});`);
+          if (Object.prototype.hasOwnProperty.call(metaProvider, 'useValue')) {
+            const val = this.serializeValue(metaProvider.useValue, registry);
+
+            factoryEntries.push(`  container.set('${node.name}::${token}', () => ${val});`);
 
             return;
           }
@@ -33,20 +33,34 @@ export class InjectorGenerator {
             const classes = Array.isArray(metaProvider.useClass) ? metaProvider.useClass : [metaProvider.useClass];
             const instances = classes.map((clsItem: any) => {
               const className = clsItem.__bunner_ref || clsItem;
-              const clsNode = graph.classMap.get(className);
+              const clsDef = graph.classDefinitions.get(className);
 
-              if (!clsNode) {
+              if (!clsDef) {
                 return 'undefined'; // Should ideally warn
               }
 
-              const alias = getAlias(clsNode.metadata.className, clsNode.filePath);
-              const deps = this.resolveConstructorDeps(clsNode.metadata, node, graph);
+              const alias = getAlias(clsDef.metadata.className, clsDef.filePath);
+              const deps = this.resolveConstructorDeps(clsDef.metadata, node, graph);
 
               return `new ${alias}(${deps.join(', ')})`;
             });
             const factoryBody = Array.isArray(metaProvider.useClass) ? `[${instances.join(', ')}]` : instances[0];
 
             factoryEntries.push(`  container.set('${node.name}::${token}', (c) => ${factoryBody});`);
+
+            return;
+          }
+
+          if (metaProvider.useExisting) {
+            const existingToken = this.serializeValue(metaProvider.useExisting, registry);
+
+            // resolveToken logic?
+            // Since factory is runtime, we just generate lookup.
+            // But we need to scope it if possible.
+            // Simplest: container.get(token)
+            // But we might need 'scope::token' resolution.
+            // Let's assume global lookup or same-module lookup for now.
+            factoryEntries.push(`  container.set('${node.name}::${token}', (c) => c.get(${existingToken}));`);
 
             return;
           }
@@ -92,43 +106,55 @@ export class InjectorGenerator {
           }
         }
 
-        const classInfo = graph.classMap.get(token);
-        // Note: graph.classMap is ClassName based.
-        // If duplicates exist, it returns ONE of them.
-        // We hope `token` (ClassName) matches uniqueness or we luck out.
-        // For standard usage, it matches.
+        // Implicit providers (Class directly)
+        // If it's a class metadata structure
+        if (metaProvider && metaProvider.className && metaProvider.constructorParams) {
+          const clsMeta = metaProvider as ClassMetadata;
+          const alias = getAlias(clsMeta.className, ref.filePath);
+          const deps = this.resolveConstructorDeps(clsMeta, node, graph);
 
-        if (!classInfo) {
-          return;
+          factoryEntries.push(`  container.set('${node.name}::${token}', (c) => new ${alias}(${deps.join(', ')}));`);
         }
-
-        const alias = getAlias(classInfo.metadata.className, classInfo.filePath);
-        const deps = this.resolveConstructorDeps(classInfo.metadata, node, graph);
-
-        factoryEntries.push(`  container.set('${node.name}::${token}', (c) => new ${alias}(${deps.join(', ')}));`);
       });
-      node.controllers.forEach((ctrlName: string) => {
-        const classInfo = graph.classMap.get(ctrlName);
+      // 1.1 Dynamic Provider Bundles
+      node.dynamicProviderBundles.forEach((bundleExpr: any) => {
+        const bundleVal = this.serializeValue(bundleExpr, registry);
 
-        if (!classInfo) {
-          return;
-        }
-
-        const alias = getAlias(classInfo.metadata.className, classInfo.filePath);
-        const deps = this.resolveConstructorDeps(classInfo.metadata, node, graph);
-
-        factoryEntries.push(`  container.set('${node.name}::${ctrlName}', (c) => new ${alias}(${deps.join(', ')}));`);
+        factoryEntries.push(`
+  (${bundleVal} || []).forEach(p => {
+      let token = p.provide;
+      if (typeof p === 'function') token = p.name;
+      
+      let factory;
+      if(Object.prototype.hasOwnProperty.call(p, 'useValue')) factory = () => p.useValue;
+      else if(p.useClass) factory = (c) => new p.useClass(...(resolveDeps(p.useClass))); 
+      else if(p.useFactory) {
+         factory = (c) => {
+            const args = (p.inject || []).map(t => c.get(t));
+            return p.useFactory(...args);
+         };
+      }
+      
+      const key = token ? '${node.name}::' + (typeof token === 'symbol' ? token.description : token) : null;
+      if(key && factory) container.set(key, factory);
+  });`);
       });
+
+      // 2. Adapters Config Generation
+      if (node.moduleDefinition && node.moduleDefinition.adapters) {
+        const config = this.serializeValue(node.moduleDefinition.adapters, registry);
+
+        adapterConfigs.push(`  '${node.name}': ${config},`);
+      }
     });
 
     const dynamicEntries: string[] = [];
 
+    // Dynamic modules handling (legacy support or libraries)
     graph.modules.forEach((node: ModuleNode) => {
       node.dynamicImports.forEach((imp: any) => {
         if (imp.__bunner_call) {
           const [className, _methodName] = imp.__bunner_call.split('.');
-          // handle dynamic imports (usually helpers).
-          // For now left as is (assume lib call)
           let callExpression = imp.__bunner_call;
 
           if (imp.__bunner_import_source) {
@@ -141,7 +167,7 @@ export class InjectorGenerator {
             }
           }
 
-          const args = imp.args.map((a: any) => JSON.stringify(a)).join(', ');
+          const args = imp.args.map((a: any) => this.serializeValue(a, registry)).join(', ');
 
           dynamicEntries.push(`  const mod_${node.name}_${className} = await ${callExpression}(${args});`);
           dynamicEntries.push(`  await container.loadDynamicModule('${className}', mod_${node.name}_${className});`);
@@ -149,14 +175,6 @@ export class InjectorGenerator {
       });
     });
 
-    if (this.hasLogger) {
-      // Logger handled in global imports? No, need to import it.
-      // Registry handles User imports. Logger is lib import.
-      // We can add it manually to output.
-    }
-
-    // We rely on Manifest to print Registry imports.
-    // But Wrapper imports (Core, Logger) need to be here.
     return `
 import { Container } from "@bunner/core";
 import { Logger } from "@bunner/logger";
@@ -167,10 +185,79 @@ ${factoryEntries.join('\n')}
   return container;
 }
 
+export const adapterConfig = {
+${adapterConfigs.join('\n')}
+};
+
 export async function registerDynamicModules(container: any) {
 ${dynamicEntries.join('\n')}
 }
 `;
+  }
+
+  private serializeValue(value: any, registry: ImportRegistry): string {
+    if (value === undefined) {
+      return 'undefined';
+    }
+
+    if (value === null) {
+      return 'null';
+    }
+
+    if (typeof value === 'string') {
+      return JSON.stringify(value);
+    }
+
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      return String(value);
+    }
+
+    if (Array.isArray(value)) {
+      return `[${value.map(v => this.serializeValue(v, registry)).join(', ')}]`;
+    }
+
+    if (value.__bunner_ref) {
+      return registry.getAlias(value.__bunner_ref, value.__bunner_import_source);
+    }
+
+    if (value.__bunner_call) {
+      const parts = value.__bunner_call.split('.');
+      const className = parts[0];
+      const methodName = parts[1];
+      let callName = value.__bunner_call;
+
+      if (value.__bunner_import_source) {
+        const alias = registry.getAlias(className, value.__bunner_import_source);
+
+        if (methodName) {
+          callName = `${alias}.${methodName}`;
+        } else {
+          callName = alias;
+        }
+      }
+
+      const args = (value.args || []).map((a: any) => this.serializeValue(a, registry)).join(', ');
+
+      return `${callName}(${args})`;
+    }
+
+    if (typeof value === 'object') {
+      const props = Object.entries(value).map(([k, v]) => {
+        if (k.startsWith('__bunner_computed_')) {
+          const computed = v as any;
+          const keyContent = this.serializeValue(computed.__bunner_computed_key, registry);
+          const valContent = this.serializeValue(computed.__bunner_computed_value, registry);
+
+          return `[${keyContent}]: ${valContent}`;
+        }
+
+        return `'${k}': ${this.serializeValue(v, registry)}`;
+      });
+
+      return `{ ${props.join(', ')} }`;
+    }
+
+    return 'undefined';
   }
 
   private resolveConstructorDeps(meta: ClassMetadata, node: ModuleNode, graph: ModuleGraph): string[] {
@@ -186,9 +273,6 @@ ${dynamicEntries.join('\n')}
       }
 
       if (token === 'Logger') {
-        this.hasLogger = true;
-
-        // Logger doesn't need alias if we import it globally
         return `new Logger('${meta.className}')`;
       }
 
@@ -216,6 +300,13 @@ ${dynamicEntries.join('\n')}
 
       if (resolvedToken) {
         return `c.get('${resolvedToken}')`;
+      }
+
+      // Fallback: Try to find owning module for the token (assuming Class Name)
+      const targetModule = graph.classMap.get(token);
+
+      if (targetModule) {
+        return `c.get('${targetModule.name}::${token}')`;
       }
 
       return `c.get('${token}')`;

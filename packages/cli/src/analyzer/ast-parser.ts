@@ -22,6 +22,7 @@ export class AstParser {
 
     this.currentImports = {};
 
+    let moduleDefinition: import('./parser-models').ModuleDefinition | undefined;
     const traverse = (node: any) => {
       // 1. Imports
       if (node.type === 'ImportDeclaration') {
@@ -56,7 +57,7 @@ export class AstParser {
         });
       }
 
-      // 3. Export Named (export { A } from '...' or export class ...)
+      // 3. Export Named (export { A } from '...' or export class ... or export const ...)
       if (node.type === 'ExportNamedDeclaration') {
         if (node.source) {
           // Re-export: export { A } from './a'
@@ -81,7 +82,22 @@ export class AstParser {
 
             return; // Don't traverse specific children again if handled
           }
-          // Handle other declarations if needed (funcs, vars)
+
+          // export const module = ...
+          if (node.declaration.type === 'VariableDeclaration') {
+            node.declaration.declarations.forEach((decl: any) => {
+              if (decl.id.name === 'module') {
+                localExports.push('module');
+
+                if (decl.init && decl.init.type === 'ObjectExpression') {
+                  moduleDefinition = this.extractModuleDefinition(decl.init);
+                }
+              } else {
+                localExports.push(decl.id.name);
+              }
+            });
+          }
+          // Handle other declarations if needed (funcs)
         }
       }
 
@@ -101,7 +117,34 @@ export class AstParser {
 
     traverse(result.program);
 
-    return { classes, reExports, exports: localExports, imports };
+    return { classes, reExports, exports: localExports, imports, moduleDefinition };
+  }
+
+  private extractModuleDefinition(node: any): import('./parser-models').ModuleDefinition {
+    let name: string | undefined;
+    const providers: any[] = [];
+    let adapters: any = undefined;
+
+    node.properties.forEach((prop: any) => {
+      if (prop.key.name === 'name') {
+        name = prop.value.value;
+      } else if (prop.key.name === 'providers') {
+        if (prop.value.type === 'ArrayExpression') {
+          prop.value.elements.forEach((el: any) => {
+            providers.push(this.parseExpression(el));
+          });
+        }
+      } else if (prop.key.name === 'adapters') {
+        adapters = this.parseExpression(prop.value);
+      }
+    });
+
+    return {
+      name,
+      providers,
+      adapters,
+      imports: { ...this.currentImports },
+    };
   }
 
   private resolvePath(sourcePath: string, importPath: string): string {
@@ -444,9 +487,20 @@ export class AstParser {
 
         (node.properties || []).forEach((prop: any) => {
           if (prop.type === 'Property' || prop.type === 'ObjectProperty') {
-            const key = prop.key.name || prop.key.value;
+            if (prop.computed) {
+              // Special handling for computed properties
+              const keyExpr = this.parseExpression(prop.key);
+              const valExpr = this.parseExpression(prop.value);
 
-            obj[key] = this.parseExpression(prop.value);
+              obj[`__bunner_computed_${prop.start}`] = {
+                __bunner_computed_key: keyExpr,
+                __bunner_computed_value: valExpr,
+              };
+            } else {
+              const key = prop.key.name || prop.key.value;
+
+              obj[key] = this.parseExpression(prop.value);
+            }
           }
         });
 
@@ -454,7 +508,13 @@ export class AstParser {
       }
 
       case 'ArrayExpression':
-        return (node.elements || []).map((el: any) => this.parseExpression(el));
+        return (node.elements || []).map((el: any) => {
+          if (el.type === 'SpreadElement') {
+            return { __bunner_spread: this.parseExpression(el.argument) };
+          }
+
+          return this.parseExpression(el);
+        });
 
       case 'Identifier': {
         const importSource = this.currentImports[node.name];
@@ -513,6 +573,9 @@ export class AstParser {
 
         return { __bunner_factory_code: factoryCode, __bunner_factory_deps: deps };
       }
+
+      case 'SpreadElement':
+        return { __bunner_spread: this.parseExpression(node.argument) };
 
       default:
         return null;

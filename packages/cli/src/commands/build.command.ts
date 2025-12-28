@@ -71,9 +71,11 @@ export async function build() {
       allClasses.push(...classInfos);
       fileMap.set(filePath, {
         filePath,
-        classes: classInfos,
+        classes: parseResult.classes,
         reExports: parseResult.reExports,
         exports: parseResult.exports,
+        imports: parseResult.imports,
+        moduleDefinition: parseResult.moduleDefinition,
       });
 
       // Follow Imports

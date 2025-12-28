@@ -5,7 +5,8 @@ import { Glob } from 'bun';
 
 import { AstParser, ModuleGraph } from '../analyzer';
 import { ConfigLoader } from '../common';
-import { EntryGenerator, ManifestGenerator } from '../generator';
+import { EntryGenerator, InjectorGenerator, ManifestGenerator } from '../generator';
+import { ImportRegistry } from '../generator/import-registry';
 import { ProjectWatcher } from '../watcher';
 
 export async function dev() {
@@ -18,20 +19,20 @@ export async function dev() {
   const srcDir = resolve(projectRoot, 'src');
   const outDir = resolve(projectRoot, '.bunner');
   const parser = new AstParser();
-  const manifestGen = new ManifestGenerator();
   const fileCache = new Map<string, any>(); // Map<string, FileAnalysis>
 
   async function analyzeFile(filePath: string) {
     try {
       const fileContent = await Bun.file(filePath).text();
       const parseResult = parser.parse(filePath, fileContent);
-      const classInfos = parseResult.classes.map(meta => ({ metadata: meta, filePath: filePath }));
 
       fileCache.set(filePath, {
         filePath: filePath,
-        classes: classInfos,
+        classes: parseResult.classes,
         reExports: parseResult.reExports,
         exports: parseResult.exports,
+        imports: parseResult.imports,
+        moduleDefinition: parseResult.moduleDefinition,
       });
 
       return true;
@@ -45,9 +46,11 @@ export async function dev() {
   async function rebuild() {
     // Flatten classes for Manifest legacy support if needed
     const allFileAnalyses = Array.from(fileCache.values());
-    const allClasses = allFileAnalyses.flatMap(f => f.classes);
+    const allClasses = allFileAnalyses.flatMap((f: any) =>
+      (f.classes || []).map((metadata: any) => ({ metadata, filePath: f.filePath })),
+    );
 
-    logger.debug(`🛠️  Rebuilding manifest (${allClasses.length} classes)...`);
+    logger.debug(`🛠️  Rebuilding injection map (${allClasses.length} classes)...`);
 
     // Create FileMap for Graph
     const fileMap = new Map(fileCache.entries());
@@ -55,6 +58,15 @@ export async function dev() {
 
     graph.build();
 
+    logger.info(`Graph Size: ${graph.modules.size} modules`);
+
+    const injectorGen = new InjectorGenerator();
+    const registry = new ImportRegistry(outDir);
+    const injectorCode = injectorGen.generate(graph, registry);
+
+    await Bun.write(join(outDir, 'injector.ts'), injectorCode);
+
+    const manifestGen = new ManifestGenerator();
     const manifestCode = manifestGen.generate(graph, allClasses, outDir);
 
     await Bun.write(join(outDir, 'manifest.ts'), manifestCode);

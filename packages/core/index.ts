@@ -4,6 +4,16 @@ export { BunnerApplication } from './src/application/bunner-application';
 export type { BunnerApplicationNormalizedOptions } from './src/application/interfaces';
 export type { BunnerModule } from './src/application/interfaces';
 
+export { createApplication } from './src/application/create-application';
+export type {
+  BootstrapAdapter,
+  BootstrapApplicationOptions,
+  BootstrapConfigLoader,
+  BootstrapConfigOptions,
+  BootstrapEnvOptions,
+} from './src/application/bootstrap-application';
+export { bootstrapApplication } from './src/application/bootstrap-application';
+
 export { Container } from './src/injector/container';
 
 export { ClusterManager } from './src/cluster/cluster-manager';

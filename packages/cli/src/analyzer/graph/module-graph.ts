@@ -1,481 +1,344 @@
+import type { ClassMetadata } from '../interfaces';
+import { ModuleDiscovery } from '../module-discovery';
+
 import type { CyclePath, ProviderRef, FileAnalysis } from './interfaces';
 import { ModuleNode } from './module-node';
 
 export class ModuleGraph {
-  public modules: Map<string, ModuleNode> = new Map(); // Key: FilePath
-  public classMap: Map<string, ModuleNode> = new Map(); // Key: ClassName
+  public modules: Map<string, ModuleNode> = new Map(); // Key: FilePath of __module__.ts
+  public classMap: Map<string, ModuleNode> = new Map(); // Key: ClassName -> Owning ModuleNode
+  public classDefinitions: Map<string, { metadata: ClassMetadata; filePath: string }> = new Map();
 
   constructor(private fileMap: Map<string, FileAnalysis>) {}
 
   build() {
-    // 1. Create Nodes
-    for (const [filePath, analysis] of this.fileMap.entries()) {
-      analysis.classes.forEach(info => {
-        const moduleDec = info.metadata.decorators.find(d => d.name === 'Module' || d.name === 'RootModule');
-        // Create a wrapper node for every class to facilitate lookup by Injector
-        // Even if it's not a Module, we need its metadata and file path.
-        const node = new ModuleNode(info);
+    // 1. Discovery
+    const allFiles = Array.from(this.fileMap.keys());
+    const discovery = new ModuleDiscovery(allFiles);
+    const moduleMap = discovery.discover();
+    const orphans = discovery.getOrphans();
 
-        node.filePath = filePath;
-
-        // Index all classes
-        // Warning: This assumes unique class names or last-wins for now.
-        // Ideally we should use ImportRegistry logic, but InjectorGenerator relies on this map.
-        this.classMap.set(info.metadata.className, node);
-
-        if (moduleDec) {
-          this.modules.set(filePath, node);
-        }
-      });
+    if (orphans.size > 0) {
+      // Ideally warn about orphans
     }
 
-    // 2. Populate and Link
-    this.modules.forEach(node => {
-      this.populateNode(node);
-    });
-    this.modules.forEach(node => {
-      this.linkImports(node);
-    });
-    this.validateMiddlewares();
-    this.validateErrorFilters();
+    // 2. Create Module Nodes
+    for (const [modulePath, files] of moduleMap.entries()) {
+      const moduleFile = this.fileMap.get(modulePath);
+      // We create a "Virtual" ModuleNode derived from __module__.ts definition
+      // But ModuleNode constructor takes specific ClassMetadata.
+      // We might need to refactor ModuleNode or create a synthetic one.
+      // Current ModuleNode is wrapper around ClassMetadata.
+      // Let's adapt it to use ModuleDefinition if available.
+      // We look for the "module" definition in this file.
+      const rawDef = moduleFile?.moduleDefinition;
+
+      if (!moduleFile) {
+        continue;
+      }
+
+      // Create synthetic metadata for ModuleNode
+      const syntheticMeta: any = {
+        className: rawDef?.name || 'AnonymousModule',
+        decorators: [],
+        imports: moduleFile.imports || {},
+        // ... fill others minimal
+      };
+      const node = new ModuleNode(syntheticMeta);
+
+      node.filePath = modulePath;
+      node.name = rawDef?.name || 'AnonymousModule';
+      node.moduleDefinition = rawDef;
+
+      this.modules.set(modulePath, node);
+      // 3. Hydrate Module with Owned Files
+      files.forEach(filePath => {
+        const fileAnalysis = this.fileMap.get(filePath);
+
+        if (!fileAnalysis) {
+          return;
+        }
+
+        fileAnalysis.classes.forEach(cls => {
+          // Add to classMap for lookup
+          this.classMap.set(cls.className, node);
+          this.classDefinitions.set(cls.className, { metadata: cls, filePath });
+
+          // Check for Standalone Components (@Controller, @RestController, @Service/Injectable?)
+          // Actually, we just need to know if they are Providers or Controllers.
+          // Discovery of "Implicit Providers" happens here?
+          // PLAN says: "@Controller, @Service같은 Standalone 컴포넌트를 __module__.ts에 등록하지 않아도 AOT가 수집하여 모듈 스코프로 귀속시킨다."
+
+          const isController = cls.decorators?.some((d: any) => ['Controller', 'RestController'].includes(d.name));
+          const isInjectable = cls.decorators?.some((d: any) => d.name === 'Injectable');
+
+          if (isController) {
+            node.controllers.add(cls.className);
+          }
+
+          if (isInjectable) {
+            // Add implicit provider
+            // Check for Ambiguity here?
+            const token = cls.className;
+
+            if (node.providers.has(token)) {
+              // Conflict between implicit provider and explicit provider?
+              // Explicit wins? Or Error? Plan says "Conflict/Ambiguity is build failure".
+              // But manual override in __module__.ts should be allowed.
+              // If manual override exists, we skip implicit adding.
+              // But we haven't processed manual providers yet.
+            }
+
+            // We add it tentatively.
+            // ProviderRef needs to store visibility info.
+            // Extract options from @Injectable(options)
+            const injectableDec = cls.decorators.find((d: any) => d.name === 'Injectable');
+            const options = injectableDec?.arguments[0] || {};
+            const visibility = options.visibility || 'internal';
+            const lifetime = options.lifetime || 'singleton';
+
+            node.providers.set(token, {
+              token,
+              metadata: cls,
+              isExported: visibility === 'exported',
+              scope: lifetime,
+              filePath: filePath,
+            });
+          }
+        });
+      });
+
+      // 4. Process Explicit Providers from __module__.ts (Overrides)
+      if (rawDef && rawDef.providers) {
+        rawDef.providers.forEach((p: any) => {
+          if (p.__bunner_spread) {
+            node.dynamicProviderBundles.add(p.__bunner_spread);
+
+            return;
+          }
+
+          const ref = this.normalizeProvider(p);
+
+          // Check uniqueness/ambiguity
+          if (node.providers.has(ref.token) && !this.isImplicit(node.providers.get(ref.token))) {
+            throw new Error(
+              `[Bunner AOT] Ambiguous provider '${ref.token}' in module '${node.name}' (${node.filePath}). Duplicate explicit definition.`,
+            );
+          }
+
+          // If we are overwriting an implicit provider with a simple Reference (Identifier),
+          // we must preserve the rich ClassMetadata (constructor params) found during discovery.
+          if (node.providers.has(ref.token)) {
+            const prev = node.providers.get(ref.token);
+
+            if (this.isImplicit(prev)) {
+              // If the explicit one is just an identifier/ref
+              if (ref.metadata && (ref.metadata.__bunner_ref || typeof ref.metadata === 'function')) {
+                ref.metadata = prev?.metadata;
+                ref.filePath = prev?.filePath;
+
+                // Also need to preserve scope if explicit didn't specify?
+                // Explicit simple ref implies same class, so decorator options apply.
+                if (!ref.scope) {
+                  ref.scope = prev?.scope;
+                }
+
+                // Inherit visibility from decorator
+                if (prev?.isExported) {
+                  ref.isExported = true;
+                }
+              }
+            }
+          }
+
+          node.providers.set(ref.token, ref);
+        });
+      }
+    }
+
+    // 5. Link imports? (No, modules don't import modules in Plan. They import visibility-checked providers)
+
+    // 6. Validation
+    this.validateVisibilityAndScope();
 
     return this.modules;
   }
 
   detectCycles(): CyclePath[] {
-    const cycles: CyclePath[] = [];
-
-    this.modules.forEach(node => {
-      node.visited = false;
-      node.visiting = false;
-    });
-    this.modules.forEach(node => {
-      if (!node.visited) {
-        this._detectCyclesRecursive(node, [], cycles);
-      }
-    });
-
-    return cycles;
+    // TODO: Implement Cycle Detection based on Dependency Graph
+    return [];
   }
 
-  resolveToken(moduleName: string, token: string): string | null {
-    const node = this.classMap.get(moduleName);
-
-    if (!node) {
-      return null;
-    }
-
-    if (node.providers.has(token)) {
-      return `${node.name}::${token}`;
-    }
-
-    for (const imported of node.imports) {
-      if (this.isExportedFromModule(imported, token)) {
-        return `${imported.name}::${token}`;
-      }
-    }
-
+  resolveToken(_moduleName: string, _token: string): string | null {
+    // Not used in the same way anymore, as we don't have "Module Import" edges.
+    // We search globally or via explicit configuration?
+    // PLAN: "Module A component injects Module B component"
+    // How does A know about B?
+    // "Auto-discovery"?
+    // If code uses `import { BService } from '../b/b.service'`, it refers to the class.
+    // We map Class -> Module.
+    // So we check ClassMap.
     return null;
   }
 
-  private isExportedFromModule(node: ModuleNode, token: string, visited = new Set<string>()): boolean {
-    if (visited.has(node.filePath)) {
-      return false;
-    }
-
-    visited.add(node.filePath);
-
-    if (node.exports.has(token)) {
-      return true;
-    }
-
-    // Direct exports check is usually enough for module linkage logic
-    // But if we want to confirm recursive exports availability:
-    return false;
+  private isImplicit(ref: ProviderRef | undefined): boolean {
+    // Logic to determine if ref was added implicitly
+    // We can add a flag to ProviderRef or check metadata structure
+    return !!(ref?.metadata && ref.metadata.className); // Rough check
   }
 
-  private _detectCyclesRecursive(node: ModuleNode, stack: ModuleNode[], cycles: CyclePath[]) {
-    node.visiting = true;
+  private validateVisibilityAndScope() {
+    this.modules.forEach(node => {
+      // Iterate all providers in this module
+      node.providers.forEach(provider => {
+        // Analyze dependencies (constructor params / injects)
+        if (!provider.metadata) {
+          return;
+        }
 
-    stack.push(node);
+        const deps = this.extractDeps(provider);
 
-    for (const neighbor of node.imports) {
-      if (neighbor.visiting) {
-        const cycleStartIndex = stack.findIndex(n => n === neighbor);
-        const cycleNodes = stack.slice(cycleStartIndex);
+        deps.forEach(depToken => {
+          const targetModule = this.classMap.get(depToken); // Assuming token is ClassName
 
-        cycleNodes.push(neighbor);
+          if (!targetModule) {
+            // Maybe token is string/symbol?
+            // If so, we need to find which module provides it.
+            // This implies a Global Search for token?
+            // Or it must be provided in the SAME module explicitly?
+            // PLAN: "모듈 간 결합은 인스턴스(클래스) 단위 공개(visibility)로 제어"
+            // "대상이 visibility: exported가 아니면 빌드 실패"
+            return;
+          }
 
-        const pathNames = cycleNodes.map(n => n.name);
-        const source = pathNames[0];
-        const target = pathNames[1];
+          if (targetModule === node) {
+            return;
+          } // Intra-module is always allowed
 
-        cycles.push({
-          path: pathNames,
-          suggestedFix: `Circular dependency detected: ${pathNames.join(' -> ')}. Try using forwardRef in ${source}: imports: [forwardRef(() => ${target})]`,
+          // Cross-module access
+          const targetProvider = targetModule.providers.get(depToken);
+
+          if (!targetProvider) {
+            // Token not found in target module
+            return;
+          }
+
+          // 1. Visibility Check
+          if (!targetProvider.isExported) {
+            throw new Error(
+              `[Bunner AOT] Visibility Violation: '${provider.token}' in module '${node.name}' tries to inject '${depToken}' from '${targetModule.name}', but it is NOT exported.`,
+            );
+          }
+
+          // 2. Scope Check
+          const sourceScope = provider.scope || 'singleton';
+          const targetScope = targetProvider.scope || 'singleton';
+
+          if (sourceScope === 'singleton' && targetScope === 'request-context') {
+            throw new Error(
+              `[Bunner AOT] Scope Violation: Singleton '${provider.token}' cannot inject Request-Scoped '${depToken}'.`,
+            );
+          }
         });
-      } else if (!neighbor.visited) {
-        this._detectCyclesRecursive(neighbor, stack, cycles);
-      }
-    }
-
-    stack.pop();
-
-    node.visiting = false;
-    node.visited = true;
-  }
-
-  private populateNode(node: ModuleNode) {
-    const moduleDec = node.metadata.decorators.find(d => d.name === 'Module' || d.name === 'RootModule')!;
-    const args = moduleDec.arguments[0] || {};
-
-    (args.providers || []).forEach((p: any) => {
-      const ref = this.normalizeProvider(p);
-
-      this.providersAdd(node, ref);
-    });
-    (args.controllers || []).forEach((c: any) => {
-      const name = c.__bunner_ref || c;
-
-      if (typeof name === 'string') {
-        node.controllers.add(name);
-      }
-    });
-    (args.exports || []).forEach((e: any) => {
-      const token = this.extractToken(e);
-
-      if (token) {
-        node.exports.add(token);
-      }
+      });
     });
   }
 
-  private linkImports(node: ModuleNode) {
-    const moduleDec = node.metadata.decorators.find(d => d.name === 'Module' || d.name === 'RootModule')!;
-    const args = moduleDec.arguments[0] || {};
-    const importsMeta = node.metadata.imports || {};
+  private extractDeps(provider: ProviderRef): string[] {
+    // Helper to extract dependency tokens from constructor or inject array
+    if (!provider.metadata) {
+      return [];
+    }
 
-    (args.imports || []).forEach((imp: any) => {
-      if (imp.__bunner_ref) {
-        const importName = imp.__bunner_ref;
-        const absPath = importsMeta[importName];
+    // If ClassMetadata
+    if (provider.metadata.constructorParams) {
+      return provider.metadata.constructorParams.map((p: any) => {
+        // Logic to extract token name (handling @Inject)
+        // Simplified for brevity
+        const injectDec = p.decorators?.find((d: any) => d.name === 'Inject');
 
-        if (absPath) {
-          this.resolveModuleFromPath(node, absPath, importName);
-        } else {
-          // Same file Check
-          const sameFileNode = this.classMap.get(importName);
+        if (injectDec && injectDec.arguments[0]) {
+          return injectDec.arguments[0];
+        } // TODO: Handle Symbol/String correctly
 
-          if (sameFileNode && sameFileNode.filePath === node.filePath) {
-            node.imports.add(sameFileNode);
-          }
+        if (p.type && p.type.__bunner_ref) {
+          return p.type.__bunner_ref;
         }
-      } else if (imp.__bunner_call) {
-        node.dynamicImports.add(imp);
-      } else if (imp.__bunner_forward_ref) {
-        const importName = imp.__bunner_forward_ref;
-        const absPath = importsMeta[importName];
 
-        if (absPath) {
-          this.resolveModuleFromPath(node, absPath, importName);
-        } else {
-          const sameFileNode = this.classMap.get(importName);
-
-          if (sameFileNode && sameFileNode.filePath === node.filePath) {
-            node.imports.add(sameFileNode);
-          }
-        }
-      }
-    });
-  }
-
-  private resolveModuleFromPath(parentNode: ModuleNode, targetPath: string, targetName: string, visited = new Set<string>()) {
-    if (visited.has(targetPath)) {
-      return;
+        return p.type;
+      });
     }
 
-    visited.add(targetPath);
-
-    const fileKey = this.findFileKey(targetPath);
-
-    if (!fileKey) {
-      return;
+    // If useFactory
+    if (provider.metadata.inject) {
+      return provider.metadata.inject;
     }
 
-    const fileAnalysis = this.fileMap.get(fileKey)!;
-
-    // 1. Direct Export from File
-    if (fileAnalysis.exports.includes(targetName)) {
-      const cls = fileAnalysis.classes.find(c => c.metadata.className === targetName);
-
-      if (cls) {
-        // It's a class in this file. Is it a module?
-        // We need to look up in classMap but verify filePath.
-        const node = this.classMap.get(targetName);
-
-        if (node && node.filePath === fileKey) {
-          parentNode.imports.add(node);
-
-          return;
-        }
-      }
-    }
-
-    // 2. Re-exports (Recursive)
-    for (const re of fileAnalysis.reExports) {
-      if (re.exportAll) {
-        this.resolveModuleFromPath(parentNode, re.module, targetName, visited);
-      } else if (re.names) {
-        const match = re.names.find(n => n.exported === targetName);
-
-        if (match) {
-          // Aliased export logic: find 'local' in 'module'
-          this.resolveModuleFromPath(parentNode, re.module, match.local, visited);
-
-          return;
-        }
-      }
-    }
-  }
-
-  private findFileKey(path: string): string | undefined {
-    // Exact match
-    if (this.fileMap.has(path)) {
-      return path;
-    }
-
-    // Add extension
-    if (this.fileMap.has(path + '.ts')) {
-      return path + '.ts';
-    }
-
-    // Index
-    if (this.fileMap.has(path + '/index.ts')) {
-      return path + '/index.ts';
-    }
-
-    // Fuzzy search (slow but safe for weird paths)
-    // Only if not found exact
-    for (const key of this.fileMap.keys()) {
-      if (key.replace(/\.ts$/, '') === path.replace(/\.ts$/, '')) {
-        return key;
-      }
-    }
-
-    return undefined;
+    return [];
   }
 
   private normalizeProvider(p: any): ProviderRef {
-    if (typeof p === 'string') {
-      return { token: p, isExported: false };
+    // Reuse logic from previous one but ensure it captures scope/visibility if possible (from where in raw def?)
+    // Raw def in __module__.ts providers array typically doesn't have visibility/scope options attached directly
+    // unless we support extended syntax there or it inherits from Class.
+    // For useClass, we look up the class metadata!
+
+    let token = 'UNKNOWN';
+    const isExported = false; // Default for explicit?
+    const scope = 'singleton';
+
+    if (p.provide) {
+      token = this.extractTokenName(p.provide);
+    } else if (typeof p === 'function') {
+      token = p.name;
+    } else if (p.__bunner_ref) {
+      token = p.__bunner_ref;
+    }
+
+    // Look up class metadata for visibility/scope if useClass or ClassProvider
+    let clsName = null;
+
+    if (typeof p === 'function') {
+      clsName = p.name;
     }
 
     if (p.__bunner_ref) {
-      return { token: p.__bunner_ref, isExported: false };
+      clsName = p.__bunner_ref;
     }
 
-    if (p.provide) {
-      return { token: p.provide, metadata: p, isExported: false };
+    if (p.useClass) {
+      clsName = this.extractTokenName(p.useClass);
     }
 
-    return { token: 'UNKNOWN', isExported: false };
+    if (clsName) {
+      // We might fail lookup if we don't have handle to classMap here...
+      // But we are inside ModuleGraph class, we have access to this.classMap (partially built)
+      // Actually we fill classMap in Discovery phase (step 3).
+      // Step 4 runs after Step 3. So classMap is populated.
+      // BUT strict lookup by string might be flaky if multiple classes have same name.
+      // We should use Import matching.
+    }
+
+    return { token, metadata: p, isExported, scope };
   }
 
-  private providersAdd(node: ModuleNode, ref: ProviderRef) {
-    let key = '';
-
-    if (typeof ref.token === 'string') {
-      key = ref.token;
-    } else if (ref.token && ref.token.__bunner_ref) {
-      key = ref.token.__bunner_ref;
+  private extractTokenName(t: any): string {
+    if (typeof t === 'string') {
+      return t;
     }
 
-    if (key) {
-      node.providers.set(key, ref);
-    }
-  }
-
-  private extractToken(e: any): string | null {
-    if (typeof e === 'string') {
-      return e;
+    if (typeof t === 'function') {
+      return t.name;
     }
 
-    if (e.__bunner_ref) {
-      return e.__bunner_ref;
+    if (t.__bunner_ref) {
+      return t.__bunner_ref;
     }
 
-    if (e.provide) {
-      return e.provide;
+    if (typeof t === 'symbol') {
+      return t.description || t.toString();
     }
 
-    return null;
-  }
-
-  private validateMiddlewares() {
-    this.modules.forEach(node => {
-      const middlewares = node.metadata.middlewares || [];
-
-      if (middlewares.length === 0) {
-        return;
-      }
-
-      const importsMeta = node.metadata.imports || {};
-
-      middlewares.forEach(mw => {
-        const mwName = mw.name;
-        let targetNode: ModuleNode | undefined;
-        // 1. Check imports
-        const absPath = importsMeta[mwName];
-
-        if (absPath) {
-          // Find class in that file
-          const fileKey = this.findFileKey(absPath);
-
-          if (fileKey) {
-            // Find class in file's classes
-            const fileAnalysis = this.fileMap.get(fileKey)!;
-
-            // Handle re-exports if necessary (simplified direct export check first)
-            if (fileAnalysis.exports.includes(mwName)) {
-              targetNode = this.classMap.get(mwName);
-
-              // verify filePath matches to avoid name collision issues
-              if (targetNode && targetNode.filePath !== fileKey) {
-                // Name collision with another file?
-                // Try searching classMap by matching filePath?
-                // classMap key is just ClassName. This is weak if multiple files have same class name.
-                // But ModuleGraph already warns about this assumption.
-              }
-            } else {
-              // Check imports/re-exports of that file?
-              // Deep resolution might be needed, but let's stick to simple direct check for now.
-            }
-          }
-        } else {
-          // 2. Same file check
-          const sameFileNode = this.classMap.get(mwName);
-
-          if (sameFileNode && sameFileNode.filePath === node.filePath) {
-            targetNode = sameFileNode;
-          }
-        }
-
-        // If validation target found
-        if (targetNode) {
-          const hasDecorator = targetNode.metadata.decorators.some(d => d.name === 'Middleware');
-
-          if (!hasDecorator) {
-            throw new Error(
-              `[Bunner AOT] Middleware validation failed: Class '${mwName}' (lifecycle: ${mw.lifecycle ?? 'unknown'}, index: ${mw.index}) used in '${node.name}.configure()' via addMiddlewares() is missing @Middleware() decorator. File: ${targetNode.filePath}`,
-            );
-          }
-        } else {
-          // Warn if we couldn't resolve it?
-          // console.warn(`[Bunner AOT] Could not resolve middleware '${mwName}' for validation in ${node.name}`);
-        }
-      });
-    });
-  }
-
-  private validateErrorFilters() {
-    this.validateGlobalErrorFilters();
-    this.validateScopedErrorFilters();
-  }
-
-  private validateGlobalErrorFilters() {
-    this.modules.forEach(node => {
-      const errorFilters = node.metadata.errorFilters || [];
-
-      if (errorFilters.length === 0) {
-        return;
-      }
-
-      errorFilters.forEach(ef => {
-        const targetNode = this.resolveClassNodeFromImports(node, ef.name);
-
-        if (!targetNode) {
-          return;
-        }
-
-        const hasDecorator = targetNode.metadata.decorators.some(d => d.name === 'Catch');
-
-        if (!hasDecorator) {
-          throw new Error(
-            `[Bunner AOT] ErrorFilter validation failed: Class '${ef.name}' (index: ${ef.index}) used in '${node.name}.configure()' via addErrorFilters() is missing @Catch(). File: ${targetNode.filePath}`,
-          );
-        }
-      });
-    });
-  }
-
-  private validateScopedErrorFilters() {
-    this.classMap.forEach(node => {
-      const methods = node.metadata.methods || [];
-
-      if (methods.length === 0) {
-        return;
-      }
-
-      methods.forEach(m => {
-        const decs = m.decorators || [];
-
-        decs
-          .filter(d => d.name === 'UseErrorFilters')
-          .forEach(d => {
-            (d.arguments || []).forEach((arg: any, index: number) => {
-              const name = typeof arg === 'string' ? arg : arg?.__bunner_ref;
-
-              if (!name || typeof name !== 'string') {
-                throw new Error(
-                  `[Bunner AOT] @UseErrorFilters() only supports Identifier tokens. Found unsupported argument at ${node.name}.${m.name} index ${index}. File: ${node.filePath}`,
-                );
-              }
-
-              const targetNode = this.resolveClassNodeFromImports(node, name);
-
-              if (!targetNode) {
-                return;
-              }
-
-              const hasDecorator = targetNode.metadata.decorators.some(dd => dd.name === 'Catch');
-
-              if (!hasDecorator) {
-                throw new Error(
-                  `[Bunner AOT] ErrorFilter validation failed: Class '${name}' used in @UseErrorFilters() at ${node.name}.${m.name} is missing @Catch(). File: ${targetNode.filePath}`,
-                );
-              }
-            });
-          });
-      });
-    });
-  }
-
-  private resolveClassNodeFromImports(contextNode: ModuleNode, className: string): ModuleNode | undefined {
-    const importsMeta = contextNode.metadata.imports || {};
-    const absPath = importsMeta[className];
-
-    if (absPath) {
-      const fileKey = this.findFileKey(absPath);
-
-      if (fileKey) {
-        const fileAnalysis = this.fileMap.get(fileKey)!;
-
-        if (fileAnalysis.exports.includes(className)) {
-          const targetNode = this.classMap.get(className);
-
-          if (targetNode && targetNode.filePath === fileKey) {
-            return targetNode;
-          }
-        }
-      }
-    }
-
-    const sameFileNode = this.classMap.get(className);
-
-    if (sameFileNode && sameFileNode.filePath === contextNode.filePath) {
-      return sameFileNode;
-    }
-
-    return undefined;
+    return 'UNKNOWN';
   }
 }

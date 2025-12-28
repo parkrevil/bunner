@@ -1,22 +1,21 @@
 import type { ClassMetadata } from '../interfaces';
-import type { ReExport } from '../parser-models';
+import type { ModuleDefinition, ReExport } from '../parser-models';
 
 export interface ProviderRef {
   token: any;
   metadata?: any;
   isExported: boolean;
-}
-
-export interface ClassInfo {
-  metadata: ClassMetadata;
-  filePath: string;
+  scope?: string;
+  filePath?: string;
 }
 
 export interface FileAnalysis {
   filePath: string;
-  classes: ClassInfo[];
+  classes: ClassMetadata[];
   reExports: ReExport[];
   exports: string[];
+  imports?: Record<string, string>;
+  moduleDefinition?: ModuleDefinition;
 }
 
 export interface CyclePath {

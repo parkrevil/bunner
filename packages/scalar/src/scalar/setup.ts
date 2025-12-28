@@ -50,15 +50,15 @@ function registerInternalRoutes(internal: InternalRouter, docs: Doc[], docsById:
 
 export function setupScalar(adapters: AdapterCollectionLike, options: ScalarSetupOptions): void {
   if (!options || !('documentTargets' in options) || !('httpTargets' in options)) {
-    throw new Error('Scalar.setup: options { documentTargets, httpTargets } is required.');
+    throw new Error('Scalar: options { documentTargets, httpTargets } is required.');
   }
 
   if (options.documentTargets !== 'all' && !Array.isArray(options.documentTargets)) {
-    throw new Error('Scalar.setup: documentTargets must be "all" or an array of targets.');
+    throw new Error('Scalar: documentTargets must be "all" or an array of targets.');
   }
 
   if (options.httpTargets !== 'all' && !Array.isArray(options.httpTargets)) {
-    throw new Error('Scalar.setup: httpTargets must be "all" or an array of names.');
+    throw new Error('Scalar: httpTargets must be "all" or an array of names.');
   }
 
   if (options.httpTargets === undefined || options.httpTargets === null) {

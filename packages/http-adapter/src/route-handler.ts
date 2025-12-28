@@ -112,6 +112,10 @@ export class RouteHandler {
     }
 
     if (!instance) {
+      instance = this.tryCreateControllerInstance(targetClass);
+    }
+
+    if (!instance) {
       this.logger.warn(`⚠️  Cannot resolve controller instance: ${meta.className} (Key: ${scopedKey || targetClass.name})`);
 
       return;
@@ -246,6 +250,132 @@ export class RouteHandler {
     });
   }
 
+  private tryCreateControllerInstance(targetClass: any): unknown {
+    const meta = this.metadataRegistry.get(targetClass);
+
+    if (!meta || !Array.isArray(meta.constructorParams)) {
+      return undefined;
+    }
+
+    const deps = meta.constructorParams.map((param: any) => {
+      let token = param?.type;
+
+      if (token && typeof token === 'object') {
+        if (token.__bunner_ref) {
+          token = token.__bunner_ref;
+        } else if (token.__bunner_forward_ref) {
+          token = token.__bunner_forward_ref;
+        }
+      }
+
+      const injectDec = (param?.decorators || []).find((d: any) => d.name === 'Inject');
+
+      if (injectDec && Array.isArray(injectDec.arguments) && injectDec.arguments.length > 0) {
+        token = injectDec.arguments[0];
+
+        if (token && typeof token === 'object') {
+          if (token.__bunner_forward_ref) {
+            token = token.__bunner_forward_ref;
+          } else if (token.__bunner_ref) {
+            token = token.__bunner_ref;
+          }
+        }
+      }
+
+      return this.tryGetFromContainer(token);
+    });
+
+    try {
+      return new targetClass(...deps);
+    } catch {
+      return undefined;
+    }
+  }
+
+  private tryGetFromContainer(token: any): unknown {
+    if (!token) {
+      return undefined;
+    }
+
+    const scopedKey = this.scopedKeys.get(token);
+
+    if (scopedKey) {
+      try {
+        return this.container.get(scopedKey);
+      } catch {
+        return undefined;
+      }
+    }
+
+    try {
+      return this.container.get(token);
+    } catch {
+      return this.tryGetFromContainerBySuffix(token);
+    }
+  }
+
+  private tryGetFromContainerBySuffix(token: any): unknown {
+    const tokenName = this.normalizeToken(token);
+
+    if (!tokenName) {
+      return undefined;
+    }
+
+    const suffix = `::${tokenName}`;
+
+    for (const key of this.container.keys()) {
+      if (typeof key !== 'string') {
+        continue;
+      }
+
+      if (!key.endsWith(suffix)) {
+        continue;
+      }
+
+      try {
+        return this.container.get(key);
+      } catch {
+        return undefined;
+      }
+    }
+
+    return undefined;
+  }
+
+  private normalizeToken(token: any): string | undefined {
+    if (!token) {
+      return undefined;
+    }
+
+    if (typeof token === 'string') {
+      return token;
+    }
+
+    if (typeof token === 'symbol') {
+      return token.description || token.toString();
+    }
+
+    if (typeof token === 'function' && token.name) {
+      return token.name;
+    }
+
+    if (typeof token === 'object') {
+      if (token.__bunner_ref) {
+        return token.__bunner_ref;
+      }
+
+      if (token.__bunner_forward_ref) {
+        return token.__bunner_forward_ref;
+      }
+
+      if (typeof token.name === 'string') {
+        return token.name;
+      }
+    }
+
+    return undefined;
+  }
+
   private resolveMiddlewares(_targetClass: any, method: any, classMeta: any): BunnerMiddleware[] {
     const middlewares: BunnerMiddleware[] = [];
     // Method Level
@@ -253,13 +383,19 @@ export class RouteHandler {
 
     decs.forEach((d: any) => {
       (d.arguments || []).forEach((arg: any) => {
-        try {
-          const mw = this.container.get(arg);
+        const mw = this.tryGetFromContainer(arg);
 
-          if (mw) {
-            middlewares.push(mw);
-          }
-        } catch {}
+        if (mw) {
+          middlewares.push(mw as BunnerMiddleware);
+
+          return;
+        }
+
+        const created = this.tryCreateControllerInstance(arg);
+
+        if (created) {
+          middlewares.push(created as BunnerMiddleware);
+        }
       });
     });
 
@@ -269,13 +405,19 @@ export class RouteHandler {
 
       decs.forEach((d: any) => {
         (d.arguments || []).forEach((arg: any) => {
-          try {
-            const mw = this.container.get(arg);
+          const mw = this.tryGetFromContainer(arg);
 
-            if (mw) {
-              middlewares.push(mw);
-            }
-          } catch {}
+          if (mw) {
+            middlewares.push(mw as BunnerMiddleware);
+
+            return;
+          }
+
+          const created = this.tryCreateControllerInstance(arg);
+
+          if (created) {
+            middlewares.push(created as BunnerMiddleware);
+          }
         });
       });
     }
@@ -320,7 +462,17 @@ export class RouteHandler {
         continue;
       }
 
-      if (!this.container.has(token)) {
+      const instance = this.tryGetFromContainer(token);
+
+      if (instance) {
+        resolved.push(instance as BunnerErrorFilter);
+
+        continue;
+      }
+
+      const created = this.tryCreateControllerInstance(token);
+
+      if (!created) {
         throw new Error(
           `Cannot resolve ErrorFilter token for ${targetClass?.name || 'UnknownController'}.${method?.name || 'unknown'}: ${String(
             token?.name || token,
@@ -328,17 +480,7 @@ export class RouteHandler {
         );
       }
 
-      const instance = this.container.get(token);
-
-      if (!instance) {
-        throw new Error(
-          `Resolved ErrorFilter token but got empty instance for ${targetClass?.name || 'UnknownController'}.${
-            method?.name || 'unknown'
-          }: ${String(token?.name || token)}`,
-        );
-      }
-
-      resolved.push(instance);
+      resolved.push(created as BunnerErrorFilter);
     }
 
     return resolved;

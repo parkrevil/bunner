@@ -2,7 +2,9 @@ import { Injectable } from '@bunner/common';
 
 import { CommentRepository } from './comments.repository';
 
-@Injectable()
+@Injectable({
+  visibility: 'exported',
+})
 export class CommentsService {
   constructor(private readonly commentsRepo: CommentRepository) {}
 

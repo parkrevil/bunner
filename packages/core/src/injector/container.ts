@@ -25,7 +25,10 @@ export class Container implements BunnerContainer {
     const factory = this.factories.get(token);
 
     if (!factory) {
-      throw new Error(`No provider for token: ${token.name || token}`);
+      const tokenLabel =
+        token && typeof token === 'object' && 'name' in token && typeof token.name === 'string' ? token.name : String(token);
+
+      throw new Error(`No provider for token: ${tokenLabel}`);
     }
 
     const instance = factory(this);
@@ -66,16 +69,31 @@ export class Container implements BunnerContainer {
       } else if (p.provide) {
         token = p.provide;
 
-        if (p.useValue) {
+        if (Object.prototype.hasOwnProperty.call(p, 'useValue')) {
           factory = () => p.useValue;
+        } else if (p.useClass) {
+          factory = c => new p.useClass(...this.resolveDepsFor(p.useClass, scope, c));
+        } else if (p.useExisting) {
+          factory = c => {
+            const existingKey = this.normalizeToken(p.useExisting);
+            const scopedKey = existingKey ? `${scope}::${existingKey}` : '';
+
+            if (scopedKey && c.has(scopedKey)) {
+              return c.get(scopedKey);
+            }
+
+            if (existingKey) {
+              return c.get(existingKey);
+            }
+
+            throw new Error(`No existing provider found for alias token: ${String(p.useExisting)}`);
+          };
         } else if (p.useFactory) {
-          factory = async c => {
+          factory = c => {
             const args = (p.inject || []).map((t: any) => c.get(t));
 
-            return await p.useFactory(...args);
+            return p.useFactory(...args);
           };
-        } else {
-          factory = () => null;
         }
       }
 
@@ -152,6 +170,10 @@ export class Container implements BunnerContainer {
 
     if (typeof token === 'string') {
       return token;
+    }
+
+    if (typeof token === 'symbol') {
+      return token.description || token.toString();
     }
 
     if (typeof token === 'function' && token.name) {

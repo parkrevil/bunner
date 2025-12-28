@@ -1,13 +1,9 @@
-// Removed unused Container import
-
 export interface BunnerApplicationBaseOptions {
   name: string;
   logLevel: string | number;
 }
 
 export type BunnerApplicationNormalizedOptions = BunnerApplicationBaseOptions & { [key: string]: any };
-
-
 
 // Simplified Module Interface
 export interface BunnerModule {

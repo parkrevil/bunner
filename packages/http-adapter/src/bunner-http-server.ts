@@ -133,6 +133,10 @@ export class BunnerHttpServer {
         ips,
       });
 
+      (adaptiveReq as any).query = (adaptiveReq as any).queryParams;
+      (bunnerReq as any).body = body;
+      (bunnerReq as any).query = (adaptiveReq as any).queryParams;
+
       // 2. afterRequest (Post-Parsing)
       const continueAfterRequest = await this.runMiddlewares(HttpMiddlewareLifecycle.AfterRequest, context);
 
@@ -272,6 +276,22 @@ export class BunnerHttpServer {
   }
 
   private toResponse(workerRes: HttpWorkerResponse): Response {
-    return new Response(workerRes.body, workerRes.init);
+    const init = workerRes.init ?? {};
+    const status = init.status;
+
+    if (status === 0 || status === undefined) {
+      const { status: _status, statusText: _statusText, ...rest } = init;
+
+      return new Response(workerRes.body, rest);
+    }
+
+    if (typeof status === 'number' && status !== 101 && (status < 200 || status > 599)) {
+      return new Response(workerRes.body, {
+        ...init,
+        status: StatusCodes.INTERNAL_SERVER_ERROR,
+      });
+    }
+
+    return new Response(workerRes.body, init);
   }
 }

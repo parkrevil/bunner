@@ -14,12 +14,16 @@ export interface Context {
 // DI Interfaces
 export type ProviderToken = string | symbol | Class;
 
+export type ProviderScope = 'singleton' | 'request-context' | 'transient';
+
+export type ProviderVisibility = 'internal' | 'exported';
+
 export interface ProviderBase {
-  token: ProviderToken;
+  provide: ProviderToken;
 }
 
 export interface ProviderUseValue extends ProviderBase {
-  useValue: any;
+  useValue: unknown;
 }
 
 export interface ProviderUseClass extends ProviderBase {
@@ -27,11 +31,11 @@ export interface ProviderUseClass extends ProviderBase {
 }
 
 export interface ProviderUseExisting extends ProviderBase {
-  useExisting: Class;
+  useExisting: ProviderToken;
 }
 
 export interface ProviderUseFactory extends ProviderBase {
-  useFactory: <T>(...args: any[]) => T | Promise<T>;
+  useFactory: (...args: any[]) => unknown;
   inject?: ProviderToken[];
 }
 
@@ -81,6 +85,22 @@ export interface BunnerApplicationOptions {
   [key: string]: any;
 }
 
+export interface ConfigService {
+  get<T = unknown>(namespace: string | symbol): T;
+}
+
+export interface EnvService {
+  get(key: string, fallback?: string): string;
+  getOptional(key: string): string | undefined;
+  getInt(key: string, fallback: number): number;
+  snapshot(): Readonly<Record<string, string>>;
+}
+
+export interface EnvSource {
+  readonly name?: string;
+  load(): Promise<Readonly<Record<string, string>>> | Readonly<Record<string, string>>;
+}
+
 export class BunnerContextError extends Error {
   constructor(message: string) {
     super(message);
@@ -123,3 +143,30 @@ export abstract class BunnerErrorFilter<TError = unknown> {
 }
 
 export type ErrorFilterToken = Class<BunnerErrorFilter>;
+
+// Module Interface (Strict Schema Enforcement)
+export interface BunnerModule {
+  name?: string;
+  providers?: Provider[];
+  adapters?: AdapterConfig;
+}
+
+export interface AdapterConfig {
+  [protocol: string]: {
+    [instanceName: string]: AdapterInstanceConfig;
+  };
+}
+
+export interface AdapterInstanceConfig {
+  middlewares?: MiddlewareConfig;
+  errorFilters?: ErrorFilterConfig[];
+  [key: string]: any;
+}
+
+export interface MiddlewareConfig {
+  [lifecycle: string]: Array<MiddlewareToken | MiddlewareRegistration>;
+}
+
+export type ErrorFilterConfig = ErrorFilterToken;
+
+export type Provider = ProviderUseValue | ProviderUseClass | ProviderUseExisting | ProviderUseFactory | Class;

@@ -6,9 +6,10 @@ import type {
   OnStart,
   OnShutdown,
   OnDestroy,
-  Class,
   AdapterCollection,
   Configurer,
+  AdapterConfig,
+  AdapterInstanceConfig,
 } from '@bunner/common';
 import { Logger } from '@bunner/logger';
 
@@ -21,18 +22,12 @@ export class BunnerApplication {
   private isInitialized = false;
 
   constructor(
-    private readonly entryModule: Class,
-    _options: any = {},
+    private readonly entryModule: unknown,
+    private readonly _options: any = {},
   ) {
-    const globalRef = globalThis as any;
+    const providedContainer = this._options?.container as Container | undefined;
 
-    if (globalRef.__BUNNER_CONTAINER__) {
-      this.container = globalRef.__BUNNER_CONTAINER__;
-    } else {
-      this.container = new Container();
-
-      globalRef.__BUNNER_CONTAINER__ = this.container;
-    }
+    this.container = providedContainer ?? new Container();
 
     // Ensure Logger is set if not already
     if (!this.container.has(Logger)) {
@@ -49,6 +44,7 @@ export class BunnerApplication {
     }
 
     this.adapters.get(protocol)!.set(name, adapter);
+    this.applyAdapterConfig(protocol, name, adapter);
 
     return this;
   }
@@ -64,10 +60,15 @@ export class BunnerApplication {
 
     this.isInitialized = true;
 
-    // Initialize container (module scanning)
     const scanner = new BunnerScanner(this.container);
 
-    await scanner.scan(this.entryModule);
+    if (Array.isArray(this._options.providers) && this._options.providers.length > 0) {
+      await scanner.scan({ providers: this._options.providers });
+    }
+
+    if (!this._options.skipScanning) {
+      await scanner.scan(this.entryModule);
+    }
 
     // Eager Load: Instantiate all providers to trigger lifecycle hooks
     for (const token of this.container.keys()) {
@@ -103,7 +104,7 @@ export class BunnerApplication {
     await this.callLifecycleHook('beforeStart');
 
     // Create base context
-    const context: Context & { entryModule: Class } = {
+    const context: Context & { entryModule: unknown } = {
       getType: () => 'bunner',
       get: (key: string) => this.container.get(key),
       container: this.container,
@@ -135,6 +136,77 @@ export class BunnerApplication {
     });
 
     return adapters;
+  }
+
+  private applyAdapterConfig(protocol: string, instanceName: string, adapter: unknown): void {
+    const rawConfig =
+      (this._options?.adapterConfig as AdapterConfig | undefined) ??
+      ((this.entryModule as any)?.adapters as AdapterConfig | undefined);
+
+    if (!rawConfig) {
+      return;
+    }
+
+    const protocolConfig = rawConfig[protocol];
+
+    if (!protocolConfig) {
+      return;
+    }
+
+    const wildcard = protocolConfig['*'] as AdapterInstanceConfig | undefined;
+    const specific = protocolConfig[instanceName] as AdapterInstanceConfig | undefined;
+    const middlewares = this.mergeMiddlewares(wildcard?.middlewares, specific?.middlewares);
+    const errorFilters = [...(wildcard?.errorFilters ?? []), ...(specific?.errorFilters ?? [])];
+    const adapterAny = adapter as any;
+
+    if (middlewares && typeof adapterAny.addMiddlewares === 'function') {
+      Object.entries(middlewares).forEach(([lifecycle, items]) => {
+        if (!Array.isArray(items) || items.length === 0) {
+          return;
+        }
+
+        adapterAny.addMiddlewares(lifecycle, items);
+      });
+    }
+
+    if (errorFilters.length > 0 && typeof adapterAny.addErrorFilters === 'function') {
+      adapterAny.addErrorFilters(errorFilters);
+    }
+  }
+
+  private mergeMiddlewares(
+    wildcard: AdapterInstanceConfig['middlewares'] | undefined,
+    specific: AdapterInstanceConfig['middlewares'] | undefined,
+  ): Record<string, readonly unknown[]> | undefined {
+    const result: Record<string, readonly unknown[]> = {};
+
+    if (wildcard) {
+      Object.entries(wildcard).forEach(([lifecycle, items]) => {
+        if (!Array.isArray(items) || items.length === 0) {
+          return;
+        }
+
+        result[lifecycle] = [...items];
+      });
+    }
+
+    if (specific) {
+      Object.entries(specific).forEach(([lifecycle, items]) => {
+        if (!Array.isArray(items) || items.length === 0) {
+          return;
+        }
+
+        const prev = result[lifecycle] ?? [];
+
+        result[lifecycle] = [...prev, ...items];
+      });
+    }
+
+    if (Object.keys(result).length === 0) {
+      return undefined;
+    }
+
+    return result;
   }
 
   private createAdapterCollection(): AdapterCollection {

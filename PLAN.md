@@ -27,9 +27,8 @@
 
 추가 핵심 결정(용어/모델):
 
-- Bunner에는 **Plugin(플러그인)이라는 1급 개념이 없다**.
-  - 런타임 훅 컨테이너/플러그인 레지스트리/플러그인 실행 모델을 별도로 정의하지 않는다.
-  - 외부 통합(문서화/DB/캐시/관측 등)은 모두 **Provider bundle(`provideXxx() => Provider[]`)** 로만 제공/소비한다.
+- Bunner에는 런타임 확장 모델(훅 컨테이너/레지스트리/실행 모델)을 별도로 두지 않는다.
+  - 외부 기능은 모두 **provider bundle(`provideXxx() => Provider[]`)** 로만 제공/소비한다.
 
 ### 0.2 비목표
 
@@ -164,7 +163,7 @@
 - 모듈/컨트롤러/어댑터 정책(예: middleware/errorFilters)을 엔트리 설정으로 끌어올리는 방식은 금지한다(MUST NOT).
 
 - 외부 통합(TypeORM/Redis 등)은 `providers`로만 표현한다(MUST).
-  - 통합 패키지는 `provideTypeOrm(...) => Provider[]` 같은 provider bundle 함수를 제공하고,
+  - provider bundle 패키지는 `provideTypeOrm(...) => Provider[]` 같은 provider bundle 함수를 제공하고,
     소비자는 그 반환값을 `providers`에 펼쳐 넣는다.
 
 ### 5.2 Application Lifecycle (적용 방식)
@@ -376,16 +375,16 @@ SSOT 고정: 엔트리는 현행처럼 파일 경로(string)로 유지한다(MUS
 
 - “엔트리 모듈을 직접 참조하는 형태”는 본 Plan의 범위 밖이며, 별도 Plan/승인 없이는 도입하지 않는다.
 
-### 8.5 DB Connection 제공 형태(모듈 vs 통합 패키지)
+### 8.5 DB Connection 제공 형태(모듈 vs provider bundle 패키지)
 
 Plan 관점 권장안(딱 두 줄):
 
 - 이 앱에서만 쓰는 DB 연결/설정이면, 해당 모듈(`__module__.ts`)의 `providers`로 끝낸다.
-- 프레임워크가 “공식 통합”으로 제공할 거면, 소비자는 통합 패키지의 provider bundle을 `providers`에만 추가한다.
+- 프레임워크가 “공식 제공”으로 제공할 거면, 소비자는 provider bundle 패키지의 provider bundle을 `providers`에만 추가한다.
 
 즉, TypeORM을 공식 통합으로 제공하더라도 사용하는 쪽에서는 `providers`만 만진다.
 
-통합 패키지 사용 형태(예시, 스케치):
+provider bundle 패키지 사용 형태(예시, 스케치):
 
 ```ts
 import { provideTypeOrm } from '@bunner/typeorm';
@@ -401,22 +400,22 @@ export const module = {
 } as const;
 ```
 
-## 9. 통합 패키지(Integration) 제작 DX (공식 통합/외부 생태계)
+## 9. Provider Bundle 패키지 제작 DX (외부 생태계)
 
-통합 패키지는 “앱 기능 모듈(디렉토리)”과 다르게, 외부 통합(TypeORM/Redis 등)을 위해 재사용 가능한 provider 묶음을 제공한다.
+provider bundle 패키지는 “앱 기능 모듈(디렉토리)”과 다르게, 재사용 가능한 provider 묶음을 제공한다.
 
-### 9.1 통합 패키지 노출 형태(Provider Bundle)
+### 9.1 provider bundle 패키지 노출 형태
 
-통합 패키지는 사용자가 복잡한 등록을 직접 하지 않도록, `provideXxx(...)` 같은 함수가 `providers`에 넣을 수 있는 provider bundle(`Provider[]`)을 반환하는 형태를 기본값으로 둔다(MUST).
+provider bundle 패키지는 사용자가 복잡한 등록을 직접 하지 않도록, `provideXxx(...)` 같은 함수가 `providers`에 넣을 수 있는 provider bundle(`Provider[]`)을 반환하는 형태를 기본값으로 둔다(MUST).
 
 - 소비자는 그 결과를 `providers` 배열에 펼쳐 넣는다(MUST).
 - AOT는 `providers`만 소비해 DI 그래프를 고정한다(MUST).
 
-통합 패키지의 목표는 “새 런타임 개념”이 아니라, Provider primitive 위에 얹는 DX 번들(매크로)이다.
+provider bundle 패키지의 목표는 “새 런타임 개념”이 아니라, Provider primitive 위에 얹는 DX 번들(매크로)이다.
 
-- 통합 패키지를 DI 대상으로 주입하는 모델은 기본값이 아니다.
-- 대신 통합 패키지가 설치한 결과물(예: `DataSource`, `RedisClient`)을 일반 DI로 주입받는 모델을 기본값으로 둔다.
-- 초기화/종료가 필요한 통합은, 라이프사이클 훅 인터페이스를 구현하는 구성요소를 함께 제공하고 그 구성요소도 `providers`로 등록한다.
+- provider bundle 패키지를 DI 대상으로 주입하는 모델은 기본값이 아니다.
+- 대신 provider bundle 패키지가 설치한 결과물(예: `DataSource`, `RedisClient`)을 일반 DI로 주입받는 모델을 기본값으로 둔다.
+- 초기화/종료가 필요한 경우는, 라이프사이클 훅 인터페이스를 구현하는 구성요소를 함께 제공하고 그 구성요소도 `providers`로 등록한다.
 
 #### 9.1.1 `...provideXxx(...)` 스프레드를 왜 쓰는가?
 
@@ -428,7 +427,7 @@ export const module = {
   - `providers: provideXxx(a).concat(provideXxx(b))`
   - `providers: [provideA(), provideB()].flat()`
 
-본 Plan은 “통합 패키지 소비가 한 줄로 끝나는 DX”를 목표로 하므로, 기본 예시는 스프레드 형태를 사용한다.
+본 Plan은 “provider bundle 패키지 소비가 한 줄로 끝나는 DX”를 목표로 하므로, 기본 예시는 스프레드 형태를 사용한다.
 
 권장 반환 타입(개념):
 
@@ -451,13 +450,13 @@ export type BunnerProviderBundle = readonly BunnerProvider[];
 
 ### 9.2 `provideXxx` 네이밍 정책
 
-- 통합 패키지는 `provideXxx(...)` 형태를 기본 API로 제공하는 것을 권장한다(SHOULD).
+- provider bundle 패키지는 `provideXxx(...)` 형태를 기본 API로 제공하는 것을 권장한다(SHOULD).
 - `provideXxxAsync` 같은 별도 네이밍을 “모델의 일부”로 강제하지 않는다(MUST NOT).
   - 비동기/지연 의존은 `providers`의 `{ provide, useFactory, inject }`로 표현하는 것을 기본값으로 둔다(MUST).
 
-### 9.3 통합 패키지를 “번들”로 제공해야 하는 기준(판정 가능)
+### 9.3 provider bundle 패키지를 “번들”로 제공해야 하는 기준(판정 가능)
 
-다음 중 하나라도 해당되면, 통합 패키지는 단일 provider가 아니라 provider bundle 형태로 제공하는 것을 기본값으로 둔다(SHOULD).
+다음 중 하나라도 해당되면, provider bundle 패키지는 단일 provider가 아니라 provider bundle 형태로 제공하는 것을 기본값으로 둔다(SHOULD).
 
 - provider가 2개 이상 항상 함께 설치된다.
 - 초기화/종료가 필요하다(연결 열기/닫기, 워밍업 등).
@@ -465,9 +464,9 @@ export type BunnerProviderBundle = readonly BunnerProvider[];
 - 관측/헬스체크/리트라이 같은 부가 기능이 표준적으로 따라온다.
 - 테스트에서의 오버라이드 패턴을 표준 제공해야 한다.
 
-### 9.4 통합 패키지 구조(권장)
+### 9.4 provider bundle 패키지 구조(권장)
 
-통합 패키지는 `packages/*`의 독립 패키지로 제공한다(MUST).
+provider bundle 패키지는 `packages/*`의 독립 패키지로 제공한다(MUST).
 
 ```text
 packages/typeorm/
@@ -486,9 +485,9 @@ packages/typeorm/
 - 패키지 루트 `index.ts`는 public facade이며, `export *`로 외부 노출을 확장하지 않는다(MUST).
 - 소비자는 `@bunner/typeorm` 같은 패키지 엔트리포인트로만 import 해야 한다(MUST).
 
-### 9.5 통합 패키지 구현 제약(결정성/부작용)
+### 9.5 provider bundle 패키지 구현 제약(결정성/부작용)
 
-- 통합 패키지의 `provideXxx(...)`는 “provider bundle 생성”만 수행해야 한다(MUST).
+- provider bundle 패키지의 `provideXxx(...)`는 “provider bundle 생성”만 수행해야 한다(MUST).
 - 런타임 스캔/동적 탐색을 도입하거나, AOT 산출물/레지스트리를 수정하려는 흐름은 금지다(MUST NOT).
 
 ## 10. 검증(Verification)
@@ -532,17 +531,17 @@ export class AppModule {}
 - 제거 대상: `Scalar.setup(adapters, options)` 같은 수동 호출
 - 대체: `provideScalar(...)`가 등록하는 구성요소가 `configure(app, adapters)`를 통해 라우트를 바인딩한다.
 
-### 11.2 “Plugin 개념 없음”을 문서/정책에 반영하는 작업 목록
+### 11.2 “런타임 확장 모델 없음”을 문서/정책에 반영하는 작업 목록
 
 이 작업은 용어/모델 혼선을 제거하기 위한 문서 정합성 작업이며, 런타임 개념을 새로 만들지 않는다.
 
 - PLAN 정합성(현재 문서):
-  - 본 문서에서 Plugin을 1급 개념으로 도입하는 문장/예시는 금지
-  - 외부 통합은 전부 “통합 패키지 = provider bundle”로만 서술
-- SSOT 문서 정합성(추후 변경 대상):
-  - [ARCHITECTURE.md](ARCHITECTURE.md): “Plugin(Third-party Integration)” 섹션/용어를 “Integration(provider bundle)”로 치환
-  - [DEPENDENCIES.md](DEPENDENCIES.md): “런타임 플러그인(예: @bunner/scalar)” 분류를 “통합 패키지(Integration)”로 치환
-  - [TOOLING.md](TOOLING.md): CLI가 의존 금지 대상으로 나열하는 패키지 목록은 유지하되, plugin 용어는 제거
+  - 런타임 확장 모델(훅 컨테이너/레지스트리/실행 모델)을 도입하는 문장/예시는 금지
+  - 외부 기능은 전부 “provider bundle 패키지 = provider bundle”로만 서술
+- SSOT 문서 정합성(필수 상태):
+  - [ARCHITECTURE.md](ARCHITECTURE.md): provider bundle 패키지를 별도 개념 없이 provider bundle로만 서술
+  - [DEPENDENCIES.md](DEPENDENCIES.md): provider bundle 패키지 분류를 provider bundle 패키지로만 서술
+  - [TOOLING.md](TOOLING.md): CLI의 의존 금지 대상 표현은 유지하되, 용어는 provider bundle 중심으로 정리
 
 ### 11.3 Scalar를 Provider로 전환하기 위한 설계 고정
 
@@ -674,18 +673,3 @@ Scalar 전환 관련 유닛 테스트 범위(예정):
 
 - `provideScalar()`가 반환하는 provider bundle의 shape(결정적/순서 고정)
 - Configurer 구현체가 `configure()`에서 `setupScalar()`를 정확히 호출
-
-### 11.7 에이전트 룰 업데이트(계획)
-
-요구사항: “플러그인 개념 없음”과 “provider-only + AOT 결정성”을 에이전트가 작업 중에 다시 흔들지 못하도록, 집행 규칙을 문서로 고정한다.
-
-변경 대상(예정):
-
-- [AGENTS.md](AGENTS.md)
-  - 금지 용어/금지 설계: Plugin(1급 개념) 도입 시 즉시 중단
-  - 외부 통합은 `provideXxx() => Provider[]` 패턴만 허용
-  - 문서/코드 변경 시 “Provider primitive shape” 단일화 체크를 게이트로 추가
-
-- .github/copilot-instructions.md
-  - “Plugin” 대신 “Integration(provider bundle)” 용어 사용을 강제
-  - Provider bundle 패턴을 벗어나는 제안(런타임 훅 컨테이너/registry 주입 등)은 금지
