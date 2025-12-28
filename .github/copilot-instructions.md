@@ -2,8 +2,18 @@
 
 이 문서는 Bunner 프로젝트에서 AI 에이전트가 **절대적으로** 따라야 하는 규칙이다.
 
-- **우선순위**: 이 문서의 규칙은 에이전트의 일반적 판단/관행보다 우선한다.
+- **우선순위**: 이 문서의 규칙은 에이전트의 일반적 판단/관행보다 우선한다. 단, 문서 간 충돌이 발생하면 최상위 SSOT([SPEC.md](../SPEC.md)) 및 그 문서 지도에 정의된 SSOT를 따른다.
 - **목표**: 프로젝트의 아키텍처 일관성, 확장성, 유지보수성, 안정성을 보장한다.
+
+문서 SSOT(정본) 요약:
+
+- 최상위 SSOT: [SPEC.md](../SPEC.md)
+- 아키텍처/경계: [ARCHITECTURE.md](../ARCHITECTURE.md)
+- 구조/파일 배치: [STRUCTURE.md](../STRUCTURE.md)
+- 의존성 선언(`package.json`): [DEPENDENCIES.md](../DEPENDENCIES.md)
+- 툴링/CLI 운영 정책: [TOOLING.md](../TOOLING.md)
+- 스타일: [STYLEGUIDE.md](../STYLEGUIDE.md)
+- 테스트 표준: [TESTING.md](../TESTING.md)
 
 ---
 
@@ -21,211 +31,62 @@
 2. 모든 기능은 “런타임 추론/스캔/반사(reflection)”가 아니라 “CLI 기반 AOT 산출물”을 전제로 설계해야 한다.
 3. `reflect-metadata` 사용은 **전면 금지**다. 예외는 없다.
 4. AOT 결과물/레지스트리(`__BUNNER_METADATA_REGISTRY__`)를 런타임이나 외부에서 임의로 수정/패치/주입하려는 시도는 **금지**다.
-5. 런타임 오버헤드를 유발하는 문제(스캔, 반사, 동적 탐색)는 “편의상 런타임에서 처리”하지 말고, AOT/CLI 단계에서 해결해야 한다.
 
----
+## Bunner 프로젝트 룰 (Copilot / AI Agent Instructions)
 
-## 3. AST (의존성 트리)
+이 문서는 Bunner 프로젝트에서 AI 에이전트가 따라야 하는 **운영 가이드(요약)** 다.
+세부 규칙(정본)은 SSOT 문서들이며, 이 문서는 그 요약/진입점 역할만 한다.
 
-AST(의존성 트리)는 Bunner의 **AOT 파이프라인의 단일 진실(SSOT)** 이다.
-CORE 런타임은 소스를 스캔하지 않는다. 런타임은 오직 CLI가 만든 메타데이터 레지스트리(`__BUNNER_METADATA_REGISTRY__`)를 소비한다.
-따라서 AST/의존성 트리에 “빠짐”이 생기면, 그 순간 AOT는 실패다. 예외는 없다.
+## SSOT (정본)
 
-1. **추적 범위는 “프로젝트 + 임포트된 패키지 전체”다**
-   - 로컬 소스(`src/**`)만 보지 마라.
-   - 사용자가 임포트한 워크스페이스 패키지(`packages/*`)와 외부 패키지(`node_modules`)까지 포함하여 의존성 트리를 구성해야 한다.
-   - 단, `*.d.ts` 및 `node_modules/@types/**`는 타입 정의로 간주하고 AOT 분석 대상에서 제외할 수 있다(트리에는 “존재”만 기록 가능).
+- 최상위 SSOT: [SPEC.md](../SPEC.md)
+- 에이전트 집행 규칙: [AGENTS.md](../AGENTS.md)
+- 아키텍처/경계: [ARCHITECTURE.md](../ARCHITECTURE.md)
+- 구조/파일 배치: [STRUCTURE.md](../STRUCTURE.md)
+- 의존성 선언 정책: [DEPENDENCIES.md](../DEPENDENCIES.md)
+- 툴링/CLI 운영 정책: [TOOLING.md](../TOOLING.md)
+- 스타일/네이밍/코드 규칙: [STYLEGUIDE.md](../STYLEGUIDE.md)
+- 테스트 표준: [TESTING.md](../TESTING.md)
 
-2. **해석(Resolution)은 Bun 기준이며, 임포터 기준으로 결정적이어야 한다**
-   - 상대 경로(`./`, `../`)는 `dirname(importer)` 기준으로 절대 경로로 정규화한다.
-   - 패키지 경로는 반드시 `Bun.resolveSync(specifier, dirname(importer))`로 해석한다.
-   - 확장자/인덱스 규칙을 강제한다: `path`, `path.ts`, `path.tsx`, `path/index.ts` 순으로 확인한다.
-   - 빌트인/런타임 외부 모듈(예: `node:*`, `bun:*`)은 “외부 의존성”으로만 기록하고 소스 파싱을 시도하지 않는다.
+충돌이 발생하면 언제나 [SPEC.md](../SPEC.md)가 우선한다.
 
-3. **파서는 Import/Re-export를 손실 없이 수집해야 한다 (CLI 기준)**
-   - `import` / `export * from` / `export { X } from` 를 모두 수집한다.
-   - `import type` 및 `import { type X }`는 런타임 의존성이 아니므로 기본적으로 제외한다.
-   - 단, “타입 전용처럼 보여도” 런타임 코드 생성에 필요하다면(예: DTO 스키마 생성), 그 근거와 처리 방식을 코드/테스트로 증명해야 한다.
+## 작업 원칙 (반드시)
 
-4. **의존성 트리는 “모듈 그래프”로 승격되어야 한다 (ModuleGraph 기준)**
-   - 파일 단위가 아니라 “클래스/모듈 단위”로 연결 관계를 만든다.
-   - `@Module`/`@RootModule`의 `imports/providers/controllers/exports`는 AST에서 추출되어 그래프 노드에 반영되어야 한다.
-   - `export` 및 `re-export`는 import 연결 해석의 필수 입력이다. `export *`와 alias re-export까지 추적해야 한다.
+1. **범위 제한(Scope Restriction)**
 
-5. **동적 의존성은 금지에 가깝게 다룬다**
-   - 정적 분석이 불가능한 형태(임의의 `require`, 계산된 specifier, 난독화된 import)는 허용하지 않는다.
-   - 불가피한 경우, CLI가 “동적 import”로 분류하고 런타임/빌드가 안전하게 다룰 수 있다는 것을 테스트로 증명하기 전까지 merge 금지다.
+- 사용자가 지시한 범위 내에서만 변경한다.
+- “겸사겸사 리팩토링/정리”는 금지다.
+- 범위 확장이 필요하면 즉시 중단하고 승인 요청으로 전환한다.
 
-6. **순환 의존성은 ‘경고’가 아니라 ‘설계 결함’이다**
-   - 그래프는 순환을 탐지해야 하며, 발견 즉시 실패 처리(또는 사용자에게 강제 수정 가이드)를 제공해야 한다.
-   - 순환을 “운 좋게 런타임에서 돌아간다”는 이유로 방치하는 행위를 금지한다.
+2. **AOT/AST 결정성 우선**
 
-7. **결정성/재현성은 필수다**
-   - 동일 입력(코드/락파일/설정) → 동일 그래프/동일 산출물 이어야 한다.
-   - 경로는 반드시 정규화(절대 경로 + 일관된 확장자 처리)하여 키로 사용한다.
-   - 실패는 조용히 삼키지 마라. 해석 불가/파싱 실패는 AOT 품질 결함이며, 최소한 “어떤 specifier를 어디서 해석하다 실패했는지”를 남겨야 한다.
+- 런타임 스캔/리플렉션(반사)로 문제를 해결하지 않는다.
+- `reflect-metadata`는 금지다.
+- `__BUNNER_METADATA_REGISTRY__`를 런타임에서 패치/주입/수정하려는 시도는 금지다.
 
-8. **CORE 런타임 계약(Contract)을 침범하지 마라**
-   - CORE의 `MetadataConsumer`/`BunnerScanner`는 레지스트리만 소비한다.
-   - 런타임에 파일 시스템을 뒤져 메타데이터를 복구하려는 시도(폴백 스캔/리플렉션)는 AOT 가치 훼손으로 간주하고 금지한다.
+3. **모노레포/패키지 경계 준수**
 
----
+- 다른 패키지의 내부 경로로 deep import 하지 않는다.
+- 패키지 간 참조는 public facade(패키지 엔트리포인트)만 사용한다.
 
-## 4. 아키텍처 하이라이트 (High-Level Architecture)
+4. **테스트는 게이트(Tests as a Gate)**
 
-이 프로젝트는 **Bun Workspaces** 기반의 **모노레포(Monorepo)** 구조를 **강제**한다.
-코드는 `packages/` 하위의 배포 단위 패키지로만 구성하며, 관심사 분리(SoC)와 재사용성은 “규칙 준수”로 달성한다.
+- 변경이 행동/계약에 영향을 주면 관련 테스트/타입체크가 반드시 따라야 한다.
+- 테스트 추가가 범위를 벗어나면 즉시 중단하고 지침을 요청한다.
 
-- 모노레포 도구: `bun` (workspaces)
-- 패키지 관리: `packages/*` 하위의 각 디렉토리는 독립적인 npm 패키지로 관리 및 배포된다.
+## 실행 전 체크리스트 (짧게)
 
-### 4.1 아키텍처 세부 원칙 (Architectural Rules)
+- 배치(Placement): [STRUCTURE.md](../STRUCTURE.md) 기준으로 위치 결정
+- 경계/의존 방향: [ARCHITECTURE.md](../ARCHITECTURE.md) 준수
+- 의존성 선언: [DEPENDENCIES.md](../DEPENDENCIES.md) 기준으로 `package.json` 정합성 확인
+- 스타일/네이밍/주석 규칙: [STYLEGUIDE.md](../STYLEGUIDE.md) 준수
+- 테스트 품질/네이밍/격리: [TESTING.md](../TESTING.md) 준수
 
-1. **단방향 의존성 (Dependency Direction)**
-   - 상위 계층(예: `http-server`)은 하위 계층(예: `core`)을 의존할 수 있다.
-   - 반대 방향의 의존은 **절대 불가**다. (하위 계층은 상위 계층을 알면 안 된다)
-   - 순환 참조(Circular Dependency)는 “허용 가능한 트릭”이 아니라 **설계 결함**이다. 발견 즉시 수정이 원칙이다.
+## 멈추고 승인 요청해야 하는 경우
 
-2. **Public API 캡슐화 (Encapsulation via Exports)**
-   - 물리적인 `internal` 디렉토리를 사용하지 않고, Barrel 파일(`index.ts`)을 통한 논리적 캡슐화를 수행한다.
-   - `index.ts`는 "무엇을 노출할 것인가"를 결정하는 **유일한 관문**이다.
-   - 외부에 필요한 API만 **명시적 이름**으로 export 하고, 내부 구현이 우연히 노출되는 구조(`export *` 남발)는 금지한다.
-
-3. **에러 핸들링 표준 (Error Handling)**
-   - 프레임워크/인프라 계층에서 던지는 에러는 반드시 프레임워크 표준 에러(`BunnerError`)를 상속해야 한다.
-   - “제어 흐름”을 만들기 위해 `throw`를 남용하지 마라. 가능하면 명시적 결과/에러 반환 패턴을 우선 고려하되, API 일관성을 깨지 않는 방식으로만 사용한다.
-
-### 4.2 패키지 내부 아키텍처 패턴 (MANDATORY)
-
-이 프로젝트의 `packages/*` 내부 코드는 반드시 다음 패턴을 따른다.
-
-**Package-by-Feature(Vertical Slice) + Facade(공개 API 관문)**
-
-이 규칙은 “권장”이 아니다. 예외는 없다.
-
-1. **패키지 = 배포/의존의 단위**
-   - 다른 패키지는 오직 대상 패키지의 루트 `index.ts`(Public Facade)에만 의존한다.
-   - 다른 패키지의 `src/**` 내부 파일로 직접 import 하는 행위는 금지한다.
-
-2. **기능 디렉토리 = 개발/테스트/리팩토링의 단위(Vertical Slice)**
-   - `src/<feature>/`는 하나의 기능 모듈이다.
-   - 폴더 이름이 기능을 “소리치듯” 드러내야 한다(Screaming Architecture).
-   - 기능 모듈은 스스로 완결적이어야 하며, 외부(다른 기능)에서 구현 상세를 알 필요가 없어야 한다.
-
-3. **Facade(관문) 규칙**
-   - 패키지 루트 `index.ts`: 외부에 필요한 API만 **명시적으로** export 한다. `export *`로 외부 노출은 **원칙적으로 금지**다.
-     - 단, 레거시 패키지에 `export *`가 이미 존재할 수 있다. 이 경우 “현상 유지”를 이유로 신규 `export *`를 추가하지 마라.
-     - 해당 패키지의 공개 API(루트 `index.ts`)를 수정하는 작업을 수행한다면, 그 작업 범위 내에서 `export *`를 **명시 export**로 전환하여 규칙을 이행한다.
-   - 기능 폴더 `src/<feature>/index.ts`: 기능 내부 결합을 위해 `export *` 허용(단, 순환 참조 발생 시 즉시 명시 export로 전환).
-   - `src/index.ts`: 내부 기능 모듈들을 묶는 Internal Facade로 사용한다.
-
----
-
-## 5. 디렉토리 구조 (Directory Structure)
-
-### 5.1 루트 디렉토리 (Root Directory)
-
-```text
-/
-├── packages/           # 핵심 프레임워크 패키지
-├── examples/           # 사용 예시 애플리케이션
-├── package.json        # 워크스페이스 Root 설정
-├── bun.lock            # Lockfile
-├── tsconfig.json       # Base TypeScript 설정
-└── .husky/             # Git Hooks
-```
-
-### 5.2 상세 패키지 구조 (Detailed Package Structure)
-
-모든 패키지는 아래 구조를 **표준 레이아웃(Standard Layout)**으로 따른다. 예외는 없다.
-
-```text
-packages/[package-name]/
-├── index.ts                    # [Public Facade] 외부에 노출할 API만 명시 export
-├── package.json
-├── tsconfig.json
-├── README.md
-└── src/
-   ├── index.ts                # [Internal Facade] src 내부 기능 모듈 정리
-   ├── common/                 # Cross-Domain 공유만 허용
-   │   ├── constants.ts
-   │   ├── enums.ts
-   │   ├── interfaces.ts
-   │   ├── types.ts
-   │   └── index.ts
-   └── <feature>/              # 기능 모듈(Vertical Slice)
-      ├── constants.ts
-      ├── enums.ts
-      ├── interfaces.ts
-      ├── types.ts
-      ├── errors/             # 기능 전용 에러(필요 시)
-      │   └── *.error.ts
-      ├── *.ts                # 구현 파일(단일 책임)
-      ├── *.spec.ts           # 테스트(권장: 기능 옆에 co-locate)
-      └── index.ts            # [Feature Barrel]
-```
-
-주의(집행 방식): 현재 저장소의 레거시 패키지들이 이 템플릿을 100% 충족하지 않을 수 있다.
-
-- 새 패키지를 만들 때는 예외 없이 이 구조를 **그대로** 따른다.
-- 기존 패키지를 수정하는 작업을 수행한다면, 작업 범위 안에서 누락된 항목(예: `README.md`, `tsconfig.json`, 표준 스크립트)을 **함께 이행**한다.
-
-테스트 구조는 둘 중 하나만 선택할 수 있다.
-
-1. `src/<feature>/*.spec.ts`로 기능 옆에 둔다(기본 권장).
-2. `tests/**`로 분리한다.
-
-어느 쪽이든 Fixture는 `tests/fixtures` 단일 위치로 중앙화한다.
-
-### 5.3 디렉토리 및 파일 관리 규칙
-
-1. 소스 위치: 모든 기능 코드는 반드시 `src/` 내부에 위치한다. `src/` 밖에 기능 코드가 생기면 규칙 위반이다.
-2. 메타 파일 분리(강제):
-   - `constants.ts`, `enums.ts`, `interfaces.ts`, `types.ts` 등 성격이 다른 선언부는 별도 파일로 분리하여 관리한다. (1파일 1목적 원칙)
-3. 공유 자원 관리:
-   - Cross-Domain: 여러 도메인(기능)에서 공유되는 자원만 `src/common`에 둔다.
-   - Sub-Module Sharing: 하위 모듈 간 공유 자원은 별도 `common` 폴더 없이 해당 모듈 내(상위 디렉토리)에 위치시킨다.
-4. 테스트 자산: 테스트에 필요한 Fixture나 Mock 데이터는 `tests/fixtures` 단일 위치에서 중앙 관리한다. 임의 폴더로 분산시키지 마라.
-
-5. 기능 모듈 규격(강제, 예외 없음):
-   - 새 기능을 만들면 반드시 `src/<feature>/index.ts`를 만든다.
-   - 기능 간 참조는 원칙적으로 “기능의 `index.ts`를 통한 import”만 허용한다.
-   - 기능 폴더 밖에서 기능의 구현 상세 파일을 직접 import 하는 행위는 금지한다.
-
-6. 파일 목적 분리(강제):
-   - 한 파일에 타입/상수/구현을 무질서하게 섞지 마라.
-   - 타입은 `types.ts`, 인터페이스는 `interfaces.ts`, 상수는 `constants.ts`, 열거는 `enums.ts`로 분리한다.
-   - 구현 파일은 “한 가지 책임”만 가져야 한다.
-
----
-
-## 6. 네이밍 규칙 (Naming Conventions)
-
-이 규칙은 “권장”이 아니다. 위반은 즉시 수정 대상이다.
-
-|    대상    | 규칙                   | 예시                       | 비고                   |
-| :--------: | :--------------------- | :------------------------- | :--------------------- |
-|  디렉토리  | `kebab-case`           | `http-server`, `user-auth` |                        |
-|  패키지명  | `kebab-case` (Scoped)  | `@bunner/http-server`      |                        |
-|   파일명   | `kebab-case`           | `user-controller.ts`       |                        |
-|   클래스   | `PascalCase`           | `UserController`           |                        |
-| 인터페이스 | `PascalCase`           | `HttpRequest`              | `I` 접두사 금지        |
-| 타입(Type) | `PascalCase`           | `UserResponse`             |                        |
-| 함수/변수  | `camelCase`            | `getUser`, `isValid`       |                        |
-|    상수    | `SCREAMING_SNAKE_CASE` | `MAX_CONNECTIONS`          | `const` assertion 권장 |
-|    Enum    | `PascalCase`           | `UserRole`                 |                        |
-
----
-
-## 7. Type / Interface / Enum 선택 기준 (Selection Criteria)
-
-### 7.1 Type vs Interface
-
-- Interface: 아래 목적 중 하나라도 해당하면 Interface를 사용한다.
-  - `implements`/`extends`가 설계의 일부인 “계약(Contract)” 타입(가장 우선). 구현 클래스가 계약을 **강제**해야 한다.
-  - 데이터 스키마(요청/응답/저장/직렬화)처럼 “객체 형태”가 시스템 경계에 걸려 있고, 팀/도메인에서 **규격으로 유지**되어야 하는 구조.
-    - 강제(MUST): 위와 같은 데이터 스키마/경계 계약(Object shape)은 `type X = { ... }`가 아니라 **반드시** `interface X { ... }`로 선언한다.
-    - 예외: 유니온(`|`), 교차(`&`), 튜플, Alias 등 “조합/제약”이 핵심인 경우는 `type`을 사용한다.
+- 새 SSOT/정책을 도입하거나, 기존 SSOT의 의미를 변경해야 하는 경우
+- 패키지 경계/의존 방향을 바꾸는 구조적 변경이 필요한 경우
+- public API(패키지 엔트리포인트로 노출되는 계약)를 바꿔야 하는 경우
   - (부수적) 확장 가능성이 핵심인 객체 구조.
 - Type: 유니온(`|`), 교차(`&`), 튜플, Alias 등 “조합/제약”이 핵심이면 Type을 사용한다. 런타임 오브젝트를 남기지 않는 제로 오버헤드를 기본값으로 둔다.
 - 금지: 기준 없이 Interface/Type을 혼용하지 마라. 애매하면 기본은 **Type**로 시작하고, “`implements` 강제” 또는 “스키마 규격화” 요구가 생길 때만 Interface로 승격한다.

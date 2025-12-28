@@ -1,3 +1,4 @@
 # shellcheck shell=sh
 
-bunx commitlint --edit "$1"
+bunx commitlint --config commitlint.config.ts --edit "$1"
+
