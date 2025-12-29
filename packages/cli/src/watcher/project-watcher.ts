@@ -1,17 +1,14 @@
 import { watch } from 'fs';
 
-import { Logger } from '@bunner/logger';
-
 import type { FileChangePayload } from './interfaces';
 
 export class ProjectWatcher {
-  private watcher: any;
-  private readonly logger = new Logger(ProjectWatcher.name);
+  private watcher: ReturnType<typeof watch> | undefined;
 
   constructor(private readonly rootPath: string) {}
 
   start(onChange: (event: FileChangePayload) => void) {
-    this.logger.debug(`👁️  Watching for file changes in ${this.rootPath}... (using fs.watch as Bun.watch wrapper)`);
+    console.info(`👁️  Watching for file changes in ${this.rootPath}...`);
 
     this.watcher = watch(this.rootPath, { recursive: true }, (event, filename) => {
       if (

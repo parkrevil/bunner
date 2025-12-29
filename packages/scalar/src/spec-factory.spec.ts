@@ -126,6 +126,7 @@ describe('OpenApiFactory.create', () => {
     expect(doc.paths).toEqual({});
     expect(doc.components).toEqual({ schemas: {} });
   });
+
   it('should normalize route paths and convert params to {param}', () => {
     const registry = createRegistryForUsersController();
     const doc = OpenApiFactory.create(registry, { title: 'API Docs', version: '1.0.0' });
@@ -133,6 +134,7 @@ describe('OpenApiFactory.create', () => {
     expect(doc.paths['/users/{id}']).toBeDefined();
     expect(doc.paths['/users']).toBeDefined();
   });
+
   it('should apply ApiOperation metadata to the generated operation', () => {
     const registry = createRegistryForUsersController();
     const doc = OpenApiFactory.create(registry, { title: 'API Docs', version: '1.0.0' });
@@ -151,6 +153,7 @@ describe('OpenApiFactory.create', () => {
     expect(operationValue['summary']).toBe('Get one');
     expect(operationValue['description']).toBe('Get by id');
   });
+
   it('should generate path and query parameters from Param and Query decorators', () => {
     const registry = createRegistryForUsersController();
     const doc = OpenApiFactory.create(registry, { title: 'API Docs', version: '1.0.0' });
@@ -171,6 +174,7 @@ describe('OpenApiFactory.create', () => {
       { name: 'verbose', in: 'query', required: false, schema: { type: 'string' } },
     ]);
   });
+
   it('should generate requestBody schema when a Body parameter exists', () => {
     const registry = createRegistryForUsersController();
     const doc = OpenApiFactory.create(registry, { title: 'API Docs', version: '1.0.0' });
@@ -206,6 +210,7 @@ describe('OpenApiFactory.create', () => {
 
     expect(jsonContentValue['schema']).toEqual({ $ref: '#/components/schemas/CreateUserDto' });
   });
+
   it('should create a component schema for ApiProperty metadata', () => {
     const registry = createRegistryForUsersController();
     const doc = OpenApiFactory.create(registry, { title: 'API Docs', version: '1.0.0' });
@@ -227,6 +232,7 @@ describe('OpenApiFactory.create', () => {
       example: 'a@b.com',
     });
   });
+
   it('should create component schemas for nested objects and arrays', () => {
     const registry = createRegistryForNestedSchemaShapes();
     const doc = OpenApiFactory.create(registry, { title: 'T', version: 'V' });

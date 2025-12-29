@@ -7,9 +7,6 @@
     "bunner": "./src/bin/bunner.ts"
   },
   "scripts": {
-    "test": "bun test",
-    "lint": "eslint . --fix",
-    "typecheck": "tsc --noEmit",
     "build": "bun build ./src/bin/bunner.ts --compile --outfile dist/bunner"
   },
   "devDependencies": {
@@ -17,7 +14,6 @@
     "typescript": "^5"
   },
   "dependencies": {
-    "oxc-parser": "^0.104.0",
-    "@bunner/logger": "workspace:*"
+    "oxc-parser": "^0.104.0"
   }
 }

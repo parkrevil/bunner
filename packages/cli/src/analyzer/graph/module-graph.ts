@@ -1,48 +1,47 @@
+import { compareCodePoint } from '../../common';
 import type { ClassMetadata } from '../interfaces';
 import { ModuleDiscovery } from '../module-discovery';
 
 import type { CyclePath, ProviderRef, FileAnalysis } from './interfaces';
 import { ModuleNode } from './module-node';
 
+type InjectableOptions = {
+  readonly visibility?: string;
+  readonly lifetime?: string;
+};
+
 export class ModuleGraph {
-  public modules: Map<string, ModuleNode> = new Map(); // Key: FilePath of __module__.ts
-  public classMap: Map<string, ModuleNode> = new Map(); // Key: ClassName -> Owning ModuleNode
+  public modules: Map<string, ModuleNode> = new Map();
+  public classMap: Map<string, ModuleNode> = new Map();
   public classDefinitions: Map<string, { metadata: ClassMetadata; filePath: string }> = new Map();
 
   constructor(private fileMap: Map<string, FileAnalysis>) {}
 
-  build() {
-    // 1. Discovery
-    const allFiles = Array.from(this.fileMap.keys());
+  build(): Map<string, ModuleNode> {
+    const allFiles = Array.from(this.fileMap.keys()).sort(compareCodePoint);
     const discovery = new ModuleDiscovery(allFiles);
     const moduleMap = discovery.discover();
-    const orphans = discovery.getOrphans();
 
-    if (orphans.size > 0) {
-      // Ideally warn about orphans
-    }
+    discovery.getOrphans();
 
-    // 2. Create Module Nodes
-    for (const [modulePath, files] of moduleMap.entries()) {
+    const moduleEntries = Array.from(moduleMap.entries()).sort(([a], [b]) => compareCodePoint(a, b));
+
+    for (const [modulePath, files] of moduleEntries) {
       const moduleFile = this.fileMap.get(modulePath);
-      // We create a "Virtual" ModuleNode derived from __module__.ts definition
-      // But ModuleNode constructor takes specific ClassMetadata.
-      // We might need to refactor ModuleNode or create a synthetic one.
-      // Current ModuleNode is wrapper around ClassMetadata.
-      // Let's adapt it to use ModuleDefinition if available.
-      // We look for the "module" definition in this file.
       const rawDef = moduleFile?.moduleDefinition;
 
       if (!moduleFile) {
         continue;
       }
 
-      // Create synthetic metadata for ModuleNode
-      const syntheticMeta: any = {
+      const syntheticMeta: ClassMetadata = {
         className: rawDef?.name || 'AnonymousModule',
+        heritage: undefined,
         decorators: [],
+        constructorParams: [],
+        methods: [],
+        properties: [],
         imports: moduleFile.imports || {},
-        // ... fill others minimal
       };
       const node = new ModuleNode(syntheticMeta);
 
@@ -51,8 +50,10 @@ export class ModuleGraph {
       node.moduleDefinition = rawDef;
 
       this.modules.set(modulePath, node);
-      // 3. Hydrate Module with Owned Files
-      files.forEach(filePath => {
+
+      const sortedOwnedFiles = Array.from(files).sort(compareCodePoint);
+
+      sortedOwnedFiles.forEach(filePath => {
         const fileAnalysis = this.fileMap.get(filePath);
 
         if (!fileAnalysis) {
@@ -60,40 +61,20 @@ export class ModuleGraph {
         }
 
         fileAnalysis.classes.forEach(cls => {
-          // Add to classMap for lookup
           this.classMap.set(cls.className, node);
           this.classDefinitions.set(cls.className, { metadata: cls, filePath });
 
-          // Check for Standalone Components (@Controller, @RestController, @Service/Injectable?)
-          // Actually, we just need to know if they are Providers or Controllers.
-          // Discovery of "Implicit Providers" happens here?
-          // PLAN says: "@Controller, @Service같은 Standalone 컴포넌트를 __module__.ts에 등록하지 않아도 AOT가 수집하여 모듈 스코프로 귀속시킨다."
-
-          const isController = cls.decorators?.some((d: any) => ['Controller', 'RestController'].includes(d.name));
-          const isInjectable = cls.decorators?.some((d: any) => d.name === 'Injectable');
+          const isController = cls.decorators.some(d => d.name === 'Controller' || d.name === 'RestController');
+          const isInjectable = cls.decorators.some(d => d.name === 'Injectable');
 
           if (isController) {
             node.controllers.add(cls.className);
           }
 
           if (isInjectable) {
-            // Add implicit provider
-            // Check for Ambiguity here?
             const token = cls.className;
-
-            if (node.providers.has(token)) {
-              // Conflict between implicit provider and explicit provider?
-              // Explicit wins? Or Error? Plan says "Conflict/Ambiguity is build failure".
-              // But manual override in __module__.ts should be allowed.
-              // If manual override exists, we skip implicit adding.
-              // But we haven't processed manual providers yet.
-            }
-
-            // We add it tentatively.
-            // ProviderRef needs to store visibility info.
-            // Extract options from @Injectable(options)
-            const injectableDec = cls.decorators.find((d: any) => d.name === 'Injectable');
-            const options = injectableDec?.arguments[0] || {};
+            const injectableDec = cls.decorators.find(d => d.name === 'Injectable');
+            const options = this.parseInjectableOptions(injectableDec?.arguments?.[0]);
             const visibility = options.visibility || 'internal';
             const lifetime = options.lifetime || 'singleton';
 
@@ -108,42 +89,38 @@ export class ModuleGraph {
         });
       });
 
-      // 4. Process Explicit Providers from __module__.ts (Overrides)
       if (rawDef && rawDef.providers) {
-        rawDef.providers.forEach((p: any) => {
-          if (p.__bunner_spread) {
-            node.dynamicProviderBundles.add(p.__bunner_spread);
+        rawDef.providers.forEach((p: unknown) => {
+          const record = this.asRecord(p);
+
+          if (record && typeof record.__bunner_spread === 'string') {
+            node.dynamicProviderBundles.add(record.__bunner_spread);
 
             return;
           }
 
           const ref = this.normalizeProvider(p);
 
-          // Check uniqueness/ambiguity
           if (node.providers.has(ref.token) && !this.isImplicit(node.providers.get(ref.token))) {
             throw new Error(
               `[Bunner AOT] Ambiguous provider '${ref.token}' in module '${node.name}' (${node.filePath}). Duplicate explicit definition.`,
             );
           }
 
-          // If we are overwriting an implicit provider with a simple Reference (Identifier),
-          // we must preserve the rich ClassMetadata (constructor params) found during discovery.
           if (node.providers.has(ref.token)) {
             const prev = node.providers.get(ref.token);
 
             if (this.isImplicit(prev)) {
-              // If the explicit one is just an identifier/ref
-              if (ref.metadata && (ref.metadata.__bunner_ref || typeof ref.metadata === 'function')) {
+              const metaRecord = this.asRecord(ref.metadata);
+
+              if (metaRecord && typeof metaRecord.__bunner_ref === 'string') {
                 ref.metadata = prev?.metadata;
                 ref.filePath = prev?.filePath;
 
-                // Also need to preserve scope if explicit didn't specify?
-                // Explicit simple ref implies same class, so decorator options apply.
                 if (!ref.scope) {
                   ref.scope = prev?.scope;
                 }
 
-                // Inherit visibility from decorator
                 if (prev?.isExported) {
                   ref.isExported = true;
                 }
@@ -156,42 +133,120 @@ export class ModuleGraph {
       }
     }
 
-    // 5. Link imports? (No, modules don't import modules in Plan. They import visibility-checked providers)
-
-    // 6. Validation
     this.validateVisibilityAndScope();
+
+    const cycles = this.detectCycles();
+
+    if (cycles.length > 0) {
+      const summary = cycles.map(c => c.path.join(' -> ')).join('\n');
+
+      throw new Error(`[Bunner AOT] Circular dependency detected:\n${summary}`);
+    }
 
     return this.modules;
   }
 
   detectCycles(): CyclePath[] {
-    // TODO: Implement Cycle Detection based on Dependency Graph
-    return [];
+    const nodes = Array.from(this.modules.values()).sort((a, b) => compareCodePoint(a.filePath, b.filePath));
+    const adjacency = new Map<ModuleNode, ModuleNode[]>();
+
+    nodes.forEach(node => {
+      const next = new Set<ModuleNode>();
+      const providerTokens = Array.from(node.providers.keys()).sort(compareCodePoint);
+
+      providerTokens.forEach(token => {
+        const provider = node.providers.get(token);
+
+        if (!provider) {
+          return;
+        }
+
+        const deps = this.extractDeps(provider);
+        const sortedDeps = [...deps].sort(compareCodePoint);
+
+        sortedDeps.forEach(depToken => {
+          const target = this.classMap.get(depToken);
+
+          if (!target) {
+            return;
+          }
+
+          if (target === node) {
+            return;
+          }
+
+          next.add(target);
+        });
+      });
+      adjacency.set(
+        node,
+        Array.from(next).sort((a, b) => compareCodePoint(a.filePath, b.filePath)),
+      );
+    });
+
+    const cycles: CyclePath[] = [];
+    const cycleKeys = new Set<string>();
+    const visited = new Set<ModuleNode>();
+    const inStack = new Set<ModuleNode>();
+    const stack: ModuleNode[] = [];
+    const recordCycle = (cycle: ModuleNode[]): void => {
+      const names = cycle.map(n => n.name);
+      const normalized = this.normalizeCycle(names);
+      const key = normalized.join('->');
+
+      if (cycleKeys.has(key)) {
+        return;
+      }
+
+      cycleKeys.add(key);
+      cycles.push({ path: normalized });
+    };
+    const dfs = (node: ModuleNode): void => {
+      if (inStack.has(node)) {
+        const startIndex = stack.indexOf(node);
+
+        if (startIndex >= 0) {
+          recordCycle(stack.slice(startIndex).concat(node));
+        }
+
+        return;
+      }
+
+      if (visited.has(node)) {
+        return;
+      }
+
+      visited.add(node);
+      inStack.add(node);
+      stack.push(node);
+
+      const next = adjacency.get(node) || [];
+
+      next.forEach(n => {
+        dfs(n);
+      });
+      stack.pop();
+      inStack.delete(node);
+    };
+
+    nodes.forEach(node => {
+      dfs(node);
+    });
+
+    return cycles;
   }
 
   resolveToken(_moduleName: string, _token: string): string | null {
-    // Not used in the same way anymore, as we don't have "Module Import" edges.
-    // We search globally or via explicit configuration?
-    // PLAN: "Module A component injects Module B component"
-    // How does A know about B?
-    // "Auto-discovery"?
-    // If code uses `import { BService } from '../b/b.service'`, it refers to the class.
-    // We map Class -> Module.
-    // So we check ClassMap.
     return null;
   }
 
   private isImplicit(ref: ProviderRef | undefined): boolean {
-    // Logic to determine if ref was added implicitly
-    // We can add a flag to ProviderRef or check metadata structure
-    return !!(ref?.metadata && ref.metadata.className); // Rough check
+    return this.isClassMetadata(ref?.metadata);
   }
 
   private validateVisibilityAndScope() {
     this.modules.forEach(node => {
-      // Iterate all providers in this module
       node.providers.forEach(provider => {
-        // Analyze dependencies (constructor params / injects)
         if (!provider.metadata) {
           return;
         }
@@ -199,38 +254,28 @@ export class ModuleGraph {
         const deps = this.extractDeps(provider);
 
         deps.forEach(depToken => {
-          const targetModule = this.classMap.get(depToken); // Assuming token is ClassName
+          const targetModule = this.classMap.get(depToken);
 
           if (!targetModule) {
-            // Maybe token is string/symbol?
-            // If so, we need to find which module provides it.
-            // This implies a Global Search for token?
-            // Or it must be provided in the SAME module explicitly?
-            // PLAN: "모듈 간 결합은 인스턴스(클래스) 단위 공개(visibility)로 제어"
-            // "대상이 visibility: exported가 아니면 빌드 실패"
             return;
           }
 
           if (targetModule === node) {
             return;
-          } // Intra-module is always allowed
+          }
 
-          // Cross-module access
           const targetProvider = targetModule.providers.get(depToken);
 
           if (!targetProvider) {
-            // Token not found in target module
             return;
           }
 
-          // 1. Visibility Check
           if (!targetProvider.isExported) {
             throw new Error(
               `[Bunner AOT] Visibility Violation: '${provider.token}' in module '${node.name}' tries to inject '${depToken}' from '${targetModule.name}', but it is NOT exported.`,
             );
           }
 
-          // 2. Scope Check
           const sourceScope = provider.scope || 'singleton';
           const targetScope = targetProvider.scope || 'singleton';
 
@@ -245,84 +290,61 @@ export class ModuleGraph {
   }
 
   private extractDeps(provider: ProviderRef): string[] {
-    // Helper to extract dependency tokens from constructor or inject array
     if (!provider.metadata) {
       return [];
     }
 
-    // If ClassMetadata
-    if (provider.metadata.constructorParams) {
-      return provider.metadata.constructorParams.map((p: any) => {
-        // Logic to extract token name (handling @Inject)
-        // Simplified for brevity
-        const injectDec = p.decorators?.find((d: any) => d.name === 'Inject');
+    if (this.isClassMetadata(provider.metadata)) {
+      return provider.metadata.constructorParams
+        .map(p => {
+          const injectDec = p.decorators.find(d => d.name === 'Inject');
 
-        if (injectDec && injectDec.arguments[0]) {
-          return injectDec.arguments[0];
-        } // TODO: Handle Symbol/String correctly
+          if (injectDec) {
+            const token = injectDec.arguments[0];
 
-        if (p.type && p.type.__bunner_ref) {
-          return p.type.__bunner_ref;
-        }
+            if (typeof token === 'string') {
+              return token;
+            }
 
-        return p.type;
-      });
+            const extracted = this.extractTokenName(token);
+
+            if (extracted !== 'UNKNOWN') {
+              return extracted;
+            }
+          }
+
+          return this.extractTokenName(p.type);
+        })
+        .filter(v => v !== 'UNKNOWN');
     }
 
-    // If useFactory
-    if (provider.metadata.inject) {
-      return provider.metadata.inject;
+    const record = this.asRecord(provider.metadata);
+
+    if (record && Array.isArray(record.inject)) {
+      return record.inject.map(v => this.extractTokenName(v)).filter(v => v !== 'UNKNOWN');
     }
 
     return [];
   }
 
-  private normalizeProvider(p: any): ProviderRef {
-    // Reuse logic from previous one but ensure it captures scope/visibility if possible (from where in raw def?)
-    // Raw def in __module__.ts providers array typically doesn't have visibility/scope options attached directly
-    // unless we support extended syntax there or it inherits from Class.
-    // For useClass, we look up the class metadata!
-
+  private normalizeProvider(p: unknown): ProviderRef {
     let token = 'UNKNOWN';
-    const isExported = false; // Default for explicit?
+    const isExported = false;
     const scope = 'singleton';
+    const record = this.asRecord(p);
 
-    if (p.provide) {
-      token = this.extractTokenName(p.provide);
+    if (record && record.provide !== undefined) {
+      token = this.extractTokenName(record.provide);
     } else if (typeof p === 'function') {
       token = p.name;
-    } else if (p.__bunner_ref) {
-      token = p.__bunner_ref;
-    }
-
-    // Look up class metadata for visibility/scope if useClass or ClassProvider
-    let clsName = null;
-
-    if (typeof p === 'function') {
-      clsName = p.name;
-    }
-
-    if (p.__bunner_ref) {
-      clsName = p.__bunner_ref;
-    }
-
-    if (p.useClass) {
-      clsName = this.extractTokenName(p.useClass);
-    }
-
-    if (clsName) {
-      // We might fail lookup if we don't have handle to classMap here...
-      // But we are inside ModuleGraph class, we have access to this.classMap (partially built)
-      // Actually we fill classMap in Discovery phase (step 3).
-      // Step 4 runs after Step 3. So classMap is populated.
-      // BUT strict lookup by string might be flaky if multiple classes have same name.
-      // We should use Import matching.
+    } else if (record && typeof record.__bunner_ref === 'string') {
+      token = record.__bunner_ref;
     }
 
     return { token, metadata: p, isExported, scope };
   }
 
-  private extractTokenName(t: any): string {
+  private extractTokenName(t: unknown): string {
     if (typeof t === 'string') {
       return t;
     }
@@ -331,14 +353,99 @@ export class ModuleGraph {
       return t.name;
     }
 
-    if (t.__bunner_ref) {
-      return t.__bunner_ref;
-    }
-
     if (typeof t === 'symbol') {
       return t.description || t.toString();
     }
 
+    const record = this.asRecord(t);
+
+    if (record && typeof record.__bunner_ref === 'string') {
+      return record.__bunner_ref;
+    }
+
     return 'UNKNOWN';
+  }
+
+  private normalizeCycle(path: readonly string[]): string[] {
+    if (path.length === 0) {
+      return [];
+    }
+
+    const unique = path[0] === path[path.length - 1] ? path.slice(0, -1) : [...path];
+
+    if (unique.length === 0) {
+      return [];
+    }
+
+    let best = unique;
+
+    for (let i = 1; i < unique.length; i += 1) {
+      const rotated = unique.slice(i).concat(unique.slice(0, i));
+
+      if (this.compareStringArray(rotated, best) < 0) {
+        best = rotated;
+      }
+    }
+
+    return best;
+  }
+
+  private compareStringArray(a: readonly string[], b: readonly string[]): number {
+    const len = Math.min(a.length, b.length);
+
+    for (let i = 0; i < len; i += 1) {
+      const left = a[i];
+      const right = b[i];
+
+      if (left === undefined || right === undefined) {
+        continue;
+      }
+
+      const diff = compareCodePoint(left, right);
+
+      if (diff !== 0) {
+        return diff;
+      }
+    }
+
+    return a.length - b.length;
+  }
+
+  private isClassMetadata(value: unknown): value is ClassMetadata {
+    if (!value || typeof value !== 'object') {
+      return false;
+    }
+
+    const record = value as Record<string, unknown>;
+
+    return (
+      typeof record.className === 'string' &&
+      Array.isArray(record.decorators) &&
+      Array.isArray(record.constructorParams) &&
+      Array.isArray(record.methods) &&
+      Array.isArray(record.properties) &&
+      typeof record.imports === 'object'
+    );
+  }
+
+  private parseInjectableOptions(value: unknown): InjectableOptions {
+    const record = this.asRecord(value);
+
+    if (!record) {
+      return {};
+    }
+
+    const visibility = typeof record.visibility === 'string' ? record.visibility : undefined;
+    const lifetime = typeof record.lifetime === 'string' ? record.lifetime : undefined;
+
+    return { visibility, lifetime };
+  }
+
+  private asRecord(value: unknown): Record<string, unknown> | null {
+    if (!value || typeof value !== 'object') {
+      return null;
+    }
+
+    return value as Record<string, unknown>;
   }
 }

@@ -1,25 +1,21 @@
 import { join, resolve } from 'path';
 
-import { Logger } from '@bunner/logger';
 import { Glob } from 'bun';
 
-import { AstParser, ModuleGraph } from '../analyzer';
-import { ConfigLoader } from '../common';
-import { EntryGenerator, InjectorGenerator, ManifestGenerator } from '../generator';
-import { ImportRegistry } from '../generator/import-registry';
+import { AstParser, ModuleGraph, type ClassMetadata, type FileAnalysis } from '../analyzer';
+import { ConfigLoader, scanGlobSorted } from '../common';
+import { EntryGenerator, ImportRegistry, InjectorGenerator, ManifestGenerator } from '../generator';
 import { ProjectWatcher } from '../watcher';
 
 export async function dev() {
-  const logger = new Logger('CLI:Dev');
-
-  logger.info('🚀 Starting Bunner Dev Server...');
+  console.info('🚀 Starting Bunner Dev...');
 
   const config = await ConfigLoader.load();
   const projectRoot = process.cwd();
   const srcDir = resolve(projectRoot, 'src');
   const outDir = resolve(projectRoot, '.bunner');
   const parser = new AstParser();
-  const fileCache = new Map<string, any>(); // Map<string, FileAnalysis>
+  const fileCache = new Map<string, FileAnalysis>();
 
   async function analyzeFile(filePath: string) {
     try {
@@ -27,7 +23,7 @@ export async function dev() {
       const parseResult = parser.parse(filePath, fileContent);
 
       fileCache.set(filePath, {
-        filePath: filePath,
+        filePath,
         classes: parseResult.classes,
         reExports: parseResult.reExports,
         exports: parseResult.exports,
@@ -37,28 +33,21 @@ export async function dev() {
 
       return true;
     } catch (e) {
-      logger.error(`❌ Parse Error (${filePath})`, e);
+      console.error(`❌ Parse Error (${filePath})`, e);
 
       return false;
     }
   }
 
   async function rebuild() {
-    // Flatten classes for Manifest legacy support if needed
     const allFileAnalyses = Array.from(fileCache.values());
-    const allClasses = allFileAnalyses.flatMap((f: any) =>
-      (f.classes || []).map((metadata: any) => ({ metadata, filePath: f.filePath })),
-    );
-
-    logger.debug(`🛠️  Rebuilding injection map (${allClasses.length} classes)...`);
-
-    // Create FileMap for Graph
+    const allClasses: Array<{ metadata: ClassMetadata; filePath: string }> = allFileAnalyses.flatMap(f => {
+      return f.classes.map(metadata => ({ metadata, filePath: f.filePath }));
+    });
     const fileMap = new Map(fileCache.entries());
     const graph = new ModuleGraph(fileMap);
 
     graph.build();
-
-    logger.info(`Graph Size: ${graph.modules.size} modules`);
 
     const injectorGen = new InjectorGenerator();
     const registry = new ImportRegistry(outDir);
@@ -73,7 +62,7 @@ export async function dev() {
 
     const userMain = join(srcDir, 'main.ts');
     const entryGen = new EntryGenerator();
-    const indexContent = entryGen.generate(userMain, true, config);
+    const indexContent = entryGen.generate(userMain, true, { workers: config.workers });
 
     await Bun.write(join(outDir, 'index.ts'), indexContent);
   }
@@ -91,10 +80,9 @@ export async function dev() {
   }
 
   const glob = new Glob('**/*.ts');
+  const srcFiles = await scanGlobSorted({ glob, baseDir: srcDir });
 
-  logger.info('🔍 Initial Scan...');
-
-  for await (const file of glob.scan(srcDir)) {
+  for (const file of srcFiles) {
     const fullPath = join(srcDir, file);
 
     if (!shouldAnalyzeFile(fullPath)) {
@@ -107,10 +95,9 @@ export async function dev() {
   if (config.scanPaths) {
     for (const scanPath of config.scanPaths) {
       const absPath = resolve(projectRoot, scanPath);
+      const extraFiles = await scanGlobSorted({ glob, baseDir: absPath });
 
-      logger.info(`🔍 Scanning additional path: ${scanPath}`);
-
-      for await (const file of glob.scan(absPath)) {
+      for (const file of extraFiles) {
         const fullPath = join(absPath, file);
 
         if (!shouldAnalyzeFile(fullPath)) {
@@ -124,48 +111,36 @@ export async function dev() {
 
   await rebuild();
 
-  const appEntry = join(outDir, 'index.ts');
+  console.info('🛠️  AOT artifacts generated.');
+  console.info(`   Entry: ${join(outDir, 'index.ts')}`);
 
-  logger.info('🚀 Spawning App', { command: `bun run --watch ${appEntry}` });
-
-  const appProc = Bun.spawn(['bun', 'run', '--watch', appEntry], {
-    stdout: 'inherit',
-    stderr: 'inherit',
-    env: { ...process.env, FORCE_COLOR: '1' },
-  });
-  // 5. Watcher
   const projectWatcher = new ProjectWatcher(srcDir);
 
   projectWatcher.start(event => {
     void (async () => {
       const filename = event.filename;
 
-      // Debounce or immediate? For now immediate.
       if (!filename) {
         return;
       }
 
       const fullPath = join(srcDir, filename);
 
-      logger.debug(`🔄 [${event.eventType}] Detected change in: ${filename}`);
-
       if (event.eventType === 'rename' && !(await Bun.file(fullPath).exists())) {
-        // Deleted
-        logger.info(`🗑️ File deleted: ${filename}`);
+        console.info(`🗑️ File deleted: ${filename}`);
 
         fileCache.delete(fullPath);
       } else {
-        // Changed or Created
         await analyzeFile(fullPath);
       }
 
-      // Incremental Rebuild Trigger
       await rebuild();
     })();
   });
-  process.on('SIGINT', () => {
+
+  const onSigint = () => {
     projectWatcher.close();
-    appProc.kill();
-    process.exit(0);
-  });
+  };
+
+  process.on('SIGINT', onSigint);
 }

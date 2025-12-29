@@ -21,8 +21,8 @@
 
 - 영향 패키지: `@bunner/cli` 단일 패키지
 - Public API/Contract
-  - `packages/cli/index.ts`에서 노출되는 심볼
-    - 현재: `BunnerCliError`, `TypeMetadata`
+  - `packages/cli/index.ts`에서 노출되는 심볼(현행 스냅샷)
+    - 현재(실측): `BunnerCliError`, `TypeMetadata`
   - `packages/cli/package.json`의 `bin`(CLI 실행 계약): `bunner`
 - 행동/출력에 영향 가능 영역
   - `dev`/`build` CLI 명령 동작
@@ -58,6 +58,14 @@
   - `Glob.scan` 결과와 Map/Set 순회가 정렬되지 않음: AOT 결정성 위반 리스크 (`SPEC.md`, `TOOLING.md`)
   - `ModuleGraph.detectCycles()` 미구현: 순환 의존 실패 처리 미보장 (`SPEC.md`, `ARCHITECTURE.md`)
 
+- 결정성/휴대성(추가 리스크)
+  - `ImportRegistry`가 `Bun.resolveSync(..., process.cwd())`로 specifier를 절대 경로로 바꾼 뒤 상대 경로로 변환: 산출물 경로가 실행 위치/설치 레이아웃에 흔들릴 수 있음
+  - `ImportRegistry`의 alias 충돌 해결이 “호출 순서”에 의존: 동일 입력이어도 분석/수집 순서가 달라지면 alias가 달라질 수 있음
+
+- Sealed Registry/Graph(인지 사항)
+  - CLI 산출물(예: `manifest.ts`)은 외부(런타임/다른 패키지)가 조회하는 메타데이터/그래프 관련 구조를 불변으로 봉인한다.
+  - 이는 런타임이 `__BUNNER_METADATA_REGISTRY__`를 수정/패치/주입해서는 안 된다는 SSOT 불변조건과 정합해야 한다.
+
 - CLI 정책
   - `dev` 명령이 애플리케이션 실행/감시를 직접 수행: CLI 역할 경계 위반 가능성 (`TOOLING.md`)
 
@@ -77,8 +85,8 @@
   - 어댑터/플러그인에서 `peerDependencies`로 둘 경우, 소비자 앱(또는 workspace 루트)이 logger를 직접 설치해야 한다.
 
 - 본 PLAN에서의 결론(작업 범위: `packages/cli/**`)
-  - CLI에서는 `@bunner/logger`를 제거하고, CLI 전용 logger(`console` 기반)로 대체한다.
-  - 동시에, CLI가 생성하는 산출물 코드에서 불필요한 `@bunner/logger` import가 끼어들지 않도록 제거/정리한다.
+  - CLI에서는 `@bunner/logger`를 제거하고, Bun 내장 `console`을 직접 사용한다.
+  - CLI 산출물 코드에서의 `@bunner/logger` import는 “필수 근거가 있을 때만” 허용하며, 불필요한 import는 제거/정리한다.
 
 ## 4. 리팩토링 목표
 
@@ -89,8 +97,9 @@
 5. 비‑TSDoc 주석을 전부 제거한다.
 6. `any`를 제거하고 `unknown` + 타입가드 또는 명확한 타입으로 대체한다.
 7. AOT 산출물/분석 로직이 **결정적(Deterministic)** 으로 동작한다.
-8. 순환 의존을 빌드 실패로 처리한다.
-9. 테스트로 결정성/순환 검증을 보장한다.
+8. CLI가 생성하는 레지스트리/그래프 관련 데이터는 조회 전용으로 유지되며(Sealed/Immutable), 이 불변조건을 약화시키지 않는다.
+9. 순환 의존을 빌드 실패로 처리한다.
+10. 테스트로 결정성/순환 검증을 보장한다.
 
 ## 5. 실행 계획 (상세)
 
@@ -98,6 +107,8 @@
 
 - [ ] 변경 대상이 `packages/cli/**`만인지 재확인한다.
 - [ ] 다른 패키지 또는 SSOT 문서 수정이 필요해지는 경우 즉시 중단하고 사용자 승인 요청한다.
+- [ ] Public Facade 스냅샷을 고정한다.
+  - 현행 `packages/cli/index.ts`의 export 목록을 기준으로 “변경 전 계약”을 명시하고, 이후 변경은 Breaking 여부를 먼저 판정한다.
 
 ### 5.2 단계 1 — 구조/Facade 정합성
 
@@ -118,11 +129,7 @@
 
 - [ ] `packages/cli/package.json`에서 `@bunner/logger` 제거
   - CLI는 런타임 패키지에 의존하지 않아야 한다.
-- [ ] `packages/cli/src/common/cli-logger.ts` 추가
-  - 최소 기능: `debug/info/warn/error` 메서드, `context` 문자열 지원.
-  - 출력은 `console` 기반으로 구현.
-  - 로그 레벨 제어는 환경 변수(`BUNNER_LOG_LEVEL`) 기준으로 단순화.
-- [ ] 기존 `Logger` 사용처를 CLI 로거로 교체
+- [ ] 기존 `Logger` 사용처를 `console` 기반으로 교체
   - 대상: `packages/cli/src/commands/dev.command.ts`, `packages/cli/src/commands/build.command.ts`, `packages/cli/src/common/config-loader.ts`, `packages/cli/src/watcher/project-watcher.ts`
   - feature 경계 규칙에 맞게 `../common` barrel 경유.
 
@@ -159,8 +166,9 @@
 ### 5.7 단계 6 — 결정성 보장 (Determinism)
 
 - [ ] 모든 파일/키/모듈 순회를 정렬된 리스트로 처리
-  - `Glob.scan` 결과는 배열화 후 `localeCompare`로 정렬
-  - `Map/Set` 순회 시 `Array.from(...).sort()` 후 순회
+  - 정렬은 로케일에 의존하지 않는 비교(코드포인트 기반)를 사용해 환경 차이로 인한 흔들림을 제거한다.
+  - `Glob.scan` 결과는 배열화 후 결정적 비교로 정렬
+  - `Map/Set` 순회는 키/엔트리를 배열화 후 결정적 비교로 정렬한 뒤 순회
 - [ ] `ModuleGraph.build()` 내부의 입력 순서를 고정
   - `moduleMap`의 키(모듈 파일 경로) 정렬
   - 모듈 내 `providers`/`controllers`/`dynamicProviderBundles` 처리 순서 고정
@@ -168,6 +176,24 @@
   - 모듈 순서, provider/controller 토큰 순서를 정렬 기반으로 고정
 - [ ] `ImportRegistry.getImportStatements()` 결과 정렬
   - alias 또는 path 기준으로 정렬하여 출력 고정
+
+- [ ] `ImportRegistry` 경로 정책을 결정하고 고정한다
+  - 패키지 specifier(예: `react`, `@bunner/common`)는 불필요하게 절대 경로로 해석하지 않고 specifier를 유지한다.
+  - 파일 경로(상대/절대)는 “프로젝트 루트 기준 정규화” 규칙을 정의하고, outputDir 기준 상대 import로 변환한다.
+  - alias 충돌 해결이 입력 순서에 의존하지 않도록, ImportRegistry에 들어가는 (filePath, className) 입력을 정렬된 순서로 공급한다.
+
+- [ ] Sealed Registry/Graph 계약을 명시적으로 유지한다
+  - `__BUNNER_METADATA_REGISTRY__`는 런타임에서 재정의/재할당이 불가해야 한다(예: `defineProperty`로 `writable: false`, `configurable: false`).
+  - 메타데이터 오브젝트는 깊은 불변화(예: deep freeze)로 외부 변경이 불가능해야 한다.
+  - 그래프/키 테이블(Map 등)은 변이 API를 차단해 외부 변경 시도를 즉시 실패 처리해야 한다.
+
+- [ ] Sealed 계약 파손 방지 체크리스트(구체)
+  - `globalThis.__BUNNER_METADATA_REGISTRY__` 설정은 반드시 `Object.defineProperty`로 고정하고, `writable/configurable` 값을 약화시키지 않는다.
+  - 봉인 대상은 “외부에서 접근 가능한 모든 그래프/키/메타데이터 구조”여야 하며, 일부 객체/맵만 봉인되는 누락을 허용하지 않는다.
+  - deep freeze는 순환 참조(WeakSet 등) 안전성을 유지하고, 누락된 하위 필드가 생기지 않도록 테스트로 고정한다.
+  - Map 봉인은 `Object.freeze(map)`만으로 끝내지 않고, `set/delete/clear` 등 변이 API 차단이 유지되어야 한다.
+  - 봉인 로직이 import/초기화 순서에 의존하지 않도록, 생성 코드의 실행 순서(레지스트리 생성 → defineProperty)를 유지한다.
+  - 런타임/테스트에서 “레지스트리 재정의/변이 시도 시 실패(throw)”가 보장되는 케이스를 추가한다.
 - [ ] `ManifestGenerator`, `InjectorGenerator`, `MetadataGenerator`의 출력 순서 고정
   - 클래스/모듈/프로바이더/컨트롤러 순서를 정렬
 
@@ -185,13 +211,19 @@
 - [ ] `dev` 명령에서 **애플리케이션 실행/스폰 제거**
   - 역할을 AOT 산출물 생성 + 파일 감시에 한정
   - 실행은 사용자에게 명시적 커맨드로 안내
-- [ ] `build` 명령의 로깅 통일 및 불필요한 `console.log` 제거
+  - 종료 코드 정책(성공: 0, 실패: 1)을 고정한다
+- [ ] `build` 명령의 출력 정책을 고정하고, 불필요한 `console.log`를 제거한다
 
 ### 5.10 단계 9 — 테스트/검증 강화
 
 - [ ] 결정성 테스트
   - 동일 입력에서 동일 출력이 나오는지 검사
   - `ImportRegistry`/`ManifestGenerator`/`ModuleGraph` 순서 고정 테스트
+  - 입력 순서를 뒤섞어도 출력이 동일함을 검증한다(순서 독립성)
+- [ ] Sealed Registry/Graph 테스트
+  - `__BUNNER_METADATA_REGISTRY__` 재정의 시도(예: `defineProperty`, 재할당)가 실패하는지 확인한다
+  - scoped keys map의 변이 시도(`set/delete/clear`)가 즉시 실패(throw)하는지 확인한다
+  - 메타데이터 오브젝트 변이 시도(예: nested property write)가 실패하는지 확인한다
 - [ ] 순환 의존 테스트
   - cycle 발견 시 오류 발생 확인
 - [ ] 기존 테스트(`entry.spec.ts`) 유지 + 필요 시 수정
@@ -216,7 +248,6 @@
 - 추가
   - `packages/cli/src/index.ts`
   - `packages/cli/src/bin/index.ts`
-  - `packages/cli/src/common/cli-logger.ts`
   - `packages/cli/README.md`
 - 삭제
   - 없음 (불가피한 삭제가 필요하면 사전 승인 후 진행)
@@ -249,4 +280,5 @@
 - `dev`/`build`가 `TOOLING.md` 경계를 위반하지 않는다.
 - 순환 의존이 감지되면 빌드 실패가 발생한다.
 - 동일 입력 → 동일 산출물(결정성)이 보장된다.
+- CLI 산출물의 레지스트리/그래프 관련 데이터는 불변(Sealed)이며 런타임 변경 시도는 실패 처리된다.
 - `bun run lint`, `bun run tsc`, `bun test`가 통과한다.

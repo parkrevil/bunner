@@ -115,6 +115,7 @@ describe('RequestHandler.handle', () => {
 
     expect(parsed).toEqual({ name: 'alice', age: 10 });
   });
+
   it('should return 400 when a required string field is missing', async () => {
     const metadataRegistry = createRegistry();
     const onErrorFilter = mock(() => {});
@@ -149,6 +150,7 @@ describe('RequestHandler.handle', () => {
     expect(Array.isArray(parsed.details)).toBeTrue();
     expect(parsed.details).toContain('name must be a string');
   });
+
   it('should return 400 when number conversion produces NaN', async () => {
     const metadataRegistry = createRegistry();
     const onErrorFilter = mock(() => {});
@@ -181,6 +183,7 @@ describe('RequestHandler.handle', () => {
 
     expect(parsed.details).toContain('age must be an integer');
   });
+
   it('should return 400 when number is out of range', async () => {
     const metadataRegistry = createRegistry();
     const onErrorFilter = mock(() => {});

@@ -1,3 +1,6 @@
+/**
+ * Serializable metadata about a type extracted by the CLI analyzer.
+ */
 export interface TypeMetadata {
   name: string;
   properties: {
@@ -20,7 +23,7 @@ export interface ErrorFilterUsage {
 
 export interface DecoratorMetadata {
   name: string;
-  arguments: any[];
+  arguments: unknown[];
 }
 
 export interface ClassMetadata {
@@ -33,7 +36,7 @@ export interface ClassMetadata {
   decorators: DecoratorMetadata[];
   constructorParams: {
     name: string;
-    type: string;
+    type: unknown;
     typeArgs?: string[];
     decorators: DecoratorMetadata[];
   }[];
@@ -42,7 +45,7 @@ export interface ClassMetadata {
     decorators: DecoratorMetadata[];
     parameters: {
       name: string;
-      type: string;
+      type: unknown;
       typeArgs?: string[];
       decorators: DecoratorMetadata[];
       index: number;
@@ -50,10 +53,10 @@ export interface ClassMetadata {
   }[];
   properties: {
     name: string;
-    type: string;
+    type: unknown;
     typeArgs?: string[];
     decorators: DecoratorMetadata[];
-    items?: any;
+    items?: unknown;
     isOptional?: boolean;
     isArray?: boolean;
     isEnum?: boolean;

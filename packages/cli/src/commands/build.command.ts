@@ -1,16 +1,13 @@
 import { join, resolve, dirname } from 'path';
 
-import { Logger } from '@bunner/logger';
 import { Glob } from 'bun';
 
-import { AstParser, ModuleGraph, type ClassMetadata } from '../analyzer';
-import { ConfigLoader } from '../common';
+import { AstParser, ModuleGraph, type ClassMetadata, type FileAnalysis } from '../analyzer';
+import { ConfigLoader, compareCodePoint, scanGlobSorted } from '../common';
 import { EntryGenerator, ManifestGenerator } from '../generator';
 
 export async function build() {
-  const logger = new Logger('CLI:Build');
-
-  logger.info('🚀 Starting Bunner Production Build...');
+  console.info('🚀 Starting Bunner Production Build...');
 
   const config = await ConfigLoader.load();
   const projectRoot = process.cwd();
@@ -18,23 +15,24 @@ export async function build() {
   const outDir = resolve(projectRoot, 'dist');
   const bunnerDir = resolve(projectRoot, '.bunner');
 
-  logger.info(`📂 Project Root: ${projectRoot}`);
-  logger.info(`📂 Source Dir: ${srcDir}`);
-  logger.info(`📂 Output Dir: ${outDir}`);
+  console.info(`📂 Project Root: ${projectRoot}`);
+  console.info(`📂 Source Dir: ${srcDir}`);
+  console.info(`📂 Output Dir: ${outDir}`);
 
   const parser = new AstParser();
   const manifestGen = new ManifestGenerator();
-  const fileMap = new Map<string, any>(); // Map<string, FileAnalysis>
+  const fileMap = new Map<string, FileAnalysis>();
   const allClasses: { metadata: ClassMetadata; filePath: string }[] = [];
 
-  logger.info('🔍 Scanning source files...');
+  console.info('🔍 Scanning source files...');
 
   const userMain = join(srcDir, 'main.ts');
   const visited = new Set<string>();
   const queue: string[] = [userMain];
   const glob = new Glob('**/*.ts');
+  const srcFiles = await scanGlobSorted({ glob, baseDir: srcDir });
 
-  for await (const file of glob.scan(srcDir)) {
+  for (const file of srcFiles) {
     const fullPath = join(srcDir, file);
 
     if (fullPath !== userMain) {
@@ -51,7 +49,6 @@ export async function build() {
 
     visited.add(filePath);
 
-    // Filter: Only scan .ts files, ignore .d.ts
     if (!filePath.endsWith('.ts') && !filePath.endsWith('.tsx')) {
       continue;
     }
@@ -62,9 +59,6 @@ export async function build() {
 
     try {
       const fileContent = await Bun.file(filePath).text();
-
-      console.log('Scanning:', filePath);
-
       const parseResult = parser.parse(filePath, fileContent);
       const classInfos = parseResult.classes.map(meta => ({ metadata: meta, filePath }));
 
@@ -78,9 +72,6 @@ export async function build() {
         moduleDefinition: parseResult.moduleDefinition,
       });
 
-      // Follow Imports
-      // Follow Imports
-      // Follow Imports & Re-Exports
       const pathsToFollow = new Set<string>();
 
       if (parseResult.imports) {
@@ -91,20 +82,19 @@ export async function build() {
         parseResult.reExports.forEach(re => pathsToFollow.add(re.module));
       }
 
-      for (const rawImportPath of pathsToFollow) {
+      const orderedPathsToFollow = Array.from(pathsToFollow).sort(compareCodePoint);
+
+      for (const rawImportPath of orderedPathsToFollow) {
         let resolvedPath = rawImportPath;
 
-        // If not absolute, try to resolve via Bun
         if (!resolvedPath.startsWith('/') && !resolvedPath.match(/^[a-zA-Z]:/)) {
           try {
             resolvedPath = Bun.resolveSync(resolvedPath, dirname(filePath));
           } catch (_e) {
-            // console.warn(`Failed to resolve import: ${rawImportPath} from ${filePath}`);
-            continue; // Skip if unresolved
+            continue;
           }
         }
 
-        // Handle missing extensions
         if (resolvedPath && !resolvedPath.endsWith('.ts') && !resolvedPath.endsWith('.tsx') && !resolvedPath.endsWith('.d.ts')) {
           if (await Bun.file(resolvedPath + '.ts').exists()) {
             resolvedPath += '.ts';
@@ -116,28 +106,25 @@ export async function build() {
         }
 
         if (resolvedPath && !visited.has(resolvedPath)) {
-          // Allow scanning .ts/.tsx files.
           if (
             !resolvedPath.endsWith('.d.ts') &&
             (resolvedPath.endsWith('.ts') || resolvedPath.endsWith('.tsx')) &&
-            !resolvedPath.includes('/node_modules/@types/') // Exclude type definitions
+            !resolvedPath.includes('/node_modules/@types/')
           ) {
             queue.push(resolvedPath);
           }
         }
       }
-    } catch (_e) {
-      // logger.warn(`⚠️ Failed to parse ${filePath}: ${e.message}`);
-    }
+    } catch (_e) {}
   }
 
-  logger.info('🕸️  Building Module Graph...');
+  console.info('🕸️  Building Module Graph...');
 
   const graph = new ModuleGraph(fileMap);
 
   graph.build();
 
-  logger.info('🛠️  Generating intermediate manifests...');
+  console.info('🛠️  Generating intermediate manifests...');
 
   const manifestFile = join(bunnerDir, 'manifest.ts');
   const manifestCode = manifestGen.generate(graph, allClasses, bunnerDir);
@@ -146,11 +133,11 @@ export async function build() {
 
   const entryPointFile = join(bunnerDir, 'entry.ts');
   const entryGen = new EntryGenerator();
-  const buildEntryContent = entryGen.generate(userMain, false, config);
+  const buildEntryContent = entryGen.generate(userMain, false, { workers: config.workers });
 
   await Bun.write(entryPointFile, buildEntryContent);
 
-  logger.info('📦 Bundling application, manifest, and workers...');
+  console.info('📦 Bundling application, manifest, and workers...');
 
   let workerFiles: string[] = [];
 
@@ -159,7 +146,7 @@ export async function build() {
   }
 
   if (workerFiles.length > 0) {
-    workerFiles.forEach((w: string) => logger.info(`   Worker Entry: ${w}`));
+    workerFiles.forEach((w: string) => console.info(`   Worker Entry: ${w}`));
   }
 
   const buildResult = await Bun.build({
@@ -172,25 +159,25 @@ export async function build() {
   });
 
   if (!buildResult.success) {
-    logger.error('❌ Build failed!');
+    console.error('❌ Build failed!');
 
     for (const log of buildResult.logs) {
-      logger.error(log.message, log);
+      console.error(log.message, log);
     }
 
-    process.exit(1);
+    throw new Error('Build failed');
   }
 
-  logger.info('✅ Build Complete!');
-  logger.info(`   Entry: ${join(outDir, 'entry.js')}`);
+  console.info('✅ Build Complete!');
+  console.info(`   Entry: ${join(outDir, 'entry.js')}`);
 
   if (workerFiles.length > 0) {
     workerFiles.forEach(w => {
       const workerName = w.split('/').pop()?.replace('.ts', '.js');
 
-      logger.info(`   Worker: ${join(outDir, workerName || '')}`);
+      console.info(`   Worker: ${join(outDir, workerName || '')}`);
     });
   }
 
-  logger.info(`   Manifest: ${join(outDir, 'manifest.js')}`);
+  console.info(`   Manifest: ${join(outDir, 'manifest.js')}`);
 }

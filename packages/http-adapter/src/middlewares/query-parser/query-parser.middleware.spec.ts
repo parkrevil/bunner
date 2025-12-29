@@ -34,6 +34,7 @@ describe('QueryParserMiddleware', () => {
       middleware.handle(ctx);
       expect(ctx.request.query).toEqual({ name: 'value', age: '30' });
     });
+
     it('should return empty object if no query string', () => {
       const middleware = new QueryParserMiddleware({});
       const ctx = createContext('http://localhost/path');
@@ -41,6 +42,7 @@ describe('QueryParserMiddleware', () => {
       middleware.handle(ctx);
       expect(ctx.request.query).toEqual({});
     });
+
     it('should return empty object if query string is empty after ?', () => {
       const middleware = new QueryParserMiddleware({});
       const ctx = createContext('http://localhost/path?');
@@ -49,6 +51,7 @@ describe('QueryParserMiddleware', () => {
       expect(ctx.request.query).toEqual({});
     });
   });
+
   // ============================================
   // 3. Option Passthrough
   // ============================================
@@ -60,6 +63,7 @@ describe('QueryParserMiddleware', () => {
       middleware.handle(ctx);
       expect(ctx.request.query).toEqual({ user: { name: 'alice', age: '30' } });
     });
+
     it('should respect depth option', () => {
       const middleware = new QueryParserMiddleware({ parseArrays: true, depth: 1 });
       const ctx = createContext('http://localhost/?a[b][c]=d');
@@ -67,6 +71,7 @@ describe('QueryParserMiddleware', () => {
       middleware.handle(ctx);
       expect(ctx.request.query).toEqual({ a: { b: {} } });
     });
+
     it('should respect parameterLimit option', () => {
       const middleware = new QueryParserMiddleware({ parameterLimit: 2 });
       const ctx = createContext('http://localhost/?a=1&b=2&c=3&d=4');
@@ -74,6 +79,7 @@ describe('QueryParserMiddleware', () => {
       middleware.handle(ctx);
       expect(ctx.request.query).toEqual({ a: '1', b: '2' });
     });
+
     it('should respect hppMode option', () => {
       const middleware = new QueryParserMiddleware({ hppMode: 'last' });
       const ctx = createContext('http://localhost/?id=1&id=2&id=3');
@@ -82,6 +88,7 @@ describe('QueryParserMiddleware', () => {
       expect(ctx.request.query).toEqual({ id: '3' });
     });
   });
+
   // ============================================
   // 4. Strict Mode Error Handling
   // ============================================
@@ -92,12 +99,14 @@ describe('QueryParserMiddleware', () => {
 
       expect(() => middleware.handle(ctx)).toThrow(BadRequestError);
     });
+
     it('should throw on mixed scalar and nested keys when strictMode: true', () => {
       const middleware = new QueryParserMiddleware({ strictMode: true, parseArrays: true });
       const ctx = createContext('http://localhost/?a=1&a[b]=2');
 
       expect(() => middleware.handle(ctx)).toThrow(BadRequestError);
     });
+
     it('should NOT throw on malformed query in non-strict mode', () => {
       const middleware = new QueryParserMiddleware({ strictMode: false });
       const ctx = createContext('http://localhost/?a[b=1');
@@ -107,6 +116,7 @@ describe('QueryParserMiddleware', () => {
       expect(ctx.request.query).toEqual({ 'a[b': '1' });
     });
   });
+
   // ============================================
   // 5. Security (Prototype Pollution)
   // ============================================
@@ -119,6 +129,7 @@ describe('QueryParserMiddleware', () => {
       expect((ctx.request.query as any).__proto__?.polluted).toBeUndefined();
       expect((Object.prototype as any).polluted).toBeUndefined();
     });
+
     it('should block constructor pollution through middleware', () => {
       const middleware = new QueryParserMiddleware({ parseArrays: true });
       const ctx = createContext('http://localhost/?constructor[prototype][foo]=bar');
@@ -127,6 +138,7 @@ describe('QueryParserMiddleware', () => {
       expect(Object.prototype.hasOwnProperty.call(ctx.request.query, 'constructor')).toBe(false);
     });
   });
+
   // ============================================
   // 6. Encoding
   // ============================================
@@ -138,6 +150,7 @@ describe('QueryParserMiddleware', () => {
       middleware.handle(ctx);
       expect(ctx.request.query).toEqual({ 한글: '테스트' });
     });
+
     it('should handle special characters', () => {
       const middleware = new QueryParserMiddleware({});
       const ctx = createContext('http://localhost/?eq=%3D&amp=%26');

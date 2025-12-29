@@ -45,6 +45,7 @@ describe('setupScalar', () => {
 
     expect(() => setupScalar(adapters, undefined as unknown as ScalarSetupOptions)).toThrow(/documentTargets/i);
   });
+
   it('should throw when documentTargets is neither "all" nor an array', () => {
     const adapters = { http: new Map() } as unknown as AdapterCollection;
 
@@ -56,6 +57,7 @@ describe('setupScalar', () => {
       } as unknown as ScalarSetupOptions),
     ).toThrow(/documentTargets must be/i);
   });
+
   it('should throw when httpTargets is undefined', () => {
     const adapters = { http: new Map() } as unknown as AdapterCollection;
 
@@ -67,6 +69,7 @@ describe('setupScalar', () => {
       } as unknown as ScalarSetupOptions),
     ).toThrow(/httpTargets must be/i);
   });
+
   it('should throw when httpTargets is neither "all" nor an array', () => {
     const adapters = { http: new Map() } as unknown as AdapterCollection;
 
@@ -78,6 +81,7 @@ describe('setupScalar', () => {
       } as unknown as ScalarSetupOptions),
     ).toThrow(/httpTargets must be/i);
   });
+
   it('should throw when no HTTP adapter is selected for hosting', () => {
     const adapters = { http: new Map() } as unknown as AdapterCollection;
 
@@ -89,6 +93,7 @@ describe('setupScalar', () => {
       }),
     ).toThrow(/no HTTP adapter selected/i);
   });
+
   it('should throw when the http adapter group does not support lookup', () => {
     const httpGroup = {
       forEach(callback: (adapter: unknown, name: unknown) => void): void {
@@ -105,6 +110,7 @@ describe('setupScalar', () => {
       }),
     ).toThrow(/does not support lookup/i);
   });
+
   it('should throw when selected httpTargets do not exist', () => {
     const { adapter } = createHttpAdapterSpy();
     const http = new Map<string, unknown>([['http-server', adapter]]);
@@ -118,6 +124,7 @@ describe('setupScalar', () => {
       }),
     ).toThrow(/httpTargets not found/i);
   });
+
   it('should register exactly the two internal routes when an adapter supports internal binding', () => {
     const { adapter, calls } = createHttpAdapterSpy();
     const http = new Map<string, unknown>([['http-server', adapter]]);
@@ -131,6 +138,7 @@ describe('setupScalar', () => {
     expect(calls).toHaveLength(2);
     expect(calls.map(call => call.path)).toEqual(['/api-docs', '/api-docs/*']);
   });
+
   it('should not register routes twice for the same adapter', () => {
     const { adapter, calls } = createHttpAdapterSpy();
     const http = new Map<string, unknown>([['http-server', adapter]]);
@@ -140,6 +148,7 @@ describe('setupScalar', () => {
     setupScalar(adapters, { documentTargets: 'all', httpTargets: ['http-server'], metadataRegistry: new Map() });
     expect(calls).toHaveLength(2);
   });
+
   it('should serve Scalar UI at /api-docs when exactly one document exists', async () => {
     const { adapter, calls } = createHttpAdapterSpy();
     const http = new Map<string, unknown>([['http-server', adapter]]);
@@ -158,6 +167,7 @@ describe('setupScalar', () => {
     expect(response.headers.get('Content-Type')).toContain('text/html');
     expect(text).toContain('api-reference');
   });
+
   it('should serve an index at /api-docs when multiple documents exist', async () => {
     const adapterSpyA = createHttpAdapterSpy();
     const adapterSpyB = createHttpAdapterSpy();
@@ -183,6 +193,7 @@ describe('setupScalar', () => {
     expect(text).toContain('openapi:http:http-b');
     expect(text).not.toContain('api-reference');
   });
+
   it('should serve JSON from /api-docs/* when a .json document path is requested', async () => {
     const { adapter, calls } = createHttpAdapterSpy();
     const http = new Map<string, unknown>([['http-server', adapter]]);
@@ -201,6 +212,7 @@ describe('setupScalar', () => {
     expect(response.headers.get('Content-Type')).toContain('application/json');
     expect(parsed).toHaveProperty('openapi', '3.0.0');
   });
+
   it('should serve UI from /api-docs/* when a non-.json document path is requested', async () => {
     const { adapter, calls } = createHttpAdapterSpy();
     const http = new Map<string, unknown>([['http-server', adapter]]);
@@ -219,6 +231,7 @@ describe('setupScalar', () => {
     expect(response.headers.get('Content-Type')).toContain('text/html');
     expect(text).toContain('api-reference');
   });
+
   it('should return 404 from /api-docs/* when the request path is missing', () => {
     const { adapter, calls } = createHttpAdapterSpy();
     const http = new Map<string, unknown>([['http-server', adapter]]);
@@ -235,6 +248,7 @@ describe('setupScalar', () => {
 
     expect(response.status).toBe(404);
   });
+
   it('should return 404 from /api-docs/* when the document does not exist', () => {
     const { adapter, calls } = createHttpAdapterSpy();
     const http = new Map<string, unknown>([['http-server', adapter]]);

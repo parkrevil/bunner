@@ -15,6 +15,7 @@ describe('EntryGenerator.generate', () => {
     expect(code).toContain('await import(manifestFileName)');
     expect(code).toContain('new ClusterManager');
   });
+
   it('should use ClusterManager when workers is greater than 1', () => {
     const gen = new EntryGenerator();
     const code = gen.generate('./src/main.ts', false, { workers: 2 });

@@ -1,42 +1,183 @@
-import { type ClassMetadata, ModuleGraph, type ProviderRef, type ModuleNode } from '../analyzer';
+import { type ClassMetadata, ModuleGraph, type ModuleNode } from '../analyzer';
+import { compareCodePoint } from '../common';
 
 import type { ImportRegistry } from './import-registry';
+
+type RecordUnknown = Record<string, unknown>;
+
+const stableKey = (value: unknown, visited = new WeakSet<object>()): string => {
+  if (value === null) {
+    return 'null';
+  }
+
+  if (value === undefined) {
+    return 'undefined';
+  }
+
+  if (typeof value === 'string') {
+    return `string:${value}`;
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return `${typeof value}:${String(value)}`;
+  }
+
+  if (typeof value === 'symbol') {
+    return `symbol:${value.description ?? value.toString()}`;
+  }
+
+  if (typeof value === 'function') {
+    return `function:${value.name}`;
+  }
+
+  if (Array.isArray(value)) {
+    const parts = value.map(v => stableKey(v, visited));
+
+    return `[${parts.join(',')}]`;
+  }
+
+  if (typeof value !== 'object' || !value) {
+    return 'unknown';
+  }
+
+  if (visited.has(value)) {
+    return '[Circular]';
+  }
+
+  visited.add(value);
+
+  const record = value as Record<string, unknown>;
+  const entries = Object.entries(record).sort(([a], [b]) => compareCodePoint(a, b));
+  const parts = entries.map(([k, v]) => `${k}:${stableKey(v, visited)}`);
+
+  return `{${parts.join(',')}}`;
+};
+const asString = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  return value;
+};
+const asRecord = (value: unknown): RecordUnknown | null => {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  return value as RecordUnknown;
+};
+const getRefName = (value: unknown): string | null => {
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  const record = asRecord(value);
+
+  if (!record) {
+    return null;
+  }
+
+  if (typeof record.__bunner_ref === 'string') {
+    return record.__bunner_ref;
+  }
+
+  return null;
+};
+const getForwardRefName = (value: unknown): string | null => {
+  const record = asRecord(value);
+
+  if (!record) {
+    return null;
+  }
+
+  if (typeof record.__bunner_forward_ref === 'string') {
+    return record.__bunner_forward_ref;
+  }
+
+  return null;
+};
+const isClassMetadata = (value: unknown): value is ClassMetadata => {
+  const record = asRecord(value);
+
+  if (!record) {
+    return false;
+  }
+
+  if (typeof record.className !== 'string') {
+    return false;
+  }
+
+  if (!Array.isArray(record.constructorParams)) {
+    return false;
+  }
+
+  if (!Array.isArray(record.decorators)) {
+    return false;
+  }
+
+  if (!Array.isArray(record.methods)) {
+    return false;
+  }
+
+  if (!Array.isArray(record.properties)) {
+    return false;
+  }
+
+  if (!record.imports || typeof record.imports !== 'object') {
+    return false;
+  }
+
+  return true;
+};
 
 export class InjectorGenerator {
   generate(graph: ModuleGraph, registry: ImportRegistry): string {
     const factoryEntries: string[] = [];
     const adapterConfigs: string[] = [];
-    // Helper to get alias
-    const getAlias = (name: string, path?: string) => {
+    const getAlias = (name: string, path?: string): string => {
       if (!path) {
         return name;
       }
 
       return registry.getAlias(name, path);
     };
+    const sortedNodes = Array.from(graph.modules.values()).sort((a, b) => compareCodePoint(a.filePath, b.filePath));
 
-    graph.modules.forEach((node: ModuleNode) => {
-      // 1. Providers Generation
-      node.providers.forEach((ref: ProviderRef, token: string) => {
-        const metaProvider = ref.metadata;
+    sortedNodes.forEach((node: ModuleNode) => {
+      const providerTokens = Array.from(node.providers.keys()).sort(compareCodePoint);
 
-        if (metaProvider) {
-          if (Object.prototype.hasOwnProperty.call(metaProvider, 'useValue')) {
-            const val = this.serializeValue(metaProvider.useValue, registry);
+      providerTokens.forEach((token: string) => {
+        const ref = node.providers.get(token);
+
+        if (!ref) {
+          return;
+        }
+
+        const providerRecord = asRecord(ref.metadata);
+
+        if (providerRecord) {
+          if (Object.prototype.hasOwnProperty.call(providerRecord, 'useValue')) {
+            const val = this.serializeValue(providerRecord.useValue, registry);
 
             factoryEntries.push(`  container.set('${node.name}::${token}', () => ${val});`);
 
             return;
           }
 
-          if (metaProvider.useClass) {
-            const classes = Array.isArray(metaProvider.useClass) ? metaProvider.useClass : [metaProvider.useClass];
-            const instances = classes.map((clsItem: any) => {
-              const className = clsItem.__bunner_ref || clsItem;
+          if (providerRecord.useClass !== undefined) {
+            const useClass = providerRecord.useClass;
+            const classes = Array.isArray(useClass) ? useClass : [useClass];
+            const instances = classes.map((clsItem: unknown) => {
+              const className = getRefName(clsItem);
+
+              if (!className) {
+                return 'undefined';
+              }
+
               const clsDef = graph.classDefinitions.get(className);
 
               if (!clsDef) {
-                return 'undefined'; // Should ideally warn
+                return 'undefined';
               }
 
               const alias = getAlias(clsDef.metadata.className, clsDef.filePath);
@@ -44,103 +185,149 @@ export class InjectorGenerator {
 
               return `new ${alias}(${deps.join(', ')})`;
             });
-            const factoryBody = Array.isArray(metaProvider.useClass) ? `[${instances.join(', ')}]` : instances[0];
+            const factoryBody = Array.isArray(useClass) ? `[${instances.join(', ')}]` : instances[0];
 
             factoryEntries.push(`  container.set('${node.name}::${token}', (c) => ${factoryBody});`);
 
             return;
           }
 
-          if (metaProvider.useExisting) {
-            const existingToken = this.serializeValue(metaProvider.useExisting, registry);
+          if (providerRecord.useExisting !== undefined) {
+            const existingToken = this.serializeValue(providerRecord.useExisting, registry);
 
-            // resolveToken logic?
-            // Since factory is runtime, we just generate lookup.
-            // But we need to scope it if possible.
-            // Simplest: container.get(token)
-            // But we might need 'scope::token' resolution.
-            // Let's assume global lookup or same-module lookup for now.
             factoryEntries.push(`  container.set('${node.name}::${token}', (c) => c.get(${existingToken}));`);
 
             return;
           }
 
-          if (metaProvider.useFactory) {
-            let factoryFn = metaProvider.useFactory.__bunner_factory_code;
-            const deps = metaProvider.useFactory.__bunner_factory_deps || [];
+          if (providerRecord.useFactory !== undefined) {
+            const factoryRecord = asRecord(providerRecord.useFactory);
+            let factoryFn = typeof factoryRecord?.__bunner_factory_code === 'string' ? factoryRecord.__bunner_factory_code : '';
+            const deps = Array.isArray(factoryRecord?.__bunner_factory_deps) ? factoryRecord.__bunner_factory_deps : [];
 
-            if (factoryFn) {
-              const replacements: { start: number; end: number; content: string }[] = [];
-
-              deps.forEach((dep: any) => {
-                const alias = registry.getAlias(dep.name, dep.path);
-
-                if (alias !== dep.name) {
-                  replacements.push({
-                    start: dep.start,
-                    end: dep.end,
-                    content: alias,
-                  });
-                }
-              });
-              replacements
-                .sort((a, b) => b.start - a.start)
-                .forEach(rep => {
-                  factoryFn = factoryFn.slice(0, rep.start) + rep.content + factoryFn.slice(rep.end);
-                });
-
-              const injectedArgs = (metaProvider.inject || []).map((injectItem: any) => {
-                const tokenName = injectItem.__bunner_ref || injectItem;
-                const resolved = graph.resolveToken(node.name, tokenName) || tokenName;
-
-                return `c.get('${resolved}')`;
-              });
-
-              factoryEntries.push(`  container.set('${node.name}::${token}', (c) => {
-                        const factory = ${factoryFn};
-                        return factory(${injectedArgs.join(', ')});
-                    });`);
-
+            if (!factoryFn) {
               return;
             }
+
+            const replacements: Array<{ start: number; end: number; content: string }> = [];
+            const orderedDeps = [...deps].sort((a, b) => {
+              const left = asRecord(a);
+              const right = asRecord(b);
+              const leftName = typeof left?.name === 'string' ? left.name : '';
+              const rightName = typeof right?.name === 'string' ? right.name : '';
+              const nameDiff = compareCodePoint(leftName, rightName);
+
+              if (nameDiff !== 0) {
+                return nameDiff;
+              }
+
+              const leftPath = typeof left?.path === 'string' ? left.path : '';
+              const rightPath = typeof right?.path === 'string' ? right.path : '';
+              const pathDiff = compareCodePoint(leftPath, rightPath);
+
+              if (pathDiff !== 0) {
+                return pathDiff;
+              }
+
+              const leftStart = typeof left?.start === 'number' ? left.start : 0;
+              const rightStart = typeof right?.start === 'number' ? right.start : 0;
+              const startDiff = leftStart - rightStart;
+
+              if (startDiff !== 0) {
+                return startDiff;
+              }
+
+              const leftEnd = typeof left?.end === 'number' ? left.end : 0;
+              const rightEnd = typeof right?.end === 'number' ? right.end : 0;
+
+              return leftEnd - rightEnd;
+            });
+
+            orderedDeps.forEach((dep: unknown) => {
+              const depRecord = asRecord(dep);
+
+              if (!depRecord) {
+                return;
+              }
+
+              const name = typeof depRecord.name === 'string' ? depRecord.name : null;
+              const path = typeof depRecord.path === 'string' ? depRecord.path : null;
+              const start = typeof depRecord.start === 'number' ? depRecord.start : null;
+              const end = typeof depRecord.end === 'number' ? depRecord.end : null;
+
+              if (!name || !path || start === null || end === null) {
+                return;
+              }
+
+              const alias = registry.getAlias(name, path);
+
+              if (alias !== name) {
+                replacements.push({ start, end, content: alias });
+              }
+            });
+            replacements
+              .sort((a, b) => b.start - a.start)
+              .forEach(rep => {
+                factoryFn = factoryFn.slice(0, rep.start) + rep.content + factoryFn.slice(rep.end);
+              });
+
+            const injectList = Array.isArray(providerRecord.inject) ? providerRecord.inject : [];
+            const injectedArgs = injectList.map((injectItem: unknown) => {
+              const tokenName = getRefName(injectItem);
+
+              if (!tokenName) {
+                return 'undefined';
+              }
+
+              const resolved = graph.resolveToken(node.name, tokenName) || tokenName;
+
+              return `c.get('${resolved}')`;
+            });
+
+            factoryEntries.push(`  container.set('${node.name}::${token}', (c) => {`);
+            factoryEntries.push(`    const factory = ${factoryFn};`);
+            factoryEntries.push(`    return factory(${injectedArgs.join(', ')});`);
+            factoryEntries.push('  });');
+
+            return;
           }
         }
 
-        // Implicit providers (Class directly)
-        // If it's a class metadata structure
-        if (metaProvider && metaProvider.className && metaProvider.constructorParams) {
-          const clsMeta = metaProvider as ClassMetadata;
+        if (isClassMetadata(ref.metadata)) {
+          const clsMeta = ref.metadata;
           const alias = getAlias(clsMeta.className, ref.filePath);
           const deps = this.resolveConstructorDeps(clsMeta, node, graph);
 
           factoryEntries.push(`  container.set('${node.name}::${token}', (c) => new ${alias}(${deps.join(', ')}));`);
         }
       });
-      // 1.1 Dynamic Provider Bundles
-      node.dynamicProviderBundles.forEach((bundleExpr: any) => {
-        const bundleVal = this.serializeValue(bundleExpr, registry);
 
-        factoryEntries.push(`
-  (${bundleVal} || []).forEach(p => {
-      let token = p.provide;
-      if (typeof p === 'function') token = p.name;
-      
-      let factory;
-      if(Object.prototype.hasOwnProperty.call(p, 'useValue')) factory = () => p.useValue;
-      else if(p.useClass) factory = (c) => new p.useClass(...(resolveDeps(p.useClass))); 
-      else if(p.useFactory) {
-         factory = (c) => {
-            const args = (p.inject || []).map(t => c.get(t));
-            return p.useFactory(...args);
-         };
-      }
-      
-      const key = token ? '${node.name}::' + (typeof token === 'symbol' ? token.description : token) : null;
-      if(key && factory) container.set(key, factory);
-  });`);
+      const dynamicBundles = Array.from(node.dynamicProviderBundles).sort((a, b) => compareCodePoint(stableKey(a), stableKey(b)));
+
+      dynamicBundles.forEach(bundle => {
+        const stable = this.serializeValue(bundle, registry);
+
+        factoryEntries.push(`  (${stable} || []).forEach(p => {`);
+        factoryEntries.push('    let token = p.provide;');
+        factoryEntries.push("    if (typeof p === 'function') token = p.name;");
+        factoryEntries.push('');
+        factoryEntries.push('    let factory;');
+        factoryEntries.push("    if (Object.prototype.hasOwnProperty.call(p, 'useValue')) factory = () => p.useValue;");
+        factoryEntries.push('    else if (p.useClass) factory = () => new p.useClass();');
+        factoryEntries.push('    else if (p.useFactory) {');
+        factoryEntries.push('      factory = (c) => {');
+        factoryEntries.push('        const args = (p.inject || []).map(t => c.get(t));');
+        factoryEntries.push('        return p.useFactory(...args);');
+        factoryEntries.push('      };');
+        factoryEntries.push('    }');
+        factoryEntries.push('');
+        factoryEntries.push(
+          `    const key = token ? '${node.name}::' + (typeof token === 'symbol' ? token.description : token) : null;`,
+        );
+        factoryEntries.push('    if (key && factory) container.set(key, factory);');
+        factoryEntries.push('  });');
       });
 
-      // 2. Adapters Config Generation
       if (node.moduleDefinition && node.moduleDefinition.adapters) {
         const config = this.serializeValue(node.moduleDefinition.adapters, registry);
 
@@ -150,34 +337,51 @@ export class InjectorGenerator {
 
     const dynamicEntries: string[] = [];
 
-    // Dynamic modules handling (legacy support or libraries)
-    graph.modules.forEach((node: ModuleNode) => {
-      node.dynamicImports.forEach((imp: any) => {
-        if (imp.__bunner_call) {
-          const [className, _methodName] = imp.__bunner_call.split('.');
-          let callExpression = imp.__bunner_call;
+    sortedNodes.forEach((node: ModuleNode) => {
+      const dynamicImports = Array.from(node.dynamicImports).sort((a, b) => compareCodePoint(stableKey(a), stableKey(b)));
 
-          if (imp.__bunner_import_source) {
-            const alias = registry.getAlias(className, imp.__bunner_import_source);
+      dynamicImports.forEach(imp => {
+        const impRecord = asRecord(imp);
 
-            if (_methodName) {
-              callExpression = `${alias}.${_methodName}`;
-            } else {
-              callExpression = alias;
-            }
-          }
-
-          const args = imp.args.map((a: any) => this.serializeValue(a, registry)).join(', ');
-
-          dynamicEntries.push(`  const mod_${node.name}_${className} = await ${callExpression}(${args});`);
-          dynamicEntries.push(`  await container.loadDynamicModule('${className}', mod_${node.name}_${className});`);
+        if (!impRecord || typeof impRecord.__bunner_call !== 'string') {
+          return;
         }
+
+        const parts = impRecord.__bunner_call.split('.');
+        const className = parts[0];
+        const methodName = parts[1];
+
+        if (!className) {
+          return;
+        }
+
+        let callExpression = impRecord.__bunner_call;
+        const importSource = asString(impRecord.__bunner_import_source);
+
+        if (importSource === undefined) {
+          return;
+        }
+
+        {
+          const alias = registry.getAlias(className, importSource);
+
+          if (methodName) {
+            callExpression = `${alias}.${methodName}`;
+          } else {
+            callExpression = alias;
+          }
+        }
+
+        const argList = Array.isArray(impRecord.args) ? impRecord.args : [];
+        const args = argList.map(a => this.serializeValue(a, registry)).join(', ');
+
+        dynamicEntries.push(`  const mod_${node.name}_${className} = await ${callExpression}(${args});`);
+        dynamicEntries.push(`  await container.loadDynamicModule('${className}', mod_${node.name}_${className});`);
       });
     });
 
     return `
 import { Container } from "@bunner/core";
-import { Logger } from "@bunner/logger";
 
 export function createContainer() {
   const container = new Container();
@@ -189,13 +393,13 @@ export const adapterConfig = deepFreeze({
 ${adapterConfigs.join('\n')}
 });
 
-export async function registerDynamicModules(container: any) {
+export async function registerDynamicModules(container: { loadDynamicModule: (name: string, module: unknown) => Promise<void> }) {
 ${dynamicEntries.join('\n')}
 }
 `;
   }
 
-  private serializeValue(value: any, registry: ImportRegistry): string {
+  private serializeValue(value: unknown, registry: ImportRegistry): string {
     if (value === undefined) {
       return 'undefined';
     }
@@ -216,18 +420,30 @@ ${dynamicEntries.join('\n')}
       return `[${value.map(v => this.serializeValue(v, registry)).join(', ')}]`;
     }
 
-    if (value.__bunner_ref) {
-      return registry.getAlias(value.__bunner_ref, value.__bunner_import_source);
+    const record = asRecord(value);
+
+    if (!record) {
+      return 'undefined';
     }
 
-    if (value.__bunner_call) {
-      const parts = value.__bunner_call.split('.');
+    if (typeof record.__bunner_ref === 'string' && typeof record.__bunner_import_source === 'string') {
+      return registry.getAlias(record.__bunner_ref, record.__bunner_import_source);
+    }
+
+    if (typeof record.__bunner_call === 'string') {
+      const parts = record.__bunner_call.split('.');
       const className = parts[0];
       const methodName = parts[1];
-      let callName = value.__bunner_call;
 
-      if (value.__bunner_import_source) {
-        const alias = registry.getAlias(className, value.__bunner_import_source);
+      if (!className) {
+        return 'undefined';
+      }
+
+      let callName = record.__bunner_call;
+      const importSource = asString(record.__bunner_import_source);
+
+      if (importSource !== undefined) {
+        const alias = registry.getAlias(className, importSource);
 
         if (methodName) {
           callName = `${alias}.${methodName}`;
@@ -236,58 +452,54 @@ ${dynamicEntries.join('\n')}
         }
       }
 
-      const args = (value.args || []).map((a: any) => this.serializeValue(a, registry)).join(', ');
+      const args = (Array.isArray(record.args) ? record.args : []).map(a => this.serializeValue(a, registry)).join(', ');
 
       return `${callName}(${args})`;
     }
 
-    if (typeof value === 'object') {
-      const props = Object.entries(value).map(([k, v]) => {
-        if (k.startsWith('__bunner_computed_')) {
-          const computed = v as any;
-          const keyContent = this.serializeValue(computed.__bunner_computed_key, registry);
-          const valContent = this.serializeValue(computed.__bunner_computed_value, registry);
+    const entries = Object.entries(record).sort(([a], [b]) => compareCodePoint(a, b));
+    const props = entries.map(([key, entryValue]) => {
+      if (key.startsWith('__bunner_computed_')) {
+        const computed = asRecord(entryValue) ?? {};
+        const keyContent = this.serializeValue(computed.__bunner_computed_key, registry);
+        const valContent = this.serializeValue(computed.__bunner_computed_value, registry);
 
-          return `[${keyContent}]: ${valContent}`;
-        }
+        return `[${keyContent}]: ${valContent}`;
+      }
 
-        return `'${k}': ${this.serializeValue(v, registry)}`;
-      });
+      return `'${key}': ${this.serializeValue(entryValue, registry)}`;
+    });
 
-      return `{ ${props.join(', ')} }`;
-    }
-
-    return 'undefined';
+    return `{ ${props.join(', ')} }`;
   }
 
   private resolveConstructorDeps(meta: ClassMetadata, node: ModuleNode, graph: ModuleGraph): string[] {
-    return meta.constructorParams.map((param: any) => {
-      let token = param.type;
+    return meta.constructorParams.map(param => {
+      let token: unknown = param.type;
+      const refName = getRefName(token);
+      const forwardRefName = getForwardRefName(token);
 
-      if (token && typeof token === 'object') {
-        if (token.__bunner_ref) {
-          token = token.__bunner_ref;
-        } else if (token.__bunner_forward_ref) {
-          token = token.__bunner_forward_ref;
-        }
+      if (refName) {
+        token = refName;
+      } else if (forwardRefName) {
+        token = forwardRefName;
       }
 
-      if (token === 'Logger') {
-        return `new Logger('${meta.className}')`;
-      }
-
-      const injectDec = param.decorators.find((d: any) => d.name === 'Inject');
+      const injectDec = param.decorators.find(d => d.name === 'Inject');
 
       if (injectDec && injectDec.arguments.length > 0) {
         const arg = injectDec.arguments[0];
 
         if (typeof arg === 'string') {
           token = arg;
-        } else if (arg && typeof arg === 'object') {
-          if (arg.__bunner_forward_ref) {
-            token = arg.__bunner_forward_ref;
-          } else if (arg.__bunner_ref) {
-            token = arg.__bunner_ref;
+        } else {
+          const argRefName = getRefName(arg);
+          const argForwardRefName = getForwardRefName(arg);
+
+          if (argRefName) {
+            token = argRefName;
+          } else if (argForwardRefName) {
+            token = argForwardRefName;
           }
         }
       }
@@ -302,7 +514,6 @@ ${dynamicEntries.join('\n')}
         return `c.get('${resolvedToken}')`;
       }
 
-      // Fallback: Try to find owning module for the token (assuming Class Name)
       const targetModule = graph.classMap.get(token);
 
       if (targetModule) {

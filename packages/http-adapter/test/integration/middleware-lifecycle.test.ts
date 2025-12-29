@@ -76,6 +76,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.NO_CONTENT);
     expect(workerResponse.body).toBe('');
   });
+
   it('should default to 204 when a beforeRequest middleware returns false without setting status', async () => {
     const metadataRegistry = createRegistry({ useScopedMiddleware: [] });
     const harness = createHttpTestHarness({
@@ -95,6 +96,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.NO_CONTENT);
     expect(workerResponse.body).toBe('');
   });
+
   it('should run global beforeRequest middlewares in declaration order', async () => {
     const metadataRegistry = createRegistry({ useScopedMiddleware: [] });
     const calls: string[] = [];
@@ -127,6 +129,7 @@ describe('RequestHandler.handle', () => {
     });
     expect(calls).toEqual(['first', 'second']);
   });
+
   it('should not execute later beforeRequest middlewares after a previous one returns false', async () => {
     const metadataRegistry = createRegistry({ useScopedMiddleware: [] });
     const calledLater = mock(() => {});
@@ -159,6 +162,7 @@ describe('RequestHandler.handle', () => {
     });
     expect(calledLater).toHaveBeenCalledTimes(0);
   });
+
   it('should return 500 when a global beforeRequest middleware throws', async () => {
     const metadataRegistry = createRegistry({ useScopedMiddleware: [] });
     const harness = createHttpTestHarness({
@@ -178,6 +182,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
     expect(workerResponse.body).toBe('Internal Server Error');
   });
+
   it('should run scoped middlewares before handler', async () => {
     const onScoped = mock(() => {});
 
@@ -207,6 +212,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.OK);
     expect(workerResponse.body).toBe('{"ok":true}');
   });
+
   it('should ignore scoped middleware tokens that are not registered in the container', async () => {
     class MissingMiddlewareToken extends BunnerMiddleware {
       handle(): void {}
@@ -227,6 +233,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.OK);
     expect(workerResponse.body).toBe('{"ok":true}');
   });
+
   it('should keep the response when a beforeResponse middleware throws after handler succeeded', async () => {
     class BeforeResponseThrowingMiddleware extends BunnerMiddleware {
       handle(): void {
@@ -252,6 +259,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.OK);
     expect(workerResponse.body).toBe('{"ok":true}');
   });
+
   it('should not invoke ErrorFilters for beforeResponse errors', async () => {
     const onErrorFilter = mock(() => {});
 
@@ -296,6 +304,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
     expect(workerResponse.body).toBeUndefined();
   });
+
   it('should set status to 500 without setting body when a beforeResponse middleware throws while status is unset', async () => {
     class BeforeRequestStopMiddleware extends BunnerMiddleware {
       handle(): boolean {
@@ -330,6 +339,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
     expect(workerResponse.body).toBeUndefined();
   });
+
   it('should keep the response when an afterResponse middleware throws', async () => {
     class AfterResponseThrowingMiddleware extends BunnerMiddleware {
       handle(): void {
@@ -355,6 +365,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.OK);
     expect(workerResponse.body).toBe('{"ok":true}');
   });
+
   it('should not invoke ErrorFilters for afterResponse errors', async () => {
     const onErrorFilter = mock(() => {});
 

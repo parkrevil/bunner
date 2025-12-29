@@ -4,11 +4,7 @@
   "description": "Scalar API Documentation integration for Bunner",
   "main": "index.ts",
   "types": "index.ts",
-  "scripts": {
-    "test": "bun test",
-    "lint": "eslint . --fix",
-    "tsc": "tsc --noEmit"
-  },
+  "scripts": {},
   "dependencies": {},
   "peerDependencies": {
     "bun": "*",

@@ -37,22 +37,21 @@
 
 ## 패키지 스크립트 표준 (Scripts)
 
-`package.json` 표준 스크립트(강제):
+이 레포의 검증 스크립트는 **루트 `package.json`만** 소유한다(MUST).
 
-- 모든 패키지는 최소한 `test`, `lint`, `tsc`(또는 동등한 typecheck 스크립트) 를 제공해야 한다.
-- 단, 레거시 패키지에 스크립트가 누락되어 있을 수 있다. 이 경우 “현상 유지”를 이유로 방치하지 마라.
-  - 해당 패키지의 `package.json`을 수정하는 작업을 수행한다면, 반드시 표준 스크립트를 **함께 추가**하여 규칙을 이행한다.
-- 프로젝트 성격에 따라 `build`는 달라질 수 있으나, 타입체크 스크립트는 절대 생략하지 마라.
+강제 정책(Enforced):
 
-```json
-{
-  "scripts": {
-    "test": "bun test",
-    "lint": "eslint . --fix",
-    "tsc": "tsc --noEmit"
-  }
-}
-```
+- 루트 `package.json`에는 반드시 `verify` 스크립트가 존재해야 한다(MUST).
+- 검증은 반드시 루트의 `verify`로만 수행한다(MUST).
+  - 허용: `bun run verify`
+  - 금지: `packages/*`의 `package.json`에 `test`/`lint`/`tsc`/`typecheck` 같은 검증 스크립트를 두는 행위(MUST NOT)
+  - 금지: 에이전트/CI/개발자가 패키지 단위 검증 스크립트를 직접 실행하도록 문서화/유도하는 행위(MUST NOT)
+
+`verify`는 최소한 아래 3가지를 한 번에 실행해야 한다(MUST).
+
+- lint
+- typecheck(tsc)
+- test
 
 ## CLI AOT 산출물 (Registry / Plan)
 

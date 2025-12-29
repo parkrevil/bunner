@@ -2,8 +2,8 @@ import type { ClassMetadata } from '../interfaces';
 import type { ModuleDefinition, ReExport } from '../parser-models';
 
 export interface ProviderRef {
-  token: any;
-  metadata?: any;
+  token: string;
+  metadata?: unknown;
   isExported: boolean;
   scope?: string;
   filePath?: string;

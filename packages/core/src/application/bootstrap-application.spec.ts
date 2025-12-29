@@ -9,6 +9,7 @@ describe('createApplication', () => {
 
     expect(app1.getContainer()).not.toBe(app2.getContainer());
   });
+
   it('should scan module objects and register providers', async () => {
     const app = await createApplication(
       {

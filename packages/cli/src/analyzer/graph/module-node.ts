@@ -9,11 +9,11 @@ export class ModuleNode {
   filePath: string;
   moduleDefinition?: ModuleDefinition;
   imports: Set<ModuleNode> = new Set();
-  dynamicImports: Set<any> = new Set();
+  dynamicImports: Set<unknown> = new Set();
   providers: Map<string, ProviderRef> = new Map();
   exports: Set<string> = new Set();
   controllers: Set<string> = new Set();
-  dynamicProviderBundles: Set<any> = new Set();
+  dynamicProviderBundles: Set<unknown> = new Set();
 
   visiting: boolean = false;
   visited: boolean = false;

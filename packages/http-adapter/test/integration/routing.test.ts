@@ -69,6 +69,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.OK);
     expect(workerResponse.body).toBe('{"ok":true}');
   });
+
   it('should match when trailing slash is present', async () => {
     const metadataRegistry = createRoutingRegistry();
     const harness = createHttpTestHarness({
@@ -85,6 +86,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.OK);
     expect(workerResponse.body).toBe('{"ok":true}');
   });
+
   it('should return 500 when route is not found', async () => {
     const metadataRegistry = createRoutingRegistry();
     const harness = createHttpTestHarness({
@@ -101,6 +103,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
     expect(workerResponse.body).toBe('Internal Server Error');
   });
+
   it('should return 500 when method is not registered', async () => {
     const metadataRegistry = createRoutingRegistry();
     const harness = createHttpTestHarness({
@@ -119,6 +122,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
     expect(workerResponse.body).toBe('Internal Server Error');
   });
+
   it('should return 500 when path traversal is present', async () => {
     const metadataRegistry = createRoutingRegistry();
     const harness = createHttpTestHarness({
@@ -135,6 +139,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
     expect(workerResponse.body).toBe('Internal Server Error');
   });
+
   it('should match even when query string is included in path input', async () => {
     const metadataRegistry = createRoutingRegistry();
     const harness = createHttpTestHarness({
@@ -151,6 +156,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.OK);
     expect(workerResponse.body).toBe('{"ok":true}');
   });
+
   it('should match when multiple slashes are present in the path', async () => {
     const metadataRegistry = createRoutingRegistry();
     const harness = createHttpTestHarness({
@@ -167,6 +173,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.OK);
     expect(workerResponse.body).toBe('{"ok":true}');
   });
+
   it('should return 500 when collapseSlashes is false and path contains internal double slashes', async () => {
     const metadataRegistry = createRoutingRegistry();
     const harness = createHttpTestHarness({
@@ -184,6 +191,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
     expect(workerResponse.body).toBe('Internal Server Error');
   });
+
   it('should match when path does not start with a leading slash', async () => {
     const metadataRegistry = createRoutingRegistry();
     const harness = createHttpTestHarness({
@@ -200,6 +208,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.OK);
     expect(workerResponse.body).toBe('{"ok":true}');
   });
+
   it('should return 500 when case does not match and router is case-sensitive', async () => {
     const metadataRegistry = createRoutingRegistry();
     const harness = createHttpTestHarness({
@@ -216,6 +225,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
     expect(workerResponse.body).toBe('Internal Server Error');
   });
+
   it('should match when case does not match and router is case-insensitive', async () => {
     const metadataRegistry = createRoutingRegistry();
     const harness = createHttpTestHarness({
@@ -233,6 +243,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.OK);
     expect(workerResponse.body).toBe('{"ok":true}');
   });
+
   it('should return 500 for an empty path', async () => {
     const metadataRegistry = createRoutingRegistry();
     const harness = createHttpTestHarness({
@@ -249,6 +260,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
     expect(workerResponse.body).toBe('Internal Server Error');
   });
+
   it('should return 500 when a path segment exceeds the max segment length', async () => {
     const metadataRegistry = createRoutingRegistry();
     const harness = createHttpTestHarness({
@@ -266,6 +278,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
     expect(workerResponse.body).toBe('Internal Server Error');
   });
+
   it('should match when maxSegmentLength is increased to allow long param segments', async () => {
     const metadataRegistry = createRoutingRegistry();
     const harness = createHttpTestHarness({
@@ -284,6 +297,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.OK);
     expect(workerResponse.body).toBe(`{"id":"${longSegment}"}`);
   });
+
   it('should not throw on malformed percent encoding when failFastOnBadEncoding is false', async () => {
     const metadataRegistry = createRoutingRegistry();
     const harness = createHttpTestHarness({
@@ -300,6 +314,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
     expect(workerResponse.body).toBe('Internal Server Error');
   });
+
   it('should match and keep raw param when percent decoding fails and failFastOnBadEncoding is false', async () => {
     const metadataRegistry = createRoutingRegistry();
     const harness = createHttpTestHarness({
@@ -317,6 +332,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.OK);
     expect(workerResponse.body).toBe('{"id":"%E0%A4%A"}');
   });
+
   it('should return 500 when percent decoding fails and failFastOnBadEncoding is true', async () => {
     const metadataRegistry = createRoutingRegistry();
     const harness = createHttpTestHarness({
@@ -334,6 +350,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
     expect(workerResponse.body).toBe('Internal Server Error');
   });
+
   it('should decode %2F in params when encodedSlashBehavior is decode', async () => {
     const metadataRegistry = createRoutingRegistry();
     const harness = createHttpTestHarness({
@@ -351,6 +368,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.OK);
     expect(workerResponse.body).toBe('{"id":"a/b"}');
   });
+
   it('should preserve %2F in params when encodedSlashBehavior is preserve', async () => {
     const metadataRegistry = createRoutingRegistry();
     const harness = createHttpTestHarness({
@@ -368,6 +386,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.OK);
     expect(workerResponse.body).toBe('{"id":"a%2Fb"}');
   });
+
   it('should return 500 when encodedSlashBehavior is reject and params contain %2F', async () => {
     const metadataRegistry = createRoutingRegistry();
     const harness = createHttpTestHarness({
@@ -385,6 +404,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
     expect(workerResponse.body).toBe('Internal Server Error');
   });
+
   it('should not decode params when decodeParams is false even if encodedSlashBehavior is reject', async () => {
     const metadataRegistry = createRoutingRegistry();
     const harness = createHttpTestHarness({
@@ -402,6 +422,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.OK);
     expect(workerResponse.body).toBe('{"id":"a%2Fb"}');
   });
+
   it('should return 500 for unicode paths that do not match a registered route', async () => {
     const metadataRegistry = createRoutingRegistry();
     const harness = createHttpTestHarness({

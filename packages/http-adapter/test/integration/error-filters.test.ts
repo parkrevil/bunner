@@ -274,6 +274,7 @@ describe('BunnerHttpAdapter.addErrorFilters', () => {
     expect(workerResponse.body).toBe('adapter-filtered');
   });
 });
+
 describe('RequestHandler.handle', () => {
   it('should throw during route registration when a UseErrorFilters token is not resolvable', () => {
     class MissingFilterToken extends BunnerErrorFilter {
@@ -289,6 +290,7 @@ describe('RequestHandler.handle', () => {
       });
     }).toThrow();
   });
+
   it('should call ErrorFilter.catch with exactly (error, ctx)', async () => {
     const receivedArgs: any[][] = [];
 
@@ -318,6 +320,7 @@ describe('RequestHandler.handle', () => {
     expect(receivedArgs[0]?.[0]).toBeInstanceOf(Error);
     expect(typeof receivedArgs[0]?.[1]?.to).toBe('function');
   });
+
   it('should combine @UseErrorFilters in method -> controller order', async () => {
     const calls: string[] = [];
 
@@ -356,6 +359,7 @@ describe('RequestHandler.handle', () => {
     });
     expect(calls).toEqual(['method', 'controller']);
   });
+
   it('should run route-level ErrorFilters before global ErrorFilters', async () => {
     const calledRoute = mock(() => {});
     const calledGlobal = mock(() => {});
@@ -410,6 +414,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.BAD_GATEWAY);
     expect(workerResponse.body).toBe('global');
   });
+
   it('should dedupe duplicate ErrorFilter tokens between method and controller level', async () => {
     const onCall = mock(() => {});
     const metadataRegistry = createRegistry({
@@ -438,6 +443,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.IM_A_TEAPOT);
     expect(workerResponse.body).toBe('{"filtered":true}');
   });
+
   it('should catch primitive string errors when @Catch(String) is used', async () => {
     const onCall = mock(() => {});
     const metadataRegistry = createRegistry({ useErrorFilters: [CatchStringFilter] });
@@ -466,6 +472,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.BAD_REQUEST);
     expect(workerResponse.body).toBe('caught-string');
   });
+
   it('should catch literal string errors when @Catch("LITERAL") is used', async () => {
     const onCall = mock(() => {});
     const metadataRegistry = createRegistry({ useErrorFilters: [CatchLiteralFilter] });
@@ -494,6 +501,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.CONFLICT);
     expect(workerResponse.body).toBe('caught-literal');
   });
+
   it('should catch primitive number errors when @Catch(Number) is used', async () => {
     const onCall = mock(() => {});
     const metadataRegistry = createRegistry({ useErrorFilters: [CatchNumberFilter] });
@@ -522,6 +530,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.UNPROCESSABLE_ENTITY);
     expect(workerResponse.body).toBe('caught-number');
   });
+
   it('should return 500 when no ErrorFilter matches', async () => {
     const metadataRegistry = createRegistry({ includeOkRoute: true });
     const harness = createHttpTestHarness({
@@ -538,6 +547,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
     expect(workerResponse.body).toBe('Internal Server Error');
   });
+
   it('should fall back to DefaultErrorHandler when ErrorFilter engine fails', async () => {
     const onCall = mock(() => {});
     const metadataRegistry = createRegistry({ includeOkRoute: true });
@@ -559,6 +569,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
     expect(workerResponse.body).toBe('Internal Server Error');
   });
+
   it('should continue to next ErrorFilter when current one throws', async () => {
     const metadataRegistry = createRegistry({ useErrorFilters: [RethrowFilter] });
 
@@ -593,6 +604,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.SERVICE_UNAVAILABLE);
     expect(workerResponse.body).toBe('next');
   });
+
   it('should always run an ErrorFilter when it has no @Catch decorator', async () => {
     const onCall = mock(() => {});
 
@@ -627,6 +639,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.NOT_IMPLEMENTED);
     expect(workerResponse.body).toBe('no-catch');
   });
+
   it('should run an ErrorFilter when @Catch() has no arguments', async () => {
     const onCall = mock(() => {});
 
@@ -667,6 +680,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.GONE);
     expect(workerResponse.body).toBe('empty-catch-args');
   });
+
   it('should match when @Catch has multiple arguments and any matches', async () => {
     const onCall = mock(() => {});
 
@@ -707,6 +721,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.UNAUTHORIZED);
     expect(workerResponse.body).toBe('multi');
   });
+
   it('should catch boxed String errors when @Catch(String) is used', async () => {
     const onCall = mock(() => {});
 
@@ -747,6 +762,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.BAD_REQUEST);
     expect(workerResponse.body).toBe('boxed-string');
   });
+
   it('should catch boxed Number errors when @Catch(Number) is used', async () => {
     const onCall = mock(() => {});
 
@@ -787,6 +803,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.UNPROCESSABLE_ENTITY);
     expect(workerResponse.body).toBe('boxed-number');
   });
+
   it('should catch primitive boolean errors when @Catch(Boolean) is used', async () => {
     const onCall = mock(() => {});
 
@@ -824,6 +841,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.PRECONDITION_FAILED);
     expect(workerResponse.body).toBe('boolean');
   });
+
   it('should call SystemErrorHandler when ErrorFilters set body but leave status unset', async () => {
     const onFilter = mock(() => {});
     const onSystem = mock(() => {});
@@ -871,6 +889,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
     expect(workerResponse.body).toBe('body-only');
   });
+
   it('should not call SystemErrorHandler when ErrorFilters already set a status', async () => {
     const onSystem = mock(() => {});
     const systemErrorHandler = {

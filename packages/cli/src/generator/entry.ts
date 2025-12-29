@@ -63,33 +63,39 @@ async function bootstrap() {
 
     const manifest = await import(manifestFileName);
 
-    if (typeof (manifest as any).createScopedKeysMap === 'function') {
+    const manifestApi = manifest as unknown as {
+      createScopedKeysMap?: () => unknown;
+      createContainer?: () => unknown;
+      adapterConfig?: unknown;
+      registerDynamicModules?: (...args: unknown[]) => unknown;
+    };
+
+    if (typeof manifestApi.createScopedKeysMap === 'function') {
       Object.defineProperty(globalThis, '__BUNNER_SCOPED_KEYS__', {
-        value: (manifest as any).createScopedKeysMap(),
+        value: manifestApi.createScopedKeysMap(),
         writable: false,
         configurable: false,
       });
     }
 
     const injector = {
-      createContainer: (manifest as any).createContainer,
-      adapterConfig: (manifest as any).adapterConfig,
-      registerDynamicModules: (manifest as any).registerDynamicModules,
+      createContainer: manifestApi.createContainer,
+      adapterConfig: manifestApi.adapterConfig,
+      registerDynamicModules: manifestApi.registerDynamicModules,
     };
-    const { BunnerApplication } = await import("@bunner/core");
-    
-    const container = injector.createContainer();
-    
-    // Set Global Container for BunnerApplication to pick up
+
+    const container = injector.createContainer && injector.createContainer();
+
+    if (!container) {
+      throw new Error('[Entry Error] Failed to create container.');
+    }
+
     Object.defineProperty(globalThis, '__BUNNER_CONTAINER__', {
       value: container,
       writable: false,
       configurable: false,
     });
     
-    // Configure Adapters (Global Defaults from AOT)
-    // We can expose adapterConfig globally or let the app handle it.
-    // For now, let's just make it available if needed.
     Object.defineProperty(globalThis, '__BUNNER_ADAPTER_CONFIG__', {
       value: injector.adapterConfig,
       writable: false,
@@ -98,7 +104,6 @@ async function bootstrap() {
 
     console.log("[Entry] Loading Application Module...");
 
-    // Load User Entry (runs Bunner.create -> BunnerApplication.init)
     await import("${userMainImportPath}");
 
   } catch (err) {

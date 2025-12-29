@@ -69,8 +69,10 @@ async function run() {
     console.log('--- GENERATED CODE START ---');
     console.log(code);
     console.log('--- GENERATED CODE END ---');
-  } catch (e: any) {
-    console.error('AOT Validation Failed:', e.message);
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : String(e);
+
+    console.error('AOT Validation Failed:', message);
 
     process.exit(1);
   }

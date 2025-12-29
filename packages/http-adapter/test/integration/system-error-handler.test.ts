@@ -66,6 +66,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
     expect(workerResponse.body).toBe('system');
   });
+
   it('should fall back to DefaultErrorHandler when SystemErrorHandler throws', async () => {
     const metadataRegistry = createRegistry();
     const onCall = mock(() => {});
@@ -91,6 +92,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
     expect(workerResponse.body).toBe('Internal Server Error');
   });
+
   it('should call SystemErrorHandler at most once per request', async () => {
     const metadataRegistry = createRegistry();
     const onCall = mock(() => {});
@@ -134,6 +136,7 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.init.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
     expect(workerResponse.body).toBe('system');
   });
+
   it('should not call SystemErrorHandler for afterResponse middleware errors', async () => {
     const metadataRegistry = createRegistry();
     const onCall = mock(() => {});

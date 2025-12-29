@@ -29,7 +29,9 @@
 
 ## 로컬 검증
 
-- 패키지별 표준 스크립트: [TOOLING.md](TOOLING.md)의 "패키지 스크립트 표준"을 따른다.
+- 검증은 루트 `package.json`의 `verify`로만 수행한다.
+  - 허용: `bun run verify`
+  - 금지: `packages/*`의 `package.json`에 있는 검증 스크립트 실행
 
 ## 커밋 규칙
 
@@ -40,4 +42,4 @@
 - 범위 밖 변경 금지(요청 범위 외 리팩토링/정리 금지)
 - AOT/AST 결정성 위반 금지
 - 패키지 경계 침범(deep import) 금지
-- 테스트/타입체크 실패 상태로 병합 금지
+- `verify` 실패 상태로 병합 금지

@@ -79,6 +79,35 @@ export const statementGroupingPlugin = {
         const isIdentifierNamed = (node: any, name: string): boolean => {
           return node?.type === 'Identifier' && node.name === name;
         };
+        const isTestBlockCallExpressionStatement = (node: any): boolean => {
+          if (!node || node.type !== 'ExpressionStatement') {
+            return false;
+          }
+
+          const expr = node.expression;
+
+          if (!expr) {
+            return false;
+          }
+
+          const unwrapped = unwrapExpression(expr);
+
+          if (unwrapped?.type !== 'CallExpression') {
+            return false;
+          }
+
+          const callee = unwrapped.callee;
+
+          if (isIdentifierNamed(callee, 'it')) {
+            return true;
+          }
+
+          if (isIdentifierNamed(callee, 'describe')) {
+            return true;
+          }
+
+          return false;
+        };
         const getMemberExpressionRootObject = (node: any): any => {
           let current = node;
 
@@ -292,7 +321,9 @@ export const statementGroupingPlugin = {
 
             const prevGroup = getGroup(prev);
             const nextGroup = getGroup(next);
+            const mustSeparateTestBlocks = isTestBlockCallExpressionStatement(prev) && isTestBlockCallExpressionStatement(next);
             const mustSeparate =
+              mustSeparateTestBlocks ||
               (prevGroup !== null && nextGroup !== null && prevGroup !== nextGroup) ||
               (prevGroup === 'logging' && nextGroup !== 'logging') ||
               (nextGroup === 'logging' && prevGroup !== 'logging');

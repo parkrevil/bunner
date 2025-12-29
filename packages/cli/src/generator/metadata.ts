@@ -1,21 +1,46 @@
 import { type ClassMetadata } from '../analyzer';
+import { compareCodePoint } from '../common';
 
 import type { ImportRegistry } from './import-registry';
 
 export class MetadataGenerator {
   generate(classes: { metadata: ClassMetadata; filePath: string }[], registry: ImportRegistry): string {
+    const sortedClasses = [...classes].sort((a, b) => {
+      const nameDiff = compareCodePoint(a.metadata.className, b.metadata.className);
+
+      if (nameDiff !== 0) {
+        return nameDiff;
+      }
+
+      return compareCodePoint(a.filePath, b.filePath);
+    });
     const registryEntries: string[] = [];
-    const availableClasses = new Set(classes.map(c => c.metadata.className));
-    // For Inheritance resolution, we still risk collisions if names are same.
-    // Resolving inheritance strictly is Phase 5 (Future).
+    const availableClasses = new Set(sortedClasses.map(c => c.metadata.className));
     const classMap = new Map<string, ClassMetadata>();
     const classFilePathMap = new Map<string, string>();
 
-    classes.forEach(c => {
+    sortedClasses.forEach(c => {
       classMap.set(c.metadata.className, c.metadata);
       classFilePathMap.set(c.metadata.className, c.filePath);
     });
 
+    const getRefName = (value: unknown): string | null => {
+      if (typeof value === 'string') {
+        return value;
+      }
+
+      if (!value || typeof value !== 'object') {
+        return null;
+      }
+
+      const record = value as Record<string, unknown>;
+
+      if (typeof record.__bunner_ref === 'string') {
+        return record.__bunner_ref;
+      }
+
+      return null;
+    };
     const cloneProps = (props: ClassMetadata['properties']): ClassMetadata['properties'] =>
       props.map(p => ({
         ...p,
@@ -73,7 +98,7 @@ export class MetadataGenerator {
 
       return properties;
     };
-    const serializeValue = (value: any): string => {
+    const serializeValue = (value: unknown): string => {
       if (value === null) {
         return 'null';
       }
@@ -87,48 +112,55 @@ export class MetadataGenerator {
       }
 
       if (typeof value === 'object') {
-        if (value.__bunner_ref) {
-          if (value.__bunner_import_source) {
-            registry.addImport(value.__bunner_ref, value.__bunner_import_source);
+        if (!value) {
+          return 'null';
+        }
+
+        const record = value as Record<string, unknown>;
+
+        if (typeof record.__bunner_ref === 'string') {
+          if (typeof record.__bunner_import_source === 'string') {
+            registry.addImport(record.__bunner_ref, record.__bunner_import_source);
           }
 
-          return value.__bunner_ref;
+          return record.__bunner_ref;
         }
 
-        if (value.__bunner_factory_code) {
-          // Output the factory function code directly
-          return value.__bunner_factory_code;
+        if (typeof record.__bunner_factory_code === 'string') {
+          return record.__bunner_factory_code;
         }
 
-        if (value.__bunner_call) {
-          if (value.__bunner_import_source) {
-            // If the call base (e.g. ScalarModule) needs import
-            const root = value.__bunner_call.split('.')[0];
+        if (typeof record.__bunner_call === 'string') {
+          if (typeof record.__bunner_import_source === 'string') {
+            const root = record.__bunner_call.split('.')[0];
 
-            if (root !== value.__bunner_call) {
-              // If it's Dot notation, import the root
-              registry.addImport(root, value.__bunner_import_source);
+            if (!root) {
+              return record.__bunner_call;
+            }
+
+            if (root !== record.__bunner_call) {
+              registry.addImport(root, record.__bunner_import_source);
             } else {
-              registry.addImport(value.__bunner_call, value.__bunner_import_source);
+              registry.addImport(record.__bunner_call, record.__bunner_import_source);
             }
           }
 
-          const args = (value.args || []).map((a: any) => serializeValue(a)).join(', ');
+          const args = (Array.isArray(record.args) ? record.args : []).map(a => serializeValue(a)).join(', ');
 
-          return `${value.__bunner_call}(${args})`;
+          return `${record.__bunner_call}(${args})`;
         }
 
-        if (value.__bunner_new) {
-          const args = (value.args || []).map((a: any) => serializeValue(a)).join(', ');
+        if (typeof record.__bunner_new === 'string') {
+          const args = (Array.isArray(record.args) ? record.args : []).map(a => serializeValue(a)).join(', ');
 
-          return `new ${value.__bunner_new}(${args})`;
+          return `new ${record.__bunner_new}(${args})`;
         }
 
-        if (value.__bunner_forward_ref) {
-          return `forwardRef(() => ${value.__bunner_forward_ref})`;
+        if (typeof record.__bunner_forward_ref === 'string') {
+          return `forwardRef(() => ${record.__bunner_forward_ref})`;
         }
 
-        const entries = Object.entries(value).map(([k, v]) => {
+        const entries = Object.entries(record).map(([k, v]) => {
           return `${k}: ${serializeValue(v)}`;
         });
 
@@ -138,33 +170,38 @@ export class MetadataGenerator {
       return JSON.stringify(value);
     };
 
-    classes.forEach(({ metadata, filePath }) => {
-      const alias = registry.getAlias(metadata.className, filePath); // Use Alias
+    sortedClasses.forEach(({ metadata, filePath }) => {
+      const alias = registry.getAlias(metadata.className, filePath);
       const resolvedProperties = resolveMetadata(metadata.className);
       const props = resolvedProperties.map(prop => {
-        const isClassRef = availableClasses.has(prop.type);
+        const propTypeName = getRefName(prop.type);
+        const isClassRef = !!propTypeName && availableClasses.has(propTypeName);
         let typeValue = serializeValue(prop.type);
 
         if (isClassRef) {
-          const filePath = classFilePathMap.get(prop.type);
+          const filePath = propTypeName ? classFilePathMap.get(propTypeName) : undefined;
 
           if (filePath) {
-            const alias = registry.getAlias(prop.type, filePath);
+            const alias = propTypeName ? registry.getAlias(propTypeName, filePath) : undefined;
 
-            typeValue = `() => ${alias}`;
+            if (alias) {
+              typeValue = `() => ${alias}`;
+            }
           }
         }
 
         let itemsStr = 'undefined';
 
         if (prop.items) {
-          let itemTypeVal = `'${prop.items.typeName}'`;
+          const itemRecord = prop.items as Record<string, unknown>;
+          const itemTypeName = typeof itemRecord.typeName === 'string' ? itemRecord.typeName : 'Unknown';
+          let itemTypeVal = `'${itemTypeName}'`;
 
-          if (availableClasses.has(prop.items.typeName)) {
-            const filePath = classFilePathMap.get(prop.items.typeName);
+          if (availableClasses.has(itemTypeName)) {
+            const filePath = classFilePathMap.get(itemTypeName);
 
             if (filePath) {
-              const alias = registry.getAlias(prop.items.typeName, filePath);
+              const alias = registry.getAlias(itemTypeName, filePath);
 
               itemTypeVal = `() => ${alias}`;
             }
@@ -173,7 +210,6 @@ export class MetadataGenerator {
           itemsStr = `{ typeName: ${itemTypeVal} }`;
         }
 
-        // Use serializeValue for decorators to handle __bunner_ref
         return `{
           name: '${prop.name}',
           type: ${typeValue},
@@ -187,7 +223,7 @@ export class MetadataGenerator {
           literals: ${JSON.stringify(prop.literals)}
         }`;
       });
-      const serializeMethods = (methods: any[]) => {
+      const serializeMethods = (methods: ClassMetadata['methods']): string => {
         if (!methods || methods.length === 0) {
           return '[]';
         }
@@ -195,19 +231,11 @@ export class MetadataGenerator {
         return `[${methods
           .map(m => {
             const params = (m.parameters || [])
-              .map((p: any) => {
+              .map(p => {
                 let typeVal = serializeValue(p.type);
-                // Check if type is a class reference like properties
-                // p.type comes as serialized string/ref from AstParser?
-                // AstParser stores typeName in __bunner_ref usually for Class types.
-                // Try to find the class name from the ref string
-                let typeName = p.type;
+                const typeName = getRefName(p.type);
 
-                if (typeof p.type === 'object' && p.type.__bunner_ref) {
-                  typeName = p.type.__bunner_ref;
-                }
-
-                if (availableClasses.has(typeName)) {
+                if (typeName && availableClasses.has(typeName)) {
                   const filePath = classFilePathMap.get(typeName);
 
                   if (filePath) {
@@ -251,7 +279,6 @@ export function createMetadataRegistry() {
   const registry = new Map();
 ${registryEntries.join('\n')}
   
-  // Strict Immutability
   registry.forEach(v => deepFreeze(v));
   return sealMap(registry);
 }

@@ -32,6 +32,7 @@
     "test": "bun test",
     "test:coverage": "bun test --coverage",
     "lint": "eslint . --fix",
+    "verify": "bun run tsc && bun run lint && bun run test",
     "format": "prettier --write .",
     "prepare": "husky"
   },

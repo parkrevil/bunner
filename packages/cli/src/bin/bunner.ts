@@ -9,17 +9,27 @@ const { positionals } = parseArgs({
 
 const command = positionals[0];
 
-switch (command) {
-  case 'dev':
-    await dev();
-    break;
-  case 'build':
-    await build();
-    break;
-  default:
-    console.log('Usage: bunner <command>');
-    console.log('Commands:');
-    console.log('  dev    Start development server');
-    console.log('  build  Build for production');
-    process.exit(1);
+const printUsage = (): void => {
+  console.info('Usage: bunner <command>');
+  console.info('Commands:');
+  console.info('  dev    Generate AOT artifacts and watch');
+  console.info('  build  Generate build output');
+};
+
+try {
+  switch (command) {
+    case 'dev':
+      await dev();
+      break;
+    case 'build':
+      await build();
+      break;
+    default:
+      printUsage();
+      process.exitCode = 1;
+  }
+} catch (error) {
+  console.error(error);
+
+  process.exitCode = 1;
 }
