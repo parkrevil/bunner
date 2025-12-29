@@ -42,6 +42,10 @@
 - `devDependencies`는 개발/테스트/타입체크에만 필요한 도구에 한정한다.
 - 워크스페이스 루트에 우연히 호이스팅된 의존성에 기대는 선언 누락은 금지한다.
 
+- `peerDependencies`는 “호스트가 제공해야 하는 의존”이다.
+  - 일부 패키지 매니저/설치 전략에서는 transitive dependency가 peer를 만족시키지 않는다.
+  - 따라서 peer로 선언된 항목은 소비자 애플리케이션(또는 workspace 루트)이 **직접 설치**한다고 가정해야 한다.
+
 - `optionalDependencies`는 기본값으로 사용하지 않는다.
   - optional 통합이 필요하다면 원칙적으로 별도 패키지(플러그인)로 분리하거나, 항상 설치되는 의존으로 `dependencies`에 선언하고 기능 플래그/명시적 계약으로 동작을 제어한다.
 
@@ -68,6 +72,15 @@
 - 패키지 자체 구현에 항상 필요한 의존이면 `dependencies`를 사용한다.
 - 개발/테스트/타입체크/코드 생성 등 개발 시점에만 필요한 도구면 `devDependencies`를 사용한다.
 
+## `@bunner/logger` 의존성 정책 (명확화)
+
+- `@bunner/logger`는 레포의 “모든 패키지”가 반드시 필요로 하는 전제 패키지가 아니다.
+- 어떤 패키지가 런타임에서 `@bunner/logger`를 import 한다면, 그 패키지는 반드시 `dependencies` 또는 `peerDependencies`로 `@bunner/logger`를 선언해야 한다.
+- `@bunner/*` 내부 기본값
+  - 런타임 코어(`@bunner/core`): `dependencies`로 선언한다.
+  - 런타임 어댑터/플러그인: 기본값은 `peerDependencies`로 선언한다(호스트가 버전 정합성을 통제).
+  - CLI(`@bunner/cli`): 런타임 패키지에 의존해서는 안 된다(SSOT: `ARCHITECTURE.md`, `TOOLING.md`).
+
 ## 패키지 분류별 판정
 
 - 아래 분류 및 패키지 간 의존 방향/금지 관계는 [ARCHITECTURE.md](ARCHITECTURE.md)의 재진술이며, 충돌 시 [ARCHITECTURE.md](ARCHITECTURE.md)가 우선한다.
@@ -77,11 +90,11 @@
   - `peerDependencies`: 기본값으로 사용하지 않는다
 
 - 런타임 어댑터(예: `@bunner/http-adapter`)
-  - `peerDependencies`: 필수: `@bunner/core`, 선택: 필요 시 `@bunner/common`, `@bunner/logger`
+  - `peerDependencies`: 필수: `@bunner/core`, (사용 시) `@bunner/common`, `@bunner/logger`
   - `dependencies`: 어댑터 자체 구현에 필요한 외부 라이브러리
 
 - 런타임 플러그인(예: `@bunner/scalar`)
-  - `peerDependencies`: 필수: `@bunner/common`, 선택: 필요 시 `@bunner/logger`
+  - `peerDependencies`: 필수: `@bunner/common`, (사용 시) `@bunner/logger`
   - `dependencies`: 플러그인 자체 구현에 필요한 외부 라이브러리
 
 - 공용 기반(`@bunner/common`, `@bunner/logger`)
@@ -112,11 +125,11 @@
 
 - `@bunner/http-adapter`
   - `dependencies`: 어댑터 자체 구현에 필요한 외부 라이브러리
-  - `peerDependencies`: 필수: `@bunner/core`, 선택: 필요 시 `@bunner/common`, `@bunner/logger`
+  - `peerDependencies`: 필수: `@bunner/core`, `@bunner/common`, `@bunner/logger`
 
 - `@bunner/scalar`
   - `dependencies`: 플러그인 자체 구현에 필요한 외부 라이브러리
-  - `peerDependencies`: 필수: `@bunner/common`, 선택: 필요 시 `@bunner/logger`
+  - `peerDependencies`: 필수: `@bunner/common`, (사용 시) `@bunner/logger`
 
 - `@bunner/cli`
   - `dependencies`: CLI 실행에 필요한 라이브러리(파서/파일 I/O/템플릿 등)
