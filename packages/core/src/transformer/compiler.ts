@@ -16,6 +16,7 @@ export class TransformerCompiler {
     bodyLines.push("if (!plain || typeof plain !== 'object') return instance;");
 
     for (const [propName, prop] of Object.entries(metadata.properties)) {
+      let closed = false;
       const p = prop;
       const access = `plain['${propName}']`;
       // Determine conversion strategy based on Type
@@ -60,13 +61,30 @@ export class TransformerCompiler {
           if (p.items && p.items.typeName) {
             // Nested Array
             // We need to recursively call plainToInstance for items if they are classes.
-            // This requires a registry of compiled transformers?
             // Or we call `TransformerCompiler.plainToInstance(ItemType)(val)`.
-            bodyLines.push(`  if (Array.isArray(${access})) {`);
-            bodyLines.push(
-              `    instance['${propName}'] = ${access}.map(item => validators.plainToInstance(classRefs['${propName}'], item));`,
-            );
+
+            // Check if item type is primitive
+            const itemType = p.items.typeName;
+            const isPrimitiveString = typeof itemType === 'string' && itemType.toLowerCase() === 'string';
+            const isPrimitiveNumber = typeof itemType === 'string' && itemType.toLowerCase() === 'number';
+            const isPrimitiveBoolean = typeof itemType === 'string' && itemType.toLowerCase() === 'boolean';
+
+            if (isPrimitiveString) {
+              bodyLines.push(`    instance['${propName}'] = ${access}.map(item => String(item));`);
+            } else if (isPrimitiveNumber) {
+              bodyLines.push(`    instance['${propName}'] = ${access}.map(item => Number(item));`);
+            } else if (isPrimitiveBoolean) {
+              bodyLines.push(`    instance['${propName}'] = ${access}.map(item => Boolean(item));`);
+            } else {
+              // It is a class (lazy or direct)
+              bodyLines.push(
+                `    instance['${propName}'] = ${access}.map(item => validators.plainToInstance(classRefs['${propName}'], item));`,
+              );
+            }
+
             bodyLines.push(`  } else { instance['${propName}'] = []; }`);
+
+            closed = true;
           } else {
             bodyLines.push(`  instance['${propName}'] = ${access};`);
           }
@@ -84,7 +102,9 @@ export class TransformerCompiler {
         }
       }
 
-      bodyLines.push('}');
+      if (!closed) {
+        bodyLines.push('}');
+      }
     }
 
     bodyLines.push('return instance;');
@@ -101,13 +121,14 @@ export class TransformerCompiler {
       const p = prop;
 
       if (p.isClass) {
-        classRefs[propName] = p.type;
+        classRefs[propName] = typeof p.type === 'function' && !p.type.prototype ? p.type() : p.type;
       }
 
-      if (p.isArray && p.items && typeof p.items.typeName !== 'string') {
+      if (p.isArray && p.items && p.items.typeName) {
         // If items.typeName is a Reference
-        classRefs[propName] = p.items.typeName; // For array items, we reuse the key?
-        // Logic above used classRefs[propName] for array map too.
+        const itemType = p.items.typeName;
+
+        classRefs[propName] = typeof itemType === 'function' && !itemType.prototype ? itemType() : itemType;
       }
     }
 

@@ -1,4 +1,4 @@
-import { RestController, Get, Post, Put, Delete } from '@bunner/http-adapter';
+import { RestController, Get, Post, Put, Delete, Body } from '@bunner/http-adapter';
 import { Logger } from '@bunner/logger';
 
 import { CreateUserComplexDto, AddressDto, SocialDto } from './dto/complex.dto';
@@ -15,7 +15,7 @@ export class UsersController {
   }
 
   @Post('complex')
-  complexCreate(body: CreateUserComplexDto) {
+  complexCreate(@Body() body: CreateUserComplexDto) {
     this.logger.info('Complex Data Received:', body);
 
     return {

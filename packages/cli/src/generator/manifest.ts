@@ -63,6 +63,32 @@ export class ManifestGenerator {
     return `
 ${imports}
 
+const deepFreeze = (obj: any, visited = new WeakSet()) => {
+  if (visited.has(obj)) return obj;
+  if (obj && typeof obj === 'object' && !Object.isFrozen(obj)) {
+    visited.add(obj);
+    Object.freeze(obj);
+    Object.getOwnPropertyNames(obj).forEach(prop => deepFreeze(obj[prop], visited));
+  }
+  return obj;
+};
+
+const sealMap = (map: Map<any, any>) => {
+  map.set = map.delete = map.clear = () => {
+    throw new Error("FATAL: AOT Registry is immutable.");
+  };
+  Object.freeze(map);
+  return map;
+};
+
+const _meta = (className: string, decorators: any[], params: any[], methods: any[], props: any[]) => ({
+  className,
+  decorators,
+  constructorParams: params,
+  methods,
+  properties: props
+});
+
 ${injectorCode}
 
 ${metadataCode}
@@ -70,12 +96,16 @@ ${metadataCode}
 export function createScopedKeysMap() {
   const map = new Map();
 ${scopedKeysEntries.join('\n')}
-  return map;
+  return sealMap(map);
 }
 
 
 const registry = createMetadataRegistry();
-(globalThis as any).__BUNNER_METADATA_REGISTRY__ = registry;
+Object.defineProperty(globalThis, '__BUNNER_METADATA_REGISTRY__', {
+  value: registry,
+  writable: false,
+  configurable: false, // Strict AOT: No Runtime Mocking
+});
 export const metadataRegistry = registry;
 
 `;

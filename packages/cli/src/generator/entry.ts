@@ -55,12 +55,20 @@ async function bootstrap() {
     const manifestFileName = ${isDev ? "'./manifest.ts'" : "'./manifest.js'"};
     const manifestUrl = new URL(manifestFileName, import.meta.url);
 
-    (globalThis as any).__BUNNER_MANIFEST_PATH__ = manifestUrl.href;
+    Object.defineProperty(globalThis, '__BUNNER_MANIFEST_PATH__', {
+      value: manifestUrl.href,
+      writable: false,
+      configurable: false,
+    });
 
     const manifest = await import(manifestFileName);
 
     if (typeof (manifest as any).createScopedKeysMap === 'function') {
-      (globalThis as any).__BUNNER_SCOPED_KEYS__ = (manifest as any).createScopedKeysMap();
+      Object.defineProperty(globalThis, '__BUNNER_SCOPED_KEYS__', {
+        value: (manifest as any).createScopedKeysMap(),
+        writable: false,
+        configurable: false,
+      });
     }
 
     const injector = {
@@ -73,12 +81,20 @@ async function bootstrap() {
     const container = injector.createContainer();
     
     // Set Global Container for BunnerApplication to pick up
-    globalThis.__BUNNER_CONTAINER__ = container;
+    Object.defineProperty(globalThis, '__BUNNER_CONTAINER__', {
+      value: container,
+      writable: false,
+      configurable: false,
+    });
     
     // Configure Adapters (Global Defaults from AOT)
     // We can expose adapterConfig globally or let the app handle it.
     // For now, let's just make it available if needed.
-    globalThis.__BUNNER_ADAPTER_CONFIG__ = injector.adapterConfig;
+    Object.defineProperty(globalThis, '__BUNNER_ADAPTER_CONFIG__', {
+      value: injector.adapterConfig,
+      writable: false,
+      configurable: false,
+    });
 
     console.log("[Entry] Loading Application Module...");
 

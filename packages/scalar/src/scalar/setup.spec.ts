@@ -1,5 +1,5 @@
 import type { AdapterCollection } from '@bunner/common';
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 
 import type { ScalarSetupOptions } from './interfaces';
 import { setupScalar } from './setup';
@@ -37,16 +37,9 @@ function getInternalRouteHandler(params: {
 }
 
 describe('setupScalar', () => {
-  beforeEach(() => {
-    const globalRecord = globalThis as unknown as Record<string, unknown>;
+  // Removed global beforeEach/afterEach for AOT/Strict-Immutable compliance.
+  // Instead, we inject a mock registry to each setupScalar call where needed.
 
-    globalRecord['__BUNNER_METADATA_REGISTRY__'] = new Map();
-  });
-  afterEach(() => {
-    const globalRecord = globalThis as unknown as Record<string, unknown>;
-
-    delete globalRecord['__BUNNER_METADATA_REGISTRY__'];
-  });
   it('should throw when options are missing', () => {
     const adapters = { http: new Map() } as unknown as AdapterCollection;
 
@@ -59,6 +52,7 @@ describe('setupScalar', () => {
       setupScalar(adapters, {
         documentTargets: 'invalid',
         httpTargets: [],
+        metadataRegistry: new Map(),
       } as unknown as ScalarSetupOptions),
     ).toThrow(/documentTargets must be/i);
   });
@@ -69,6 +63,7 @@ describe('setupScalar', () => {
       setupScalar(adapters, {
         documentTargets: 'all',
         httpTargets: undefined,
+        metadataRegistry: new Map(),
       } as unknown as ScalarSetupOptions),
     ).toThrow(/httpTargets must be/i);
   });
@@ -79,6 +74,7 @@ describe('setupScalar', () => {
       setupScalar(adapters, {
         documentTargets: 'all',
         httpTargets: 'invalid',
+        metadataRegistry: new Map(),
       } as unknown as ScalarSetupOptions),
     ).toThrow(/httpTargets must be/i);
   });
@@ -89,6 +85,7 @@ describe('setupScalar', () => {
       setupScalar(adapters, {
         documentTargets: 'all',
         httpTargets: [],
+        metadataRegistry: new Map(),
       }),
     ).toThrow(/no HTTP adapter selected/i);
   });
@@ -104,6 +101,7 @@ describe('setupScalar', () => {
       setupScalar(adapters, {
         documentTargets: 'all',
         httpTargets: ['http-server'],
+        metadataRegistry: new Map(),
       }),
     ).toThrow(/does not support lookup/i);
   });
@@ -116,6 +114,7 @@ describe('setupScalar', () => {
       setupScalar(adapters, {
         documentTargets: 'all',
         httpTargets: ['missing'],
+        metadataRegistry: new Map(),
       }),
     ).toThrow(/httpTargets not found/i);
   });
@@ -127,6 +126,7 @@ describe('setupScalar', () => {
     setupScalar(adapters, {
       documentTargets: 'all',
       httpTargets: ['http-server'],
+      metadataRegistry: new Map(),
     });
     expect(calls).toHaveLength(2);
     expect(calls.map(call => call.path)).toEqual(['/api-docs', '/api-docs/*']);
@@ -136,8 +136,8 @@ describe('setupScalar', () => {
     const http = new Map<string, unknown>([['http-server', adapter]]);
     const adapters = { http } as unknown as AdapterCollection;
 
-    setupScalar(adapters, { documentTargets: 'all', httpTargets: ['http-server'] });
-    setupScalar(adapters, { documentTargets: 'all', httpTargets: ['http-server'] });
+    setupScalar(adapters, { documentTargets: 'all', httpTargets: ['http-server'], metadataRegistry: new Map() });
+    setupScalar(adapters, { documentTargets: 'all', httpTargets: ['http-server'], metadataRegistry: new Map() });
     expect(calls).toHaveLength(2);
   });
   it('should serve Scalar UI at /api-docs when exactly one document exists', async () => {
@@ -148,6 +148,7 @@ describe('setupScalar', () => {
     setupScalar(adapters, {
       documentTargets: 'all',
       httpTargets: ['http-server'],
+      metadataRegistry: new Map(),
     });
 
     const handler = getInternalRouteHandler({ calls, path: '/api-docs' });
@@ -169,6 +170,7 @@ describe('setupScalar', () => {
     setupScalar(adapters, {
       documentTargets: 'all',
       httpTargets: ['http-a'],
+      metadataRegistry: new Map(),
     });
 
     const handler = getInternalRouteHandler({ calls: adapterSpyA.calls, path: '/api-docs' });
@@ -189,6 +191,7 @@ describe('setupScalar', () => {
     setupScalar(adapters, {
       documentTargets: 'all',
       httpTargets: ['http-server'],
+      metadataRegistry: new Map(),
     });
 
     const handler = getInternalRouteHandler({ calls, path: '/api-docs/*' });
@@ -206,6 +209,7 @@ describe('setupScalar', () => {
     setupScalar(adapters, {
       documentTargets: 'all',
       httpTargets: ['http-server'],
+      metadataRegistry: new Map(),
     });
 
     const handler = getInternalRouteHandler({ calls, path: '/api-docs/*' });
@@ -223,6 +227,7 @@ describe('setupScalar', () => {
     setupScalar(adapters, {
       documentTargets: 'all',
       httpTargets: ['http-server'],
+      metadataRegistry: new Map(),
     });
 
     const handler = getInternalRouteHandler({ calls, path: '/api-docs/*' });
@@ -238,6 +243,7 @@ describe('setupScalar', () => {
     setupScalar(adapters, {
       documentTargets: 'all',
       httpTargets: ['http-server'],
+      metadataRegistry: new Map(),
     });
 
     const handler = getInternalRouteHandler({ calls, path: '/api-docs/*' });

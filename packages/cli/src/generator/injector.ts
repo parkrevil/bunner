@@ -185,9 +185,9 @@ ${factoryEntries.join('\n')}
   return container;
 }
 
-export const adapterConfig = {
+export const adapterConfig = deepFreeze({
 ${adapterConfigs.join('\n')}
-};
+});
 
 export async function registerDynamicModules(container: any) {
 ${dynamicEntries.join('\n')}

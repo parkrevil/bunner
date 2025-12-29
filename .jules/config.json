@@ -1,5 +1,5 @@
 {
-  "rules_path": ".github/copilot.instructions.md",
-  "target_dir": "./packages",
+  "rules_path": "AGENTS.md",
+  "target_dir": ["./packages", "./examples"],
   "severity": "error"
 }

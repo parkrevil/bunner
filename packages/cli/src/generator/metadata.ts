@@ -9,8 +9,12 @@ export class MetadataGenerator {
     // For Inheritance resolution, we still risk collisions if names are same.
     // Resolving inheritance strictly is Phase 5 (Future).
     const classMap = new Map<string, ClassMetadata>();
+    const classFilePathMap = new Map<string, string>();
 
-    classes.forEach(c => classMap.set(c.metadata.className, c.metadata));
+    classes.forEach(c => {
+      classMap.set(c.metadata.className, c.metadata);
+      classFilePathMap.set(c.metadata.className, c.filePath);
+    });
 
     const cloneProps = (props: ClassMetadata['properties']): ClassMetadata['properties'] =>
       props.map(p => ({
@@ -139,18 +143,32 @@ export class MetadataGenerator {
       const resolvedProperties = resolveMetadata(metadata.className);
       const props = resolvedProperties.map(prop => {
         const isClassRef = availableClasses.has(prop.type);
-        const typeValue = serializeValue(prop.type);
+        let typeValue = serializeValue(prop.type);
+
+        if (isClassRef) {
+          const filePath = classFilePathMap.get(prop.type);
+
+          if (filePath) {
+            const alias = registry.getAlias(prop.type, filePath);
+
+            typeValue = `() => ${alias}`;
+          }
+        }
+
         let itemsStr = 'undefined';
 
         if (prop.items) {
-          // Items typeName also needs serialization if it's a ref??
-          // Current ast-parser doesn't convert items.typeName to ref object yet,
-          // but we can assume simple string for DTO items for now or strictly speaking we should handle it too.
-          // For now let's keep it simple as DTOs are mostly primitives or explicit refs handled by resolveMetadata?
-          // Actually resolveMetadata uses strings for DTO resolution.
-          // Let's stick to string for items.typeName for now unless it causes issues.
-          const isItemRef = availableClasses.has(prop.items.typeName);
-          const itemTypeVal = isItemRef ? `'${prop.items.typeName}'` : `'${prop.items.typeName}'`;
+          let itemTypeVal = `'${prop.items.typeName}'`;
+
+          if (availableClasses.has(prop.items.typeName)) {
+            const filePath = classFilePathMap.get(prop.items.typeName);
+
+            if (filePath) {
+              const alias = registry.getAlias(prop.items.typeName, filePath);
+
+              itemTypeVal = `() => ${alias}`;
+            }
+          }
 
           itemsStr = `{ typeName: ${itemTypeVal} }`;
         }
@@ -169,22 +187,73 @@ export class MetadataGenerator {
           literals: ${JSON.stringify(prop.literals)}
         }`;
       });
-      const serializedMeta = `{
-        className: '${metadata.className}',
-        decorators: ${serializeValue(metadata.decorators)},
-        constructorParams: ${serializeValue(metadata.constructorParams)},
-        methods: ${serializeValue(metadata.methods)},
-        properties: [${props.join(',')}]
-      }`;
+      const serializeMethods = (methods: any[]) => {
+        if (!methods || methods.length === 0) {
+          return '[]';
+        }
 
-      registryEntries.push(`  registry.set(${alias}, ${serializedMeta});`);
+        return `[${methods
+          .map(m => {
+            const params = (m.parameters || [])
+              .map((p: any) => {
+                let typeVal = serializeValue(p.type);
+                // Check if type is a class reference like properties
+                // p.type comes as serialized string/ref from AstParser?
+                // AstParser stores typeName in __bunner_ref usually for Class types.
+                // Try to find the class name from the ref string
+                let typeName = p.type;
+
+                if (typeof p.type === 'object' && p.type.__bunner_ref) {
+                  typeName = p.type.__bunner_ref;
+                }
+
+                if (availableClasses.has(typeName)) {
+                  const filePath = classFilePathMap.get(typeName);
+
+                  if (filePath) {
+                    const alias = registry.getAlias(typeName, filePath);
+
+                    typeVal = `() => ${alias}`;
+                  }
+                }
+
+                return `{
+                      name: '${p.name}',
+                      type: ${typeVal},
+                      typeArgs: ${JSON.stringify(p.typeArgs)},
+                      decorators: ${serializeValue(p.decorators)},
+                      index: ${p.index}
+                  }`;
+              })
+              .join(',');
+
+            return `{
+                  name: '${m.name}',
+                  decorators: ${serializeValue(m.decorators)},
+                  parameters: [${params}]
+              }`;
+          })
+          .join(',')}]`;
+      };
+      const metaFactoryCall = `_meta(
+        '${metadata.className}',
+        ${serializeValue(metadata.decorators)},
+        ${serializeValue(metadata.constructorParams)},
+        ${serializeMethods(metadata.methods)},
+        [${props.join(',')}]
+      )`;
+
+      registryEntries.push(`  registry.set(${alias}, ${metaFactoryCall});`);
     });
 
     return `
 export function createMetadataRegistry() {
   const registry = new Map();
 ${registryEntries.join('\n')}
-  return registry;
+  
+  // Strict Immutability
+  registry.forEach(v => deepFreeze(v));
+  return sealMap(registry);
 }
 `;
   }

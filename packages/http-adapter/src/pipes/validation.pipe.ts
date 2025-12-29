@@ -26,6 +26,10 @@ export class ValidationPipe implements PipeTransform {
   }
 
   private toValidate(metatype: Function): boolean {
+    if (typeof metatype !== 'function') {
+      return false;
+    }
+
     const types: Function[] = [String, Boolean, Number, Array, Object];
 
     return !types.includes(metatype);

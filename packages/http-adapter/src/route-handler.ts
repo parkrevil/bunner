@@ -130,16 +130,12 @@ export class RouteHandler {
         const httpMethod = routeDec.name.toUpperCase();
         const subPath = routeDec.arguments[0] || '';
         const fullPath = '/' + [prefix, subPath].filter(Boolean).join('/').replace(/\/+/g, '/');
-        const paramTypes = (method.parameters || [])
-          .sort((a: any, b: any) => a.index - b.index)
-          .map((p: any) => {
-            const d = (p.decorators || [])[0];
+        const paramTypes = (method.parameters || []).map((p: any) => {
+          const d = (p.decorators || [])[0];
 
-            return d ? d.name.toLowerCase() : 'unknown';
-          });
-        const paramRefs = (method.parameters || [])
-          .sort((a: any, b: any) => a.index - b.index)
-          .map((p: any) => this.resolveParamType(p.type));
+          return d ? d.name.toLowerCase() : 'unknown';
+        });
+        const paramRefs = (method.parameters || []).map((p: any) => this.resolveParamType(p.type));
         // Detect parameters early (moved into paramFactory closure)
         const paramsConfig = (method.parameters || []).map((p: any, i: number) => {
           const d = (p.decorators || [])[0];
@@ -214,9 +210,9 @@ export class RouteHandler {
                 break;
             }
 
-            if (metatype && (type === 'body' || type === 'query')) {
+            if (metatype && (typeToUse === 'body' || typeToUse === 'query')) {
               paramValue = await this.validationPipe.transform(paramValue, {
-                type: type,
+                type: typeToUse as 'body' | 'query' | 'param' | 'custom',
                 metatype,
                 data: undefined,
               });
@@ -488,6 +484,14 @@ export class RouteHandler {
 
   private resolveParamType(type: any): any {
     if (typeof type !== 'string') {
+      if (typeof type === 'function' && !type.prototype) {
+        const resolved = type();
+
+        console.log(`[RouteHandler] Resolved Lazy Type: ${type.toString()} ->`, resolved);
+
+        return resolved;
+      }
+
       return type;
     }
 

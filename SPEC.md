@@ -60,6 +60,17 @@ SPEC 변경으로 취급해 [GOVERNANCE.md](GOVERNANCE.md)의 승인이 선행�
 - 폭주 방지/중단 기준: [SAFEGUARDS.md](SAFEGUARDS.md)
 - 툴링/CLI 운영 정책: [TOOLING.md](TOOLING.md)
 
+### 품질/스타일 SSOT
+
+- 코딩 스타일: [STYLEGUIDE.md](STYLEGUIDE.md)
+- 테스트 표준: [TESTING.md](TESTING.md)
+- 데드 코드 정책: [DEAD_CODE_POLICY.md](DEAD_CODE_POLICY.md)
+
+### 기여/커밋 SSOT
+
+- 커밋 규칙: [COMMITS.md](COMMITS.md)
+- 기여 가이드: [CONTRIBUTING.md](CONTRIBUTING.md)
+
 ## 최상위 불변조건 (Project Invariants)
 
 이 문서는 “모든 하위 규칙의 근거가 되는 불변조건”만을 고정한다.

@@ -13,6 +13,9 @@ This repo is SSOT-driven. Follow the documents below exactly; do not invent new 
 - Tests as a gate: [TESTING.md](../TESTING.md)
 - Agent enforcement rules: [AGENTS.md](../AGENTS.md)
 - Stop/rollback criteria: [POLICY.md](../POLICY.md), [SAFEGUARDS.md](../SAFEGUARDS.md)
+- Dead code removal: [DEAD_CODE_POLICY.md](../DEAD_CODE_POLICY.md)
+- Commit conventions: [COMMITS.md](../COMMITS.md)
+- Contributions: [CONTRIBUTING.md](../CONTRIBUTING.md)
 
 ## Non-negotiables (hard stops)
 

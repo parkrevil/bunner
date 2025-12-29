@@ -196,6 +196,8 @@ export class AstParser {
               methodParams.push({ ...p, index });
             }
           });
+          // Ensure parameters are sorted by index at build time
+          methodParams.sort((a, b) => a.index - b.index);
 
           if (methodName === 'configure') {
             middlewares = this.extractMiddlewaresFromConfigure(member.value);

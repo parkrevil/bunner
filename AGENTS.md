@@ -74,30 +74,30 @@
 - 필요한 테스트가 누락되어 있고 테스트 추가가 작업 범위를 벗어난다면, 에이전트는 즉시 중단하고 사용자에게 지침을 요청해야 한다.
 - 에이전트는 실패하는 테스트를 조용히 우회하거나 삭제해서는 안 된다.
 
-### 5.5 PR 게이트 (CONTRIBUTING Gate)
+### 5.3 PR 게이트 (CONTRIBUTING Gate)
 
 - 에이전트가 생성한 PR/변경은 [CONTRIBUTING.md](CONTRIBUTING.md)의 PR 기준을 통과해야 한다.
 - [CONTRIBUTING.md](CONTRIBUTING.md)는 에이전트 행동 규칙의 SSOT가 아니라, 결과물의 merge 가능 여부를 판정하는 게이트다.
 
-### 5.6 데드 코드 제거 게이트 (Dead Code Policy Gate)
+### 5.4 데드 코드 제거 게이트 (Dead Code Policy Gate)
 
 - 에이전트는 데드 코드/파일 제거 작업 시 [DEAD_CODE_POLICY.md](DEAD_CODE_POLICY.md)의 판정 기준과 절차를 준수해야 한다.
 
-### 5.7 승인/중단 게이트 (GOVERNANCE Gate)
+### 5.5 승인/중단 게이트 (GOVERNANCE Gate)
 
 - 에이전트가 SSOT 문서 변경, 정책 변경, 자동화 개입 범위 조정을 수행하려면 [GOVERNANCE.md](GOVERNANCE.md)의 승인/중단 기준을 따라야 한다.
 
-### 5.8 즉시 중단 게이트 (POLICY Gate)
+### 5.6 즉시 중단 게이트 (POLICY Gate)
 
 - 위반 시 즉시 중단해야 하는 항목은 [POLICY.md](POLICY.md)를 따른다.
 
-### 5.3 용어(개념) SSOT 준수 (Terminology Gate)
+### 5.7 용어(개념) SSOT 준수 (Terminology Gate)
 
 - 패키지 관계(`dependencies`/`peerDependencies`/`devDependencies`), 모듈 경계, 역할/책임을 판정할 때 사용하는 용어(예: adapter, plugin, middleware, error filter/handler)는 [ARCHITECTURE.md](ARCHITECTURE.md)의 정의를 SSOT로 따른다.
 - 용어의 의미가 불명확하거나, 기존 정의로는 결정을 내릴 수 없다면 임의로 정의를 확장하지 말고 즉시 중단한 뒤 사용자에게 확인을 요청한다.
 - 새 개념을 도입하거나 기존 용어의 의미를 변경해야 한다면, 이는 아키텍처 변경으로 취급하며 문서(ARCHITECTURE) 업데이트가 선행되어야 한다.
 
-### 5.4 파일/디렉토리 생성 게이트 (Creation Gate)
+### 5.8 파일/디렉토리 생성 게이트 (Creation Gate)
 
 에이전트가 파일/디렉토리를 생성·이동·분리·병합하려면, 실행 전에 아래를 반드시 만족해야 한다.
 
@@ -116,6 +116,14 @@
 
 - 생성/이동/분해가 영향을 주는 패키지, public facade(`index.ts`) 변경 여부를 식별한다.
 - 영향 범위를 확신할 수 없으면 즉시 중단하고 사용자에게 확인을 요청한다.
+
+### 5.9 커밋 게이트 (COMMITS Gate)
+
+- 에이전트가 생성하는 커밋은 [COMMITS.md](COMMITS.md)의 규칙을 따라야 한다.
+
+### 5.10 툴링/CLI 게이트 (TOOLING Gate)
+
+- CLI 관련 변경 시 [TOOLING.md](TOOLING.md)의 정책을 따라야 한다.
 
 ## 6. 모듈 경계 및 import 규칙
 

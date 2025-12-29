@@ -4,7 +4,10 @@ import type { Container } from './container';
 import type { ModuleMetadata } from './types';
 
 export class BunnerScanner {
-  constructor(private readonly container: Container) {}
+  constructor(
+    private readonly container: Container,
+    private readonly registry?: Map<any, any>,
+  ) {}
 
   public async scan(module: unknown): Promise<void> {
     const visited = new Set<unknown>();
@@ -33,7 +36,7 @@ export class BunnerScanner {
 
     this.registerProvider(moduleClass);
 
-    const registry = (globalThis as any).__BUNNER_METADATA_REGISTRY__;
+    const registry = this.registry ?? (globalThis as any).__BUNNER_METADATA_REGISTRY__;
 
     if (!registry || !registry.has(moduleClass)) {
       return;
@@ -111,7 +114,7 @@ export class BunnerScanner {
   // I must implement it here or expose it in Container.
   // Implementing here is fine.
   private resolveDepsFor(ctor: any, c: Container): any[] {
-    const registry = (globalThis as any).__BUNNER_METADATA_REGISTRY__;
+    const registry = this.registry ?? (globalThis as any).__BUNNER_METADATA_REGISTRY__;
     const scopedKeys = (globalThis as any).__BUNNER_SCOPED_KEYS__ as Map<any, string> | undefined;
 
     if (!registry || !registry.has(ctor)) {

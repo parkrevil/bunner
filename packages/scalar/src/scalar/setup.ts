@@ -48,7 +48,10 @@ function registerInternalRoutes(internal: InternalRouter, docs: Doc[], docsById:
   });
 }
 
-export function setupScalar(adapters: AdapterCollectionLike, options: ScalarSetupOptions): void {
+export function setupScalar(
+  adapters: AdapterCollectionLike,
+  options: ScalarSetupOptions & { metadataRegistry?: Map<any, any> },
+): void {
   if (!options || !('documentTargets' in options) || !('httpTargets' in options)) {
     throw new Error('Scalar: options { documentTargets, httpTargets } is required.');
   }
@@ -66,7 +69,7 @@ export function setupScalar(adapters: AdapterCollectionLike, options: ScalarSetu
   }
 
   const httpDocNames = resolveHttpNamesForDocuments(adapters, options.documentTargets);
-  const docs = buildDocsForHttpAdapters(httpDocNames);
+  const docs = buildDocsForHttpAdapters(httpDocNames, options.metadataRegistry);
   const docsById = new Map(docs.map(d => [d.docId, d] as const));
   const httpHostNames = resolveHttpNamesForHosting(adapters, options.httpTargets);
 

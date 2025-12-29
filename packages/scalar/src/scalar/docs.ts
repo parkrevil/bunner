@@ -3,9 +3,9 @@ import { OpenApiFactory } from '../spec-factory';
 
 import type { Doc } from './interfaces';
 
-export function buildDocsForHttpAdapters(httpAdapterNames: string[]): Doc[] {
+export function buildDocsForHttpAdapters(httpAdapterNames: string[], registry?: Map<any, any>): Doc[] {
   const globalRecord = globalThis as unknown as Record<string, unknown>;
-  const registryValue = globalRecord['__BUNNER_METADATA_REGISTRY__'];
+  const registryValue = registry ?? globalRecord['__BUNNER_METADATA_REGISTRY__'];
 
   if (!registryValue) {
     throw new Error('Scalar: No Metadata Registry found. Ensure app.init() completes before Scalar binding.');

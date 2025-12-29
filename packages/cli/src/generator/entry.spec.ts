@@ -9,9 +9,10 @@ describe('EntryGenerator.generate', () => {
 
     expect(code).toContain('if (workersCount <= 1)');
     expect(code).toContain('await bootstrap();');
-    expect(code).toContain("new URL('./manifest.js', import.meta.url)");
+    expect(code).toContain("const manifestFileName = './manifest.js'");
+    expect(code).toContain('new URL(manifestFileName, import.meta.url)');
     expect(code).toContain('__BUNNER_MANIFEST_PATH__');
-    expect(code).toContain("await import('./manifest.js')");
+    expect(code).toContain('await import(manifestFileName)');
     expect(code).toContain('new ClusterManager');
   });
   it('should use ClusterManager when workers is greater than 1', () => {
