@@ -25,54 +25,18 @@ This repo is SSOT-driven. Follow [AGENTS.md](../AGENTS.md) exactly.
 
 ### Task Execution Protocol
 
-#### Phase 1: Discovery
+See: [.agent/workflows/complex-task.md](../.agent/workflows/complex-task.md)
 
-- If request is ambiguous, **ask questions first** (MUST)
-- Gather: purpose, scope, constraints, priorities
+| Phase     | Action                                |
+| --------- | ------------------------------------- |
+| Discovery | Ask questions if ambiguous            |
+| Alignment | Summarize and confirm                 |
+| Planning  | Present execution plan (see template) |
+| Execution | Start after approval only             |
 
-#### Phase 2: Alignment
+Template: [.agent/templates/execution-plan.md](../.agent/templates/execution-plan.md)
 
-- Summarize understanding and **confirm with user**
-- Do NOT proceed without explicit "yes/go ahead"
-
-#### Phase 3: Planning
-
-For complex tasks, present execution plan:
-
-```markdown
-## 📋 Execution Plan
-
-### Goal
-
-[What to achieve]
-
-### Non-Goals
-
-[What NOT to do]
-
-### Steps
-
-1. [ ] Step 1
-2. [ ] Step 2
-
-### Acceptance Criteria
-
-- [ ] Criterion 1
-- [ ] Criterion 2
-```
-
-#### Phase 4: Execution
-
-- Start only after user approval (MUST)
-- Stop immediately if unplanned changes needed
-
-#### Exception: Simple Tasks
-
-Skip phases 1-3 if ALL conditions met:
-
-- Request is clear and specific
-- Scope is single file or obviously limited
-- No architecture/Public API changes
+**Exception**: Skip phases 1-3 for simple, clear, single-file tasks.
 
 ## Repo Architecture
 
@@ -92,11 +56,12 @@ bun test           # Tests
 
 ## SSOT Documents
 
-| Purpose              | Document                              |
-| -------------------- | ------------------------------------- |
-| Agent rules (full)   | [AGENTS.md](../AGENTS.md)             |
-| Top-level invariants | [SPEC.md](../SPEC.md)                 |
-| Package boundaries   | [ARCHITECTURE.md](../ARCHITECTURE.md) |
-| Coding style         | [STYLEGUIDE.md](../STYLEGUIDE.md)     |
-| Stop conditions      | [POLICY.md](../POLICY.md)             |
-| Approval required    | [GOVERNANCE.md](../GOVERNANCE.md)     |
+| Purpose              | Document                                                                |
+| -------------------- | ----------------------------------------------------------------------- |
+| Agent rules (full)   | [AGENTS.md](../AGENTS.md)                                               |
+| Top-level invariants | [SPEC.md](../SPEC.md)                                                   |
+| Package boundaries   | [ARCHITECTURE.md](../ARCHITECTURE.md)                                   |
+| Coding style         | [STYLEGUIDE.md](../STYLEGUIDE.md)                                       |
+| Stop conditions      | [POLICY.md](../POLICY.md)                                               |
+| Approval required    | [GOVERNANCE.md](../GOVERNANCE.md)                                       |
+| Complex tasks        | [.agent/workflows/complex-task.md](../.agent/workflows/complex-task.md) |

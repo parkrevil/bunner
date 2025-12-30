@@ -300,14 +300,13 @@
 
 사용자가 새로운 기능/변경을 요청할 때, 에이전트는 아래 4단계 프로토콜을 따른다.
 
+상세 워크플로우: [.agent/workflows/complex-task.md](.agent/workflows/complex-task.md)
+실행계획 템플릿: [.agent/templates/execution-plan.md](.agent/templates/execution-plan.md)
+
 ### Phase 1: 요구사항 탐색 (Discovery)
 
 - 사용자 요청이 모호하면 **즉시 실행하지 않고 질문**한다(MUST).
-- 탐색해야 할 정보:
-  - 목적 (왜 필요한가?)
-  - 범위 (어디까지 변경할 것인가?)
-  - 제약조건 (하지 말아야 할 것은?)
-  - 우선순위 (무엇이 가장 중요한가?)
+- 탐색 대상: 목적, 범위, 제약조건, 우선순위
 
 ### Phase 2: 합의 도출 (Alignment)
 
@@ -317,35 +316,9 @@
 
 ### Phase 3: 실행계획 수립 (Planning)
 
-합의가 도출되면, 아래 템플릿으로 **실행계획서를 작성**하여 사용자에게 제시한다(MUST).
-
-```markdown
-## 📋 실행계획
-
-### Goal (목표)
-
-[이번 작업에서 달성할 것]
-
-### Non-Goals (범위 제외)
-
-[이번 작업에서 명시적으로 하지 않을 것]
-
-### Steps (실행 단계)
-
-1. [ ] Step 1: [설명]
-2. [ ] Step 2: [설명]
-3. [ ] Step 3: [설명]
-
-### Affected Files (영향 파일)
-
-- `path/to/file1.ts`
-- `path/to/file2.ts`
-
-### Acceptance Criteria (완료 기준)
-
-- [ ] 기준 1
-- [ ] 기준 2
-```
+- 합의가 도출되면, **실행계획서를 작성**하여 사용자에게 제시한다(MUST).
+- 템플릿 참조: [.agent/templates/execution-plan.md](.agent/templates/execution-plan.md)
+- 필수 포함 항목: Goal, Non-Goals, Steps, Affected Files, Acceptance Criteria
 
 ### Phase 4: 실행 (Execution)
 

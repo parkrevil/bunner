@@ -28,12 +28,13 @@ AGENTS.md가 공용 SSOT이며, 이 문서는 Antigravity 특화 규칙만 정�
 
 ## 빠른 참조
 
-| 상황            | 확인 문서                          |
-| --------------- | ---------------------------------- |
-| 집행 규칙 전체  | [AGENTS.md](AGENTS.md)             |
-| 최상위 불변조건 | [SPEC.md](SPEC.md)                 |
-| 불변의 법칙     | [INVARIANTS.md](INVARIANTS.md)     |
-| 패키지 경계     | [ARCHITECTURE.md](ARCHITECTURE.md) |
-| 코딩 스타일     | [STYLEGUIDE.md](STYLEGUIDE.md)     |
-| 즉시 중단 조건  | [POLICY.md](POLICY.md)             |
-| 승인 필요       | [GOVERNANCE.md](GOVERNANCE.md)     |
+| 상황            | 확인 문서                                                            |
+| --------------- | -------------------------------------------------------------------- |
+| 집행 규칙 전체  | [AGENTS.md](AGENTS.md)                                               |
+| 최상위 불변조건 | [SPEC.md](SPEC.md)                                                   |
+| 불변의 법칙     | [INVARIANTS.md](INVARIANTS.md)                                       |
+| 패키지 경계     | [ARCHITECTURE.md](ARCHITECTURE.md)                                   |
+| 코딩 스타일     | [STYLEGUIDE.md](STYLEGUIDE.md)                                       |
+| 즉시 중단 조건  | [POLICY.md](POLICY.md)                                               |
+| 승인 필요       | [GOVERNANCE.md](GOVERNANCE.md)                                       |
+| 복잡한 작업     | [.agent/workflows/complex-task.md](.agent/workflows/complex-task.md) |
