@@ -21,6 +21,23 @@
 3. 3순위: 검증된 npm 패키지
 4. 4순위: 직접 구현 (Custom)
 
+## 핵심 규칙 요약 (Quick Reference)
+
+| #   | 규칙                                    | 위반 예                           | 섹션  |
+| --- | --------------------------------------- | --------------------------------- | ----- |
+| 1   | 파일명 `kebab-case` (예약 파일 제외)    | `UserService.ts` ❌               | 6.1   |
+| 2   | 한 글자 식별자 금지 (`i/j/k`, `_` 제외) | `p`, `v`, `x` ❌                  | 6.2.1 |
+| 3   | 축약어 금지 (`id` 제외)                 | `ctx`, `req`, `res` ❌            | 6.2.3 |
+| 4   | 인라인 오브젝트 타입 금지               | `{ a: number }` ❌                | 10.3  |
+| 5   | 타입/인터페이스는 구현 파일 분리        | `types.ts` / `interfaces.ts` 사용 | 10.2  |
+| 6   | `any`/`unknown` 금지 (필수 경우만)      | 정확한 타입 정의                  | 8.2   |
+| 7   | Public 함수는 반환 타입 명시            | `function foo(): string`          | 8.3   |
+| 8   | 선언/제어문 사이 빈 줄                  | `const x=1; if(...)` ❌           | 10.9  |
+| 9   | Early return은 블록 형태                | `if(x) return;` ❌                | 10.9  |
+| 10  | 클래스는 `this` 필요 시만               | Standalone Function 우선          | 11.2  |
+
+상세 규칙은 아래 각 섹션 참조.
+
 ## 6. 네이밍 규칙 (Naming Conventions)
 
 이 규칙은 “권장”이 아니다. 위반은 즉시 수정 대상이다.
@@ -127,12 +144,12 @@
 - `unknown`: TypeScript로 **절대 표현할 수 없는 타입**인 경우에만 사용한다(MAY). 그 외 사용은 금지한다(MUST NOT).
 - `Record<string, any>`: 금지한다(MUST NOT). 필요한 경우 목적에 맞는 타입/인터페이스를 정의한다(MUST).
 
-3. 명시적 반환 타입(강제): export 되는 모든 Public 함수/메서드는 반환 타입을 반드시 명시해야 한다.
+1. 명시적 반환 타입(강제): export 되는 모든 Public 함수/메서드는 반환 타입을 반드시 명시해야 한다.
 
-4. TypeScript 문법 최대 활용(강제):
+2. TypeScript 문법 최대 활용(강제):
 
 - TypeScript는 방대하고 강력한 문법을 제공한다.
-- 구현은 https://www.typescriptlang.org/docs 에 정의된 문법을 **최대한 활용**해야 한다(MUST).
+- 구현은 <https://www.typescriptlang.org/docs> 에 정의된 문법을 **최대한 활용**해야 한다(MUST).
 - 타입 단언, 인라인 오브젝트 타입, loose type로 문제를 덮는 행위는 금지한다(MUST NOT).
 
 ## 10. 코딩 품질 및 스타일 (Code Quality & Style)
@@ -147,26 +164,26 @@
 - 타입/인터페이스를 구현 파일에 남겨 두는 예외는 존재하지 않는다(MUST NOT).
 - 위 처리가 불가능하거나 판단이 애매하면, 임의로 섞지 말고 중단 후 확인한다(MUST).
 
-3. 인라인 오브젝트 타입 금지(강제):
+1. 인라인 오브젝트 타입 금지(강제):
 
 - 코드에 `{ a: number; b: number }` 같은 오브젝트 타입 리터럴을 직접 작성하는 행위는 금지한다(MUST NOT).
 - 오브젝트 shape는 항상 목적에 맞는 `type` 또는 `interface`로 정의해서 사용한다(MUST).
 
-3. 불변성(Immutability): 인자로 받은 객체/배열은 변형하지 않는다. 가능하면 `readonly`를 사용해 의도를 고정한다.
-4. 비동기 안전성(Async Safety): Floating Promise(`await` 누락)는 금지다. 병렬 처리는 의도적으로 `Promise.all`을 사용한다.
-5. 문서화(TSDoc): Public API는 예외 없이 TSDoc(`@param`, `@returns`)을 작성한다.
+1. 불변성(Immutability): 인자로 받은 객체/배열은 변형하지 않는다. 가능하면 `readonly`를 사용해 의도를 고정한다.
+2. 비동기 안전성(Async Safety): Floating Promise(`await` 누락)는 금지다. 병렬 처리는 의도적으로 `Promise.all`을 사용한다.
+3. 문서화(TSDoc): Public API는 예외 없이 TSDoc(`@param`, `@returns`)을 작성한다.
 
-6. 주석(Comments): Public API TSDoc을 제외한 모든 코멘트/주석은 **금지**다.
+4. 주석(Comments): Public API TSDoc을 제외한 모든 코멘트/주석은 **금지**다.
    - 금지 예: `// TODO`, `// FIXME`, 설명용 인라인 주석, 임시 디버그 주석, “왜 이렇게 했는지” 메모.
    - 허용 예: Public API TSDoc(외부 사용자에게 계약을 설명하는 목적)만.
 
-7. 파일 분해(Granularity): “작게 쪼개는 것” 자체는 품질이 아니다. 파일 분해는 16 섹션의 기준을 **반드시** 만족해야 한다.
+5. 파일 분해(Granularity): “작게 쪼개는 것” 자체는 품질이 아니다. 파일 분해는 16 섹션의 기준을 **반드시** 만족해야 한다.
 
-8. Deprecated 금지: deprecated된 코드/파일을 **절대 남기지 마라**.
+6. Deprecated 금지: deprecated된 코드/파일을 **절대 남기지 마라**.
    - `@deprecated`/`deprecated` 표기, deprecated 전용 파일/폴더, 사용되지 않는 구 API를 “호환용”으로 방치하는 행위를 금지한다.
    - 변경 과정에서 deprecated가 발생했다면, 그 작업 범위 내에서 **완전 제거**까지 끝내야 한다(혹은 사용자에게 명시적 승인 요청).
 
-9. 코드 스타일(공백/블록) 규칙: 이 규칙은 “취향”이 아니다. 예외는 없다.
+7. 코드 스타일(공백/블록) 규칙: 이 규칙은 “취향”이 아니다. 예외는 없다.
    - 선언 블록 분리: `const`/`let` 선언 라인과 `if`/`for`/`while`/`try` 같은 제어문 라인은 **붙여 쓰지 않는다**. 사이에 **빈 줄 1줄**을 강제한다.
    - Early return 강제: 유효성/가드 조건은 가능한 한 빨리 실패로 종료한다.
      - 금지: one-line early return (예: `if (invalid) return ...;`)

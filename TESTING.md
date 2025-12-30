@@ -1,5 +1,24 @@
 # TESTING
 
+## 역할
+
+- **이 문서는 테스트 품질 기준(네이밍/격리/결정성)을 정의한다.**
+
+---
+
+### 테스트 규칙 요약표 (Quick Reference)
+
+| 규칙            | 내용                          | 키워드 |
+| --------------- | ----------------------------- | ------ |
+| 파일명          | `*.spec.ts` 형식              | MUST   |
+| describe        | 함수 1개당 1개                | MUST   |
+| it 네이밍       | BDD 영어 (`should...when...`) | MUST   |
+| 스코프          | 대상 함수만 검증              | MUST   |
+| 외부 호출       | mock/spy 격리 의무            | MUST   |
+| 1 it = 1 케이스 | 여러 케이스 혼합 금지         | MUST   |
+| 결정성          | 동일 입력 → 동일 결과         | MUST   |
+| 러너            | `bun test` 전용               | MUST   |
+
 ## 목적
 
 - 테스트의 품질 기준(네이밍/격리/결정성)을 고정한다.
@@ -55,3 +74,66 @@
 
 8. **Bun 테스트 러너 사용을 전제로 한다**
    - 표준 실행은 `bun test`다. 다른 러너/헬퍼를 편의상 추가하지 마라(필요하면 사용자 승인 필요).
+
+## 테스트 안티패턴 (Anti-patterns)
+
+| 위반               | ❌ 나쁜 예                    | ✅ 올바른 방법                      |
+| ------------------ | ----------------------------- | ----------------------------------- |
+| 여러 함수 혼합     | 1 describe에 여러 함수 테스트 | 함수 1개당 describe 1개             |
+| 비-BDD 네이밍      | `it('test1', ...)`            | `it('should return X when Y', ...)` |
+| 외부 의존 미격리   | 실제 API 호출                 | mock/spy로 격리                     |
+| 1 it에 여러 케이스 | expect 5개를 1 it에           | 케이스별 it 분리                    |
+| Happy path만       | 성공 케이스만 테스트          | edge/failure 케이스 포함            |
+| 비결정적           | `Date.now()` 직접 사용        | 시간 고정 mock                      |
+
+## 테스트 예시 (Minimal Example)
+
+```typescript
+import { describe, expect, it, mock } from 'bun:test';
+
+describe('calculateTotal', () => {
+  // Happy path
+  it('should return sum when all prices are positive', () => {
+    const items = [{ price: 100 }, { price: 200 }];
+
+    const result = calculateTotal(items);
+
+    expect(result).toBe(300);
+  });
+
+  // Edge case: empty
+  it('should return 0 when items array is empty', () => {
+    const result = calculateTotal([]);
+
+    expect(result).toBe(0);
+  });
+
+  // Failure case
+  it('should throw when item has negative price', () => {
+    const items = [{ price: -100 }];
+
+    expect(() => calculateTotal(items)).toThrow();
+  });
+});
+```
+
+**주요 포인트:**
+
+- `describe`: 함수 1개당 1개
+- `it`: BDD 문장 (`should ... when ...`)
+- Happy path + Edge case + Failure case 모두 작성
+- 외부 의존은 `mock`으로 격리
+
+상세 예시는 [STYLEGUIDE.md](STYLEGUIDE.md)의 유닛 테스트 예시 참조.
+
+## 테스트 작성 체크리스트
+
+- [ ] 파일명이 `*.spec.ts` 형식인가?
+- [ ] `describe`가 함수 1개당 1개인가?
+- [ ] `it` 이름이 BDD 형식(`should...when...`)인가?
+- [ ] 대상 함수의 스코프만 검증하는가?
+- [ ] 외부 호출을 mock/spy로 격리했는가?
+- [ ] 1 it = 1 케이스를 준수하는가?
+- [ ] Happy path + Edge case + Failure case가 모두 있는가?
+- [ ] 비결정 요소(시간/랜덤)를 고정했는가?
+- [ ] `bun test`로 실행이 통과하는가?

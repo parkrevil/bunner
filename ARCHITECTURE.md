@@ -1,5 +1,11 @@
 # ARCHITECTURE
 
+## 역할
+
+- **이 문서는 시스템 구조/의존 방향/패키지 경계/Facade 규칙을 정의한다.**
+
+---
+
 ## 목적
 
 - 시스템 구조/의존 방향/패키지 경계/Facade 규칙을 SSOT 하위 문서로 고정한다.
@@ -252,6 +258,31 @@
 
 위 규칙에 위배되는 의존이 필요해진다면, 변경을 진행하기 전에 아키텍처 변경으로 취급하고 승인/합의가 선행되어야 한다.
 
+### 패키지 의존 가능 여부 매트릭스 (Quick Reference)
+
+| 소비자 ↓ / 제공자 → | common | logger | core  | http-adapter | scalar | cli |
+| ------------------- | ------ | ------ | ----- | ------------ | ------ | --- |
+| **common**          | -      | ❌     | ❌    | ❌           | ❌     | ❌  |
+| **logger**          | ❌     | -      | ❌    | ❌           | ❌     | ❌  |
+| **core**            | ✅     | ✅     | -     | ❌           | ❌     | ❌  |
+| **http-adapter**    | ✅(P)  | ✅(P)  | ✅(P) | -            | ❌     | ❌  |
+| **scalar**          | ✅(P)  | ✅(P)  | ❌    | ❌           | -      | ❌  |
+| **cli**             | ✅     | ❌     | ❌    | ❌           | ❌     | -   |
+| **examples**        | ✅     | ✅     | ✅    | ✅           | ✅     | ✅  |
+
+- ✅ = dependencies로 의존 가능
+- ✅(P) = peerDependencies로 의존
+- ❌ = 의존 금지
+
+### Import 안티패턴 예시 (Anti-patterns)
+
+| 상황                    | ❌ 잘못된 import                                 | ✅ 올바른 import                       |
+| ----------------------- | ------------------------------------------------ | -------------------------------------- |
+| 다른 패키지 내부 접근   | `import { X } from '@bunner/core/src/container'` | `import { X } from '@bunner/core'`     |
+| CLI에서 런타임 의존     | `import { Container } from '@bunner/core'`       | CLI는 `@bunner/common`만               |
+| 상대 경로로 패키지 탈출 | `import { X } from '../../another-pkg/src/...'`  | Facade 통한 import                     |
+| feature 경계 직접 침범  | `import { X } from '../other-feature/internal'`  | `import { X } from '../other-feature'` |
+
 ### CLI ↔ Core 관계 (역할/설치/의존)
 
 이 섹션의 SSOT는 [TOOLING.md](TOOLING.md)다.
@@ -465,3 +496,13 @@ export type { AppOptions } from './src/application';
 
 - Metadata Registry 구현(현재): `globalThis.__BUNNER_METADATA_REGISTRY__` 기반
 - 레지스트리 소비자(현재): `MetadataConsumer`, `BunnerScanner`
+
+## 아키텍처 검증 체크리스트
+
+- [ ] 패키지 경계를 넘는 import가 Public Facade를 통하는가?
+- [ ] cross-package deep import가 없는가?
+- [ ] 의존 방향이 매트릭스를 준수하는가?
+- [ ] 순환 의존성이 없는가?
+- [ ] Public API 변경 시 승인을 받았는가?
+- [ ] 산출물(`.bunner/**`, `dist/**`)이 저장소에 포함되지 않았는가?
+- [ ] `bun run architecture:check`가 통과하는가?
