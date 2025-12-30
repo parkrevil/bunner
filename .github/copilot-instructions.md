@@ -1,74 +1,102 @@
-# Bunner AI Coding Agent Instructions
+# GitHub Copilot Instructions
 
-This repo is SSOT-driven. Follow the documents below exactly; do not invent new patterns.
+This repo is SSOT-driven. Follow [AGENTS.md](../AGENTS.md) exactly.
 
-## SSOT order (read before changing behavior)
+## Quick Reference
 
-1. [SPEC.md](../SPEC.md) - Top-level invariants
-2. [AGENTS.md](../AGENTS.md) - Agent enforcement rules
-3. [ARCHITECTURE.md](../ARCHITECTURE.md) - Package boundaries + responsibilities
-4. [STRUCTURE.md](../STRUCTURE.md) - Placement/layout rules
-5. [STYLEGUIDE.md](../STYLEGUIDE.md) - Coding + naming rules
+### Hard Stops (즉시 중단)
 
-Other documents:
+| Category     | Condition                                        |
+| ------------ | ------------------------------------------------ |
+| **Security** | Sensitive info (keys/tokens) in code             |
+| **AOT**      | `reflect-metadata` or runtime reflection         |
+| **AOT**      | Non-deterministic outputs (time/random)          |
+| **Boundary** | Cross-package deep import (`@bunner/pkg/src/**`) |
+| **Boundary** | Circular dependencies                            |
+| **Contract** | Public Facade change without approval            |
+| **Contract** | Silent breaking change                           |
 
-- [DEPENDENCIES.md](../DEPENDENCIES.md) - Dependency declaration policy
-- [TOOLING.md](../TOOLING.md) - CLI/AOT operations policy
-- [TESTING.md](../TESTING.md) - Tests as a gate
-- [POLICY.md](../POLICY.md), [SAFEGUARDS.md](../SAFEGUARDS.md) - Stop/rollback criteria
-- [GOVERNANCE.md](../GOVERNANCE.md) - Approval required changes
-- [DEAD_CODE_POLICY.md](../DEAD_CODE_POLICY.md) - Dead code removal
-- [COMMITS.md](../COMMITS.md) - Commit conventions
-- [CONTRIBUTING.md](../CONTRIBUTING.md) - Contributions
+### Pre-action Checklist
 
-## Hard Stops (즉시 중단)
+- [ ] Is scope clear? → If not, ask
+- [ ] Cross package boundaries? → Request approval
+- [ ] Public API change? → Request approval
+- [ ] Test needed? → Add test
 
-| Category     | Condition                                              |
-| ------------ | ------------------------------------------------------ |
-| **Security** | Sensitive info (keys/tokens) in code                   |
-| **AOT**      | `reflect-metadata` or runtime reflection               |
-| **AOT**      | Non-deterministic outputs (time/random dependent)      |
-| **Boundary** | Cross-package deep import (`@bunner/pkg/src/**`)       |
-| **Boundary** | Circular dependencies                                  |
-| **Contract** | Public Facade change without approval                  |
-| **Contract** | Silent breaking change (same type, different behavior) |
+### Task Execution Protocol
 
-## Pre-action Checklist
+#### Phase 1: Discovery
 
-- [ ] Is scope clear? → If not, ask for clarification
-- [ ] Does this cross package boundaries? → Request approval
-- [ ] Does this change Public API? → Request approval
-- [ ] Is a test needed? → Add test
+- If request is ambiguous, **ask questions first** (MUST)
+- Gather: purpose, scope, constraints, priorities
+
+#### Phase 2: Alignment
+
+- Summarize understanding and **confirm with user**
+- Do NOT proceed without explicit "yes/go ahead"
+
+#### Phase 3: Planning
+
+For complex tasks, present execution plan:
+
+```markdown
+## 📋 Execution Plan
+
+### Goal
+
+[What to achieve]
+
+### Non-Goals
+
+[What NOT to do]
+
+### Steps
+
+1. [ ] Step 1
+2. [ ] Step 2
+
+### Acceptance Criteria
+
+- [ ] Criterion 1
+- [ ] Criterion 2
+```
+
+#### Phase 4: Execution
+
+- Start only after user approval (MUST)
+- Stop immediately if unplanned changes needed
+
+#### Exception: Simple Tasks
+
+Skip phases 1-3 if ALL conditions met:
+
+- Request is clear and specific
+- Scope is single file or obviously limited
+- No architecture/Public API changes
 
 ## Repo Architecture
 
-- Monorepo with Bun workspaces: `packages/*` are publishable units; `examples/` is a consumer app.
+- Monorepo with Bun workspaces
 - Runtime: `@bunner/common`, `@bunner/logger`, `@bunner/core`, `@bunner/http-adapter`, `@bunner/scalar`
-- Tooling: `@bunner/cli` (AOT/analyzer/generator). CLI must not depend on runtime packages.
-- Facades:
-  - `packages/<pkg>/index.ts` = public facade
-  - `packages/<pkg>/src/index.ts` = internal facade
-  - Cross-feature imports via `src/<feature>/index.ts` only
+- Tooling: `@bunner/cli` (must not depend on runtime packages)
+- Facades: `packages/<pkg>/index.ts` = public API
 
 ## Workflows
 
 ```bash
 bun run verify     # All checks (tsc + lint + test)
 bun run tsc        # Typecheck
-bun run lint       # Lint (autofix)
+bun run lint       # Lint
 bun test           # Tests
-bun run architecture:check  # Architecture gate
 ```
 
-## Project Conventions
+## SSOT Documents
 
-- Filenames: `kebab-case` (exceptions: `index.ts`, `types.ts`, `interfaces.ts`, `*.spec.ts`)
-- No comments except TSDoc on public APIs
-- Tests: BDD naming (`it('should ...', ...)`)
-- No `any`/`unknown` unless absolutely necessary
-
-## Public Contracts
-
-- Package root facades: `packages/<pkg>/index.ts`
-- Documented APIs in README files
-- For Scalar: [packages/scalar/README.md](../packages/scalar/README.md)
+| Purpose              | Document                              |
+| -------------------- | ------------------------------------- |
+| Agent rules (full)   | [AGENTS.md](../AGENTS.md)             |
+| Top-level invariants | [SPEC.md](../SPEC.md)                 |
+| Package boundaries   | [ARCHITECTURE.md](../ARCHITECTURE.md) |
+| Coding style         | [STYLEGUIDE.md](../STYLEGUIDE.md)     |
+| Stop conditions      | [POLICY.md](../POLICY.md)             |
+| Approval required    | [GOVERNANCE.md](../GOVERNANCE.md)     |
