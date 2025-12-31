@@ -476,3 +476,24 @@ describe('processPayment', () => {
 - 정당화가 없다면 기본값은 병합이다(MUST).
 - 금지: 근거 없는 `utils.ts`/`helpers.ts`로의 덤핑(레거시 유지와 신규 확장은 구분되며,
   신규 확장은 금지다)(MUST NOT).
+
+---
+
+## 부록: ARCHITECTURE.md에서 이동된 내용 (백업)
+
+> 아래 내용은 ARCHITECTURE.md 재구성 시 이동되었습니다.
+> 원문을 그대로 보존합니다. (2024-12-31)
+
+### Exports (Barrel 패턴) 예시
+
+예시:
+
+```ts
+// src/application/index.ts (내부 모듈용) - 간결함 허용
+export * from './application';
+export * from './interfaces';
+
+// packages/core/index.ts (Public API 진입점) - 엄격한 제어
+export { BunnerApplication } from './src/application';
+export type { AppOptions } from './src/application';
+```

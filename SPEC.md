@@ -288,3 +288,181 @@ AST 불변조건은 AOT 결정성을 보조하기 위한 최소 제약이다.
   - 데코레이터: 메서드에 `@Compute()` 사용.
   - **제약:** 메서드는 순수 함수여야 하거나(상태 접근 금지), 프록시 가능한 특정 컨텍스트(Logger)만 허용됨.
   - **구현:** 컴파일러가 해당 메서드를 별도의 워커 진입점으로 추출.
+
+## Runtime Rules
+
+- 런타임 동적 import는 금지된다
+- 요청 처리 중 파이프라인 재구성은 금지된다
+- 프로토콜 전용 로직은 core 계층에 존재할 수 없다
+
+---
+
+## Module Resolution Rules
+
+- `__module__.ts`는 모듈 경계를 정의한다
+- 컴포넌트는 가장 가까운 상위 모듈에 자동 소속된다
+- Feature-first 디렉터리 구성이 기본이다
+
+---
+
+## Dependency Injection Rules
+
+- Constructor Injection은 허용되지 않는다
+- 함수형 의존성 주입 패턴을 사용한다
+
+---
+
+## Error Handling Rules
+
+### Failure Classification
+
+- Domain Failure: 예측 가능한 비즈니스 실패
+- System Panic: 예측 불가능한 시스템 오류
+
+### Handling Rules
+
+- Domain Failure는 Result 형태로 표현된다
+- System Panic은 throw를 허용한다
+
+---
+
+## Logging Policy
+
+- Success → INFO
+- Failure → WARN (stack trace 없음)
+- Panic → ERROR (full stack trace 필수)
+
+---
+
+## 부록: ARCHITECTURE.md에서 이동된 내용 (백업)
+
+> 아래 내용은 ARCHITECTURE.md 재구성 시 이동되었습니다.
+> 원문을 그대로 보존합니다. (2024-12-31)
+
+### 핵심 개념(용어) 정의 (코드베이스 기준, 패키지/의존 판정용)
+
+이 섹션은 "현재 코드베이스에 실제로 구현/노출된 개념"을 기준으로 용어를 고정하되,
+그 개념이 **프레임워크 레벨 핵심 개념**인지, 아니면 **어댑터(전송 계층) 단위 개념**인지까지 함께 구분한다.
+목표는 (1) 패키지 책임을 직관적으로 이해하고, (2) `dependencies`/`peerDependencies`/`devDependencies`를 판정 가능한 규칙으로 만드는 것이다.
+
+핵심 전제(AOT/메타데이터 계약):
+
+- Metadata Registry (`globalThis.__BUNNER_METADATA_REGISTRY__`)
+  - 개념(규범): CLI(AOT)가 생성한 메타데이터를 런타임이 소비하는 "논리적 레지스트리"다.
+  - 규칙(규범): 런타임은 CLI가 생성한 레지스트리를 소비해야 한다(MUST).
+  - 규칙(규범): 런타임이 메타데이터를 생성하거나 수정하는 흐름을 도입해서는 안 된다(MUST NOT).
+  - 구현 전략(비규범): 전역 객체(`globalThis`) 기반 구현은 현재 선택지 중 하나이며, 아키텍처 요구사항이 아니다.
+
+프레임워크 레벨 핵심 개념:
+
+- Core(Runtime)
+  - 의미: 애플리케이션 실행과 런타임 수명주기(시작/종료/워커 관리)를 책임지는 프레임워크 런타임.
+  - 패키지 매핑: `@bunner/core`
+  - 대표 Public API: `Bunner`, `BunnerApplication`, `Container`, cluster 관련 API, validator/transformer compiler
+
+- Module System (모듈 시스템)
+  - 의미: 애플리케이션을 모듈 단위로 구성하고, import/provider/controller를 선언적으로 묶는 구조.
+  - 구성요소(규범):
+    - 선언 채널(데코레이터/계약)은 `@bunner/common`이 소유한다.
+  - 모듈 그래프(ModuleGraph) 생성/해석(AOT)은 `@bunner/cli`가 소유한다(MUST).
+  - 런타임 조립(assembly)은 `@bunner/core`가 소유한다(MUST).
+  - CLI는 분석/산출물 생성 역할만 수행하며, 런타임을 대체하지 않는다.
+
+- DI(Dependency Injection)
+  - 의미: 토큰 기반으로 의존성을 등록/해결하는 런타임 구성.
+  - 구성요소(규범):
+    - 계약(토큰/데코레이터 채널)은 `@bunner/common`이 소유한다.
+    - 의존성 해석 및 실행 런타임은 `@bunner/core`가 소유한다.
+
+- Application Lifecycle Hooks (애플리케이션 라이프사이클 훅)
+  - 의미: 애플리케이션 라이프사이클(초기화/시작/종료 등) 특정 시점에 실행되는 계약.
+  - 규범(순서/의미): 아래 훅 순서는 런타임이 권장하는 기준이다.
+    - `onInit`: 런타임 조립(컨테이너 구성) 이후, 서버/워커 시작 전 초기화 단계
+    - `beforeStart`: 시작 직전 준비 단계
+    - `onStart`: 어댑터가 실제로 시작된 직후(요청 수신 가능 상태)
+    - `onShutdown`: 종료 신호/요청 수신 후 graceful shutdown 진입 단계
+    - `onDestroy`: 최종 정리 단계(항상 마지막)
+  - 패키지 매핑:
+    - 계약: `@bunner/common`의 lifecycle interface들
+    - 런타임 호출: `@bunner/core`
+
+- Context
+  - 의미: 런타임/어댑터가 요청 단위 또는 실행 단위의 컨텍스트를 전달하는 계약.
+  - 패키지 매핑:
+    - 계약: `@bunner/common`의 `Context`
+  - HTTP 구현: `@bunner/http-adapter`의 `BunnerHttpContext`
+
+- Adapter(Runtime Adapter)
+  - 의미: 코어 런타임에 종속되어 특정 전송 계층/환경(예: HTTP)을 연결하는 런타임 구성요소.
+  - 계약/구현:
+    - 계약: `@bunner/common`의 `BunnerAdapter`
+    - 구현: `@bunner/http-adapter`의 `BunnerHttpAdapter`, `BunnerHttpServer`, `BunnerHttpWorker`
+  - 의존 판정(규범):
+    - 어댑터는 코어 런타임을 "제공/소유"해서는 안 된다(MUST NOT).
+    - 어댑터는 코어를 `peerDependencies`로 선언해야 한다(MUST).
+
+- Middleware
+  - 의미: 런타임 파이프라인 중간에 삽입되는 훅(전/후 처리) 구성요소.
+  - 계약/데코레이터 채널:
+    - 계약: `@bunner/common`의 `BunnerMiddleware`, `MiddlewareToken`, `MiddlewareRegistration`
+    - 데코레이터: `@bunner/common`의 `Middleware`, `UseMiddlewares`
+
+- Error Filter
+  - 의미: 에러를 "잡고(catch)" 처리하거나 다음 에러로 변환하는 구성요소.
+  - 계약/데코레이터 채널:
+    - 계약: `@bunner/common`의 `BunnerErrorFilter`, `ErrorFilterToken`
+    - 데코레이터: `@bunner/common`의 `Catch`, `UseErrorFilters`
+
+- Pipe (입력 변환/검증 파이프)
+  - 의미: handler 호출 전에 입력을 변환/검증하는 "프레임워크 레벨" 처리 단계.
+  - 배치/소유권(패키지 판정):
+    - 계약(Contract): `@bunner/common`
+    - 런타임 실행/기본 제공 구현(Runtime): `@bunner/core`
+
+어댑터 단위 개념 (Framework Core MUST NOT 소유):
+
+- Routing (HTTP 라우팅)
+  - 의미: HTTP 전용 데코레이터를 기반으로 라우트를 등록하고 요청을 핸들러로 연결하는 HTTP 런타임 계층.
+  - 패키지 매핑: `@bunner/http-adapter`
+
+- Worker / Cluster
+  - 의미: 멀티 워커 프로세스(클러스터) 기반 실행을 위한 런타임 구성.
+  - 패키지 매핑:
+    - 코어: `@bunner/core`의 `ClusterManager`, `ClusterBaseWorker`
+    - HTTP: `@bunner/http-adapter`의 `BunnerHttpWorker`
+
+- Plugin(Third-party Integration)
+  - 의미: 선택적으로 프레임워크에 추가 기능(문서화, 스펙 생성 등)을 제공하는 런타임 연동.
+  - 패키지 매핑: `@bunner/scalar`
+
+---
+
+### 패키지별 상세 책임(근거 기반)
+
+- `@bunner/common`
+  - 책임: 프레임워크 전반에서 공유되는 타입/인터페이스/에러/데코레이터/상수/유틸리티를 제공한다.
+  - 금지: 상위 런타임(`core`, `http-adapter` 등) 또는 툴링(`cli`)에 대한 의존/참조를 추가해서는 안 된다(MUST NOT).
+
+- `@bunner/logger`
+  - 책임: 로깅 인터페이스/구현 및 로깅 관련 런타임 유틸을 제공한다.
+  - 금지: 프레임워크 코어/어댑터/툴링에 대한 의존을 추가해서는 안 된다(MUST NOT).
+
+- `@bunner/core`
+  - 책임: 프레임워크 코어 런타임을 제공한다.
+  - 금지: 특정 전송 계층(예: HTTP 서버 구현)에 대한 직접 의존을 추가해서는 안 된다(MUST NOT).
+
+- `@bunner/http-adapter`
+  - 책임: HTTP 런타임 어댑터를 제공한다.
+  - 금지: 애플리케이션/툴링 전용 기능을 포함해서는 안 된다(MUST NOT).
+
+- `@bunner/scalar`
+  - 책임: Bunner용 Scalar API 문서화 연동을 제공한다.
+  - 금지: 코어 런타임의 DI/클러스터/서버 구현을 재정의하거나 대체해서는 안 된다(MUST NOT).
+
+- `@bunner/cli`
+  - 책임: 개발/빌드 작업을 위한 CLI 도구를 제공한다.
+  - 금지: 런타임 패키지들의 구현 세부를 내부 경로로 import 해서는 안 된다(MUST NOT).
+
+- `examples/*`
+  - 책임: 프레임워크 사용 예시를 제공한다.
+  - 금지: `packages/*` 런타임/툴링 코드가 `examples/*`를 참조해서는 안 된다(MUST NOT).

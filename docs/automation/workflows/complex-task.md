@@ -6,11 +6,14 @@ description: 복잡한 작업 요청 시 논의 → 계획 → 실행 워크플�
 
 복잡한 기능/변경 요청 시 사용하는 4단계 워크플로우.
 
+> **Feature 개발의 경우**: [feature-workflow.md](feature-workflow.md) 참조
+> Feature 워크플로우는 상태 머신 기반으로 더 엄격한 문서 요구사항을 적용함.
+
 ## When to Use
 
 - 여러 파일에 걸친 변경
 - 아키텍처/구조 변경
-- 새로운 기능 추가
+- 새로운 기능 추가 → **feature-workflow.md 사용 권장**
 - 불명확한 요구사항
 
 ## Phase 1: Discovery (요구사항 탐색)
