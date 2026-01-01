@@ -52,7 +52,6 @@ ARCHITECTURE.md는 이를 중복 정의하지 않는다.
 | docs/governance/   | 운영/정책 문서 (GOVERNANCE, POLICY, SECURITY 등)  |
 | docs/design/       | 철학/배경/근거 문서 (VISION, INVARIANTS 등)       |
 | docs/automation/   | 에이전트/자동화 실행 규칙 (AGENTS, GEMINI 실문서) |
-| docs/reference/    | 요약/번역본 (QUICK_REFERENCE, README.ko)          |
 | docs/architecture/ | Extended SSOT: 판정 상세 규칙                     |
 
 ---
