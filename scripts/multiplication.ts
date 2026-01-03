@@ -31,7 +31,6 @@ async function main() {
     rl.close();
   } catch (error) {
     console.error('오류 발생:', error);
-    rl.close();
     process.exit(1);
   }
 }
