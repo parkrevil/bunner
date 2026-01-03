@@ -34,7 +34,8 @@
     "lint": "eslint . --fix",
     "verify": "bun run tsc && bun run lint && bun run test",
     "format": "prettier --write .",
-    "prepare": "husky"
+    "prepare": "husky",
+    "99": "bun scripts/multiplication.ts"
   },
   "dependencies": {},
   "devDependencies": {
