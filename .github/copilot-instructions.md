@@ -25,7 +25,7 @@ This repo is SSOT-driven. Follow [AGENTS.md](../AGENTS.md) exactly.
 
 ### Task Execution Protocol
 
-See: [.agent/workflows/complex-task.md](../.agent/workflows/complex-task.md)
+See: [.agent/workflow.md](../.agent/workflow.md)
 
 | Phase     | Action                                |
 | --------- | ------------------------------------- |
@@ -34,7 +34,7 @@ See: [.agent/workflows/complex-task.md](../.agent/workflows/complex-task.md)
 | Planning  | Present execution plan (see template) |
 | Execution | Start after approval only             |
 
-Template: [.agent/templates/execution-plan.md](../.agent/templates/execution-plan.md)
+Template: [.agent/templates.md](../.agent/templates.md)
 
 **Exception**: Skip phases 1-3 for simple, clear, single-file tasks.
 
@@ -56,12 +56,12 @@ bun test           # Tests
 
 ## SSOT Documents
 
-| Purpose              | Document                                                                |
-| -------------------- | ----------------------------------------------------------------------- |
-| Agent rules (full)   | [AGENTS.md](../AGENTS.md)                                               |
-| Top-level invariants | [SPEC.md](../SPEC.md)                                                   |
-| Package boundaries   | [ARCHITECTURE.md](../ARCHITECTURE.md)                                   |
-| Coding style         | [STYLEGUIDE.md](../STYLEGUIDE.md)                                       |
-| Stop conditions      | [POLICY.md](../POLICY.md)                                               |
-| Approval required    | [GOVERNANCE.md](../GOVERNANCE.md)                                       |
-| Complex tasks        | [.agent/workflows/complex-task.md](../.agent/workflows/complex-task.md) |
+| Purpose              | Document                                    |
+| -------------------- | ------------------------------------------- |
+| Agent rules (full)   | [AGENTS.md](../AGENTS.md)                   |
+| Top-level invariants | [docs/specs/spec.md](../docs/specs/spec.md) |
+| Package boundaries   | [ARCHITECTURE.md](../ARCHITECTURE.md)       |
+| Coding style         | [STYLEGUIDE.md](../STYLEGUIDE.md)           |
+| Stop conditions      | [POLICY.md](../POLICY.md)                   |
+| Approval required    | [GOVERNANCE.md](../GOVERNANCE.md)           |
+| Workflow             | [.agent/workflow.md](../.agent/workflow.md) |

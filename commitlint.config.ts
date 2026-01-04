@@ -1,4 +1,4 @@
-import commitlintPlugin from './commitlint';
+import commitlintPlugin from './tooling/commitlint';
 
 const config = {
   extends: ['@commitlint/config-conventional'],

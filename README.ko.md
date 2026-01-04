@@ -148,8 +148,8 @@ export class SharedService {}
 ## 문서
 
 - [아키텍처](./ARCHITECTURE.md) — 시스템 설계 및 패키지 구조
-- [기여하기](./CONTRIBUTING.md) — 기여 방법
-- [보안](./SECURITY.md) — 보안 정책 및 보고
+- [기여하기](.github/CONTRIBUTING.md) — 기여 방법
+- [보안](.github/SECURITY.md) — 보안 정책 및 보고
 
 ## 제한사항
 
@@ -168,7 +168,7 @@ export class SharedService {}
 
 ## 기여하기
 
-기여를 환영합니다! 자세한 내용은 [기여 가이드](./CONTRIBUTING.md)를 참조하세요.
+기여를 환영합니다! 자세한 내용은 [기여 가이드](.github/CONTRIBUTING.md)를 참조하세요.
 
 ## 라이선스
 

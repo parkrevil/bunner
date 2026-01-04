@@ -12,7 +12,7 @@
 
 ## 정본/우선순위
 
-- 최상위 정본은 [SPEC.md](SPEC.md)다.
+- 최상위 정본은 [ARCHITECTURE.md](../ARCHITECTURE.md)다.
 
 ## 관련 문서
 

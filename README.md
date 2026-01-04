@@ -148,8 +148,8 @@ export class SharedService {}
 ## Documentation
 
 - [Architecture](./ARCHITECTURE.md) — System design and package structure
-- [Contributing](./CONTRIBUTING.md) — How to contribute
-- [Security](./SECURITY.md) — Security policy and reporting
+- [Contributing](.github/CONTRIBUTING.md) — How to contribute
+- [Security](.github/SECURITY.md) — Security policy and reporting
 
 ## Limitations
 
@@ -168,7 +168,7 @@ export class SharedService {}
 
 ## Contributing
 
-We welcome contributions! Please see our [Contributing Guide](./CONTRIBUTING.md) for details.
+We welcome contributions! Please see our [Contributing Guide](.github/CONTRIBUTING.md) for details.
 
 ## License
 

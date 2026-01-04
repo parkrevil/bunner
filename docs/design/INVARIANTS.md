@@ -2,7 +2,7 @@
 
 > **⚠️ Non-SSOT: 이 문서는 판정 기준이 아닙니다.**
 > 이 문서는 아키텍처 결정의 **철학적 배경/근거(Rationale)**를 설명합니다.
-> 실제 판정 SSOT는 [ARCHITECTURE.md](../../ARCHITECTURE.md)와 [SPEC.md](../../SPEC.md)입니다.
+> 실제 판정 SSOT는 [ARCHITECTURE.md](../../ARCHITECTURE.md)와 [docs/specs/spec.md](../specs/spec.md)입니다.
 
 ---
 

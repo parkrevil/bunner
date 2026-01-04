@@ -16,7 +16,7 @@
 
 ## 정본/우선순위
 
-- 최상위 정본은 [SPEC.md](SPEC.md)다.
+- 최상위 정본은 [ARCHITECTURE.md](ARCHITECTURE.md)다.
 - 패키지 경계/단방향 의존은 [ARCHITECTURE.md](ARCHITECTURE.md)가 우선한다.
 
 ## CLI ↔ Runtime 관계
@@ -62,7 +62,8 @@
 ## CLI AOT 산출물 (Registry / Plan)
 
 이 섹션은 “CLI가 빌드타임에 최대한 수행하여 런타임을 가볍게” 만들기 위한 산출물 기준을 정의한다.
-정적 수집/해석/결정성 같은 AOT/AST 계약 자체는 [SPEC.md](SPEC.md)가 SSOT다.
+정적 수집/해석/결정성 같은 AOT/AST 계약 자체의 정본은
+[docs/specs/aot-ast.spec.md](docs/specs/aot-ast.spec.md)다.
 
 ### Metadata Registry
 
@@ -87,7 +88,8 @@
 ## CLI 분석 계약 (AST / ModuleGraph)
 
 이 섹션은 CLI가 수행하는 정적 분석의 “구현 세부 SSOT”다.
-최상위 불변조건(결정성/런타임 비스캔/레지스트리 소비 계약 등)은 [SPEC.md](SPEC.md)가 SSOT다.
+최상위 불변조건(결정성/런타임 비스캔/레지스트리 소비 계약 등)은
+[docs/specs/aot-ast.spec.md](docs/specs/aot-ast.spec.md)가 SSOT다.
 
 ### 추적 범위
 

@@ -11,7 +11,7 @@
 
 ## 참고
 
-- PR/리뷰 절차는 [CONTRIBUTING.md](CONTRIBUTING.md)를 따른다.
+- PR/리뷰 절차는 [CONTRIBUTING.md](../../.github/CONTRIBUTING.md)를 따른다.
 
 ## 17. 커밋 규칙 (Commit Rules)
 

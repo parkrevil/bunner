@@ -15,16 +15,16 @@
 
 ## 정본/우선순위
 
-- 최상위 정본은 [SPEC.md](SPEC.md)다.
+- 최상위 정본은 [ARCHITECTURE.md](../../ARCHITECTURE.md)다.
 
 ## 관련 문서
 
-| 문서                                                   | 역할                                           |
-| ------------------------------------------------------ | ---------------------------------------------- |
-| [SECURITY.md](SECURITY.md)                             | 보안 상세                                      |
-| [SAFEGUARDS.md](SAFEGUARDS.md)                         | 폭주 방지/대량 변경/롤백 (패턴/반복 기반 중단) |
-| [GOVERNANCE.md](GOVERNANCE.md)                         | 승인 절차/프로토콜                             |
-| [SPEC.md](SPEC.md), [ARCHITECTURE.md](ARCHITECTURE.md) | AOT/경계/계약 SSOT                             |
+| 문서                                                                                             | 역할                                           |
+| ------------------------------------------------------------------------------------------------ | ---------------------------------------------- |
+| [SECURITY.md](../../.github/SECURITY.md)                                                         | 보안 상세                                      |
+| [SAFEGUARDS.md](SAFEGUARDS.md)                                                                   | 폭주 방지/대량 변경/롤백 (패턴/반복 기반 중단) |
+| [GOVERNANCE.md](GOVERNANCE.md)                                                                   | 승인 절차/프로토콜                             |
+| [docs/specs/aot-ast.spec.md](../specs/aot-ast.spec.md), [ARCHITECTURE.md](../../ARCHITECTURE.md) | AOT/경계/계약 SSOT                             |
 
 ## POLICY vs SAFEGUARDS 역할 구분
 
@@ -74,7 +74,7 @@
 
 | 항목                     | 예시                            | 승인 필요                          |
 | ------------------------ | ------------------------------- | ---------------------------------- |
-| SSOT/정책 문서 무단 변경 | SPEC.md 규칙 완화               | [GOVERNANCE.md](GOVERNANCE.md)     |
+| SSOT/정책 문서 무단 변경 | docs/specs 규칙 완화            | [GOVERNANCE.md](GOVERNANCE.md)     |
 | 배포/패키징 전략 변경    | peerDependencies 정책 변경      | [GOVERNANCE.md](GOVERNANCE.md)     |
 | 패키지 책임/역할 침범    | CLI가 런타임 패키지에 의존 추가 | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | 배치 규칙 위반           | 기능 코드를 `src/` 밖에 배치    | [STRUCTURE.md](STRUCTURE.md)       |

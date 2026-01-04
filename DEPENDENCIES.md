@@ -11,7 +11,7 @@
 
 ## 정본/우선순위
 
-- 최상위 정본은 [SPEC.md](SPEC.md)다.
+- 최상위 정본은 [ARCHITECTURE.md](ARCHITECTURE.md)다.
 - 패키지 경계/단방향 의존/Deep import 판정은 [ARCHITECTURE.md](ARCHITECTURE.md)가 우선한다.
 
 ## 문서 역할 (SSOT)

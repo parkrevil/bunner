@@ -20,12 +20,12 @@
 
 ## 정본/우선순위
 
-- 최상위 정본은 [SPEC.md](SPEC.md)다.
+- 최상위 정본은 [ARCHITECTURE.md](../ARCHITECTURE.md)다.
 
 ## 기본 원칙
 
-- 정본(SSOT) 규칙: [SPEC.md](SPEC.md)
-- 에이전트/자동화 규칙: [AGENTS.md](AGENTS.md)
+- 정본(SSOT) 규칙: [ARCHITECTURE.md](../ARCHITECTURE.md), [docs/specs/spec.md](../docs/specs/spec.md)
+- 에이전트/자동화 규칙: [AGENTS.md](../AGENTS.md)
 
 ## 로컬 검증
 

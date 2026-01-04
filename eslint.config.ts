@@ -8,7 +8,7 @@ import unusedImports from 'eslint-plugin-unused-imports';
 import globals from 'globals';
 import { plugin as tseslintPlugin, configs as tseslintConfigs } from 'typescript-eslint';
 
-import { statementGroupingPlugin } from './eslint';
+import { statementGroupingPlugin } from './tooling/eslint';
 
 export default defineConfig([
   {

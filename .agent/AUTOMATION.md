@@ -1,8 +1,9 @@
 # AUTOMATION
 
-> **역할: 자동화 실행 절차 문서**
+> **역할: 자동화 권한/금지 정책 문서**
 > 이 문서는 자동화(스크립트/에이전트/CI)가 수행할 수 있는 작업 범위, 권한, 금지 영역을 정의합니다.
-> 판정 SSOT는 [ARCHITECTURE.md](../../ARCHITECTURE.md)와 [SPEC.md](../../SPEC.md)입니다.
+> 작업 절차/상태 전이/승인 게이트는 [workflow.md](workflow.md)가 SSOT입니다.
+> 판정 SSOT는 [ARCHITECTURE.md](../ARCHITECTURE.md)와 [docs/specs/spec.md](../docs/specs/spec.md)입니다.
 
 ---
 
@@ -17,9 +18,24 @@
 
 ## 정본/우선순위
 
-- 최상위 정본은 [SPEC.md](SPEC.md)다.
+- 최상위 정본은 [ARCHITECTURE.md](../ARCHITECTURE.md)다.
 - 이 문서는 “자동 실행/도구 실행/에이전트 실행”의 집행 규칙을 정의한다.
-- 문서 간 충돌이 발생하면 [SPEC.md](SPEC.md) 및 각 SSOT 문서(예: [ARCHITECTURE.md](ARCHITECTURE.md), [STRUCTURE.md](STRUCTURE.md), [DEPENDENCIES.md](DEPENDENCIES.md), [TOOLING.md](TOOLING.md))가 우선한다.
+- 문서 간 충돌이 발생하면 [ARCHITECTURE.md](../ARCHITECTURE.md), [STRUCTURE.md](../STRUCTURE.md), [docs/specs/spec.md](../docs/specs/spec.md) 및 각 SSOT 문서(예: [DEPENDENCIES.md](../DEPENDENCIES.md), [TOOLING.md](../TOOLING.md))가 우선한다.
+
+## 경계 (Scope / Non-scope)
+
+이 섹션은 workflow 문서와의 혼재를 방지하기 위한 “판정 기준”이다.
+
+### Scope
+
+- 자동화의 권한 모델(Read/Propose/Modify/Release)
+- 금지/보호 영역(Default Deny)과 예외(승인) 절차
+- 자동화 실행의 결정성/감사 가능성 요구사항
+
+### Non-scope
+
+- 작업의 단계(phase), 상태 전이(status), 승인/게이트 절차
+  - SSOT: [workflow.md](workflow.md)
 
 ## 정의 (Definitions)
 
@@ -32,7 +48,7 @@
   - 제외 대상(명시적 non-goals)
 - **노이즈 PR**: 기능적 의미가 없는 대규모 포맷 변경, 정렬 변경, 혹은 요청 범위와 무관한 코드 이동만 포함된 PR.
 - **SSOT**: 레포의 “규칙/정책/결정성”을 규정하는 문서 및 파일.
-  - 최소 포함: `SPEC.md`, `ARCHITECTURE.md`, `STRUCTURE.md`, `DEPENDENCIES.md`, `TOOLING.md`, 본 문서(`AUTOMATION`).
+  - 최소 포함: `ARCHITECTURE.md`, `STRUCTURE.md`, `docs/specs/spec.md`, `DEPENDENCIES.md`, `TOOLING.md`, 본 문서(`AUTOMATION`).
   - 프로젝트에 따라 추가: 릴리즈 정책, 보안 정책, 빌드/배포 정책 문서.
 
 ## 기본 원칙
@@ -42,7 +58,7 @@
 - 자동화는 “요청 범위”를 벗어나는 변경을 해서는 안 된다(MUST NOT). 범위가 불명확한 경우 자동화는 실행을 계속해서는 안 된다(MUST NOT). 이 경우 자동화는 실행을 중단하고, 범위 명세 요청만 생성해야 한다(MUST).
 - 자동화는 최소 권한 원칙(Least Privilege)을 따라야 한다(MUST).
 - 본 문서에서 명시적으로 허용되지 않은 행위는 허용된 것으로 간주되지 않는다.
-- 데드 코드/파일 제거 작업은 [DEAD_CODE_POLICY.md](DEAD_CODE_POLICY.md)를 따라야 한다(MUST).
+- 데드 코드/파일 제거 작업은 [DEAD_CODE_POLICY.md](../docs/governance/DEAD_CODE_POLICY.md)를 따라야 한다(MUST).
 
 ### 범위 명세 요청 템플릿 (Scope Clarification Request)
 
@@ -131,7 +147,7 @@
 - 시크릿/키/토큰/인증 정보 취급 및 로그 출력
 - 외부 네트워크로의 임의 업로드/전송(기본 차단; 필요한 경우 허용 목록 기반)
   - 특히 Read/Propose 권한의 자동화는 외부 시스템에 대한 상태 변경을 유발하는 요청을 수행해서는 안 된다(MUST NOT).
-  - 외부 네트워크 전송 허용 목록의 SSOT는 [GOVERNANCE.md](GOVERNANCE.md) 또는 CI 설정이다.
+  - 외부 네트워크 전송 허용 목록의 SSOT는 [GOVERNANCE.md](../docs/governance/GOVERNANCE.md) 또는 CI 설정이다.
 
 ### 아키텍처 경계 위반 금지
 
@@ -154,7 +170,7 @@
     을 포함한 “예외 요청”을 생성한다.
 - 예외 승인 없이는 실행을 재개할 수 없다.
 
-예외 승인/절차의 SSOT는 [GOVERNANCE.md](GOVERNANCE.md)다.
+예외 승인/절차의 SSOT는 [GOVERNANCE.md](../docs/governance/GOVERNANCE.md)다.
 
 ## 결정성 및 재현성 (Determinism)
 

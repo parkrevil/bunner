@@ -11,7 +11,7 @@
 
 ## 정본/우선순위
 
-- 최상위 정본은 [SPEC.md](SPEC.md)다.
+- 최상위 정본은 [ARCHITECTURE.md](ARCHITECTURE.md)다.
 - 아키텍처 경계/Facade 규칙은 [ARCHITECTURE.md](ARCHITECTURE.md)가 우선한다.
 
 ## 에이전트 체크리스트 (Agent Checklist)

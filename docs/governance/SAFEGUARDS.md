@@ -15,13 +15,13 @@
 
 ## 정본/우선순위
 
-- 최상위 정본은 [SPEC.md](SPEC.md)다.
+- 최상위 정본은 [ARCHITECTURE.md](../../ARCHITECTURE.md)다.
 
 ## 관련 문서
 
 - 위반 시 즉시 중단(보안/법적/핵심 불변조건): [POLICY.md](POLICY.md)
 - 승인/승격(거버넌스): [GOVERNANCE.md](GOVERNANCE.md)
-- 에이전트 집행 규칙: [AGENTS.md](AGENTS.md)
+- 에이전트 집행 규칙: [AGENTS.md](../../AGENTS.md)
 
 ## POLICY vs SAFEGUARDS 역할 구분
 
@@ -89,7 +89,7 @@
 3. 사용자가 **명시적으로 승인**
 4. 변경은 **최소 단위**
 
-상세: [AGENTS.md](AGENTS.md) 4.1.1 Scope Override Protocol
+상세: [AGENTS.md](../../AGENTS.md) 4.1.1 Scope Override Protocol
 
 ---
 
