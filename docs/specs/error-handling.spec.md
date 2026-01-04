@@ -1,8 +1,8 @@
-## 🛡️ Error Handling
+# Error Handling
 
 Bunner는 예측 가능하고 일관된 에러 처리 전략을 제공한다. "모든 것은 필터다(All is Filter)"라는 철학 아래, 예외 발생부터 응답 생성까지의 흐름을 단일화된 파이프라인으로 제어한다.
 
-### Key Philosophy & Features
+## Key Philosophy & Features
 
 - **Unified Filter Chain (단일화된 필터 체인):**
   - 예외 처리를 위한 별도의 'Safety Net'이나 복잡한 핸들러 구조를 두지 않는다.
@@ -23,24 +23,3 @@ Bunner는 예측 가능하고 일관된 에러 처리 전략을 제공한다. "�
 - **Standard Error Protocol (표준 에러 프로토콜):**
   - 모든 에러 응답은 `code`(기계적 식별자)와 `meta`(상세 정보)를 포함하는 표준 형식을 따른다.
   - HTTP 상태 코드 등 프로토콜 종속적인 정보는 도메인 에러 정의에 포함되지 않으며, 어댑터 계층에서 매핑된다.
-
-### ⚙️ CLI - @bunner/cli
-
-- **Auto-Generated Try-Catch:**
-  - 핸들러와 미들웨어 등 실행 지점 주변에 최적화된 `try-catch` 블록을 자동으로 생성한다.
-  - 예외 발생 시 즉시 필터 체인의 시작점으로 점프하도록 제어 흐름을 연결한다.
-
-### 📐 Common - @bunner/common
-
-- **Filter Interface:**
-  - `catch(exception: unknown): Result | void` 형태의 단순한 인터페이스를 정의한다.
-  - `Result` 반환 시 처리 완료, `void` 반환 시(또는 throw) 다음 필터로 위임을 의미한다.
-
-- **Standard Error Types:**
-  - `SystemError`, `DomainError` 등 에러의 성격을 구분하는 기본 타입과 인터페이스를 제공한다.
-
-### 💎 Core - @bunner/core
-
-- **Default Filter Implementation:**
-  - 제거 불가능한 내장 필터(Default Framework Error Filter)를 구현하여 제공한다.
-  - `Unknown Error`, `Out of Memory` 등의 치명적인 상황에서도 최소한의 JSON 응답을 보장한다.
