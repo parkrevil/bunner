@@ -1,14 +1,22 @@
-## 📦 DTO (Data Transfer Object)
+# DTO (Data Transfer Object)
 
-DTO라는 개념 자체는 사용되겠지만 용어가 모호함. 사용자에게 프레임워크 권장 용어를 어필할 필요가 있음
+DTO는 계층 간 데이터 교환을 위한 순수한 데이터 컨테이너다. Bunner에서 DTO는 단순한 데이터 전달을 넘어, 입력 데이터의 구조를 정의하고 검증 규칙을 명세하는 **진실의 원천(Source of Truth)** 역할을 한다.
 
-- **HTTP**: Body, Query, Params, Headers, Response
-  - CreateUserBody, CreateUserResponse, ListQuery, UserIdParams
-- **gPRC**: Request, Response
-  - CreateUserRequest, CreateUserResponse
-- **WS**: Payload, Response, Message
-  - CreateUserPayload, CreateUserResponse, StartMaintenanceMessage
-- **Queue**: Message, Event
-  - CreateUserMessage, CreateUserEvent
-- **TCP, UDP, QUIC**: Packet
-  - CreateUserPacket
+## Key Philosophy & Features
+
+- **Class-Based Schema (클래스 기반 스키마):**
+  - 인터페이스나 타입 별칭이 아닌, 클래스를 사용하여 DTO를 정의한다.
+  - 클래스는 런타임에 값이 존재하므로, 컴파일된 자바스크립트 코드에서도 데이터 구조에 대한 메타데이터로 활용될 수 있다.
+  - 이는 파싱, 검증, 문서화 등 다양한 목적으로 재사용된다.
+
+- **Single Source of Truth (단일 진실 공급원):**
+  - DTO 클래스 하나에 데이터 구조, 타입, 필수 여부, 유효성 검사 규칙, API 문서화 정보가 모두 포함된다.
+  - 중복 정의를 방지하고, 코드 변경 시 관련된 모든 메타데이터가 동기화되도록 보장한다.
+
+- **Separation of Concerns (관심사 분리):**
+  - DTO는 로직을 포함하지 않는 순수한 데이터 객체여야 한다.
+  - 비즈니스 로직이 포함된 도메인 엔티티와 명확히 구분되어야 하며, 계층 간 결합도를 낮추는 역할을 수행한다.
+
+- **Immutable by Default (기본 불변성):**
+  - DTO는 생성 후 변경되지 않는 것을 권장한다.
+  - 데이터의 흐름을 예측 가능하게 만들고, 부수 효과를 방지한다.
