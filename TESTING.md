@@ -1,139 +1,122 @@
 # TESTING
 
-## 역할
+## 1. 개요 및 원칙 (Overview & Principles)
 
-- **이 문서는 테스트 품질 기준(네이밍/격리/결정성)을 정의한다.**
+이 문서는 **Bunner** 프로젝트의 테스트 작성, 유지보수, 실행에 관한 **단일 진실 공급원(Single Source of Truth, SSOT)**이다.
+본 문서에 기술된 규칙은 권장 사항이 아니며, 모든 기여자(Human/Agent)가 준수해야 할 **강제적 규범**이다.
+
+### 1.1 핵심 철학 (Core Philosophy)
+1.  **신뢰성 (Reliability)**: 테스트는 거짓 양성(False Positive)이나 거짓 음성(False Negative) 없이 코드의 상태를 정확히 반영해야 한다. "가끔 실패하는(Flaky)" 테스트는 즉시 삭제하거나 수정해야 한다.
+2.  **격리성 (Isolation)**: 각 테스트 케이스는 독립적이어야 하며, 실행 순서나 타 테스트의 상태 변경에 영향을 받아서는 안 된다.
+3.  **결정성 (Determinism)**: 동일한 코드와 동일한 입력에 대해서는 언제, 어디서 실행하든 100% 동일한 결과가 보장되어야 한다.
+4.  **속도 (Speed)**: 테스트 스위트는 개발 루프의 일부다. 느린 테스트(특히 유닛 테스트)는 개발 생산성을 저해하므로 최적화되어야 한다.
+5.  **목적성 (Purpose)**: 테스트를 통과하기 위한 테스트 코드는 작성하지 않는다. 실제 비즈니스 로직과 요구사항을 검증하기 위한 코드를 작성한다.
 
 ---
 
-### 테스트 규칙 요약표 (Quick Reference)
+## 2. 테스트 환경 및 실행 (Environment & Execution)
 
-| 규칙            | 내용                          | 키워드 |
-| --------------- | ----------------------------- | ------ |
-| 파일명          | `*.spec.ts` 형식              | MUST   |
-| describe        | 함수 1개당 1개                | MUST   |
-| it 네이밍       | BDD 영어 (`should...when...`) | MUST   |
-| 스코프          | 대상 함수만 검증              | MUST   |
-| 외부 호출       | mock/spy 격리 의무            | MUST   |
-| 1 it = 1 케이스 | 여러 케이스 혼합 금지         | MUST   |
-| 결정성          | 동일 입력 → 동일 결과         | MUST   |
-| 러너            | `bun test` 전용               | MUST   |
+### 2.1 테스트 러너 (Test Runner)
+- **Bun Test**: 프로젝트는 `bun test`를 표준 러너로 사용한다. Jest, Mocha 등 타 러너 사용은 금지한다.
+- **실행 명령어**:
+    - 전체 테스트: `bun test`
+    - 커버리지 측정: `bun test --coverage`
+    - 특정 파일 실행: `bun test <file-path>`
 
-## 목적
+### 2.2 라이프사이클 훅 (Lifecycle Hooks)
+Bun Test가 제공하는 표준 훅을 최대한 활용하여 테스트 전후 상태를 관리한다.
+- `beforeAll(() => { ... })`: 테스트 파일(Suite) 전체 실행 전 1회 수행 (DB 연결, 서버 시작 등).
+- `afterAll(() => { ... })`: 테스트 파일 전체 실행 후 1회 수행 (DB 연결 해제, 파일 정리 등).
+- `beforeEach(() => { ... })`: 각 `it` 실행 직전 수행 (상태 초기화, Mock 리셋).
+- `afterEach(() => { ... })`: 각 `it` 실행 직후 수행 (임시 데이터 삭제 등).
 
-- 테스트의 품질 기준(네이밍/격리/결정성)을 고정한다.
-- “테스트가 느슨해서 우연히 통과”하는 상태를 금지한다.
+---
 
-## 적용 범위
+## 3. 테스트 계층 구조 (Test Pyramid)
 
-- `bun test`로 실행되는 모든 테스트
+| 계층 | 파일 패턴 | 위치 | 목적 | Mocking 전략 |
+| :--- | :--- | :--- | :--- | :--- |
+| **Unit** | `*.spec.ts` | 소스 코드와 동일 위치 (Colocated) | 단일 함수/클래스의 로직 검증 | **Strict Mocking** (외부 의존성 전면 차단) |
+| **Integration** | `*.test.ts` | `test/integration/` | 모듈 간 상호작용 및 파이프라인 검증 | 3rd Party API만 Mocking (DB는 실제/인메모리 사용) |
+| **E2E** | `*.e2e.test.ts` | `test/e2e/` | 최종 사용자 시나리오 검증 (Black-box) | 원칙적 금지 (제어 불가능한 외부 API 제외) |
 
-## 정본/우선순위
+---
 
-- 최상위 정본은 [ARCHITECTURE.md](ARCHITECTURE.md)다.
+## 4. 상세 작성 규칙 (Detailed Guidelines)
 
-## 테스트 무결성 (Tests as a Gate)
+### 4.1 유닛 테스트 (Unit Tests)
+- **범위**: 테스트 대상(SUT)은 오직 하나의 함수나 클래스여야 한다.
+- **Strict Mocking**: SUT 내부에서 호출되는 **모든** 외부 의존성(다른 클래스, 모듈, 네트워크, DB 등)은 반드시 `mock` 또는 `spyOn`을 사용하여 격리해야 한다. 실제 구현체를 주입하는 것은 금지된다 (DTO/Value Object 제외).
+- **White-box Testing**: 내부 로직 분기를 검증하기 위해 내부 상태에 접근하는 것이 허용되나, 가능한 공개 인터페이스를 통해 검증하는 것을 권장한다.
 
-- 변경이 로직/행동/계약(Contract)에 영향을 준다면, 관련 테스트는 반드시 존재하거나 업데이트되어야 한다.
-- 필요한 테스트가 누락되어 있고 테스트 추가가 작업 범위를 벗어난다면, 즉시 중단하고 사용자에게 지침을 요청한다.
-- 실패하는 테스트를 조용히 우회하거나 삭제하는 행위는 금지한다.
+### 4.2 통합 테스트 (Integration Tests)
+- **Public API Testing**: 모듈의 내부 구현(private method)을 직접 호출하지 않는다. 반드시 모듈의 **Public API**를 통해서만 상호작용한다.
+    - *규칙*: 테스트 시나리오 검증에 필요한 Public API가 없다면, `test-only` 메서드를 뚫는 대신 모듈 설계를 재검토하여 정당한 Public API를 보강해야 한다.
+- **디렉토리 구조**: 테스트 파일이 비대해지거나 도메인이 복잡할 경우, 단일 파일 대신 디렉토리로 묶는다.
+    - 예: `test/integration/orders/create-order.test.ts`, `test/integration/orders/cancel-order.test.ts`
 
-## 15. 유닛 테스트 표준 (Unit Testing Standard)
+### 4.3 E2E 테스트 (End-to-End Tests)
+- **Black-box Testing**: 시스템 내부 구조(DB 스키마, 클래스 명 등)를 전혀 모른다고 가정한다. HTTP 요청/응답 만으로 검증한다.
+- **시나리오 중심**: 단순 기능 점검이 아닌, 사용자 시나리오(User Journey)를 기반으로 작성한다.
 
-이 섹션은 “권장사항”이 아니다. 위반은 즉시 수정 대상이며, 테스트가 느슨하면 그것은 곧 품질 결함이다.
+---
 
-1. **BDD 스타일 네이밍을 강제한다**
-   - `describe`: 테스트 대상 **함수 1개당 describe 1개**만 허용한다. (하나의 describe에 여러 함수를 섞는 행위 금지)
-   - `it`: 반드시 **영어 BDD 문장**으로 작성한다.
-     - 기본 패턴: `it('should ...', () => { ... })`
-     - 예외/실패 케이스: `it('should throw when ...', () => { ... })` 또는 `it('should return null when ...', () => { ... })`
+## 5. 코딩 표준 및 스타일 (Coding Standards)
 
-2. **유닛 테스트는 “대상 함수 스코프”만 검증한다**
-   - 테스트는 대상 함수의 입력/출력/에러/부작용(명시된 것만)을 검증한다.
-   - 대상 함수 내부에서 다른 모듈로 전파되는 호출이 테스트 결과에 영향을 주면 안 된다.
-   - 외부 호출(네트워크, 파일시스템, 타이머, 랜덤, 글로벌 상태, 컨테이너/DI, DB 등)을 유닛 테스트에 섞는 행위는 금지다.
+### 5.1 네이밍 컨벤션 (Naming - BDD Style)
+- **describe**: 테스트 대상(Class, Module) 또는 기능(Method)의 이름을 명확히 기술한다. 중첩 구조를 활용한다.
+- **it**: 반드시 **BDD 스타일**(`should ... when ...`)을 따른다. "테스트가 무엇을 검증하는지"가 아니라 "시스템이 어떻게 행동해야 하는지"를 서술한다.
+    - ✅ `it("should return 200 OK when the payload is valid", ...)`
+    - ✅ `it("should throw ValidationError when email is missing", ...)`
+    - ❌ `it("test create user", ...)`
+    - ❌ `it("works", ...)`
 
-3. **스파이/목킹은 선택이 아니라 의무다**
-   - 대상 함수가 다른 함수/모듈을 호출한다면, 그 호출은 반드시 스파잉/목킹으로 격리해야 한다.
-   - 유닛 테스트가 “우연히 통과/실패”하지 않도록, 외부로 나가는 모든 경로를 통제하라.
-
-4. **1개의 `it`는 1개의 케이스만 검증한다**
-   - 한 `it`에 여러 행동/분기/규칙을 동시에 검증하지 마라.
-   - 케이스가 늘어나면 `it`를 분리하고, 어떤 규칙이 깨졌는지 실패 메시지로 즉시 드러나게 하라.
-
-5. **엣지 케이스는 광범위하고 엄격해야 한다**
-   - Happy path만 쓰고 끝내는 행위 금지.
-   - Failure/edge 케이스를 의무적으로 작성하라: 빈 값, 경계값, 누락, 잘못된 타입/형태, 매우 큰 입력, 중복, 순서 변경, 예상치 못한 유니코드/특수문자, `null/undefined` 등 가능한 모든 실패 모드를 명시적으로 검증한다.
-
-6. **테스트는 결정적(Deterministic)이어야 한다**
-   - 같은 코드/같은 입력이면 항상 같은 결과가 나와야 한다.
-   - 시계/랜덤/타이머 등 비결정 요소는 반드시 고정하거나 대체(mock)해야 한다.
-
-7. **테스트는 명확한 실패 원인을 제공해야 한다**
-   - 실패했을 때 “어떤 규칙이 깨졌는지” 바로 알 수 있도록, 케이스를 쪼개고 이름을 규격화하라.
-
-8. **Bun 테스트 러너 사용을 전제로 한다**
-   - 표준 실행은 `bun test`다. 다른 러너/헬퍼를 편의상 추가하지 마라(필요하면 사용자 승인 필요).
-
-## 테스트 안티패턴 (Anti-patterns)
-
-| 위반               | ❌ 나쁜 예                    | ✅ 올바른 방법                      |
-| ------------------ | ----------------------------- | ----------------------------------- |
-| 여러 함수 혼합     | 1 describe에 여러 함수 테스트 | 함수 1개당 describe 1개             |
-| 비-BDD 네이밍      | `it('test1', ...)`            | `it('should return X when Y', ...)` |
-| 외부 의존 미격리   | 실제 API 호출                 | mock/spy로 격리                     |
-| 1 it에 여러 케이스 | expect 5개를 1 it에           | 케이스별 it 분리                    |
-| Happy path만       | 성공 케이스만 테스트          | edge/failure 케이스 포함            |
-| 비결정적           | `Date.now()` 직접 사용        | 시간 고정 mock                      |
-
-## 테스트 예시 (Minimal Example)
+### 5.2 코드 구조 (AAA Pattern)
+모든 테스트 케이스 내부는 **AAA (Arrange, Act, Assert)** 패턴을 명시적으로 준수해야 한다. 가독성을 위해 빈 줄로 단계를 구분한다.
 
 ```typescript
-import { describe, expect, it, mock } from 'bun:test';
+describe("UserService", () => {
+  describe("createUser", () => {
+    it("should return the created user when input is valid", async () => {
+      // Arrange (준비: 데이터 생성, Mock 설정)
+      const input = { name: "Alice" };
+      mockRepo.save.mockResolvedValue({ id: 1, ...input });
 
-describe('calculateTotal', () => {
-  // Happy path
-  it('should return sum when all prices are positive', () => {
-    const items = [{ price: 100 }, { price: 200 }];
+      // Act (실행: SUT 호출)
+      const result = await userService.createUser(input);
 
-    const result = calculateTotal(items);
-
-    expect(result).toBe(300);
-  });
-
-  // Edge case: empty
-  it('should return 0 when items array is empty', () => {
-    const result = calculateTotal([]);
-
-    expect(result).toBe(0);
-  });
-
-  // Failure case
-  it('should throw when item has negative price', () => {
-    const items = [{ price: -100 }];
-
-    expect(() => calculateTotal(items)).toThrow();
+      // Assert (검증: 결과 확인)
+      expect(result).toEqual({ id: 1, name: "Alice" });
+      expect(mockRepo.save).toHaveBeenCalledTimes(1);
+    });
   });
 });
 ```
 
-**주요 포인트:**
+### 5.3 데이터셋 및 Fixture 관리 (Datasets & Stubs)
+- **하드코딩 지양**: 반복되는 테스트 데이터는 별도 파일로 분리한다.
+- **Stubs**: 정적인 데이터셋(JSON 등)은 `test/fixtures/` 또는 `test/stubs/` 디렉토리에 위치시킨다.
+- **Factories**: 동적인 데이터 생성이 필요한 경우, `test/utils/factories/` 내에 팩토리 함수를 작성하여 활용한다. (예: `createUserParams()`)
 
-- `describe`: 함수 1개당 1개
-- `it`: BDD 문장 (`should ... when ...`)
-- Happy path + Edge case + Failure case 모두 작성
-- 외부 의존은 `mock`으로 격리
+### 5.4 헬퍼 및 유틸리티 (Helpers & Utils)
+- **전역 헬퍼**: 모든 테스트에서 공통으로 사용되는 유틸리티(예: `mockLogger`, `createTestApp`)는 `test/utils/`에 작성한다.
+- **지역 헬퍼**: 특정 도메인에만 한정된 헬퍼는 해당 테스트 파일과 인접한 `__test_utils__` 디렉토리나 파일 내부에 작성한다.
 
-상세 예시는 [STYLEGUIDE.md](STYLEGUIDE.md)의 유닛 테스트 예시 참조.
+---
 
-## 테스트 작성 체크리스트
+## 6. 안티 패턴 (Anti-Patterns)
+1.  **Logic in Tests**: 테스트 코드 내에 복잡한 조건문(`if`, `for`)이나 로직을 작성하지 않는다. 테스트는 선언적이어야 한다.
+2.  **Implementation Leaking**: 프로덕션 코드를 수정할 때 테스트 코드도 함께 수정해야 한다면(깨진 테스트 복구 제외), 테스트가 구현 세부사항에 너무 의존하고 있다는 신호다.
+3.  **Catching Everything**: `try-catch`로 예외를 잡고 `expect` 없이 넘어가는 행위를 금지한다. 예외 검증은 `expect(() => ...).toThrow()`를 사용한다.
+4.  **Flaky Tests**: 네트워크 지연이나 실행 순서에 따라 결과가 달라지는 테스트를 방치하지 않는다.
 
-- [ ] 파일명이 `*.spec.ts` 형식인가?
-- [ ] `describe`가 함수 1개당 1개인가?
-- [ ] `it` 이름이 BDD 형식(`should...when...`)인가?
-- [ ] 대상 함수의 스코프만 검증하는가?
-- [ ] 외부 호출을 mock/spy로 격리했는가?
-- [ ] 1 it = 1 케이스를 준수하는가?
-- [ ] Happy path + Edge case + Failure case가 모두 있는가?
-- [ ] 비결정 요소(시간/랜덤)를 고정했는가?
-- [ ] `bun test`로 실행이 통과하는가?
+---
+
+## 7. 체크리스트 (Self-Check)
+- [ ] 파일명 규칙(`*.spec.ts`, `*.test.ts`)을 준수했는가?
+- [ ] `describe`와 `it` 네이밍이 BDD 스타일인가?
+- [ ] AAA 패턴으로 구조가 명확한가?
+- [ ] 유닛 테스트에서 외부 의존성을 모두 Mocking 했는가?
+- [ ] 통합 테스트에서 Public API만을 사용했는가?
+- [ ] 반복되는 데이터나 로직을 Fixture/Helper로 분리했는가?
+- [ ] `bun test` 실행 시 경고나 에러 없이 통과하는가?
