@@ -99,7 +99,7 @@ ARCHITECTURE는 다음 질문에만 답한다.
 
 이 문서는 다음 문서보다 **상위 정본**이다.
 
-- `STRUCTURE.md`
+- [STRUCTURE.md](STRUCTURE.md)
 - `docs/specs/*.spec.md`
 - `docs/governance/*`
 

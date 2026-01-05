@@ -10,17 +10,17 @@
 
 ```text
 Level 0 (Top SSOT)
-└─ ARCHITECTURE.md
+└─ [ARCHITECTURE.md](../../ARCHITECTURE.md)
 
 Level 1 (Structural SSOT)
-└─ STRUCTURE.md
+└─ [STRUCTURE.md](../../STRUCTURE.md)
 
 Level 2 (Contract SSOT)
-└─ docs/specs/spec.md (본 문서)
-	└─ docs/specs/*.spec.md
+└─ [docs/specs/spec.md](spec.md) (본 문서)
+	└─ `docs/specs/*.spec.md`
 
 Level 3 (Guidance / Process)
-└─ ROADMAP.md 및 기타 가이드 문서
+└─ [ROADMAP.md](../../ROADMAP.md) 및 기타 가이드 문서
 ```
 
 ## 규범 용어
