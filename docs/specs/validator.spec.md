@@ -4,7 +4,7 @@ Bunner의 Validator는 데이터의 유효성을 검증하는 시스템이다. �
 
 ## Key Philosophy & Features
 
-- **Zero Dependency (제로 디펜던시):**
+- **Zero Dependency (제로 의존성):**
   - 무거운 검증 라이브러리를 런타임에 포함하지 않는다.
   - 필요한 검증 로직은 빌드 타임에 생성되어 애플리케이션에 내장된다.
 
