@@ -10,137 +10,113 @@
 2.  **격리성 (Isolation)**: 각 테스트 케이스는 독립적이어야 하며, 실행 순서나 타 테스트의 상태 변경에 영향을 받아서는 안 된다.
 3.  **결정성 (Determinism)**: 동일한 코드와 동일한 입력에 대해서는 언제, 어디서 실행하든 100% 동일한 결과가 보장되어야 한다.
 4.  **속도 (Speed)**: 테스트 스위트는 개발 루프의 일부다. 느린 테스트(특히 유닛 테스트)는 개발 생산성을 저해하므로 최적화되어야 한다.
+5.  **목적성 (Purpose)**: 테스트를 통과하기 위한 테스트 코드는 작성하지 않는다. 실제 비즈니스 로직과 요구사항을 검증하기 위한 코드를 작성한다.
 
 ---
 
-## 2. 테스트 피라미드 및 구조 (Test Structure)
+## 2. 테스트 환경 및 실행 (Environment & Execution)
 
-프로젝트는 명확하게 구분된 세 가지 계층의 테스트를 유지한다. 각 계층의 역할과 범위를 혼합하는 것은 엄격히 금지된다.
+### 2.1 테스트 러너 (Test Runner)
+- **Bun Test**: 프로젝트는 `bun test`를 표준 러너로 사용한다. Jest, Mocha 등 타 러너 사용은 금지한다.
+- **실행 명령어**:
+    - 전체 테스트: `bun test`
+    - 커버리지 측정: `bun test --coverage`
+    - 특정 파일 실행: `bun test <file-path>`
 
-| 계층 | 파일 패턴 | 위치 | 목적 | 외부 의존성 | Mocking 규칙 |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **Unit** | `*.spec.ts` | 소스 코드와 동일 위치 (Colocated) | 단일 함수/클래스의 로직 검증 | **절대 금지** (No I/O) | **모두 Mocking** (DB, Net, FS 포함) |
-| **Integration** | `*.test.ts` | `test/integration/` | 모듈 간 상호작용 검증 | 허용 (DB, Redis 등) | 3rd Party API만 Mocking |
-| **E2E** | `*.e2e.test.ts` | `test/e2e/` | 최종 사용자 시나리오 검증 | 허용 (실제 환경 유사) | 원칙적 금지 (제어 불가능한 외부 API 제외) |
+### 2.2 라이프사이클 훅 (Lifecycle Hooks)
+Bun Test가 제공하는 표준 훅을 최대한 활용하여 테스트 전후 상태를 관리한다.
+- `beforeAll(() => { ... })`: 테스트 파일(Suite) 전체 실행 전 1회 수행 (DB 연결, 서버 시작 등).
+- `afterAll(() => { ... })`: 테스트 파일 전체 실행 후 1회 수행 (DB 연결 해제, 파일 정리 등).
+- `beforeEach(() => { ... })`: 각 `it` 실행 직전 수행 (상태 초기화, Mock 리셋).
+- `afterEach(() => { ... })`: 각 `it` 실행 직후 수행 (임시 데이터 삭제 등).
 
 ---
 
-## 3. 유닛 테스트 (Unit Tests)
+## 3. 테스트 계층 구조 (Test Pyramid)
 
-유닛 테스트는 가장 낮은 레벨에서 개별 컴포넌트(함수, 클래스)의 **순수 로직**을 검증한다.
+| 계층 | 파일 패턴 | 위치 | 목적 | Mocking 전략 |
+| :--- | :--- | :--- | :--- | :--- |
+| **Unit** | `*.spec.ts` | 소스 코드와 동일 위치 (Colocated) | 단일 함수/클래스의 로직 검증 | **Strict Mocking** (외부 의존성 전면 차단) |
+| **Integration** | `*.test.ts` | `test/integration/` | 모듈 간 상호작용 및 파이프라인 검증 | 3rd Party API만 Mocking (DB는 실제/인메모리 사용) |
+| **E2E** | `*.e2e.test.ts` | `test/e2e/` | 최종 사용자 시나리오 검증 (Black-box) | 원칙적 금지 (제어 불가능한 외부 API 제외) |
 
-### 3.1 작성 규칙
-1.  **범위 (Scope)**: 테스트 대상(SUT, System Under Test)은 오직 하나의 함수나 클래스여야 한다. SUT가 의존하는 모든 협력 객체(Collaborator)는 Mock 또는 Spy로 대체해야 한다.
-2.  **격리 (Isolation)**: 파일 시스템, 네트워크, 데이터베이스, 시스템 시간 등 외부 상태에 의존하는 코드는 반드시 Mocking 처리하여 순수한 로직만 남겨야 한다.
-3.  **커버리지 (Coverage)**: 유틸리티 함수, 헬퍼, 코어 알고리즘은 **분기 커버리지(Branch Coverage) 100%**를 지향해야 한다.
-4.  **Happy Path & Edge Cases**: 정상 동작뿐만 아니라 `null`, `undefined`, 빈 값, 경계값 등 예외 케이스를 반드시 포함해야 한다.
+---
 
-### 3.2 금지 사항 (Forbidden)
-- 실제 DB 연결 시도.
-- 실제 HTTP 요청 전송.
-- `sleep()`이나 `setTimeout()`을 이용한 타이밍 제어 (Bun의 Time mock 기능 사용 필수).
-- 테스트 간 상태 공유 (전역 변수 사용 금지).
+## 4. 상세 작성 규칙 (Detailed Guidelines)
 
-### 3.3 예시 (Example)
+### 4.1 유닛 테스트 (Unit Tests)
+- **범위**: 테스트 대상(SUT)은 오직 하나의 함수나 클래스여야 한다.
+- **Strict Mocking**: SUT 내부에서 호출되는 **모든** 외부 의존성(다른 클래스, 모듈, 네트워크, DB 등)은 반드시 `mock` 또는 `spyOn`을 사용하여 격리해야 한다. 실제 구현체를 주입하는 것은 금지된다 (DTO/Value Object 제외).
+- **White-box Testing**: 내부 로직 분기를 검증하기 위해 내부 상태에 접근하는 것이 허용되나, 가능한 공개 인터페이스를 통해 검증하는 것을 권장한다.
+
+### 4.2 통합 테스트 (Integration Tests)
+- **Public API Testing**: 모듈의 내부 구현(private method)을 직접 호출하지 않는다. 반드시 모듈의 **Public API**를 통해서만 상호작용한다.
+    - *규칙*: 테스트 시나리오 검증에 필요한 Public API가 없다면, `test-only` 메서드를 뚫는 대신 모듈 설계를 재검토하여 정당한 Public API를 보강해야 한다.
+- **디렉토리 구조**: 테스트 파일이 비대해지거나 도메인이 복잡할 경우, 단일 파일 대신 디렉토리로 묶는다.
+    - 예: `test/integration/orders/create-order.test.ts`, `test/integration/orders/cancel-order.test.ts`
+
+### 4.3 E2E 테스트 (End-to-End Tests)
+- **Black-box Testing**: 시스템 내부 구조(DB 스키마, 클래스 명 등)를 전혀 모른다고 가정한다. HTTP 요청/응답 만으로 검증한다.
+- **시나리오 중심**: 단순 기능 점검이 아닌, 사용자 시나리오(User Journey)를 기반으로 작성한다.
+
+---
+
+## 5. 코딩 표준 및 스타일 (Coding Standards)
+
+### 5.1 네이밍 컨벤션 (Naming - BDD Style)
+- **describe**: 테스트 대상(Class, Module) 또는 기능(Method)의 이름을 명확히 기술한다. 중첩 구조를 활용한다.
+- **it**: 반드시 **BDD 스타일**(`should ... when ...`)을 따른다. "테스트가 무엇을 검증하는지"가 아니라 "시스템이 어떻게 행동해야 하는지"를 서술한다.
+    - ✅ `it("should return 200 OK when the payload is valid", ...)`
+    - ✅ `it("should throw ValidationError when email is missing", ...)`
+    - ❌ `it("test create user", ...)`
+    - ❌ `it("works", ...)`
+
+### 5.2 코드 구조 (AAA Pattern)
+모든 테스트 케이스 내부는 **AAA (Arrange, Act, Assert)** 패턴을 명시적으로 준수해야 한다. 가독성을 위해 빈 줄로 단계를 구분한다.
+
 ```typescript
-import { describe, it, expect, mock, beforeEach } from "bun:test";
-import { UserService } from "./user.service";
-
 describe("UserService", () => {
-  let service: UserService;
-  let mockRepo: any;
+  describe("createUser", () => {
+    it("should return the created user when input is valid", async () => {
+      // Arrange (준비: 데이터 생성, Mock 설정)
+      const input = { name: "Alice" };
+      mockRepo.save.mockResolvedValue({ id: 1, ...input });
 
-  beforeEach(() => {
-    // 의존성 Mocking
-    mockRepo = {
-      findById: mock(() => Promise.resolve(null)),
-    };
-    service = new UserService(mockRepo);
-  });
+      // Act (실행: SUT 호출)
+      const result = await userService.createUser(input);
 
-  describe("getUser", () => {
-    it("should throw NotFoundError when user does not exist", async () => {
-      // Arrange
-      mockRepo.findById.mockResolvedValue(null);
-
-      // Act & Assert
-      expect(service.getUser(1)).rejects.toThrow("NotFound");
+      // Assert (검증: 결과 확인)
+      expect(result).toEqual({ id: 1, name: "Alice" });
+      expect(mockRepo.save).toHaveBeenCalledTimes(1);
     });
   });
 });
 ```
 
----
+### 5.3 데이터셋 및 Fixture 관리 (Datasets & Stubs)
+- **하드코딩 지양**: 반복되는 테스트 데이터는 별도 파일로 분리한다.
+- **Stubs**: 정적인 데이터셋(JSON 등)은 `test/fixtures/` 또는 `test/stubs/` 디렉토리에 위치시킨다.
+- **Factories**: 동적인 데이터 생성이 필요한 경우, `test/utils/factories/` 내에 팩토리 함수를 작성하여 활용한다. (예: `createUserParams()`)
 
-## 4. 통합 테스트 (Integration Tests)
-
-통합 테스트는 두 개 이상의 모듈(예: Controller + Service, Service + DB)이 올바르게 협력하는지 검증한다.
-
-### 4.1 작성 규칙
-1.  **위치**: 반드시 `test/integration/` 디렉토리 내에 작성한다.
-2.  **범위**: 주요 파이프라인(Middleware -> Controller -> Service)의 연결성을 확인한다.
-3.  **데이터베이스**: 인메모리 DB(SQLite)나 Dockerized DB를 사용하여 실제 쿼리가 수행되도록 한다. 테스트 종료 후 트랜잭션 롤백이나 데이터 초기화(Teardown)가 필수다.
-4.  **Mocking**: 내부 서비스 간 호출은 실제 객체를 사용하되, 제어할 수 없는 외부 시스템(결제 게이트웨이, 이메일 서버 등)은 Mocking한다.
+### 5.4 헬퍼 및 유틸리티 (Helpers & Utils)
+- **전역 헬퍼**: 모든 테스트에서 공통으로 사용되는 유틸리티(예: `mockLogger`, `createTestApp`)는 `test/utils/`에 작성한다.
+- **지역 헬퍼**: 특정 도메인에만 한정된 헬퍼는 해당 테스트 파일과 인접한 `__test_utils__` 디렉토리나 파일 내부에 작성한다.
 
 ---
 
-## 5. E2E 테스트 (End-to-End Tests)
-
-E2E 테스트는 시스템을 블랙박스로 취급하여, 외부 요청부터 응답까지의 전체 흐름을 검증한다.
-
-### 5.1 작성 규칙
-1.  **위치**: 반드시 `test/e2e/` 디렉토리 내에 작성한다.
-2.  **접근 방식**: 내부 구현 상세(클래스 구조, DB 스키마 등)를 알지 못한다고 가정한다. 오직 공개된 API 엔드포인트(HTTP)를 통해서만 상호작용한다.
-3.  **환경**: 실제 프로덕션과 유사한 스테이징 환경 또는 격리된 컨테이너 환경에서 실행한다.
-4.  **시나리오**: 단순 API 호출이 아닌, "회원가입 -> 로그인 -> 글쓰기"와 같은 유저 시나리오를 검증한다.
+## 6. 안티 패턴 (Anti-Patterns)
+1.  **Logic in Tests**: 테스트 코드 내에 복잡한 조건문(`if`, `for`)이나 로직을 작성하지 않는다. 테스트는 선언적이어야 한다.
+2.  **Implementation Leaking**: 프로덕션 코드를 수정할 때 테스트 코드도 함께 수정해야 한다면(깨진 테스트 복구 제외), 테스트가 구현 세부사항에 너무 의존하고 있다는 신호다.
+3.  **Catching Everything**: `try-catch`로 예외를 잡고 `expect` 없이 넘어가는 행위를 금지한다. 예외 검증은 `expect(() => ...).toThrow()`를 사용한다.
+4.  **Flaky Tests**: 네트워크 지연이나 실행 순서에 따라 결과가 달라지는 테스트를 방치하지 않는다.
 
 ---
 
-## 6. 공통 코딩 표준 (Coding Standards)
-
-모든 테스트 코드는 프로덕션 코드와 동일한 수준의 품질로 관리되어야 한다.
-
-### 6.1 네이밍 컨벤션 (Naming Convention)
-- **Describe**: 테스트 대상(클래스명, 함수명)을 명확히 명시한다.
-- **It**: BDD 스타일을 준수한다. `should [expected behavior] when [condition]` 형식을 따른다.
-    - ✅ `it("should return 200 OK when payload is valid")`
-    - ❌ `it("test create")`
-    - ❌ `it("works")`
-
-### 6.2 구조 (Structure) - AAA 패턴
-모든 테스트 케이스는 **AAA (Arrange, Act, Assert)** 주석을 명시하거나, 빈 줄로 구획을 나누어 가독성을 높여야 한다.
-
-```typescript
-it("should calculate total price", () => {
-  // Arrange (준비)
-  const items = [{ price: 100 }, { price: 200 }];
-
-  // Act (실행)
-  const total = calculateTotal(items);
-
-  // Assert (검증)
-  expect(total).toBe(300);
-});
-```
-
-### 6.3 타입 안전성 (Type Safety)
-- 테스트 코드 내에서도 `any` 사용을 엄격히 제한한다.
-- Mock 객체 생성 시에도 타입 호환성을 유지해야 한다 (`as unknown as Type` 패턴은 최소화).
-
-### 6.4 에러 검증
-- 예외가 발생하는지 확인할 때는 단순히 `toThrow()`만 사용하지 말고, 구체적인 에러 타입이나 메시지를 검증해야 한다.
-    - ✅ `expect(() => fn()).toThrow(ValidationError)`
-    - ❌ `expect(() => fn()).toThrow()` (너무 포괄적임)
-
----
-
-## 7. 실행 및 CI (Execution & CI)
-
-### 7.1 명령어
-- **전체 테스트**: `bun test`
-- **유닛 테스트만**: `bun test .spec.ts`
-- **커버리지 확인**: `bun test --coverage`
-
-### 7.2 CI 정책
-- PR 제출 전 로컬에서 모든 테스트가 통과해야 한다.
-- 커버리지가 급격히 하락하는 PR은 병합이 차단될 수 있다.
+## 7. 체크리스트 (Self-Check)
+- [ ] 파일명 규칙(`*.spec.ts`, `*.test.ts`)을 준수했는가?
+- [ ] `describe`와 `it` 네이밍이 BDD 스타일인가?
+- [ ] AAA 패턴으로 구조가 명확한가?
+- [ ] 유닛 테스트에서 외부 의존성을 모두 Mocking 했는가?
+- [ ] 통합 테스트에서 Public API만을 사용했는가?
+- [ ] 반복되는 데이터나 로직을 Fixture/Helper로 분리했는가?
+- [ ] `bun test` 실행 시 경고나 에러 없이 통과하는가?
