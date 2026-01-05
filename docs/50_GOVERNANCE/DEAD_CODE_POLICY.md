@@ -13,7 +13,7 @@
 
 ## 정본/우선순위
 
-- 최상위 정본은 [ARCHITECTURE.md](../../ARCHITECTURE.md)다.
+- 최상위 정본은 [ARCHITECTURE.md](../20_ARCHITECTURE/ARCHITECTURE.md)다.
 
 ## 목표
 

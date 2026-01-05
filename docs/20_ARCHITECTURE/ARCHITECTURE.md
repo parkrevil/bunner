@@ -97,10 +97,13 @@ ARCHITECTURE는 다음 질문에만 답한다.
 
 ## 8. Authority
 
+이 문서는 **L2 Authority (Boundary/Dependency)**를 가지며,
+상위 계층인 **L1 (SSOT_HIERARCHY, INVARIANTS)**에 종속된다.
+
 이 문서는 다음 문서보다 **상위 정본**이다.
 
 - [STRUCTURE.md](STRUCTURE.md)
-- `docs/specs/*.spec.md`
-- `docs/governance/*`
+- [00_SPEC.md](../30_SPEC/00_SPEC.md) 및 `*.spec.md`
+- [docs/50_GOVERNANCE/](../50_GOVERNANCE/) 하위 제반 문서
 
 구조적 불변식과 충돌하는 하위 규칙은 무효다.

@@ -1,67 +1,27 @@
-# GitHub Copilot Instructions
+# Copilot Instructions
 
-This repo is SSOT-driven. Follow [AGENTS.md](../AGENTS.md) exactly.
+This repository is governed by the following entry document:
 
-## Quick Reference
+- [AGENTS.md](AGENTS.md)
 
-### Hard Stops (즉시 중단)
+Copilot must read and follow the rules defined in that file.
 
-| Category     | Condition                                        |
-| ------------ | ------------------------------------------------ |
-| **Security** | Sensitive info (keys/tokens) in code             |
-| **AOT**      | `reflect-metadata` or runtime reflection         |
-| **AOT**      | Non-deterministic outputs (time/random)          |
-| **Boundary** | Cross-package deep import (`@bunner/pkg/src/**`) |
-| **Boundary** | Circular dependencies                            |
-| **Contract** | Public Facade change without approval            |
-| **Contract** | Silent breaking change                           |
+---
 
-### Pre-action Checklist
+## Quick References
 
-- [ ] Is scope clear? → If not, ask
-- [ ] Cross package boundaries? → Request approval
-- [ ] Public API change? → Request approval
-- [ ] Test needed? → Add test
+1.  **Mandatory Guide**: Always follow [AGENTS.md](AGENTS.md)
+2.  **Documentation Index**: [docs/00_INDEX.md](docs/00_INDEX.md)
+3.  **Authority Model**: [docs/10_FOUNDATION/SSOT_HIERARCHY.md](docs/10_FOUNDATION/SSOT_HIERARCHY.md)
 
-### Task Execution Protocol
+---
 
-See: [.agent/workflow.md](../.agent/workflow.md)
+## Technical SSOT Reference
 
-| Phase     | Action                                |
-| --------- | ------------------------------------- |
-| Discovery | Ask questions if ambiguous            |
-| Alignment | Summarize and confirm                 |
-| Planning  | Present execution plan (see template) |
-| Execution | Start after approval only             |
-
-Template: [.agent/templates.md](../.agent/templates.md)
-
-**Exception**: Skip phases 1-3 for simple, clear, single-file tasks.
-
-## Repo Architecture
-
-- Monorepo with Bun workspaces
-- Runtime: `@bunner/common`, `@bunner/logger`, `@bunner/core`, `@bunner/http-adapter`, `@bunner/scalar`
-- Tooling: `@bunner/cli` (must not depend on runtime packages)
-- Facades: `packages/<pkg>/index.ts` = public API
-
-## Workflows
-
-```bash
-bun run verify     # All checks (tsc + lint + test)
-bun run tsc        # Typecheck
-bun run lint       # Lint
-bun test           # Tests
-```
-
-## SSOT Documents
-
-| Purpose              | Document                                    |
-| -------------------- | ------------------------------------------- |
-| Agent rules (full)   | [AGENTS.md](../AGENTS.md)                   |
-| Top-level invariants | [docs/specs/spec.md](../docs/specs/spec.md) |
-| Package boundaries   | [ARCHITECTURE.md](../ARCHITECTURE.md)       |
-| Coding style         | [STYLEGUIDE.md](../STYLEGUIDE.md)           |
-| Stop conditions      | [POLICY.md](../POLICY.md)                   |
-| Approval required    | [GOVERNANCE.md](../GOVERNANCE.md)           |
-| Workflow             | [.agent/workflow.md](../.agent/workflow.md) |
+| Area             | Document Path                                               |
+| :--------------- | :---------------------------------------------------------- |
+| **Foundation**   | `docs/10_FOUNDATION/SSOT_HIERARCHY.md`, `INVARIANTS.md`     |
+| **Architecture** | `docs/20_ARCHITECTURE/ARCHITECTURE.md`, `STRUCTURE.md`      |
+| **Contracts**    | `docs/30_SPEC/00_SPEC.md`, `docs/30_SPEC/*.spec.md`         |
+| **Engineering**  | `docs/40_ENGINEERING/STYLEGUIDE.md`, `TESTING.md`           |
+| **Governance**   | `docs/50_GOVERNANCE/OVERVIEW.md`, `POLICY.md`, `COMMITS.md` |

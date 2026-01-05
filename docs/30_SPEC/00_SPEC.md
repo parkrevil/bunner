@@ -4,24 +4,16 @@
 
 - 이 파일은 각 문서의 역할/우선순위를 한 곳에서 확인할 수 있게 한다.
 
-## SSOT 계층 (최종형)
+## SSOT 계층 (E0 ~ L3)
 
-이 레포에서 SSOT 계층은 다음 순서를 따른다.
+이 레포에서 SSOT 계층은 [SSOT_HIERARCHY.md](../10_FOUNDATION/SSOT_HIERARCHY.md)를 따르며, 본 문서는 다음과 같이 위치한다.
 
-```text
-Level 0 (Top SSOT)
-└─ [ARCHITECTURE.md](../../ARCHITECTURE.md)
+- **E0: AGENTS.md** (Out-of-Band 집행)
+- **L1: FOUNDATION (INVARIANTS)** (최상위 불변식)
+- **L2: ARCHITECTURE** (구조적 경계)
+- **L3: SPEC (본 문서)** (기능적 계약)
 
-Level 1 (Structural SSOT)
-└─ [STRUCTURE.md](../../STRUCTURE.md)
-
-Level 2 (Contract SSOT)
-└─ [docs/specs/spec.md](spec.md) (본 문서)
-	└─ `docs/specs/*.spec.md`
-
-Level 3 (Guidance / Process)
-└─ [ROADMAP.md](../../ROADMAP.md) 및 기타 가이드 문서
-```
+---
 
 ## 규범 용어
 
@@ -32,7 +24,7 @@ Level 3 (Guidance / Process)
 
 ## 충돌 해결
 
-- 문서 간 규칙이 충돌하면, SSOT 계층(ARCHITECTURE → STRUCTURE → SPEC 인덱스 → 개별 spec) 순서로 판정한다.
+- 문서 간 규칙이 충돌하면, 계층 순서(**L1 → L2 → L3**)에 따라 판정한다.
 - 위 계층으로도 판정이 불가능하면, 추측하지 말고 즉시 중단한 뒤 사용자에게 확인을 요청한다.
 
 ## 세부 계약 문서 (Contract Specs)
@@ -44,3 +36,5 @@ Level 3 (Guidance / Process)
 - [Transformer](transformer.spec.md): 제로 오버헤드 데이터 변환
 - [Validator](validator.spec.md): 제로 디펜던시 검증 시스템
 - [Adapter](adapter.spec.md): 프로토콜 격리 및 다중 어댑터 지원
+- [DTO](dto.spec.md): 데이터 전송 객체 및 스키마 정의
+- [Provider](provider.spec.md): 의존성 주입 대상의 정의와 생명주기

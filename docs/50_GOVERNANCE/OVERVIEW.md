@@ -15,12 +15,12 @@
 
 ## 정본/우선순위
 
-- 최상위 정본은 [ARCHITECTURE.md](../../ARCHITECTURE.md)다.
+- 최상위 정본은 [ARCHITECTURE.md](../20_ARCHITECTURE/ARCHITECTURE.md)다.
 
 ## 변경 승인 원칙
 
 - 범위 밖 변경은 사전 승인 없이는 불가하다.
-- SSOT 문서([docs/specs/spec.md](../specs/spec.md)) 변경은 특히 신중해야 하며, 변경 근거/영향/마이그레이션을 포함해야 한다.
+- SSOT 문서([00_SPEC.md](../30_SPEC/00_SPEC.md)) 변경은 특히 신중해야 하며, 변경 근거/영향/마이그레이션을 포함해야 한다.
 - 핵심 집행 SSOT는 규칙을 정의할 때 MUST / MUST NOT / SHOULD / MAY 중 하나를 명시적으로 사용해야 한다.
 
 ## 승인이 필요한 변경 유형

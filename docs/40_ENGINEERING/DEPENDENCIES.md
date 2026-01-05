@@ -11,13 +11,13 @@
 
 ## 정본/우선순위
 
-- 최상위 정본은 [ARCHITECTURE.md](ARCHITECTURE.md)다.
-- 패키지 경계/단방향 의존/Deep import 판정은 [ARCHITECTURE.md](ARCHITECTURE.md)가 우선한다.
+- 최상위 정본은 [ARCHITECTURE.md](../20_ARCHITECTURE/ARCHITECTURE.md)다.
+- 패키지 경계/단방향 의존/Deep import 판정은 [ARCHITECTURE.md](../20_ARCHITECTURE/ARCHITECTURE.md)가 우선한다.
 
 ## 문서 역할 (SSOT)
 
 - 이 문서는 의존성 선언의 **판정 규칙(Policy)** 과 `@bunner/*` 내부 관계의 최소 기준만 고정한다.
-- 패키지 경계/의존 방향(어떤 패키지가 어떤 패키지를 의존할 수 있는지)의 SSOT는 [ARCHITECTURE.md](ARCHITECTURE.md)다.
+- 패키지 경계/의존 방향(어떤 패키지가 어떤 패키지를 의존할 수 있는지)의 SSOT는 [ARCHITECTURE.md](../20_ARCHITECTURE/ARCHITECTURE.md)다.
 - 이 문서는 “그 관계를 `package.json`에서 `dependencies`/`peerDependencies`/`devDependencies` 중 어디에 선언해야 하는가”의 판정 기준을 제공한다.
 - 개별 패키지의 “구체적인 의존성 목록”의 SSOT는 각 패키지의 `package.json`이다.
 - 따라서 외부 라이브러리의 추가/교체만으로 이 문서를 매번 업데이트하지 않는다.
@@ -27,7 +27,7 @@
 아래 중 하나라도 발생하면 이 문서를 업데이트해야 한다.
 
 - `@bunner/*` 신규 패키지가 추가되어 분류/매트릭스가 바뀌는 경우
-- 패키지 경계/의존 방향이 바뀌는 경우(SSOT: [ARCHITECTURE.md](ARCHITECTURE.md))
+- 패키지 경계/의존 방향이 바뀌는 경우(SSOT: [ARCHITECTURE.md](../20_ARCHITECTURE/ARCHITECTURE.md))
 - `dependencies`/`peerDependencies`/`devDependencies` 판정 규칙 자체가 바뀌는 경우
 - 특정 패키지의 `peerDependencies` 정책(필수/권장 범위)이 바뀌는 경우
 
@@ -79,11 +79,11 @@
 - `@bunner/*` 내부 기본값
   - 런타임 코어(`@bunner/core`): `dependencies`로 선언한다.
   - 런타임 어댑터/플러그인: 기본값은 `peerDependencies`로 선언한다(호스트가 버전 정합성을 통제).
-  - CLI(`@bunner/cli`): 런타임 패키지에 의존해서는 안 된다(SSOT: `ARCHITECTURE.md`, `TOOLING.md`).
+  - CLI(`@bunner/cli`): 런타임 패키지에 의존해서는 안 된다(SSOT: `ARCHITECTURE.md`).
 
 ## 패키지 분류별 판정
 
-- 아래 분류 및 패키지 간 의존 방향/금지 관계는 [ARCHITECTURE.md](ARCHITECTURE.md)의 재진술이며, 충돌 시 [ARCHITECTURE.md](ARCHITECTURE.md)가 우선한다.
+- 아래 분류 및 패키지 간 의존 방향/금지 관계는 [ARCHITECTURE.md](../20_ARCHITECTURE/ARCHITECTURE.md)의 재진술이며, 충돌 시 [ARCHITECTURE.md](../20_ARCHITECTURE/ARCHITECTURE.md)가 우선한다.
 
 - 런타임 코어(`@bunner/core`)
   - `dependencies`: 코어 런타임에 직접 필요한 패키지(예: `@bunner/common`, `@bunner/logger`)

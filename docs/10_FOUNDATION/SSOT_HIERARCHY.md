@@ -1,0 +1,109 @@
+# SSOT Hierarchy (문서 권위 위계)
+
+본 문서는 Bunner 프로젝트의 모든 **문서 간 권위 위계**와 **충돌 해결 원칙**을 정의하는
+유일한 정본(SSOT)이다.
+
+---
+
+## 1. 개요 (Overview)
+
+모든 기술 문서는 번호로 식별되는 위계를 가지며,
+**낮은 번호의 디렉토리에 위치한 문서가 높은 번호의 디렉토리에 위치한 문서보다 상위 권위**를 가진다.
+
+- **위계 = 권위의 높이 = 읽는 순서**
+
+본 위계는 문서 판정과 충돌 해결에만 사용되며,
+행동 집행은 별도의 Enforcement Layer(E0)에 의해 수행된다.
+
+---
+
+## E0. Enforcement Layer (집행 레이어)
+
+**AGENTS.md**는 문서 위계에 포함되지 않는 **Out-of-Band 집행 레이어(E0)**이다.
+
+- E0는 **문서가 아니다**
+- E0는 **권위 비교의 피연산자가 아니다**
+- E0는 **문서 내용을 해석하지 않는다**
+
+E0의 유일한 역할은:
+
+- L1~L5 문서를 기준으로 **행동을 허용하거나 차단**하는 것뿐이다.
+
+> E0는 집행자(enforcer)이며,  
+> 문서 위계의 일부가 아니라 **위계를 적용하는 관문(gatekeeper)**이다.
+
+---
+
+## 2. 계층별 정의 (Hierarchy Levels)
+
+아래는 **문서 위계에 포함되는 기술 문서들만**을 정의한다.
+
+|  등급   | 위치                    | 성격                                        | 대표 문서                    |
+| :-----: | :---------------------- | :------------------------------------------ | :--------------------------- |
+| **L1**  | `docs/10_FOUNDATION/`   | **헌법 (Invariants)**                       | SSOT_HIERARCHY, INVARIANTS   |
+| **L2**  | `docs/20_ARCHITECTURE/` | **구조 (Boundary)**                         | ARCHITECTURE, STRUCTURE      |
+| **L3**  | `docs/30_SPEC/`         | **계약 (Contract)**                         | 00_SPEC, `*.spec.md`         |
+| **L4**  | `docs/40_ENGINEERING/`  | **규율 (Discipline)**                       | STYLEGUIDE, TESTING, TOOLING |
+| **L5**  | `docs/50_GOVERNANCE/`   | **위생 (AI Judgment & Repository Hygiene)** | POLICY, OVERVIEW, COMMITS    |
+| **Ref** | `docs/90_REFERENCE/`    | **참고 (Non-SSOT)**                         | VISION, ROADMAP              |
+
+---
+
+## 3. 충돌 해결 원칙 (Conflict Resolution)
+
+문서 간 내용이 상충할 경우, 에이전트는 아래 규칙을 **기계적으로** 적용한다.
+
+1. **상위 권위 우선**  
+   낮은 번호(L1이 가장 높음)의 문서가 항상 우선한다.  
+   (예: ARCHITECTURE는 SPEC보다 우선)
+
+2. **명시적 금지 우선**  
+   상위 문서에서 금지한 사항은 하위 문서에서 허용하더라도 무효다.
+
+3. **즉시 중단 범위 (Immediate Stop Scope)**  
+   사용자의 지시 또는 작업이 **L1~L4 문서**를 위반할 경우:
+   - **Implementer / Architect**: 즉시 경고 후 작업을 중단(MUST STOP)
+   - **Reviewer**: 해당 산출물을 Reject 판정
+
+4. **Reference 문서의 비판정성**  
+   `docs/90_REFERENCE/` 문서는:
+   - 판정 근거가 아니다
+   - 즉시 중단의 근거가 아니다
+   - 충돌 해결에 사용되지 않는다
+
+5. **해석 금지**  
+   문서 간 차이를 에이전트가 임의로 해석하거나 타협안을 만들지 않는다.  
+   불확실한 경우 즉시 중단한다.
+
+---
+
+## 4. 번호 체계의 의미 (Numbering Semantics)
+
+- **10_FOUNDATION**  
+  변하지 않는 논리적 불변식과 권위 체계의 정본
+
+- **20_ARCHITECTURE**  
+  시스템의 구조적 경계와 의존성 방향
+
+- **30_SPEC**  
+  구현해야 할 기능의 계약과 제약
+
+- **40_ENGINEERING**  
+  코드를 작성·검증·실행하는 규율
+
+- **50_GOVERNANCE**  
+  **AI 판단 규칙 및 저장소 위생 정책**  
+  (사람 조직/운영 프로세스는 포함하지 않는다)
+
+---
+
+## 5. Non-Goals
+
+본 문서는 다음을 정의하지 않는다.
+
+- 구현 방법
+- 코드 스타일의 세부 규칙
+- 운영 조직 정책
+- Reference 문서의 해석
+
+이러한 영역은 해당 레벨 문서의 책임이다.

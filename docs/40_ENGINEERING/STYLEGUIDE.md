@@ -11,8 +11,9 @@
 
 ## 정본/우선순위
 
-- 최상위 정본은 [ARCHITECTURE.md](ARCHITECTURE.md)다.
-- 아키텍처 경계/Facade 규칙은 [ARCHITECTURE.md](ARCHITECTURE.md)가 우선한다.
+- **L4 Authority (Discipline)**: 본 문서는 코딩 규율을 정의하며 상위 계층에 종속된다.
+- 최상위 정본은 **L1 FOUNDATION**이며, 구조적 규칙은 **L2 ARCHITECTURE**, 기능 계약은 **L3 SPEC**이 우선한다.
+- 아키텍처 경계/Facade 규칙은 [ARCHITECTURE.md](../20_ARCHITECTURE/ARCHITECTURE.md)가 우선한다.
 
 ## 에이전트 체크리스트 (Agent Checklist)
 

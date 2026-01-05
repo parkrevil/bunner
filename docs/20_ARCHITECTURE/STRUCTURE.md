@@ -19,28 +19,27 @@
 | `tooling/`  | 개발 인프라 | 린터, 커밋 검사기 등 개발 과정에서만 쓰이는 도구 |
 | `examples/` | 예제        | 사용자 참고용 구현 예제                          |
 
-### 1.2 헌법 레벨 문서 (Root Documents)
+### 1.2 주요 문서 (Core Documents)
 
-루트의 마크다운 문서는 시스템 전체에 영향을 주는 "헌법" 역할을 수행한다.
+- **README.md**: 사용자/개발자 진입점
+- **[AGENTS.md](../../AGENTS.md) (E0)**: AI 에이전트 행동 제한 규약
 
-- **ARCHITECTURE.md**: 구조, 의존성, 경계 판정의 최상위 정본
-- **STRUCTURE.md**: 파일/디렉토리 배치 판정의 정본 (본 문서)
-- **VISION.md**: 프로젝트의 핵심 가치와 철학
-- **ROADMAP.md**: 아이디어 풀 및 미구현 기능의 초안 (SSOT 아님)
-- **STYLEGUIDE.md**: 코딩 스타일 및 네이밍 규칙
-- **DEPENDENCIES.md**: 의존성 선언 및 관리 규칙
-- **TESTING.md**: 테스트 전략 및 수행 규칙
+그 외 모든 규약/설계/가이드는 `docs/` 하위의 위계적 디렉토리에 위치한다.
 
 ---
 
-## 2. docs/ 디렉토리 역할 분해
+## 2. docs/ 디렉토리 구조 및 위계
 
-`docs/` 하위는 문서의 성격에 따라 엄격히 분리된다.
+`docs/` 하위는 문서의 권위 위계와 성격에 따라 엄격히 분리되며, 디렉토리 번호는 권위의 높이와 읽는 순서를 나타낸다.
 
-- **docs/specs/**: 기능적/비기능적 "계약(Contract)" 정본. (Level 2 SSOT)
-- **docs/design/**: 설계의 배경, 근거, 철학(Rationale). (Non-SSOT)
-- **docs/governance/**: 운영 정책, 보안, 승인 절차.
-- **docs/plans/**: 에이전트 실행 계획(Plan) 로그 및 실행 입력 문서.
+- **[00_INDEX.md](00_INDEX.md)**: 전체 문서 내비게이션 SSOT
+- **[10_FOUNDATION/](10_FOUNDATION/)**: 시스템 불변식, 위계 정의, 용어 사전
+- **[20_ARCHITECTURE/](20_ARCHITECTURE/)**: 아키텍처 경계, 의존성 원칙, 파일 배치 (본 문서 포함)
+- **[30_SPEC/](30_SPEC/)**: 최상위 기능 명세 및 세부 계약
+- **[40_ENGINEERING/](40_ENGINEERING/)**: 코딩 스타일, 테스트, 도구 가이드
+- **[50_GOVERNANCE/](50_GOVERNANCE/)**: AI 규율 및 저장소 위생 관리 정책
+- **[90_REFERENCE/](90_REFERENCE/)**: 철학, 로드맵 (Non-SSOT)
+- **[plans/](plans/)**: 에이전트 실행 계획 로그
 
 ---
 

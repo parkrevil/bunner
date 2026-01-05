@@ -1,6 +1,6 @@
 # Bunner
 
-**[한국어](./README.ko.md)** | English
+**[한국어](./docs/90_REFERENCE/README.ko.md)** | English
 
 A blazing-fast, Bun-native web server framework with Ahead-of-Time (AOT) compilation.
 
@@ -147,7 +147,8 @@ export class SharedService {}
 
 ## Documentation
 
-- [Architecture](./ARCHITECTURE.md) — System design and package structure
+- **[Documentation Index (SSOT)](./docs/00_INDEX.md)** — Start here for all guides and rules
+- [Architecture](./docs/20_ARCHITECTURE/ARCHITECTURE.md) — System design and package structure
 - [Contributing](.github/CONTRIBUTING.md) — How to contribute
 - [Security](.github/SECURITY.md) — Security policy and reporting
 

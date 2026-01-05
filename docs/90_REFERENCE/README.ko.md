@@ -1,6 +1,6 @@
 # Bunner
 
-한국어 | **[English](./README.md)**
+한국어 | **[English](../../README.md)**
 
 AOT(Ahead-of-Time) 컴파일을 지원하는 초고속 Bun 네이티브 웹 서버 프레임워크입니다.
 
@@ -145,11 +145,12 @@ export const module: BunnerModule = {
 export class SharedService {}
 ```
 
-## 문서
+## 문서화
 
-- [아키텍처](./ARCHITECTURE.md) — 시스템 설계 및 패키지 구조
-- [기여하기](.github/CONTRIBUTING.md) — 기여 방법
-- [보안](.github/SECURITY.md) — 보안 정책 및 보고
+- **[문서 지표 (SSOT)](../00_INDEX.md)** — 모든 가이드와 규칙의 시작점
+- [아키텍처](../20_ARCHITECTURE/ARCHITECTURE.md) — 시스템 설계 및 패키지 구조
+- [기여하기](../../.github/CONTRIBUTING.md) — 기여 방법
+- [보안](../../.github/SECURITY.md) — 보안 정책 및 보고
 
 ## 제한사항
 
@@ -168,7 +169,7 @@ export class SharedService {}
 
 ## 기여하기
 
-기여를 환영합니다! 자세한 내용은 [기여 가이드](.github/CONTRIBUTING.md)를 참조하세요.
+기여를 환영합니다! 자세한 내용은 [기여 가이드](../../.github/CONTRIBUTING.md)를 참조하세요.
 
 ## 라이선스
 

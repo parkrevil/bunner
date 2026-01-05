@@ -15,16 +15,16 @@
 
 ## 정본/우선순위
 
-- 최상위 정본은 [ARCHITECTURE.md](../../ARCHITECTURE.md)다.
+- 최상위 정본은 [ARCHITECTURE.md](../20_ARCHITECTURE/ARCHITECTURE.md)다.
 
 ## 관련 문서
 
-| 문서                                                                                             | 역할                                           |
-| ------------------------------------------------------------------------------------------------ | ---------------------------------------------- |
-| [SECURITY.md](../../.github/SECURITY.md)                                                         | 보안 상세                                      |
-| [SAFEGUARDS.md](SAFEGUARDS.md)                                                                   | 폭주 방지/대량 변경/롤백 (패턴/반복 기반 중단) |
-| [GOVERNANCE.md](GOVERNANCE.md)                                                                   | 승인 절차/프로토콜                             |
-| [docs/specs/aot-ast.spec.md](../specs/aot-ast.spec.md), [ARCHITECTURE.md](../../ARCHITECTURE.md) | AOT/경계/계약 SSOT                             |
+| 문서                                                                                                            | 역할                                           |
+| --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| [SECURITY.md](../../.github/SECURITY.md)                                                                        | 보안 상세                                      |
+| [SAFEGUARDS.md](SAFEGUARDS.md)                                                                                  | 폭주 방지/대량 변경/롤백 (패턴/반복 기반 중단) |
+| [GOVERNANCE.md](GOVERNANCE.md)                                                                                  | 승인 절차/프로토콜                             |
+| [docs/specs/aot-ast.spec.md](../30_SPEC/aot-ast.spec.md), [ARCHITECTURE.md](../20_ARCHITECTURE/ARCHITECTURE.md) | AOT/경계/계약 SSOT                             |
 
 ## POLICY vs SAFEGUARDS 역할 구분
 
