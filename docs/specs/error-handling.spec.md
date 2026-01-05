@@ -17,7 +17,8 @@ Bunner는 예측 가능하고 일관된 에러 처리 전략을 제공한다. "�
   - 사용자 정의 필터들이 처리하지 못한 모든 예외(패닉, 시스템 에러 등)를 최종적으로 포착하여, 클라이언트에게 일관된 시스템 에러 응답을 반환함으로써 서버의 안정성을 보장하는 최후의 보루다.
 
 - **Result vs Exception (결과 대 예외):**
-  - **Domain Error:** 비즈니스 로직 상의 실패(예: 잔액 부족, 중복 가입)는 예외(`throw`)가 아닌 `Result` 객체(`Failure`)로 반환하는 것을 권장한다. 이는 흐름 제어의 일부다.
+  - **Domain Error:** 비즈니스 로직 상의 실패(예: 잔액 부족, 중복 가입)는 예외(`throw`)가 아닌 `Result` 타입(예: `Result<T, E>`, `Failure`)으로 반환하는 것을 권장한다. 이는 흐름 제어의 일부다.
+    - **참고:** 현재 프레임워크는 `Result<T, E>` 타입을 제공하지 않으며, 개발자가 직접 구현하거나 외부 라이브러리(예: [neverthrow](https://github.com/supermacro/neverthrow))를 사용해야 한다. 프레임워크 차원의 `Result<T, E>` 지원은 향후 계획되어 있다(ROADMAP.md 참조).
   - **System Panic:** 시스템 장애, 버그, 예측 불가능한 상황(예: DB 연결 끊김, 널 포인터 참조)은 예외(`throw`)로 처리되며, 이는 Error Filter Chain에 의해 포착된다.
 
 - **Standard Error Protocol (표준 에러 프로토콜):**
