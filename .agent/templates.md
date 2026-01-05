@@ -29,14 +29,32 @@ description: 단일 Run Plan 템플릿 (에이전트 실행 입력)
 > - 코딩 규칙: `STYLEGUIDE.md`
 > - 승인/중단/정책: `docs/governance/*` 및 `.agent/workflow.md`
 
----
+## 작성 가이드(MUST)
 
-## 작성 가이드(권장)
-
-- 저장 위치: `docs/plans/<plan-name>.md`
+- 저장 위치: `docs/plans/<yymmdd>_<seq>_<plan-name>.md`
+  - 예: `docs/plans/260105_01_di-manifest.md`
+  - `yymmdd`: 6자리 날짜
+  - `seq`: 기본 2자리(01~99), 100부터 3자리 허용
+  - `plan-name`: 영어 `kebab-case`만
 - 상태(status) 갱신: `.agent/workflow.md`의 상태 머신을 따른다
-  - `draft` → `accepted` → `implemented`
-  - 사용자 승인 증거는 키워드 `accepted`로만 인정한다
+  - `draft` → `accepted` → `in-progress` → `implemented`
+  - 취소 상태: `canceled`
+    - 작업 중단 또는 완료 후 롤백으로 무효화
+  - 사용자 승인 증거는 키워드 `ㅇㅇ`로만 인정한다
+
+### 불변/참조 규칙 (MUST)
+
+- Plan은 새 작업 시작 시에만 생성한다.
+- Plan의 변경(순서/범위/변경 파일 목록 포함)이 필요해지면, 반드시 사용자 승인(키워드 `ㅇㅇ`)을 먼저 받아야 한다.
+- Plan 수정은 `in-progress`에서만 허용한다.
+  - 허용 범위: Plan 본문을 덮어쓰지 않고, "Plan Changes" 섹션에 append-only로 변경 사항을 추가한다.
+  - 사용자가 승인하지 않으면 즉시 중단한다.
+- 아래 status의 Plan은 본문이 불변이다.
+  - `accepted`
+  - `implemented`
+  - `canceled`
+
+- 사용자의 명시적 지시(참조 대상 경로 지정) 없이는, 현재 작업 Plan이 아닌 Plan(과거 Plan)을 조회/참조/범위에 포함하지 않는다.
 
 ---
 
@@ -145,7 +163,7 @@ description: 단일 Run Plan 템플릿 (에이전트 실행 입력)
 
 > 금지:
 >
-> - 승인(`accepted`) 이전 코드 작성
+> - 승인(`ㅇㅇ`) 이전 코드 작성
 > - TODO / placeholder / 임시 구현
 > - 컴파일을 통과하지만 계약을 충족하지 않는 스텁
 
@@ -176,7 +194,7 @@ description: 단일 Run Plan 템플릿 (에이전트 실행 입력)
 ### 필수 게이트
 
 - [ ] `bun run verify` 통과
-- [ ] `.agent/workflow.md`의 승인 규칙 준수(사용자 승인 키워드 `accepted` 없으면 구현 시작 금지)
+- [ ] `.agent/workflow.md`의 승인 규칙 준수(사용자 승인 키워드 `ㅇㅇ` 없으면 구현 시작 금지)
 - [ ] 범위 밖 변경이 필요해진 경우: 사전 승인(허용 파일/패키지 목록 포함) 없이 진행 금지
 
 ### 산출물 무결성
@@ -198,3 +216,21 @@ description: 단일 Run Plan 템플릿 (에이전트 실행 입력)
 - verify 실패 시:
   - `.agent/workflow.md`의 “verify 실패 복구 프로토콜(최대 5회)”을 따른다.
   - 5회 소진 시 “복구 보고 템플릿” 작성 후 사용자 선택을 기다린다(추가 수정/실행 금지).
+
+---
+
+## Plan Changes (append-only)
+
+> `in-progress`에서만 사용한다.
+>
+> 규칙:
+>
+> - 사용자 승인 키워드 `ㅇㅇ` 없이는 추가하지 않는다.
+> - 본문(0~7 섹션)을 덮어쓰지 않고, 이 섹션에만 append 한다.
+
+- 변경 요약:
+  - <무엇이/왜 바뀌었는지>
+- 승인 증거:
+  - `ㅇㅇ`
+- 영향 범위(Blast Radius):
+  - <패키지/디렉터리/공개 API 변경 여부>

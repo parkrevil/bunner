@@ -40,6 +40,7 @@
 - **docs/specs/**: 기능적/비기능적 "계약(Contract)" 정본. (Level 2 SSOT)
 - **docs/design/**: 설계의 배경, 근거, 철학(Rationale). (Non-SSOT)
 - **docs/governance/**: 운영 정책, 보안, 승인 절차.
+- **docs/plans/**: 에이전트 실행 계획(Plan) 로그 및 실행 입력 문서.
 
 ---
 
