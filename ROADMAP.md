@@ -250,6 +250,80 @@ CLI는 이를 “발견 실패”로 숨기지 않고,
     - `--fix`: 자동 수정.
     - `--audit`: 보안 취약점 등 심층 검사.
 
+### Adapter Wiring & Bootstrapping (from Adapter Spec)
+어댑터의 정적 명세(Manifest)를 기반으로 사용자의 컨트롤러와 실제 프로토콜 구현체를 물리적으로 연결(Wiring)하는 코드를 생성한다.
+
+- **Manifest-Based Wiring (매니페스트 기반 연결):**
+  - 어댑터 패키지가 제공하는 정적 매니페스트 파일을 읽어, 해당 어댑터가 지원하는 고유의 데코레이터(URL 경로, 메시지 패턴 등)를 해석한다. 이를 바탕으로 런타임 라우터 등록 코드를 자동으로 생성하여, 어댑터 개발자가 별도의 컴파일러 플러그인을 작성하지 않아도 AOT 최적화를 누릴 수 있게 한다.
+
+- **Runtime Bootstrapping Generator (구동 코드 생성):**
+  - 사용자가 설정한 어댑터들을 초기화하고, 프레임워크의 라이프사이클에 등록하는 부트스트랩 코드를 생성한다. 여러 어댑터가 등록된 경우, 각 어댑터의 구동 순서와 의존성을 고려하여 병렬 또는 직렬로 실행되는 최적화된 시동 시퀀스를 작성한다.
+
+### AOT Compilation Engine (from AOT/AST Spec)
+CLI는 Bunner의 컴파일러이자 정적 분석 엔진이다.
+
+- **AST Parsing & Analysis:**
+  - TypeScript 코드를 파싱하여 AST를 생성하고, 이를 분석하여 애플리케이션의 구조(모듈, 컨트롤러, 프로바이더 등)를 파악한다.
+  - 데코레이터와 타입 정보를 정적으로 해석하여 프레임워크가 필요로 하는 메타데이터를 추출한다.
+
+- **Execution Infrastructure Generation:**
+  - 분석된 정보를 바탕으로 실행 가능한 인프라 코드를 생성한다.
+  - **Manifest Generation:** 개발 및 배포 환경에 맞는 정적 매니페스트 파일을 생성한다.
+  - **Wiring Code:** 모듈과 컴포넌트 간의 연결 코드를 생성한다.
+  - **Bootstrap Code:** 어댑터 초기화 및 프레임워크 라이프사이클을 연결하는 부트스트랩 코드를 생성한다.
+  - **Pipeline Compilation:** 미들웨어, 가드, 핸들러 등의 실행 흐름을 단일 함수 호출 체인으로 컴파일한다.
+
+- **Optimized Try-Catch Injection:**
+  - 에러 처리를 위한 `try-catch` 블록을 필요한 위치에 자동으로 주입한다.
+  - 런타임 성능 저하를 최소화하면서도, 예외 발생 시 즉시 필터 체인으로 제어 흐름이 이동하도록 코드를 구성한다.
+
+### Dependency Injection Engine (from DI Spec)
+DI 시스템의 핵심 엔진으로, 정적 분석과 코드 생성을 담당한다.
+
+- **Dependency Graph Construction:**
+  - 소스 코드를 분석하여 컴포넌트 간의 의존성 관계를 파악하고, 전체 애플리케이션의 의존성 그래프를 구축한다.
+  - 생성자 파라미터 타입을 분석하여 주입할 대상을 식별한다.
+
+- **Wiring Code Generation:**
+  - 확정된 의존성 그래프를 순회하며, 올바른 순서대로 인스턴스를 생성하고 주입하는 코드를 생성한다.
+  - 위상 정렬(Topological Sort)을 통해 생성 순서를 결정한다.
+
+- **Circular Dependency Detection:**
+  - 그래프 분석 과정에서 순환 참조가 발견되면 즉시 빌드를 중단하고, 순환 경로를 명확히 보여주는 에러 메시지를 출력한다.
+
+### DTO Optimization (from DTO Spec)
+DTO 정의를 활용하여 최적화된 코드를 생성한다.
+
+- **Validation Schema Generation:**
+  - DTO에 정의된 데코레이터와 타입 정보를 바탕으로, 런타임에 사용할 수 있는 고성능 검증 스키마를 미리 생성한다.
+  - 불필요한 리플렉션 비용을 제거하고 검증 속도를 극대화한다.
+
+- **API Documentation Extraction:**
+  - `@bunner/docs`와 연동하여 DTO 구조를 분석하고, OpenAPI(Swagger) 등의 API 명세서에 자동으로 반영한다.
+
+### Error Handling Injection (from Error Handling Spec)
+- **Auto-Generated Try-Catch:**
+  - 핸들러와 미들웨어 등 실행 지점 주변에 최적화된 `try-catch` 블록을 자동으로 생성한다.
+  - 예외 발생 시 즉시 필터 체인의 시작점으로 점프하도록 제어 흐름을 연결한다.
+
+### Module Scanning (from Module System Spec)
+- **Recursive Scanner (재귀적 스캐너):**
+  - 빌드 시점에 프로젝트의 전체 파일 시스템을 순회하며 모듈 정의 파일의 위치를 파악하고, 이를 기반으로 논리적인 모듈 트리를 구성한다.
+  - 다른 모듈에서 참조되지 않더라도 독립적으로 실행되어야 하는 모듈(예: 크론 작업, 이벤트 리스너)을 이 단계에서 찾아내어, 누락 없이 애플리케이션에 포함시킨다.
+
+- **Visibility Validator (가시성 검증기):**
+  - 소스 코드의 `import` 구문을 분석할 때, 대상 컴포넌트의 가시성 설정(Internal/Export)을 확인한다. 규칙을 위반한 접근이 감지되면 컴파일을 중단하고 명확한 에러 메시지를 출력한다.
+
+### Transformer Optimization (from Transformer Spec)
+- **Optimized Transformer Generation:**
+  - `class-transformer`와 유사한 기능을 제공하지만, 런타임 리플렉션을 사용하지 않는다.
+  - DTO에 선언된 데코레이터를 분석하여, 순수 자바스크립트 함수로 구성된 변환 로직을 생성한다.
+
+### Validation Optimization (from Validator Spec)
+- **Validation Code Generation:**
+  - DTO의 검증 데코레이터를 분석하여, 최적화된 검증 함수(Validator Function)를 생성한다.
+  - 생성된 함수는 순차적으로 조건을 검사하며, 실패 시 상세한 에러 정보를 반환하도록 구성된다.
+
 ---
 
 ## 🛠️ DevTools - @bunner/devtools (Web UI)
@@ -332,6 +406,82 @@ Transformer는 선언형 인터페이스를 유지하되, 런타임 오버헤드
 #### 1.6 Validator Declaration Contract
 
 Validator 또한 선언형 인터페이스를 전제로 하며, `common`은 검증 선언이 표현하는 의미(규칙 식별, 파라미터, 실패 표현)의 계약만 정의한다.
+
+### Adapter Contracts (from Adapter Spec)
+어댑터 구현체가 반드시 준수해야 하는 **표준 인터페이스와 통신 규약(Protocol Contract)**을 정의한다.
+
+- **Adapter Interface & Manifest Schema:**
+  - 모든 어댑터가 구현해야 하는 표준 메서드(서버 시작/종료, 요청 처리 위임 등)와, CLI가 어댑터의 기능을 이해하기 위해 필요한 매니페스트 파일의 JSON 스키마를 정의한다.
+
+- **Abstract Context & Result Definition:**
+  - 프로토콜에 종속되지 않는 추상화된 요청 컨텍스트와 응답 결과 객체의 타입을 정의한다. 이를 통해 어댑터 개발자는 자신의 프로토콜 데이터를 이 표준 규격에 맞춰 변환하는 것만으로 프레임워크와 연동할 수 있다.
+
+### AOT Contracts (from AOT/AST Spec)
+AOT 컴파일러가 생성하는 코드와 런타임이 공유하는 정적 계약을 정의한다.
+
+- **Manifest Schema:**
+  - CLI가 생성하는 매니페스트 파일의 구조를 정의한다. 이 스키마는 컴파일러와 런타임 간의 통신 규약 역할을 한다.
+
+- **Static Symbols & Markers:**
+  - 컴파일러가 코드를 분석할 때 식별자로 사용하는 데코레이터와 마커들을 정의한다.
+  - 이들은 런타임 로직을 포함하지 않으며, 오직 컴파일러에게 정보를 전달하는 용도로만 사용된다.
+
+### DI Markers (from DI Spec)
+DI 시스템을 위한 선언적 마커를 제공한다.
+
+- **Dependency Markers:**
+  - `@Injectable()`, `@Controller()` 등 컴포넌트의 역할을 정의하는 데코레이터를 제공한다.
+  - `@Inject()`와 같이 특정 토큰이나 타입을 명시적으로 주입해야 할 때 사용하는 마커를 정의한다.
+  - 이들은 런타임 로직 없이 오직 컴파일러에게 정보를 제공하는 메타데이터 역할만 수행한다.
+
+- **Token & Type Definitions:**
+  - 의존성 주입의 키로 사용되는 토큰과 타입 정의를 포함한다.
+
+### DTO Decorators (from DTO Spec)
+DTO 정의에 필요한 데코레이터와 유틸리티를 제공한다.
+
+- **Validation Decorators:**
+  - `@IsString()`, `@IsInt()`, `@Min()`, `@Max()` 등 데이터 검증 규칙을 선언하는 데코레이터를 제공한다. (Validator Spec 참조)
+
+- **Transformation Decorators:**
+  - `@Type(() => Number)` 등 데이터 변환 규칙을 선언하는 데코레이터를 제공한다. (Transformer Spec 참조)
+
+- **Api Property Decorators:**
+  - `@ApiProperty()` 등 API 문서화를 위한 메타데이터 데코레이터를 제공한다.
+
+### Error Contracts (from Error Handling Spec)
+- **Filter Interface:**
+  - `catch(exception: unknown): Result | void` 형태의 단순한 인터페이스를 정의한다.
+  - `Result` 반환 시 처리 완료, `void` 반환 시(또는 throw) 다음 필터로 위임을 의미한다.
+
+- **Standard Error Types:**
+  - `SystemError`, `DomainError` 등 에러의 성격을 구분하는 기본 타입과 인터페이스를 제공한다.
+
+### Module Helpers (from Module System Spec)
+- **Module Definition Helper (모듈 정의 헬퍼):**
+  - 단순한 모듈의 경우 파일을 비워두거나 생략할 수 있도록 허용하며, 설정이 필요한 경우에만 메타데이터를 정의할 수 있는 헬퍼 함수를 제공한다.
+  - 어댑터 설정, 프로바이더 등록, 전역 설정 오버라이딩 등 모듈 구성에 필요한 타입 정의와 스키마를 제공한다.
+
+### Transformer Decorators (from Transformer Spec)
+변환 규칙 선언을 위한 데코레이터를 제공한다.
+
+- **Transformation Decorators:**
+  - `@Type(() => Class)`: 중첩된 객체나 배열을 특정 클래스의 인스턴스로 변환한다.
+  - `@Transform(({ value }) => ...)`: 커스텀 변환 로직을 적용한다.
+  - `@Expose()`, `@Exclude()`: 직렬화 시 필드의 노출 여부를 제어한다.
+
+### Validator Decorators (from Validator Spec)
+검증 규칙 선언을 위한 표준 데코레이터를 제공한다.
+
+- **Common Validators:**
+  - `@IsString()`, `@IsNumber()`, `@IsBoolean()`: 기본 타입 검사.
+  - `@IsOptional()`: 선택적 필드 처리.
+  - `@Min()`, `@Max()`, `@Length()`: 범위 및 길이 검사.
+  - `@Matches(regex)`: 정규식 패턴 검사.
+  - `@ValidateNested()`: 중첩된 객체 검증.
+
+- **Custom Validator:**
+  - 사용자가 직접 검증 로직을 작성하여 데코레이터로 사용할 수 있는 확장 인터페이스를 제공한다.
 
 ---
 
@@ -625,6 +775,40 @@ Bunner가 관리하는 것은 오직 다음뿐이다.
 #### 7.3 파이프라인 시각화 (Pipeline DX)
 
 어댑터별로 상이한 파이프라인 구조를 개발자가 명확히 파악할 수 있도록, CLI는 빌드 타임에 **파이프라인 구조도(Graph)**나 디버깅 메타데이터를 제공하여 가시성을 확보한다.
+
+### Pipeline & Filters (from Adapter Spec)
+어댑터가 요청을 받아 비즈니스 로직으로 전달할 때 거쳐야 하는 **표준 실행 파이프라인(Execution Pipeline)**을 구성할 수 있는 API와 타입을 제공한다.
+
+- **Declarative Pipeline Definition (선언적 파이프라인 정의):**
+  - 어댑터 개발자가 `Middleware -> Guard -> Handler`로 이어지는 실행 흐름을 직관적으로 정의할 수 있는 **Simple Pipeline Definition API**를 제공한다.
+  - 런타임 엔진이 존재하지 않으며, 이 정의를 바탕으로 CLI가 최적화된 코드를 생성한다.
+
+- **Unified Error Filter Chain (단일화된 에러 필터 체인):**
+  - 모든 예외 처리는 **Error Filter**가 담당한다는 단일 원칙을 제공한다.
+  - 어댑터 구현체는 별도의 예외 처리 로직(try-catch)을 작성할 필요 없이, 프레임워크가 생성한 필터 체인을 통해 모든 예외가 표준 결과(Result)로 변환됨을 보장받는다.
+
+### Runtime Base (from AOT/AST Spec)
+Core는 AOT 컴파일러가 생성한 코드를 실행하는 최소한의 런타임 환경을 제공한다.
+
+- **No Dynamic Logic:**
+  - Core에는 동적 모듈 로딩, 런타임 의존성 해결 등의 로직이 존재하지 않는다.
+  - 모든 연결과 구성은 이미 완료된 상태로 Core에 전달된다.
+
+- **Execution Context Propagation:**
+  - 컴파일러가 주입한 구조적 실행 컨텍스트 정보를 런타임에 유지하고 전파한다.
+  - 에러 발생 시나 로그 출력 시, 이 정보를 통해 정확한 실행 위치와 경로를 파악할 수 있도록 돕는다.
+
+### Lifecycle Management (from DI Spec)
+DI와 직접적으로 관련된 런타임 로직은 거의 없으나, 라이프사이클 관리와 연동된다.
+
+- **Lifecycle Hooks:**
+  - 생성된 인스턴스들의 초기화(`onModuleInit`) 및 종료(`onModuleDestroy`) 시점을 관리한다.
+  - 의존성 그래프의 역순으로 종료 훅을 실행하여 안전한 리소스 해제를 보장한다.
+
+### Default Error Handling (from Error Handling Spec)
+- **Default Filter Implementation:**
+  - 제거 불가능한 내장 필터(Default Framework Error Filter)를 구현하여 제공한다.
+  - `Unknown Error`, `Out of Memory` 등의 치명적인 상황에서도 최소한의 JSON 응답을 보장한다.
 
 ---
 
