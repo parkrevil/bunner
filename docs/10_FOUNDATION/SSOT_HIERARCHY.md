@@ -38,14 +38,14 @@ E0의 유일한 역할은:
 
 아래는 **문서 위계에 포함되는 기술 문서들만**을 정의한다.
 
-|  등급   | 위치                    | 성격                                        | 대표 문서                    |
-| :-----: | :---------------------- | :------------------------------------------ | :--------------------------- |
-| **L1**  | `docs/10_FOUNDATION/`   | **헌법 (Invariants)**                       | SSOT_HIERARCHY, INVARIANTS   |
-| **L2**  | `docs/20_ARCHITECTURE/` | **구조 (Boundary)**                         | ARCHITECTURE, STRUCTURE      |
-| **L3**  | `docs/30_SPEC/`         | **계약 (Contract)**                         | 00_SPEC, `*.spec.md`         |
-| **L4**  | `docs/40_ENGINEERING/`  | **규율 (Discipline)**                       | STYLEGUIDE, TESTING, TOOLING |
-| **L5**  | `docs/50_GOVERNANCE/`   | **위생 (AI Judgment & Repository Hygiene)** | POLICY, OVERVIEW, COMMITS    |
-| **Ref** | `docs/90_REFERENCE/`    | **참고 (Non-SSOT)**                         | VISION, ROADMAP              |
+|  등급   | 위치                    | 성격                                        | 대표 문서                   |
+| :-----: | :---------------------- | :------------------------------------------ | :-------------------------- |
+| **L1**  | `docs/10_FOUNDATION/`   | **헌법 (Invariants)**                       | INVARIANTS                  |
+| **L2**  | `docs/20_ARCHITECTURE/` | **구조 (Boundary)**                         | ARCHITECTURE, STRUCTURE     |
+| **L3**  | `docs/30_SPEC/`         | **계약 (Contract)**                         | 00_SPEC, `*.spec.md`        |
+| **L4**  | `docs/40_ENGINEERING/`  | **규율 (Discipline)**                       | STYLEGUIDE, TESTING, VERIFY |
+| **L5**  | `docs/50_GOVERNANCE/`   | **위생 (AI Judgment & Repository Hygiene)** | POLICY, OVERVIEW, COMMITS   |
+| **Ref** | `docs/90_REFERENCE/`    | **참고 (Non-SSOT)**                         | VISION, ROADMAP             |
 
 ---
 
@@ -61,7 +61,7 @@ E0의 유일한 역할은:
    상위 문서에서 금지한 사항은 하위 문서에서 허용하더라도 무효다.
 
 3. **즉시 중단 범위 (Immediate Stop Scope)**  
-   사용자의 지시 또는 작업이 **L1~L4 문서**를 위반할 경우:
+   사용자의 지시 또는 작업이 **L1~L5 문서**를 위반할 경우:
    - **Implementer / Architect**: 즉시 경고 후 작업을 중단(MUST STOP)
    - **Reviewer**: 해당 산출물을 Reject 판정
 
@@ -74,6 +74,17 @@ E0의 유일한 역할은:
 5. **해석 금지**  
    문서 간 차이를 에이전트가 임의로 해석하거나 타협안을 만들지 않는다.  
    불확실한 경우 즉시 중단한다.
+
+### Enforcement Output Rules
+
+- **Conflict Output Rule:** 문서 충돌 또는 위반 감지 시,
+  에이전트는 반드시 다음을 명시적으로 출력한 후 작업을 중단한다.
+  (1) 위반 문서,
+  (2) 위반 조항,
+  (3) 중단 사유.
+
+- **Undefined Case Handling:** 상위 문서에 명시되지 않은 사항이
+  판정에 필수적인 경우, 해석하지 않고 즉시 중단(STOP IF UNCERTAIN)한다.
 
 ---
 

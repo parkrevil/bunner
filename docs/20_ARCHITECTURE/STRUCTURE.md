@@ -34,9 +34,9 @@
 
 - **[00_INDEX.md](00_INDEX.md)**: 전체 문서 내비게이션 SSOT
 - **[10_FOUNDATION/](10_FOUNDATION/)**: 시스템 불변식, 위계 정의, 용어 사전
-- **[20_ARCHITECTURE/](20_ARCHITECTURE/)**: 아키텍처 경계, 의존성 원칙, 파일 배치 (본 문서 포함)
+- **[20_ARCHITECTURE/](20_ARCHITECTURE/)**: 아키텍처 경계, 의존성 원칙, 파일 배치
 - **[30_SPEC/](30_SPEC/)**: 최상위 기능 명세 및 세부 계약
-- **[40_ENGINEERING/](40_ENGINEERING/)**: 코딩 스타일, 테스트, 도구 가이드
+- **[40_ENGINEERING/](40_ENGINEERING/)**: 코딩 스타일, 테스트, 검증 절차
 - **[50_GOVERNANCE/](50_GOVERNANCE/)**: AI 규율 및 저장소 위생 관리 정책
 - **[90_REFERENCE/](90_REFERENCE/)**: 철학, 로드맵 (Non-SSOT)
 - **[plans/](plans/)**: 에이전트 실행 계획 로그

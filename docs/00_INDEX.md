@@ -2,6 +2,10 @@
 
 이 문서는 Bunner 프로젝트의 모든 문서 구조와 위계를 안내하는 내비게이션 SSOT이다.
 
+> 본 문서는 문서의 위치와 권위를 판정하기 위한 **내비게이션 SSOT**이며,
+> 본문에 포함된 경로 및 계층 정보는 규범적이다.
+> 단, 문서 내용 간 충돌 판정은 SSOT_HIERARCHY.md를 따른다.
+
 ```mermaid
 graph TD
     E0[AGENTS.md - E0: Enforcer] --> L1
@@ -58,6 +62,7 @@ graph TD
 
 - [STYLEGUIDE.md](40_ENGINEERING/STYLEGUIDE.md): 코딩 스타일 및 컨벤션
 - [TESTING.md](40_ENGINEERING/TESTING.md): 테스트 전략 및 작성 규칙
+- [VERIFY.md](40_ENGINEERING/VERIFY.md): 검증 절차 및 통과 기준
 - [DEPENDENCIES.md](40_ENGINEERING/DEPENDENCIES.md): 외부 의존성 관리 정책
 
 ### ⚖️ AI 거버넌스 및 판단 기준

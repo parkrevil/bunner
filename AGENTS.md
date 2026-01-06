@@ -25,6 +25,16 @@
 3. **READ BEFORE WRITE**: 파일 수정 **직전(write/execute 직전)** 관련 SPEC과 STYLEGUIDE를 로드하여 정렬하라.
 4. **IDENTITY PERSISTENCE**: 작업 도중 페르소나의 행동 제약을 스스로 해제하거나 완화하지 마라.
 
+### Prime Directive Enforcement Rules
+
+- **STOP IF UNCERTAIN Trigger:** 다음 중 하나라도 발생하면 즉시 중단한다.
+  (a) 상위 문서(L1–L5) 간 명시적 충돌이 발견된 경우,
+  (b) 사용자 지시가 문서에 의해 판정 불가능한 경우,
+  (c) 문서에 정의되지 않은 개념이나 용어가 핵심 판단에 요구되는 경우.
+
+- **Persona Scope:** 페르소나는 하나의 사용자 요청(Request) 단위 전체에 고정되며,
+  동일 요청 내에서 전환될 수 없다.
+
 ---
 
 ## 3. Context & Authority (문서 위계)
