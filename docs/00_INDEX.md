@@ -2,6 +2,26 @@
 
 이 문서는 Bunner 프로젝트의 모든 문서 구조와 위계를 안내하는 내비게이션 SSOT이다.
 
+```mermaid
+graph TD
+    E0[AGENTS.md - E0: Enforcer] --> L1
+    L1[10_FOUNDATION - L1: Invariants] --> L2
+    L2[20_ARCHITECTURE - L2: Boundary] --> L3
+    L3[30_SPEC - L3: Contract] --> L4
+    L4[40_ENGINEERING - L4: Discipline] --> L5
+    L5[50_GOVERNANCE - L5: Hygiene]
+
+    subgraph SSOT [SSOT Layers]
+        L1
+        L2
+        L3
+        L4
+        L5
+    end
+
+    L5 -.-> REF[90_REFERENCE - Ref: Philosophy]
+```
+
 ---
 
 ## 1. 문서 시스템 위계 (Hierarchy)
