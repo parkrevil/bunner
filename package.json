@@ -28,7 +28,6 @@
   ],
   "scripts": {
     "tsc": "tsc --noEmit",
-    "architecture:check": "bun scripts/architecture-check.ts",
     "test": "bun test",
     "test:coverage": "bun test --coverage",
     "lint": "eslint . --fix",
