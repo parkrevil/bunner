@@ -22,6 +22,6 @@ Copilot must read and follow the rules defined in that file.
 | :--------------- | :---------------------------------------------------------- |
 | **Foundation**   | `docs/10_FOUNDATION/SSOT_HIERARCHY.md`, `INVARIANTS.md`     |
 | **Architecture** | `docs/20_ARCHITECTURE/ARCHITECTURE.md`, `STRUCTURE.md`      |
-| **Contracts**    | `docs/30_SPEC/00_SPEC.md`, `docs/30_SPEC/*.spec.md`         |
+| **Contracts**    | `docs/30_SPEC/SPEC.md`, `docs/30_SPEC/*.spec.md`            |
 | **Engineering**  | `docs/40_ENGINEERING/STYLEGUIDE.md`, `TESTING.md`           |
 | **Governance**   | `docs/50_GOVERNANCE/OVERVIEW.md`, `POLICY.md`, `COMMITS.md` |

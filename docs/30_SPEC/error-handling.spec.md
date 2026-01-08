@@ -1,25 +1,54 @@
-# Error Handling
+# Error Handling Specification
 
-Bunner는 예측 가능하고 일관된 에러 처리 전략을 제공한다. "모든 것은 필터다(All is Filter)"라는 철학 아래, 예외 발생부터 응답 생성까지의 흐름을 단일화된 파이프라인으로 제어한다.
+> 본 문서는 L3 SPEC이며, 특정 기능에 대한 구현 계약(Implementation Contract)만을 정의한다.
+> L1 불변식 및 L2 아키텍처 경계를 전제로 하며, 충돌 시 상위 문서가 우선한다.
 
-## Key Philosophy & Features
+## Purpose
 
-- **Unified Filter Chain (단일화된 필터 체인):**
-  - 예외 처리를 위한 별도의 'Safety Net'이나 복잡한 핸들러 구조를 두지 않는다.
-  - 오직 **Error Filter**들의 체인만이 존재하며, 예외는 이 체인을 따라 흐르며 처리된다.
+본 SPEC은 Failure(값 흐름)와 Panic(throw 경로)의 분리 및 Unified Error Filter Chain이 유효한 구현으로 성립하는 조건을 정의한다.
 
-- **No Recovery, Only Fall-through (복구 없는 통과):**
-  - 필터는 예외를 잡아 정상적인 응답(`Result`)으로 변환하거나, 처리할 수 없다면 다음 필터로 넘긴다(re-throw).
-  - 복잡한 복구 로직이나 흐름 제어를 지양하고, 단순한 **책임 연쇄 패턴(Chain of Responsibility)**을 따른다.
+## Scope & Boundary
 
-- **Default Framework Error Filter (기본 프레임워크 필터):**
-  - 필터 체인의 가장 마지막에는 항상 프레임워크가 제공하는 기본 필터가 위치한다.
-  - 사용자 정의 필터들이 처리하지 못한 모든 예외(패닉, 시스템 에러 등)를 최종적으로 포착하여, 클라이언트에게 일관된 시스템 에러 응답을 반환한다. "터지지 않는 서버"를 위한 최후의 보루다.
+본 SPEC은 throw로 발생하는 예외를 표준 결과(Result)로 변환하기 위한 Error Filter Chain의 계약을 고정한다.
+다음 항목은 본 SPEC의 소유가 아니다:
 
-- **Result vs Exception (결과 대 예외):**
-  - **Domain Error:** 비즈니스 로직 상의 실패(예: 잔액 부족, 중복 가입)는 예외(`throw`)가 아닌 `Result` 객체(`Failure`)로 반환하는 것을 권장한다. 이는 흐름 제어의 일부다.
-  - **System Panic:** 시스템 장애, 버그, 예측 불가능한 상황(예: DB 연결 끊김, 널 포인터 참조)은 예외(`throw`)로 처리되며, 이는 Error Filter Chain에 의해 포착된다.
+- 프로토콜별 최종 오류 표현(HTTP 상태 코드 등) → adapter.spec.md에서 판정된다.
+- 정상 실행의 단계 구성 → execution.spec.md에서 판정된다.
 
-- **Standard Error Protocol (표준 에러 프로토콜):**
-  - 모든 에러 응답은 기계가 식별 가능한 식별자와 상세 정보를 포함하는 **표준 형식을 준수**해야 한다.
-  - HTTP 상태 코드 등 프로토콜 종속적인 정보는 도메인 에러 정의에 포함되지 않으며, 어댑터 계층에서 매핑된다.
+## Definitions
+
+- Failure: 도메인 실패로서 Result 경로(값 흐름)로 처리되는 실패.
+- Panic(System Error): throw로 표현되는 시스템 오류.
+- Error Filter Chain: throw된 예외를 포착하여 표준 결과로 변환하는 단일 체인.
+
+## Invariants
+
+- 사용자는 인프라 예외에 대해 수동 try-catch를 작성할 필요 없이, 프레임워크가 생성한 필터 체인을 통해 예외가 표준 Result로 변환됨을 보장받는다. (ROADMAP)
+
+## MUST
+
+- Failure와 Panic은 동일한 처리 경로로 합쳐지지 않아야 한다.
+- throw로 발생한 예외는 Error Filter Chain을 통해 처리되어야 한다.
+- Error Filter Chain은 체인 순서/우선순위가 판정 가능해야 한다. (구체 규칙 ?????)
+- 필터 체인이 예외를 Result로 변환할 때 사용하는 표준 페이로드는 common.spec.md의 계약을 따른다.
+
+## MUST NOT
+
+- Failure를 throw로 표현하거나, Panic을 값 흐름으로 전달해서는 안 된다.
+- 프로토콜 종속 정보(HTTP 상태 코드 등)를 도메인 에러 정의에 포함시켜서는 안 된다. (매핑은 어댑터에서 수행)
+- 예외 처리에서 “추측 기반 분류”(문자열/메시지 파싱으로 Panic/Failure를 판정)를 허용해서는 안 된다.
+
+## Handoff
+
+- 최종 표현(상태 코드/프레임 등)은 adapter.spec.md로 이관된다.
+- 로깅/관측 시 필수 필드는 logger.spec.md로 이관된다. (필수 필드 ?????)
+
+## Violation Conditions
+
+- 예외가 필터 체인을 거치지 않고 누락/삼켜지는 경우
+- Failure/Panic 경계가 모호하여 추측이 필요한 경우
+
+## Layer Priority
+
+본 SPEC은 L3에 속한다.
+L1 불변식 또는 L2 아키텍처와 충돌할 경우, 본 SPEC은 무효로 판정된다.

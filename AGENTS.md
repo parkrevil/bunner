@@ -48,7 +48,7 @@
 
 1. **L1: docs/10_FOUNDATION/** (불변식)
 2. **L2: docs/20_ARCHITECTURE/** (구조/의존성)
-3. **L3: docs/30_SPEC/00_SPEC.md** (구현 계약)
+3. **L3: docs/30_SPEC/SPEC.md** (구현 계약)
 4. **L4: docs/40_ENGINEERING/** (실무 규율)
 5. **L5: docs/50_GOVERNANCE/** (위생/거버넌스)
 

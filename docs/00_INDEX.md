@@ -55,8 +55,8 @@ graph TD
 
 ### 📜 기능 명세 (Spec)
 
-- [00_SPEC.md](30_SPEC/00_SPEC.md): **최상위 기능 헌법 (모든 spec의 기준)**
-- [30_SPEC/](30_SPEC/): `00_SPEC.md`에 종속된 개별 모듈/기능 계약 문서들
+- [SPEC.md](30_SPEC/SPEC.md): **최상위 기능 헌법 (모든 spec의 기준)**
+- [30_SPEC/](30_SPEC/): `SPEC.md`에 종속된 개별 모듈/기능 계약 문서들
 
 ### 🛠️ 엔지니어링 가이드
 
@@ -87,7 +87,7 @@ graph TD
 | :--------------------------- | :------------------------------------------------- |
 | **작업 시작 전**             | [AGENTS.md (E0)](../AGENTS.md)                     |
 | **새 패키지 / 구조 변경 시** | `ARCHITECTURE.md`, `STRUCTURE.md`, `INVARIANTS.md` |
-| **기능 구현 시**             | `00_SPEC.md` → 관련 `*.spec.md` → `STYLEGUIDE.md`  |
+| **기능 구현 시**             | `SPEC.md` → 관련 `*.spec.md` → `STYLEGUIDE.md`     |
 | **테스트 작성 시**           | `TESTING.md`                                       |
 | **CLI 사용/추가 시**         | `package.json` 스크립트 참조                       |
 | **커밋 / 정리 전**           | `COMMITS.md`, `DEAD_CODE_POLICY.md`                |

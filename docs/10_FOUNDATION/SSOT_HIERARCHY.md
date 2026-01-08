@@ -42,7 +42,7 @@ E0의 유일한 역할은:
 | :-----: | :---------------------- | :------------------------------------------ | :-------------------------- |
 | **L1**  | `docs/10_FOUNDATION/`   | **헌법 (Invariants)**                       | INVARIANTS                  |
 | **L2**  | `docs/20_ARCHITECTURE/` | **구조 (Boundary)**                         | ARCHITECTURE, STRUCTURE     |
-| **L3**  | `docs/30_SPEC/`         | **계약 (Contract)**                         | 00_SPEC, `*.spec.md`        |
+| **L3**  | `docs/30_SPEC/`         | **계약 (Contract)**                         | SPEC, `*.spec.md`           |
 | **L4**  | `docs/40_ENGINEERING/`  | **규율 (Discipline)**                       | STYLEGUIDE, TESTING, VERIFY |
 | **L5**  | `docs/50_GOVERNANCE/`   | **위생 (AI Judgment & Repository Hygiene)** | POLICY, OVERVIEW, COMMITS   |
 | **Ref** | `docs/90_REFERENCE/`    | **참고 (Non-SSOT)**                         | VISION, ROADMAP             |
