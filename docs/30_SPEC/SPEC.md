@@ -12,6 +12,11 @@
 - L2: ARCHITECTURE (구조 경계)
 - L3: SPEC (구현 계약)
 
+## 작성 규칙
+
+모든 `*.spec.md` 파일은 [TEMPLATE.md](TEMPLATE.md)의 구조를 준수해야 한다.
+템플릿을 따르지 않는 SPEC 문서는 무효로 판정된다.
+
 ## Contract Specs
 
 - [aot-ast.spec.md](aot-ast.spec.md)
