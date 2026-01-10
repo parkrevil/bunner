@@ -123,7 +123,6 @@ resolved config의 기본값 규칙:
 - "동일 입력"은 최소한 다음을 포함해야 한다.
   - 프로젝트 파일 시스템의 동일 상태
   - bunner config 파일의 동일 상태
-  - bunner config 실행에 영향을 주는 동일 조건(예: 환경변수)
 
 ### 4.2 State Conditions
 
@@ -136,6 +135,7 @@ resolved config의 기본값 규칙:
 
 - Build-Time Violation: bunner config 파일이 존재하지 않는데 빌드가 성공하는 경우
 - Build-Time Violation: resolved config에 `module.fileName`이 존재하지 않는데 빌드가 성공하는 경우
+- Build-Time Violation: resolved config가 계약 형상(`ResolvedBunnerConfigModule`)을 위반하는 경우
 - Test-Level Violation: 동일 입력에서 AOT 판정 결과 또는 산출물이 비결정적으로 달라지는 경우
 
 ---

@@ -115,6 +115,7 @@ BunnerManifest:
 
 - CLI는 빌드 타임에 Manifest를 생성해야 한다.
 - Manifest는 동일 입력(프로젝트 파일 시스템 + 동일한 resolved config)에서 결정적으로 동일해야 한다.
+- Manifest의 `modules`는 `id` 오름차순으로 정렬되어야 한다.
 - Manifest는 런타임에서 수정될 수 없어야 한다.
 - Manifest는 모듈 판정 결과를 module-system.spec.md와 모순 없이 표현해야 한다.
 
@@ -151,6 +152,7 @@ Observable:
 
 - Build-Time Violation: Manifest가 생성되지 않았는데 빌드가 성공으로 판정되는 경우
 - Test-Level Violation: 동일 입력에서 서로 다른 Manifest가 생성되는 경우
+- Build-Time Violation: `modules` 배열이 `id` 오름차순 결정적 정렬을 따르지 않는 경우
 - Runtime Violation: 런타임에서 Manifest 수정이 관측되거나, 수정이 실행 경로를 변경하는 경우
 
 ---

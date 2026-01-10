@@ -19,7 +19,8 @@
 
 - Normal Path: 예외(throw)가 발생하지 않는 실행 경로.
 - Handler: 어댑터가 최종적으로 호출하는 사용자 함수(요청 처리 엔트리).
-- Middleware/Guard: 실행 흐름을 구성하는 전/중간 단계 구성요소. 구체 역할 정의 ?????.
+- Middleware: 요청/컨텍스트를 전처리하거나 공통 cross-cut을 적용하는 단계.
+- Guard: 접근/전제 조건을 평가해 통과(계속) 또는 거부(Result/Failure) 또는 예외(throw)로 분기하는 단계.
 
 ## Invariants
 
@@ -29,18 +30,19 @@
 ## MUST
 
 - 정상 실행은 Result 기반 흐름으로 표현되어야 한다. (Result 형태는 common.spec.md에 의해 정의된다)
-- 실행 흐름은 최소한 `Middleware -> Guard -> Handler`의 순서를 표현할 수 있어야 한다. (세부 단계/확장 ?????)
-- Structural Context Propagation이 지원되어야 한다. (필수 필드/전달 규칙 ?????)
+- 실행 흐름은 최소한 `Middleware -> Guard -> Handler`의 순서를 표현해야 한다.
+- Structural Context Propagation이 지원되어야 한다. (컨텍스트는 미들웨어→가드→핸들러로 전달되어야 한다)
 - 런타임 구성 요소는 빌드 타임에 확정된 정적 연결 관계만을 따른다. (ARCHITECTURE의 Static Context Binding 전제)
 
 ## MUST NOT
 
 - 정상 실행 흐름을 런타임에서 동적으로 재구성하거나, 구조를 추론해서는 안 된다.
-- 사용자 함수 본문을 재작성하여 실행 의미론을 강제해서는 안 된다. (예외가 있다면 ?????)
+- 사용자 함수 본문을 재작성하여 실행 의미론을 강제해서는 안 된다.
 
 ## Handoff
 
 - throw가 발생하면 정상 실행은 즉시 이탈하며, 예외는 error-handling.spec.md의 Unified Error Filter Chain으로 이관된다.
+- Guard가 거부(Result/Failure)하는 경우 Handler는 실행되지 않으며, 어댑터는 Result 경로로 응답을 생성해야 한다.
 - 실행 구성(어댑터별 wiring/초기화)은 adapter.spec.md 및 manifest.spec.md로 이관된다.
 
 ## Violation Conditions
