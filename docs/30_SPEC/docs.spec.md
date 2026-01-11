@@ -13,7 +13,7 @@
 다음 항목은 본 SPEC의 소유가 아니다:
 
 - 명세를 표시하는 UI/DevTools → devtools.spec.md에서 판정된다.
-- 문서 파일 배치/이름 → STRUCTURE.md 또는 manifest.spec.md의 산출물 섹션(?????)
+- 문서 파일 배치/이름 → STRUCTURE.md 또는 manifest.spec.md의 산출물 섹션
 
 ## Definitions
 
@@ -27,13 +27,13 @@
 ## MUST
 
 - API 명세는 adapter/execution/dto/error 모델과 정합해야 한다.
-- API 명세 생성은 다음 입력을 사용할 수 있어야 한다: (세부 ?????)
+- API 명세 생성은 다음 입력을 사용할 수 있어야 한다:
   - 어댑터의 라우팅/이벤트 표면
   - DTO 스키마
   - 표준 오류 페이로드
-  - 인증/인가 메타데이터(존재한다면 ?????)
+  - 인증/인가 메타데이터(존재한다면)
 - 명세 산출물은 동일 입력에서 결정적으로 동일해야 한다.
-- 불일치가 검출되면 빌드 실패 또는 명시적 실패로 판정되어야 한다. (수준/정책 ?????)
+- 불일치가 검출되면 빌드 실패 또는 명시적 실패로 판정되어야 한다.
 
 ## MUST NOT
 
@@ -44,7 +44,8 @@
 
 - DTO 스키마는 dto.spec.md를 따른다.
 - 오류 페이로드는 common.spec.md 및 error-handling.spec.md를 따른다.
-- 입력 인덱스/그래프는 manifest.spec.md를 따른다. (필수 여부 ?????)
+
+- 빌드 실패 및 위반 조건의 진단 출력은 diagnostics.spec.md의 형식을 따라야 한다.
 
 ## Violation Conditions
 

@@ -22,8 +22,9 @@
 
 1. **STOP IF UNCERTAIN**: 모호한 지시나 문서 충돌 발생 시, 추측하지 말고 즉시 중단 후 질문하라.
 2. **NO HALLUCINATION IN COMMANDS**: 존재하지 않거나 승인되지 않은 명령어나 옵션을 사용하지 마라.
-3. **READ BEFORE WRITE**: 파일 수정 **직전(write/execute 직전)** 관련 SPEC과 STYLEGUIDE를 로드하여 정렬하라.
-4. **IDENTITY PERSISTENCE**: 작업 도중 페르소나의 행동 제약을 스스로 해제하거나 완화하지 마라.
+3. **READ BEFORE WRITE (Code)**: 코드 수정 **직전(write/execute 직전)** 관련 SPEC과 STYLEGUIDE를 로드하여 정렬하라.
+4. **READ BEFORE WRITE (Docs)**: 문서(`docs/**`) 수정 **직전(write/execute 직전)** [docs/50_GOVERNANCE/DOCS_WRITING.md](docs/50_GOVERNANCE/DOCS_WRITING.md)의 규율을 로드하고 준수하라.
+5. **IDENTITY PERSISTENCE**: 작업 도중 페르소나의 행동 제약을 스스로 해제하거나 완화하지 마라.
 
 ### Prime Directive Enforcement Rules
 

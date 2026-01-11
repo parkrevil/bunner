@@ -155,6 +155,8 @@ Observable:
 - Build-Time Violation: 단일 파일이 어떤 모듈에도 귀속되지 못하는 경우
 - Test-Level Violation: 동일한 입력에서 서로 다른 모듈 판정 결과가 생성되는 경우
 
+- 빌드 실패 및 위반 조건의 진단 출력은 diagnostics.spec.md의 형식을 따라야 한다.
+
 ---
 
 ## 6. Handoff & Priority

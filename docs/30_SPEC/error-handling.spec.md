@@ -29,7 +29,7 @@
 
 - Failure와 Panic은 동일한 처리 경로로 합쳐지지 않아야 한다.
 - throw로 발생한 예외는 Error Filter Chain을 통해 처리되어야 한다.
-- Error Filter Chain은 체인 순서/우선순위가 판정 가능해야 한다. (구체 규칙 ?????)
+- Error Filter Chain은 체인 순서/우선순위가 판정 가능해야 한다.
 - 필터 체인이 예외를 Result로 변환할 때 사용하는 표준 페이로드는 common.spec.md의 계약을 따른다.
 
 ## MUST NOT
@@ -41,7 +41,8 @@
 ## Handoff
 
 - 최종 표현(상태 코드/프레임 등)은 adapter.spec.md로 이관된다.
-- 로깅/관측 시 필수 필드는 logger.spec.md로 이관된다. (필수 필드 ?????)
+
+- 빌드 실패 및 위반 조건의 진단 출력은 diagnostics.spec.md의 형식을 따라야 한다.
 
 ## Violation Conditions
 

@@ -20,6 +20,10 @@ L3 Implementation Contract
 - Out-of-Scope: 본 SPEC이 정의하지 않는 영역
   (타 SPEC에서 정의되는 계약, 엔지니어링 선택, 구현 상세)
 
+### 1.3 Definitions
+
+- 본 SPEC에서 사용되는 전역 용어의 정의는 [docs/10_FOUNDATION/GLOSSARY.md](../10_FOUNDATION/GLOSSARY.md)를 따른다.
+
 ---
 
 ## 2. Static Shape

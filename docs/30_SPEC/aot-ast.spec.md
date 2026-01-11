@@ -113,6 +113,8 @@ Observable:
   - 해당 파일 내부의 조건문/환경변수 사용은 허용된다.
   - resolved 결과가 계약 형상(`ResolvedBunnerConfigModule`)을 위반하면 빌드 실패가 관측되어야 한다.
 
+- 빌드 실패 및 위반 조건의 진단 출력은 diagnostics.spec.md의 형식을 따라야 한다.
+
 resolved config의 기본값 규칙:
 
 - 사용자가 resolved config에 `module.fileName`을 제공하지 않은 경우, CLI는 기본값을 설정해야 한다.
@@ -122,7 +124,15 @@ resolved config의 기본값 규칙:
 
 - "동일 입력"은 최소한 다음을 포함해야 한다.
   - 프로젝트 파일 시스템의 동일 상태
-  - bunner config 파일의 동일 상태
+  - resolved bunner config의 동일 상태
+
+- bunner config 소스가 환경변수 등을 사용하더라도, 결정성 입력은 resolved bunner config를 기준으로 판정되어야 한다.
+
+정적 해석 범위:
+
+- CLI는 프로젝트 소스가 참조하는 심볼을 따라가며, 정적 해석을 수행할 수 있어야 한다.
+- 이 정적 해석은 `node_modules` 하위 파일을 포함할 수 있다.
+- CLI는 `node_modules` 전수 스캔을 수행해서는 안 된다.
 
 ### 4.2 State Conditions
 

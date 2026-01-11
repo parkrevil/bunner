@@ -122,7 +122,8 @@ BunnerManifest:
 ### 3.2 MUST NOT
 
 - Manifest는 런타임 동적 판정을 요구하는 필드를 포함해서는 안 된다.
-- Manifest는 "현재 환경"(시간, 호스트명 등)에 의해 달라지는 값을 포함해서는 안 된다.
+
+- 빌드 실패 및 위반 조건의 진단 출력은 diagnostics.spec.md의 형식을 따라야 한다.
 
 ---
 

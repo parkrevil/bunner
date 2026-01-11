@@ -138,10 +138,10 @@ export const module: BunnerModule = {
 
 ### 가시성 제어
 
-`visibility` 옵션으로 모듈 간 접근을 제어합니다:
+`visibleTo` 옵션으로 모듈 간 접근을 제어합니다:
 
 ```typescript
-@Injectable({ visibility: 'exported' })
+@Injectable({ visibleTo: 'all' })
 export class SharedService {}
 ```
 
@@ -177,6 +177,4 @@ MIT © [ParkRevil](https://github.com/parkrevil)
 
 ---
 
-<p align="center">
-  Bun 생태계를 위해 ❤️로 만들었습니다
-</p>
+Bun 생태계를 위해 ❤️로 만들었습니다

@@ -12,22 +12,17 @@
 본 SPEC은 ORM 연동의 경계, 코드 생성/스키마 연계, 실행/DI/Provider와의 접점을 판정 가능한 계약으로 고정한다.
 다음 항목은 본 SPEC의 소유가 아니다:
 
-- 특정 ORM의 API 상세 사용법 → 가이드/레퍼런스 문서 범위다. (해당 문서 ?????)
+- 특정 ORM의 API 상세 사용법 → 가이드/레퍼런스 문서 범위다.
 
 ## Definitions
 
 - ORM Integration: 데이터 계층을 프레임워크 구조/DI/Provider 모델에 연결하는 기능.
-- Codegen: ORM 스키마로부터 생성되는 보조 코드/타입. 구체 형태 ?????.
 
 ## Invariants
 
 - 연동은 빌드 타임 판정(정적 산출물) 원칙을 침범하지 않는다.
 
 ## MUST
-
-- ORM 연동은 DI/Provider 모델과 결합 가능해야 한다. (결합 방식 ?????)
-- ORM 스키마/타입 정보가 DTO/Schema 및 문서화(docs) 산출물과 정합 가능해야 한다. (정합 규칙 ?????)
-- 코드 생성이 포함된다면, 생성 경계(사용자 본문 재작성 금지)를 준수해야 한다. (예외 ?????)
 
 ## MUST NOT
 
@@ -37,7 +32,8 @@
 ## Handoff
 
 - DI/Provider 결합은 di.spec.md 및 provider.spec.md를 따른다.
-- 산출물은 manifest.spec.md 및 (필요 시) docs.spec.md로 이관된다. (구체 ?????)
+
+- 빌드 실패 및 위반 조건의 진단 출력은 diagnostics.spec.md의 형식을 따라야 한다.
 
 ## Violation Conditions
 

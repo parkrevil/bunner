@@ -18,7 +18,6 @@
 ## Definitions
 
 - Non-intrusive: DevTools가 활성화되어도 실행 결과/경로/판정이 바뀌지 않는 성질.
-- Visualization Artifact: 실행/구조 정보를 시각화하기 위한 입력 데이터. 구체 형태 ?????.
 
 ## Invariants
 
@@ -26,8 +25,6 @@
 
 ## MUST
 
-- DevTools는 개발 중 모니터링/시각화를 제공해야 한다. (대상: 실행 흐름/모듈/DI/어댑터 등 ?????)
-- DevTools의 데이터 소스는 명시적으로 선언되어야 한다. (수집 경로 ?????)
 - DevTools 활성화 여부에 따라 실행 의미론이 변하지 않아야 한다.
 
 ## MUST NOT
@@ -37,7 +34,7 @@
 
 ## Handoff
 
-- 관측 데이터의 구조적 형식은 logger.spec.md 및 manifest.spec.md와 정합해야 한다. (정합 규칙 ?????)
+- 빌드 실패 및 위반 조건의 진단 출력은 diagnostics.spec.md의 형식을 따라야 한다.
 
 ## Violation Conditions
 

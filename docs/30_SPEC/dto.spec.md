@@ -18,9 +18,6 @@
 ## Definitions
 
 - DTO: 데이터 전송 객체. 비즈니스 로직을 포함하지 않는 구조적 데이터.
-- Schema: DTO의 구조를 나타내는 정적 명세. (표현 방식 ?????)
-- Transformer: DTO 변환 규칙. “제로 오버헤드” 목표(ROADMAP/기존 문서)와의 정합 조건 ?????.
-- Validator: DTO 검증 규칙. “제로 디펜던시” 목표와의 정합 조건 ?????.
 
 ## Invariants
 
@@ -28,9 +25,9 @@
 
 ## MUST
 
-- DTO는 스키마로 정의 가능해야 한다. (정의 방법 ?????)
+- DTO는 스키마로 정의 가능해야 한다.
 - 변환/검증은 DTO 스키마를 기반으로 수행되어야 한다.
-- 비즈니스 진입 전 검증 완료(Validation Before Business) 원칙이 적용되어야 한다. (적용 범위 ?????)
+- 비즈니스 진입 전 검증 완료(Validation Before Business) 원칙이 적용되어야 한다.
 
 ## MUST NOT
 
@@ -39,8 +36,7 @@
 
 ## Handoff
 
-- docs.spec.md는 DTO 스키마를 입력으로 OpenAPI/AsyncAPI 산출물을 생성할 수 있다. (필수/선택 ?????)
-- execution.spec.md는 DTO 검증 실패를 Failure로 취급하는 규칙을 참조한다. (정확한 Failure 형태 ?????)
+- 빌드 실패 및 위반 조건의 진단 출력은 diagnostics.spec.md의 형식을 따라야 한다.
 
 ## Violation Conditions
 

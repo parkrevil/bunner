@@ -2,7 +2,7 @@
 
 - [x] 모듈 시스템(디렉토리 경계, **module**, import 규칙) — 동시에 만질 파일: module-system, manifest(부분), adapter(부분)
 - [x] CLI/AOT 파이프라인(분석→검증→생성 산출물, 결정성) — 동시에 만질 파일: aot-ast, execution(부트/로딩), manifest(산출물 스키마)
-- [ ] DI(정적 그래프, 토큰 모델, scope/visibility, “런타임 토큰 조회 금지”) — 동시에 만질 파일: di, provider, module-system(visibility 연결)
+- [x] DI(정적 그래프, 토큰 모델, scope/visibility, “런타임 토큰 조회 금지”) — 동시에 만질 파일: di, provider, module-system(visibility 연결)
 - [ ] 실행 모델(미들웨어/가드/핸들러, 컨텍스트 전파 최소 형태) — 동시에 만질 파일: execution, adapter(파이프라인 접점), dto(검증 위치)
 - [ ] 에러 모델(Failure/Panic, 필터 체인, 프로토콜 변환 경계) — 동시에 만질 파일: error-handling, adapter, logger(에러 로깅)
 - [ ] HTTP 어댑터(라우팅/파라미터/미들웨어/필터/응답 변환 기준선) — 동시에 만질 파일: adapter, execution, dto, docs(문서 추출 규칙)

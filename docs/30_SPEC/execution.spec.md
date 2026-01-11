@@ -34,10 +34,18 @@
 - Structural Context Propagation이 지원되어야 한다. (컨텍스트는 미들웨어→가드→핸들러로 전달되어야 한다)
 - 런타임 구성 요소는 빌드 타임에 확정된 정적 연결 관계만을 따른다. (ARCHITECTURE의 Static Context Binding 전제)
 
+- Middleware/Guard/Handler/Error Filter는 DI wiring의 노드로 취급되어야 하며,
+  빌드 타임에 확정된 연결에 의해 의존성이 제공되어야 한다.
+
+- App-External Code에서 DI 결과에 접근해야 하는 경우, 접근 경로는 `app.get(Token)`이어야 한다.
+- `app.get(Token)`의 성공 조건 및 위반 조건은 di.spec.md의 규칙과 일치해야 한다.
+
 ## MUST NOT
 
 - 정상 실행 흐름을 런타임에서 동적으로 재구성하거나, 구조를 추론해서는 안 된다.
 - 사용자 함수 본문을 재작성하여 실행 의미론을 강제해서는 안 된다.
+
+- 런타임에서 DI 의존을 해결(resolve)하기 위한 컨테이너 조회를 실행 흐름의 일부로 포함해서는 안 된다.
 
 ## Handoff
 
@@ -49,6 +57,11 @@
 
 - Result 기반 정상 흐름이 아닌데도 “정상”으로 판정되는 경우
 - 실행 단계/컨텍스트 전달이 모호하여 추측이 필요한 경우
+
+- Runtime Violation: App-External Code에서 `app.get(Token)`이 `singleton`이 아닌 토큰에 대해 성공하는 경우
+- Runtime Violation: App-External Code에서 `app.get(Token)`이 visibleTo가 `all`이 아닌 토큰에 대해 성공하는 경우
+
+- 빌드 실패 및 위반 조건의 진단 출력은 diagnostics.spec.md의 형식을 따라야 한다.
 
 ## Layer Priority
 
