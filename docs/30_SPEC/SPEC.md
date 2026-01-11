@@ -5,17 +5,10 @@
 
 본 문서는 Bunner의 L3 SPEC 문서군을 탐색하기 위한 인덱스다.
 
-## SSOT 계층
-
-- E0: AGENTS.md (집행)
-- L1: FOUNDATION/INVARIANTS (존재 조건)
-- L2: ARCHITECTURE (구조 경계)
-- L3: SPEC (구현 계약)
-
 ## 작성 규칙
 
 모든 `*.spec.md` 파일은 [TEMPLATE.md](TEMPLATE.md)의 구조를 준수해야 한다.
-템플릿을 따르지 않는 SPEC 문서는 무효로 판정된다.
+템플릿을 따르지 않는 변경은 허용되지 않는다.
 
 ## Contract Specs
 
@@ -25,6 +18,7 @@
 - [di.spec.md](di.spec.md)
 - [provider.spec.md](provider.spec.md)
 - [common.spec.md](common.spec.md)
+- [diagnostics.spec.md](diagnostics.spec.md)
 - [execution.spec.md](execution.spec.md)
 - [error-handling.spec.md](error-handling.spec.md)
 - [adapter.spec.md](adapter.spec.md)

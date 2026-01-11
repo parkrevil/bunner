@@ -115,10 +115,10 @@ Observable:
 
 - 빌드 실패 및 위반 조건의 진단 출력은 diagnostics.spec.md의 형식을 따라야 한다.
 
-resolved config의 기본값 규칙:
+resolved config의 필수 규칙:
 
-- 사용자가 resolved config에 `module.fileName`을 제공하지 않은 경우, CLI는 기본값을 설정해야 한다.
-- 기본값은 `"module.ts"`여야 한다.
+- resolved bunner config는 `module.fileName`을 반드시 포함해야 한다.
+- CLI는 `module.fileName`에 대해 어떠한 기본값도 설정해서는 안 된다.
 
 결정성(determinism) 입력 정의:
 
@@ -161,4 +161,4 @@ resolved config의 기본값 규칙:
 
 본 문서는 L3 SPEC에 속한다.
 L2 ARCHITECTURE 또는 L1 FOUNDATION과 충돌할 경우,
-본 SPEC은 무효로 판정된다.
+상위 문서가 우선한다.

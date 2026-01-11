@@ -2,7 +2,7 @@
 
 This repository is governed by the following entry document:
 
-- [AGENTS.md](AGENTS.md)
+- [AGENTS.md](../AGENTS.md)
 
 Copilot must read and follow the rules defined in that file.
 
@@ -10,9 +10,9 @@ Copilot must read and follow the rules defined in that file.
 
 ## Quick References
 
-1.  **Mandatory Guide**: Always follow [AGENTS.md](AGENTS.md)
-2.  **Documentation Index**: [docs/00_INDEX.md](docs/00_INDEX.md)
-3.  **Authority Model**: [docs/10_FOUNDATION/SSOT_HIERARCHY.md](docs/10_FOUNDATION/SSOT_HIERARCHY.md)
+1.  **Mandatory Guide**: Always follow [AGENTS.md](../AGENTS.md)
+2.  **Documentation Index**: [docs/00_INDEX.md](../docs/00_INDEX.md)
+3.  **Authority Model**: [docs/10_FOUNDATION/SSOT_HIERARCHY.md](../docs/10_FOUNDATION/SSOT_HIERARCHY.md)
 
 ---
 

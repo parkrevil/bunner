@@ -208,10 +208,14 @@ Diagnostic:
 - Test-Level Violation: 동일 입력에서 진단 출력이 비결정적으로 달라지는 경우
 - Build-Time Violation: 빌드 실패가 발생했는데도 `Diagnostic`이 산출되지 않는 경우
 
----
+## 6. Handoff & Priority
 
-## 6. Layer Priority
+### 6.1 Handoff
+
+- Normative: None.
+
+### 6.2 Layer Priority
 
 본 문서는 L3 SPEC에 속한다.
 L2 ARCHITECTURE 또는 L1 FOUNDATION과 충돌할 경우,
-본 SPEC은 무효로 판정된다.
+상위 문서가 우선한다.

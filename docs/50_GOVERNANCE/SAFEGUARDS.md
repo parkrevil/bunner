@@ -13,14 +13,10 @@
 
 - 문서/코드 변경을 수반하는 모든 자동화 및 에이전트 작업
 
-## 정본/우선순위
-
-- 최상위 정본은 [ARCHITECTURE.md](../20_ARCHITECTURE/ARCHITECTURE.md)다.
-
 ## 관련 문서
 
 - 위반 시 즉시 중단(보안/법적/핵심 불변조건): [POLICY.md](POLICY.md)
-- 승인/승격(거버넌스): [GOVERNANCE.md](GOVERNANCE.md)
+- 승인/승격(거버넌스): [OVERVIEW.md](OVERVIEW.md)
 - 에이전트 집행 규칙: [AGENTS.md](../../AGENTS.md)
 
 ## POLICY vs SAFEGUARDS 역할 구분
@@ -33,6 +29,62 @@
 | **결과**   | 변경 즉시 거부                    | 중단 후 승인 요청 또는 롤백 |
 
 ---
+
+## Safeguard 형식 (Normative)
+
+Safeguard는 아래 형식으로만 정의한다(MUST).
+
+```text
+If <Violation> is true,
+then <Enforcement> MUST occur.
+```
+
+여기서 `<Violation>`은 boolean으로 판정 가능해야 한다(MUST).
+
+## Enforced Safeguards (Decidable)
+
+### SG-THRASH-001: Thrashing
+
+If thrashing is detected,
+then STOP MUST occur.
+
+- Violation (thrashing): 최근 10회 수정 내역에서 동일 구간(시작 라인 기준 ±5줄 범위)이 왕복 3회 이상
+- Enforcement: STOP + decision request (승인 아티팩트는 [OVERVIEW.md](OVERVIEW.md)의 정의를 따른다)
+
+### SG-SCOPE-001: Scope override required
+
+If a change touches a file/package outside the user-approved scope,
+then STOP MUST occur.
+
+- Violation: 변경 대상이 사용자 승인 범위를 벗어남
+- Enforcement: STOP (승인 아티팩트 없이는 진행 불가)
+
+### SG-VERIFY-001: Verify failure
+
+If `verify` fails and the failure cannot be fixed within approved scope,
+then ROLLBACK MUST occur.
+
+- Violation: `bun run verify` 실패 + 범위 내 해결 불가
+- Enforcement: ROLLBACK
+
+### SG-FACADE-001: Public Facade contract break
+
+If a Public Facade change is detected without approval artifact,
+then STOP MUST occur.
+
+- Violation: `packages/*/index.ts` export 변경 + 승인 아티팩트 없음
+- Enforcement: STOP
+
+---
+
+## Non-Enforced Safeguards (Invalid)
+
+아래 항목들은 임계값/판정 기준이 정의되지 않아(비판정형) 집행에 사용할 수 없다(MUST NOT).
+필요하면 boolean 조건으로 재정의한 뒤, Enforced Safeguards로 승격해야 한다(MUST).
+
+- “많은 파일 동시 변경”
+- “포맷팅-only 대량 변경”
+- “리팩토링 + 기능 변경 혼합”
 
 ## 용어 정의
 
@@ -61,69 +113,7 @@
 
 ---
 
-## 중단 기준 (즉시 Stop)
+## 집행 (Enforcement)
 
-### 패턴/반복 기반
-
-| 상황                     | 임계값 | 조치                                       |
-| ------------------------ | ------ | ------------------------------------------ |
-| 동일 구간 thrashing      | 3회    | 즉시 중단, 방향 확인 요청                  |
-| 범위 밖 변경 필요        | 1회    | 승인 요청 ([GOVERNANCE.md](GOVERNANCE.md)) |
-| verify 실패 후 해결 불가 | -      | 롤백                                       |
-
-### 규칙 미충족 기반
-
-| 상황                                                      | 관련 SSOT           |
-| --------------------------------------------------------- | ------------------- |
-| `STYLEGUIDE.md` 클래스 선택 기준(11.2) 미충족 클래스 도입 | STYLEGUIDE.md       |
-| `STYLEGUIDE.md` 단일-심볼 파일(16.6) 정당화 없이 추가     | STYLEGUIDE.md       |
-| `STRUCTURE.md` `src/common/` 배치 규칙 미충족             | STRUCTURE.md        |
-| `DEAD_CODE_POLICY.md` 증명 기록 없이 데드 코드 제거       | DEAD_CODE_POLICY.md |
-
-### 예외: 승인된 범위 확장
-
-아래 조건을 **모두** 만족하면 범위 밖 변경 허용:
-
-1. verify 실패가 범위 밖 파일을 직접 지목
-2. 범위 내 수정으로는 해결 불가능
-3. 사용자가 **명시적으로 승인**
-4. 변경은 **최소 단위**
-
-상세: [AGENTS.md](../../AGENTS.md) 4.1.1 Scope Override Protocol
-
----
-
-## 대량 변경 제한
-
-| 상황                      | 조치                        |
-| ------------------------- | --------------------------- |
-| 많은 파일 동시 변경 필요  | 먼저 계획 제시 후 승인 요청 |
-| 포맷팅-only 대량 변경     | 사용자 요청 없이는 금지     |
-| 리팩토링 + 기능 변경 혼합 | 분리하거나 승인 요청        |
-
----
-
-## 롤백 기준
-
-| 상황                            | 조치      |
-| ------------------------------- | --------- |
-| verify 실패 + 범위 내 해결 불가 | 즉시 롤백 |
-| Public Facade 계약 깨짐         | 즉시 롤백 |
-| 의도치 않은 breaking change     | 즉시 롤백 |
-
----
-
-## 되돌리기 인식 (Reversibility Awareness)
-
-- 대량/구조적 변경 전에 롤백 가능성을 고려한다.
-- 안전한 롤백 전략이 불명확하면 사용자에게 경고 후 확인 요청한다.
-
----
-
-## 실행 체크리스트
-
-- [ ] 범위 밖 변경이 필요한가? → 즉시 중단, 승인 요청
-- [ ] 동일 구간을 3회 이상 수정하고 있는가? → thrashing, 중단
-- [ ] 규칙 미충족 상태로 진행하려 하는가? → 중단, 확인 요청
-- [ ] 대량 변경인가? → 계획 제시 후 승인 요청
-- [ ] 롤백이 필요한 상황인가? → 즉시 롤백
+- 에이전트(E0): 위반 감지 시 STOP/ROLLBACK을 수행한다.
+- CI: 위반 감지 시 FAIL로 병합을 차단한다.

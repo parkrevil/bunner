@@ -9,11 +9,6 @@
 
 - `packages/*` 전 패키지 및 `examples/*`를 포함한 레포 전체
 
-## 정본/우선순위
-
-- 최상위 정본은 [ARCHITECTURE.md](../20_ARCHITECTURE/ARCHITECTURE.md)다.
-- 패키지 경계/단방향 의존/Deep import 판정은 [ARCHITECTURE.md](../20_ARCHITECTURE/ARCHITECTURE.md)가 우선한다.
-
 ## 문서 역할 (SSOT)
 
 - 이 문서는 의존성 선언의 **판정 규칙(Policy)** 과 `@bunner/*` 내부 관계의 최소 기준만 고정한다.

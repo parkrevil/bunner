@@ -1,13 +1,19 @@
 # Dependency Injection Specification
 
-> 본 문서는 L3 SPEC이며, 특정 기능에 대한 구현 계약(Implementation Contract)만을 정의한다.
-> L1 불변식 및 L2 아키텍처 경계를 전제로 하며, 충돌 시 상위 문서가 우선한다.
+L3 Implementation Contract
+본 문서는 `Dependency Injection`에 대한 구현 계약이다.
+본 계약은 기계적 검증 가능성(Mechanical Verifiability)을 최우선 기준으로 하며,
+구현 방법, 튜토리얼, 사용 가이드를 포함하지 않는다.
 
-## Purpose
+---
+
+## 1. Context
+
+### 1.1 Purpose
 
 본 SPEC은 Bunner의 DI 그래프 판정 및 정적 연결(wiring)이 유효한 구현으로 성립하는 조건을 정의한다.
 
-## Scope & Boundary
+### 1.2 Scope & Boundary
 
 본 SPEC은 DI의 ‘연결 규칙’과 그래프 판정(순환/해결)을 고정한다.
 다음 항목은 본 SPEC의 소유가 아니다:
@@ -15,20 +21,27 @@
 - Provider 생명주기(init/dispose, scope 의미론) → provider.spec.md에서 판정된다.
 - 공통 타입(Result/Error/Token)의 정의 → common.spec.md에서 판정된다.
 
-## Definitions
+### 1.3 Definitions
 
 - Wiring: 빌드 타임에 확정된 정적 연결 코드(또는 계획).
 - Dependency Cycle: 의존성 그래프에서 순환 경로가 존재하는 상태.
 
-## Invariants
+---
+
+## 2. Static Shape
+
+Normative: 본 SPEC은 추가적인 Static Shape를 정의하지 않는다.
+
+---
+
+## 3. Invariants & Constraints
 
 - DI 연결은 빌드 타임에 확정되어야 한다.
 - 순환 의존은 빌드 실패로 판정된다.
 - 런타임 토큰 조회/동적 해석 없이 정적 그래프만 사용해야 한다.
-
 - `common.spec.md`의 `InjectCall`은 런타임 조회가 아니라 빌드 타임 판정 입력이다.
 
-## MUST
+### 3.1 MUST
 
 - DI 그래프는 Manifest 기반으로 정적으로 구성되어야 한다.
 - DI 토큰은 정적으로 선언 가능한 형태(클래스 생성자 또는 `unique symbol`)만 허용되어야 한다.
@@ -64,7 +77,7 @@
   - lazy 의존은 `InjectCall`에서 `inject(() => Token)` 형태로 선언된 의존을 의미한다.
   - 위 조건을 만족하지 못하면 빌드 실패로 판정되어야 한다.
 
-## MUST NOT
+### 3.2 MUST NOT
 
 - 런타임에서 반사(reflection) 또는 컨테이너 자동 스캔으로 의존을 해결해서는 안 된다.
 - “없는 의존은 null/undefined로 주입” 같은 묵시적 완화를 허용해서는 안 된다.
@@ -78,17 +91,16 @@
   - Token의 Provider scope가 `request | transient`인 경우
   - Token의 Provider visibleTo가 `module` 또는 `ModuleRefList`인 경우
 
-## Handoff
+---
 
-- 그래프의 노드(Provider/Component/Factory 등)의 생명주기 의미론은 provider.spec.md로 이관된다.
-- Wiring 산출물의 형식은 manifest.spec.md로 이관된다.
-
-## Observable Semantics
+## 4. Observable Semantics
 
 - `common.spec.md`의 `InjectCall`은 런타임 조회 API가 아니라, 빌드 타임에 해석되는 선언으로 취급되어야 한다.
 - 런타임에는 정적 wiring에 의해 확정된 연결만 존재해야 한다.
 
-## Violation Conditions
+---
+
+## 5. Violation Conditions
 
 - 순환 의존이 존재하는데도 빌드가 성공하는 경우
 - 런타임에서 DI 연결이 변경되는 경우
@@ -100,7 +112,16 @@
 
 - 빌드 실패 및 위반 조건의 진단 출력은 diagnostics.spec.md의 형식을 따라야 한다.
 
-## Layer Priority
+---
+
+## 6. Handoff & Priority
+
+### 6.1 Handoff
+
+- 그래프의 노드(Provider/Component/Factory 등)의 생명주기 의미론은 provider.spec.md로 이관된다.
+- Wiring 산출물의 형식은 manifest.spec.md로 이관된다.
+
+### 6.2 Layer Priority
 
 본 SPEC은 L3에 속한다.
-L1 불변식 또는 L2 아키텍처와 충돌할 경우, 본 SPEC은 무효로 판정된다.
+L1 불변식 또는 L2 아키텍처와 충돌할 경우, 상위 문서가 우선한다.

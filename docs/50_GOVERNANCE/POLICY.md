@@ -2,29 +2,25 @@
 
 ## 역할
 
-- 이 문서는 위반 시 즉시 중단해야 하는 정책(보안/법적/라이선스/안전 및 프로젝트 핵심 불변조건)을 정의한다.
+- 이 문서는 **기계적으로 판정 가능한(Decidable)** 정책만 정의한다.
+- 각 정책은 단일 위반으로 즉시 발동하며, 위반 여부는 boolean으로 판정 가능해야 한다(MUST).
 
 ## 목적
 
-- 민감정보/저작권/취약점 악용 등 "즉시 중단" 사안을 명시한다.
-- Bunner의 핵심 가치(AOT 결정성, 패키지 경계, Public Facade 계약)를 훼손하는 변경을 즉시 차단한다.
+- 보안/라이선스/결정성/경계/계약을 훼손하는 변경을 기계적으로 차단한다.
 
 ## 적용 범위
 
 - 코드/문서/리소스/의존성 추가 등 레포에 반입되는 모든 변경
 
-## 정본/우선순위
-
-- 최상위 정본은 [ARCHITECTURE.md](../20_ARCHITECTURE/ARCHITECTURE.md)다.
-
 ## 관련 문서
 
-| 문서                                                                                                            | 역할                                           |
-| --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| [SECURITY.md](../../.github/SECURITY.md)                                                                        | 보안 상세                                      |
-| [SAFEGUARDS.md](SAFEGUARDS.md)                                                                                  | 폭주 방지/대량 변경/롤백 (패턴/반복 기반 중단) |
-| [GOVERNANCE.md](GOVERNANCE.md)                                                                                  | 승인 절차/프로토콜                             |
-| [docs/specs/aot-ast.spec.md](../30_SPEC/aot-ast.spec.md), [ARCHITECTURE.md](../20_ARCHITECTURE/ARCHITECTURE.md) | AOT/경계/계약 SSOT                             |
+| 문서                                                                                                 | 역할                                           |
+| ---------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| [SECURITY.md](../../.github/SECURITY.md)                                                             | 보안 상세                                      |
+| [SAFEGUARDS.md](SAFEGUARDS.md)                                                                       | 폭주 방지/대량 변경/롤백 (패턴/반복 기반 중단) |
+| [OVERVIEW.md](OVERVIEW.md)                                                                           | 승인 절차/프로토콜                             |
+| [aot-ast.spec.md](../30_SPEC/aot-ast.spec.md), [ARCHITECTURE.md](../20_ARCHITECTURE/ARCHITECTURE.md) | AOT/경계/계약 SSOT                             |
 
 ## POLICY vs SAFEGUARDS 역할 구분
 
@@ -36,63 +32,69 @@
 
 ---
 
-## 즉시 중단 (Stop) 항목
+## 정책 형식 (Normative)
 
-### 보안/법적 (Security/Legal)
+모든 정책은 아래 3요소를 가진다(MUST).
 
-| 항목                        | 예시                                       |
-| --------------------------- | ------------------------------------------ |
-| 민감정보 저장소 반입        | API 키를 코드에 하드코딩, `.env` 파일 커밋 |
-| 라이선스/저작권 위반        | 출처 없이 Stack Overflow 코드 복사         |
-| Copyleft 라이선스 무단 유입 | GPL/AGPL 라이브러리를 dependencies에 추가  |
-| 취약점 악용 코드            | SQL injection을 허용하는 쿼리 빌더         |
+```text
+Policy:
+- Target: what it applies to (file, commit, spec, code, dependency)
+- Violation: boolean, machine-checkable
+- Enforcement: block | fail | rollback | reject
+```
 
-### AOT/결정성 (AOT/Determinism)
+임계값/조건이 없는 비판정형 표현은 POLICY에 포함될 수 없다(MUST NOT).
 
-| 항목                                       | 예시                                    |
-| ------------------------------------------ | --------------------------------------- |
-| `reflect-metadata` 사용                    | `import 'reflect-metadata'` 추가        |
-| 런타임 리플렉션/스캔 도입                  | 런타임에 파일 시스템 스캔하여 모듈 로드 |
-| `__BUNNER_METADATA_REGISTRY__` 런타임 수정 | 레지스트리에 동적으로 메타데이터 추가   |
-| 비결정적 산출물 도입                       | `Date.now()`를 코드 생성에 사용         |
+## Machine-Enforced Policies
 
-### 패키지 경계 (Package Boundaries)
+### POLICY-SEC-001: Block secrets
 
-| 항목                      | 예시                                             |
-| ------------------------- | ------------------------------------------------ |
-| cross-package deep import | `import { X } from '@bunner/core/src/container'` |
-| 순환 의존성 도입          | A→B→C→A 순환 참조                                |
+- Target: all files
+- Violation: added content matches at least one pattern
+  - `AKIA[0-9A-Z]{16}`
+  - `-----BEGIN (RSA|EC|OPENSSH) PRIVATE KEY-----`
+  - `xox(b|p|a)-`
+- Enforcement: block
 
-### 계약/API (Contracts/API)
+### POLICY-DEP-001: Block dependency changes without approval artifact
 
-| 항목                    | 예시                                                  |
-| ----------------------- | ----------------------------------------------------- |
-| Public Facade 무단 변경 | 사용자 요청 없이 `packages/core/index.ts` export 삭제 |
-| Silent breaking change  | 함수 시그니처 유지, 반환값 의미 변경                  |
+- Target: `package.json` (root and `packages/*/package.json`)
+- Violation: `dependencies`/`devDependencies`/`optionalDependencies`/`peerDependencies` 변경이 발생했지만 승인 아티팩트가 존재하지 않음
+- Enforcement: block
 
-### 정책/거버넌스 (Policy/Governance)
+### POLICY-AOT-001: Block reflect-metadata
 
-| 항목                     | 예시                            | 승인 필요                          |
-| ------------------------ | ------------------------------- | ---------------------------------- |
-| SSOT/정책 문서 무단 변경 | docs/specs 규칙 완화            | [GOVERNANCE.md](GOVERNANCE.md)     |
-| 배포/패키징 전략 변경    | peerDependencies 정책 변경      | [GOVERNANCE.md](GOVERNANCE.md)     |
-| 패키지 책임/역할 침범    | CLI가 런타임 패키지에 의존 추가 | [ARCHITECTURE.md](ARCHITECTURE.md) |
-| 배치 규칙 위반           | 기능 코드를 `src/` 밖에 배치    | [STRUCTURE.md](STRUCTURE.md)       |
-| 생성물 저장소 반입       | `.bunner/**`를 git에 커밋       | [ARCHITECTURE.md](ARCHITECTURE.md) |
+- Target: source
+- Violation: any file contains `import 'reflect-metadata'` or `require('reflect-metadata')`
+- Enforcement: block
 
----
+### POLICY-AOT-002: Reject runtime file-scan based loading
 
-## 라이선스
+- Target: source
+- Violation: 동일 파일 내에 아래 패턴이 모두 존재함
+  - `fs.readdir` 또는 `fs.readdirSync` 또는 `glob`
+  - `import(` 또는 `require(`
+- Enforcement: reject
 
-- 외부 코드/리소스는 라이선스와 출처를 확인한다.
-- 필요 시 대체 구현 또는 정식 의존성 추가로 해결한다.
+### POLICY-PKG-001: Block cross-package deep imports
 
-## 실행 체크리스트
+- Target: source
+- Violation: an import path contains `@bunner/` and `/src/` in the same path, or directly references `packages/*/src/`
+- Enforcement: block
 
-- [ ] 민감정보가 포함되어 있는가? → 즉시 중단
-- [ ] 외부 코드의 라이선스를 확인했는가? → 미확인 시 중단
-- [ ] reflect-metadata 또는 런타임 스캔을 사용하는가? → 즉시 중단
-- [ ] 다른 패키지의 `src/**`를 직접 import 하는가? → 즉시 중단
-- [ ] 순환 의존성이 발생하는가? → 즉시 중단
-- [ ] Public Facade를 변경하는가? → 승인 없이는 중단
-- [ ] 의심되면 즉시 중단하고 승인/대체안을 요청한다
+### POLICY-CON-001: Block Public Facade changes without approval artifact
+
+- Target: `packages/*/index.ts`
+- Violation: 파일 변경이 발생했지만 승인 아티팩트가 존재하지 않음
+- Enforcement: block
+
+### POLICY-GOV-001: Block SSOT file changes without approval artifact
+
+- Target: `docs/10_FOUNDATION/**`, `docs/20_ARCHITECTURE/**`, `docs/30_SPEC/**`, `docs/40_ENGINEERING/**`, `docs/50_GOVERNANCE/**`
+- Violation: 파일 변경이 발생했지만 승인 아티팩트가 존재하지 않음
+- Enforcement: block
+
+## 집행 (Enforcement)
+
+- 에이전트(E0): 위반 감지 시 즉시 중단(STOP)한다.
+- CI: 위반 감지 시 빌드를 실패(FAIL)시키고 병합을 차단한다.

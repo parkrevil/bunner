@@ -122,11 +122,14 @@ Node.js 호환성 유지를 전제로 한 구조는 허용되지 않으며,
 
 ## 5. 데이터 무결성 경계 (Data Integrity Boundary)
 
-코어는 검증되지 않은 외부 데이터에 노출되지 않는다.
-이는 **L1 Invariants #5 (Data & Flow Invariants)** 를 따른다.
+코어는 입력이 “변환/검증 완료”라고 가정하지 않는다.
+변환(transform) 및 검증(validate)의 실행 여부는 어댑터가 선언한 Pipeline의 Pipe 구성에 의해 결정되며,
+파이프에 명시적으로 등록되지 않은 변환/검증은 암묵적으로 삽입되거나 추론될 수 없다.
+이는 **L1 Invariants #5 (Data & Flow Invariants)** 의 No Implicit Pipe 및 Raw Input Is First-Class를 따른다.
 
-- 외부 입력은 구조적으로 정의된 검증 경계를 통과해야 한다.
-- 검증 이전의 데이터가 비즈니스 로직에 도달하는 경로는 존재하지 않는다.
+- 변환/검증을 적용하려면 Pipe에 명시적으로 등록되어야 한다.
+- Raw Input 모드에서는 변환/검증 이전의 입력이 핸들러로 전달될 수 있다.
+- 코어는 Raw Input을 처리하더라도 프로토콜 종속 입력/출력 표현을 전제로 하지 않는다. (Protocol-Agnostic Core)
 
 ---
 

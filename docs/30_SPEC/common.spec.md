@@ -193,4 +193,4 @@ ProviderDeclarationList:
 ### 6.2 Layer Priority
 
 본 문서는 L3 SPEC에 속한다.
-L1 불변식 또는 L2 아키텍처와 충돌할 경우, 본 SPEC은 무효로 판정된다.
+L1 불변식 또는 L2 아키텍처와 충돌할 경우, 상위 문서가 우선한다.

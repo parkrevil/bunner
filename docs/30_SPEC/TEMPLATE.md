@@ -22,7 +22,7 @@ L3 Implementation Contract
 
 ### 1.3 Definitions
 
-- 본 SPEC에서 사용되는 전역 용어의 정의는 [docs/10_FOUNDATION/GLOSSARY.md](../10_FOUNDATION/GLOSSARY.md)를 따른다.
+- 본 SPEC에서 새로 도입하며 판정에 필요한 용어만 정의한다.
 
 ---
 
@@ -30,6 +30,10 @@ L3 Implementation Contract
 
 본 섹션은 CLI, 정적 분석기, 코드 생성기가 참조하는
 데이터 형상(Data Shape)만을 정의한다.
+
+Static Shape를 정의하지 않는 SPEC은 아래 1줄로 명시한다.
+
+- `Normative: 본 SPEC은 추가적인 Static Shape를 정의하지 않는다.`
 
 허용됨:
 
@@ -98,6 +102,10 @@ Value Shape:
 본 섹션은 코드 없이 텍스트로만 기술한다.
 내부 구현 방식은 금지되며, 외부에서 관측 가능한 결과만 정의한다.
 
+Observable Semantics를 추가로 정의하지 않는 SPEC은 아래 1줄로 명시한다.
+
+- `Normative: 본 SPEC은 추가적인 Observable Semantics를 정의하지 않는다.`
+
 제약:
 
 - Protocol-Agnostic
@@ -135,4 +143,4 @@ Value Shape:
 
 본 문서는 L3 SPEC에 속한다.
 L2 ARCHITECTURE 또는 L1 FOUNDATION과 충돌할 경우,
-본 SPEC은 무효로 판정된다.
+상위 문서가 우선한다.

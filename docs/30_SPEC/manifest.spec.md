@@ -169,4 +169,4 @@ Observable:
 
 본 문서는 L3 SPEC에 속한다.
 L2 ARCHITECTURE 또는 L1 FOUNDATION과 충돌할 경우,
-본 SPEC은 무효로 판정된다.
+상위 문서가 우선한다.
