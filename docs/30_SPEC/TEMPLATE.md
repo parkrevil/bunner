@@ -20,12 +20,20 @@ L3 Implementation Contract
 - Out-of-Scope: 본 SPEC이 정의하지 않는 영역
   (타 SPEC에서 정의되는 계약, 엔지니어링 선택, 구현 상세)
 
+### 1.3 Definitions
+
+- 본 SPEC에서 새로 도입하며 판정에 필요한 용어만 정의한다.
+
 ---
 
 ## 2. Static Shape
 
 본 섹션은 CLI, 정적 분석기, 코드 생성기가 참조하는
 데이터 형상(Data Shape)만을 정의한다.
+
+Static Shape를 정의하지 않는 SPEC은 아래 1줄로 명시한다.
+
+- `Normative: 본 SPEC은 추가적인 Static Shape를 정의하지 않는다.`
 
 허용됨:
 
@@ -94,6 +102,10 @@ Value Shape:
 본 섹션은 코드 없이 텍스트로만 기술한다.
 내부 구현 방식은 금지되며, 외부에서 관측 가능한 결과만 정의한다.
 
+Observable Semantics를 추가로 정의하지 않는 SPEC은 아래 1줄로 명시한다.
+
+- `Normative: 본 SPEC은 추가적인 Observable Semantics를 정의하지 않는다.`
+
 제약:
 
 - Protocol-Agnostic
@@ -131,4 +143,4 @@ Value Shape:
 
 본 문서는 L3 SPEC에 속한다.
 L2 ARCHITECTURE 또는 L1 FOUNDATION과 충돌할 경우,
-본 SPEC은 무효로 판정된다.
+상위 문서가 우선한다.

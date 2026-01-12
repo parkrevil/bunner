@@ -1,52 +1,196 @@
-# Common Contracts Specification
+# `Common` Specification
 
-> 본 문서는 L3 SPEC이며, 특정 기능에 대한 구현 계약(Implementation Contract)만을 정의한다.
-> L1 불변식 및 L2 아키텍처 경계를 전제로 하며, 충돌 시 상위 문서가 우선한다.
+L3 Implementation Contract
+본 문서는 `Common`에 대한 구현 계약이다.
+본 계약은 기계적 검증 가능성(Mechanical Verifiability)을 최우선 기준으로 하며,
+구현 방법, 튜토리얼, 사용 가이드를 포함하지 않는다.
 
-## Purpose
+---
 
-본 SPEC은 여러 기능 축에서 공유되는 공통 계약 타입/프로토콜을 정의한다.
+## 1. Context
 
-## Scope & Boundary
+### 1.1 Purpose
 
-본 SPEC은 Result/Failure/Panic, Context 식별자, 공통 에러 페이로드 등 ‘공유 타입’의 최소 계약을 고정한다.
-다음 항목은 본 SPEC의 소유가 아니다:
+본 SPEC은 여러 기능 축에서 공유되는 공통 계약과, 빌드 타임 판정의 입력이 되는
+공개 선언(public declarations)의 최소 형상을 정의한다.
 
-- 각 축의 의미론(예: 실행 단계, 에러 처리 체인) → 해당 SPEC(execution/error-handling 등)에서 판정된다.
+### 1.2 Scope & Boundary
 
-## Definitions
+In-Scope:
 
-- Result: 정상 흐름에서 사용되는 표준 결과 타입. 형태는 ????? (예: Result<T, E>).
-- Failure: 도메인 실패(예측된 실패)로서 값 흐름으로 처리되는 실패.
-- Panic(System Error): 시스템 불변식 위반/예측 불가 오류로서 throw 경로로 처리되는 오류.
-- Structural Context: 실행 전/중에 전달되는 구조적 컨텍스트(식별자/트레이스 등). 구체 필드 ?????.
+- Result/Failure/Panic, 공통 에러 페이로드, 구조적 컨텍스트 등의 공유 계약
+- DI/모듈 관련 public declarations의 최소 형상 (AOT 입력)
 
-## Invariants
+Out-of-Scope:
 
-- 공통 타입은 프로토콜(HTTP/WS 등)에 종속되지 않는다.
+- 각 축의 의미론(실행 단계, 에러 처리 체인 등) → 대응 SPEC에서 판정된다.
+- DI 연결 규칙 및 그래프 판정 → di.spec.md
+- Provider 생명주기 및 scope 의미론 → provider.spec.md
 
-## MUST
+---
 
-- Result/Failure/Panic을 구분할 수 있는 공통 계약이 존재해야 한다. (형식 ?????)
-- 오류 페이로드(프로토콜 중립)는 최소 필드 집합을 가져야 한다. (필드 ?????)
-- Structural Context의 최소 필드(예: correlation id 등)가 정의되어야 한다. (필드 ?????)
+## 2. Static Shape
 
-## MUST NOT
+본 섹션은 CLI, 정적 분석기, 코드 생성기가 참조하는 데이터 형상(Data Shape)만을 정의한다.
+
+### 2.1 Core Data Shapes
+
+Normative: 아래에 정의된 형상이 계약이다.
+
+#### 2.1.1 DI Token
+
+Token:
+
+- allowed forms:
+  - Class token: 클래스 선언을 참조 가능한 심볼
+  - Unique symbol token: `unique symbol` 선언을 참조 가능한 심볼
+
+#### 2.1.3 DI Factory Reference
+
+FactoryRef:
+
+- allowed forms:
+  - Function ref: 함수 선언을 참조 가능한 심볼
+
+#### 2.1.4 Module Reference
+
+ModuleRef:
+
+- meaning: 특정 모듈을 식별하기 위한 정적 마커.
+- allowed forms:
+  - Exported module marker: 모듈 루트 파일에서 `export const <Identifier> = <Initializer>` 형태로 선언된 식별자 참조
+    - note: `<Initializer>`의 런타임 값은 계약에 포함되지 않으며, 판정에 사용되지 않는다.
+
+ModuleRefList:
+
+- type: array
+- items: ModuleRef
+
+#### 2.1.5 DI Declarations
+
+InjectableOptions:
+
+- type: object
+- properties:
+  - scope:
+    - type: string
+    - meaning: Provider scope 선언
+  - visibleTo:
+    - allowed forms:
+      - VisibleTo keyword: `all | module`
+      - Allowlist: ModuleRefList
+    - meaning: 모듈 간 주입/접근 허용 범위 선언
+
+InjectCall:
+
+- type: object
+- required:
+  - token
+- properties:
+  - token:
+    - allowed forms:
+      - Token
+      - TokenThunk
+
+TokenThunk:
+
+- allowed forms:
+  - Thunk ref: `() => <TokenSymbol>` 또는 `function () { return <TokenSymbol> }` 형태의 0-arg 함수 표현
+    - note: thunk는 런타임에서 실행되거나 토큰 해결에 사용되지 않으며, 빌드 타임에 정적 wiring으로 치환되어야 한다.
+
+ProviderDeclaration:
+
+- type: object
+- required:
+  - token
+- properties:
+  - token: Token
+  - useClass:
+    - type: Token
+    - meaning: 클래스 구현으로 제공
+  - useValue:
+    - type: unknown
+    - meaning: 값으로 제공
+  - useFactory:
+    - type: FactoryRef
+    - meaning: 팩토리 함수로 제공
+  - useExisting:
+    - type: Token
+    - meaning: 기존 토큰의 별칭(alias)으로 제공
+
+ModuleDeclaration:
+
+- type: object
+- required:
+  - providers
+- properties:
+  - providers:
+    - type: array
+    - items: ProviderDeclaration
+
+ProviderDeclarationList:
+
+- type: array
+- items: ProviderDeclaration
+
+### 2.2 Shape Conformance Rules
+
+- 본 SPEC에 정의되지 않은 필드는 존재해서는 안 된다.
+- `Token`은 본 SPEC이 허용한 형태(클래스 또는 `unique symbol`)여야 한다.
+- `FactoryRef`는 본 SPEC이 허용한 형태(함수 참조)여야 한다.
+- `ProviderDeclaration`은 `useClass | useValue | useFactory | useExisting` 중 정확히 1개를 포함해야 한다.
+- `ProviderDeclaration.useFactory`가 존재한다면, `FactoryRef` 형상과 정확히 일치해야 한다.
+- `ModuleDeclaration.providers`는 `ProviderDeclaration`의 배열이어야 한다.
+
+- `InjectableOptions.visibleTo`는 아래 중 하나여야 한다.
+  - `all` 또는 `module`
+  - `ModuleRefList`
+
+- `ModuleRefList`는 빈 배열이어서는 안 된다.
+
+---
+
+## 3. Invariants & Constraints
+
+### 3.1 MUST
+
+- 공통 계약은 특정 프로토콜(HTTP/WS 등)에 종속되지 않아야 한다.
+- DI/모듈 관련 declarations는 빌드 타임에 정적으로 판정 가능해야 한다.
+
+### 3.2 MUST NOT
 
 - 공통 계약이 특정 어댑터의 표현(상태 코드 등)에 종속되어서는 안 된다.
 - Failure와 Panic을 동일 타입/동일 경로로 처리하게 설계해서는 안 된다.
 
-## Handoff
+---
 
-- error-handling.spec.md는 Panic을 Failure(또는 Result)로 변환하는 허용/금지 규칙을 정의하며, 변환 대상 타입은 본 SPEC의 공통 계약을 따른다.
-- logger.spec.md는 공통 Context 필드를 로그 구조에 반영한다. (필수 여부 ?????)
+## 4. Observable Semantics
 
-## Violation Conditions
+### 4.1 Input / Observable Outcome
 
-- Failure/Panic 구분이 불가능하거나, 어댑터 표현에 종속되는 경우
-- Structural Context가 정의되지 않아 실행/관측에서 추측이 필요한 경우
+- Input: 본 SPEC의 Static Shape에 부합하는 declarations
+- Observable:
+  - declarations는 AOT 입력으로 사용 가능해야 한다.
 
-## Layer Priority
+---
 
-본 SPEC은 L3에 속한다.
-L1 불변식 또는 L2 아키텍처와 충돌할 경우, 본 SPEC은 무효로 판정된다.
+## 5. Violation Conditions
+
+- Build-Time Violation: `Token`이 허용된 형태가 아닌데도 빌드가 성공하는 경우
+- Build-Time Violation: `ProviderDeclaration`이 계약 형상과 불일치하는데도 빌드가 성공하는 경우
+
+---
+
+## 6. Handoff & Priority
+
+### 6.1 Handoff
+
+- di.spec.md는 `InjectCall` 및 `ProviderDeclaration`을 해석하여 wiring 규칙을 판정한다.
+- provider.spec.md는 `InjectableOptions.scope` 의미론을 판정한다.
+- di.spec.md는 `InjectableOptions.visibleTo` 의미론을 판정한다.
+- error-handling.spec.md는 Panic/Failure 변환 규칙을 판정한다.
+
+### 6.2 Layer Priority
+
+본 문서는 L3 SPEC에 속한다.
+L1 불변식 또는 L2 아키텍처와 충돌할 경우, 상위 문서가 우선한다.

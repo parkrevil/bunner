@@ -69,6 +69,7 @@ graph TD
 
 - [OVERVIEW.md](50_GOVERNANCE/OVERVIEW.md): 거버넌스 체계 개요
 - [POLICY.md](50_GOVERNANCE/POLICY.md): 일반 판단 정책
+- [DOCS_WRITING.md](50_GOVERNANCE/DOCS_WRITING.md): 전역 문서 작성 규율
 - [SAFEGUARDS.md](50_GOVERNANCE/SAFEGUARDS.md): 에이전트 활동 보호 장치
 - [COMMITS.md](50_GOVERNANCE/COMMITS.md): 커밋 메시지 및 브랜치 규칙
 - [DEAD_CODE_POLICY.md](50_GOVERNANCE/DEAD_CODE_POLICY.md): 미사용 코드 관리 기준

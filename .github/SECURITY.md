@@ -10,13 +10,9 @@
 
 - 코드/문서/릴리즈/이슈 트래킹 등 보안과 관련된 모든 활동
 
-## 정본/우선순위
-
-- 최상위 정본은 [ARCHITECTURE.md](../ARCHITECTURE.md)다.
-
 ## 관련 문서
 
-- 위반 시 즉시 중단(보안/법적/핵심 불변조건): [POLICY.md](POLICY.md)
+- 위반 시 즉시 중단(보안/법적/핵심 불변조건): [POLICY.md](../docs/50_GOVERNANCE/POLICY.md)
 
 ## 비밀정보 정책
 

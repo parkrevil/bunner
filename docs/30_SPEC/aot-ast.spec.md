@@ -1,55 +1,164 @@
-# AOT / AST Specification
+# `AOT / AST` Specification
 
-> 본 문서는 L3 SPEC이며, 특정 기능에 대한 구현 계약(Implementation Contract)만을 정의한다.
-> L1 불변식 및 L2 아키텍처 경계를 전제로 하며, 충돌 시 상위 문서가 우선한다.
+L3 Implementation Contract
+본 문서는 `AOT / AST`에 대한 구현 계약이다.
+본 계약은 기계적 검증 가능성(Mechanical Verifiability)을 최우선 기준으로 하며,
+구현 방법, 튜토리얼, 사용 가이드를 포함하지 않는다.
 
-## Purpose
+---
 
-본 SPEC은 Bunner의 정적 분석(AOT) 및 AST 기반 판정이 유효한 구현으로 성립하는 조건을 정의한다.
+## 1. Context
 
-## Scope & Boundary
+### 1.1 Purpose
 
-본 SPEC은 빌드 타임에서 수행되는 코드 해석/분석의 결정성(determinism)과 추측 금지 원칙을 계약으로 고정한다.
-다음 항목은 본 SPEC의 소유가 아니다:
+본 SPEC은 Bunner CLI가 빌드 타임에 수행하는 정적 분석(AOT) 및 AST 기반 판정이
+유효한 구현으로 성립하기 위한 최소 계약을 정의한다.
 
-- 생성 코드의 파일 배치/네이밍 → manifest.spec.md 또는 STRUCTURE.md에서 판정된다. (상세는 ?????)
-- 프로토콜별 어댑터 표현(HTTP/WS/gRPC 등) → adapter.spec.md에서 판정된다.
+이 SPEC은 특히 bunner config 로딩/해석이 AOT 판정의 입력으로 포함되는 경우,
+"무엇이 입력이며 무엇이 사용자 책임인가"의 경계를 명시한다.
 
-## Definitions
+### 1.2 Scope & Boundary
 
-- AOT(Compile-Time Intelligence): 런타임이 아니라 CLI/빌드 단계에서 판정/연결/코드 생성을 완료하는 모델.
-- Determinism: 동일한 입력(레포 상태/설정/옵션)에 대해 동일한 판정 및 산출물이 생성되는 성질.
+In-Scope:
 
-## Invariants
+- 프로젝트 루트 판정의 최소 조건(구성 파일 로딩을 위한 전제)
+- bunner config 파일의 강제 로딩 규칙(`bunner.config.ts` 또는 `bunner.config.json`)
+- bunner config의 실행/해석 결과(resolved object)의 최소 계약
+- AOT 판정의 결정성 입력 정의(동일 입력의 의미)
 
-- 구조적 모호함이 발견되면 추측하지 않고 빌드를 즉시 중단한다. (FOUNDATION/INVARIANTS의 “Explicitness Over Guesses” 전제)
-- 런타임은 구조를 판정하거나 추론하지 않는다. (빌드 타임에 판정 완료)
+Out-of-Scope:
 
-## MUST
+- 모듈 판정 규칙의 상세 → module-system.spec.md
+- Manifest 산출물의 상세 형상 → manifest.spec.md
 
-- CLI는 프로젝트 구조 판정(모듈/역할/가시성/DI 연결 등)을 빌드 타임에 완결해야 한다.
-- 동일 입력에서 판정 결과와 산출물(매니페스트/코드젠)이 결정적으로 동일해야 한다.
-- 정적 판정에 필요한 정보(역할/경계/연결)는 명시적으로 제공되어야 하며, 누락 시 빌드 실패로 판정해야 한다.
-- 순환 참조/순환 의존이 발견되면 빌드를 즉시 중단하고, 순환 경로를 출력해야 한다. (표현 포맷은 ?????)
+---
 
-## MUST NOT
+## 2. Static Shape
 
-- CLI는 모호한 구조를 “보정”하거나 “추측 기반”으로 자동 해결해서는 안 된다.
-- 런타임 리플렉션/동적 탐색으로 빌드 타임 판정을 대체해서는 안 된다.
-- CLI는 사용자 함수의 본문을 재작성하지 않는다. (ROADMAP의 code generation boundary 전제; 예외가 있다면 ?????)
+### 2.1 Core Data Shapes
 
-## Handoff
+BunnerConfigSourceFormat:
 
-- 정적 판정 결과는 manifest.spec.md에서 정의되는 산출물 형태로 외부에 노출된다.
-- 역할/경계 판정의 입력(표식/메타데이터)의 구체 형태는 module-system.spec.md 및 common.spec.md로 이관된다. (세부 포맷 ?????)
+- type: string
+- allowed values:
+  - ts
+  - json
 
-## Violation Conditions
+BunnerConfigSource:
 
-- 구조 판정에 필요한 정보가 누락/모호하여 추측이 필요해지는 경우
-- 동일 입력에서 산출물이 비결정적으로 달라지는 경우
-- 순환 참조가 검출되었는데도 빌드가 성공으로 판정되는 경우
+- type: object
+- required:
+  - path
+  - format
+- properties:
+  - path:
+    - type: string
+    - meaning: 프로젝트 루트 기준 상대 경로
+  - format: BunnerConfigSourceFormat
 
-## Layer Priority
+ResolvedBunnerConfigModule:
 
-본 SPEC은 L3에 속한다.
-L1 불변식 또는 L2 아키텍처와 충돌할 경우, 본 SPEC은 무효로 판정된다.
+- type: object
+- required:
+  - fileName
+- properties:
+  - fileName:
+    - type: string
+
+ResolvedBunnerConfig:
+
+- type: object
+- required:
+  - module
+- properties:
+  - module: ResolvedBunnerConfigModule
+
+### 2.2 Shape Conformance Rules
+
+- CLI가 최종적으로 취득하는 bunner config는 `ResolvedBunnerConfig`에 부합해야 한다.
+- `ResolvedBunnerConfig.module`은 `ResolvedBunnerConfigModule`과 정확히 일치해야 한다.
+
+---
+
+## 3. Invariants & Constraints
+
+### 3.1 MUST
+
+- 구조적 사실(모듈 경계, 의존 관계, 역할)은 빌드 타임에 정적으로 확정되어야 한다.
+- CLI는 bunner config를 빌드 타임에 로딩하여, AOT 판정의 입력으로 포함해야 한다.
+- CLI는 모호함이 발견되면 추측하지 않고 빌드를 즉시 중단해야 한다.
+
+### 3.2 MUST NOT
+
+- 런타임은 구조를 판정하거나 추론해서는 안 된다.
+- CLI는 사용자 함수의 본문을 재작성해서는 안 된다.
+
+---
+
+## 4. Observable Semantics
+
+### 4.1 Input / Observable Outcome
+
+Input:
+
+- 프로젝트 파일 시스템 트리
+- 프로젝트 루트 디렉토리
+- bunner config 소스(`bunner.config.ts` 또는 `bunner.config.json`)
+
+Observable:
+
+- CLI는 bunner config를 반드시 로딩해야 한다.
+- bunner config가 존재하지 않으면, 빌드 실패가 관측되어야 한다.
+- `bunner.config.ts`는 실행을 통해 resolved config object를 산출할 수 있어야 한다.
+  - 해당 파일 내부의 조건문/환경변수 사용은 허용된다.
+  - resolved 결과가 계약 형상(`ResolvedBunnerConfigModule`)을 위반하면 빌드 실패가 관측되어야 한다.
+
+- 빌드 실패 및 위반 조건의 진단 출력은 diagnostics.spec.md의 형식을 따라야 한다.
+
+resolved config의 필수 규칙:
+
+- resolved bunner config는 `module.fileName`을 반드시 포함해야 한다.
+- CLI는 `module.fileName`에 대해 어떠한 기본값도 설정해서는 안 된다.
+
+결정성(determinism) 입력 정의:
+
+- "동일 입력"은 최소한 다음을 포함해야 한다.
+  - 프로젝트 파일 시스템의 동일 상태
+  - resolved bunner config의 동일 상태
+
+- bunner config 소스가 환경변수 등을 사용하더라도, 결정성 입력은 resolved bunner config를 기준으로 판정되어야 한다.
+
+정적 해석 범위:
+
+- CLI는 프로젝트 소스가 참조하는 심볼을 따라가며, 정적 해석을 수행할 수 있어야 한다.
+- 이 정적 해석은 `node_modules` 하위 파일을 포함할 수 있다.
+- CLI는 `node_modules` 전수 스캔을 수행해서는 안 된다.
+
+### 4.2 State Conditions
+
+- bunner config는 실행 이전에 확정되어야 한다.
+- 런타임 중 bunner config 변경을 전제로 한 구조는 허용되지 않는다.
+
+---
+
+## 5. Violation Conditions
+
+- Build-Time Violation: bunner config 파일이 존재하지 않는데 빌드가 성공하는 경우
+- Build-Time Violation: resolved config에 `module.fileName`이 존재하지 않는데 빌드가 성공하는 경우
+- Build-Time Violation: resolved config가 계약 형상(`ResolvedBunnerConfigModule`)을 위반하는 경우
+- Test-Level Violation: 동일 입력에서 AOT 판정 결과 또는 산출물이 비결정적으로 달라지는 경우
+
+---
+
+## 6. Handoff & Priority
+
+### 6.1 Handoff
+
+- resolved bunner config의 `module` 섹션은 module-system.spec.md의 입력으로 사용되어야 한다.
+- bunner config의 소스 정보 및 resolved module config는 manifest.spec.md의 `config` 필드로 기록되어야 한다.
+
+### 6.2 Layer Priority
+
+본 문서는 L3 SPEC에 속한다.
+L2 ARCHITECTURE 또는 L1 FOUNDATION과 충돌할 경우,
+상위 문서가 우선한다.

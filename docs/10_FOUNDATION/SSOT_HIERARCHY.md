@@ -15,6 +15,12 @@
 본 위계는 문서 판정과 충돌 해결에만 사용되며,
 행동 집행은 별도의 Enforcement Layer(E0)에 의해 수행된다.
 
+### Canonical References
+
+- 문서 권위 위계의 정본(SSOT)은 본 문서 하나로 고정한다.
+- 구조/경계(패키지 경계, 단방향 의존 등) 규칙의 정본(SSOT)은 [ARCHITECTURE.md](../20_ARCHITECTURE/ARCHITECTURE.md)다.
+- 다른 문서는 위 두 정본을 링크로 참조하며, 동일한 “정본/우선순위” 보일러플레이트를 반복 기재하지 않는다.
+
 ---
 
 ## E0. Enforcement Layer (집행 레이어)
@@ -38,14 +44,14 @@ E0의 유일한 역할은:
 
 아래는 **문서 위계에 포함되는 기술 문서들만**을 정의한다.
 
-|  등급   | 위치                    | 성격                                        | 대표 문서                   |
-| :-----: | :---------------------- | :------------------------------------------ | :-------------------------- |
-| **L1**  | `docs/10_FOUNDATION/`   | **헌법 (Invariants)**                       | INVARIANTS                  |
-| **L2**  | `docs/20_ARCHITECTURE/` | **구조 (Boundary)**                         | ARCHITECTURE, STRUCTURE     |
-| **L3**  | `docs/30_SPEC/`         | **계약 (Contract)**                         | SPEC, `*.spec.md`           |
-| **L4**  | `docs/40_ENGINEERING/`  | **규율 (Discipline)**                       | STYLEGUIDE, TESTING, VERIFY |
-| **L5**  | `docs/50_GOVERNANCE/`   | **위생 (AI Judgment & Repository Hygiene)** | POLICY, OVERVIEW, COMMITS   |
-| **Ref** | `docs/90_REFERENCE/`    | **참고 (Non-SSOT)**                         | VISION, ROADMAP             |
+|  등급   | 위치                    | 성격                                        | 대표 문서                                                             |
+| :-----: | :---------------------- | :------------------------------------------ | :-------------------------------------------------------------------- |
+| **L1**  | `docs/10_FOUNDATION/`   | **헌법 (Invariants)**                       | INVARIANTS                                                            |
+| **L2**  | `docs/20_ARCHITECTURE/` | **구조 (Boundary)**                         | ARCHITECTURE, STRUCTURE                                               |
+| **L3**  | `docs/30_SPEC/`         | **계약 (Contract)**                         | SPEC, `*.spec.md`                                                     |
+| **L4**  | `docs/40_ENGINEERING/`  | **규율 (Discipline)**                       | STYLEGUIDE, TESTING, VERIFY                                           |
+| **L5**  | `docs/50_GOVERNANCE/`   | **위생 (AI Judgment & Repository Hygiene)** | OVERVIEW, POLICY, DOCS_WRITING, SAFEGUARDS, COMMITS, DEAD_CODE_POLICY |
+| **Ref** | `docs/90_REFERENCE/`    | **참고 (Non-SSOT)**                         | VISION, ROADMAP                                                       |
 
 ---
 
@@ -103,8 +109,16 @@ E0의 유일한 역할은:
   코드를 작성·검증·실행하는 규율
 
 - **50_GOVERNANCE**  
-  **AI 판단 규칙 및 저장소 위생 정책**  
+  **AI 판단 규칙 및 저장소 위생 정책**
   (사람 조직/운영 프로세스는 포함하지 않는다)
+
+  대표 문서:
+  - `OVERVIEW.md`: 승인 아티팩트 및 승인 필요 변경 유형
+  - `POLICY.md`: 단일 위반 즉시 차단 정책
+  - `DOCS_WRITING.md`: 문서 작성 규율(집행 대상)
+  - `SAFEGUARDS.md`: 패턴/반복 기반 중단/롤백
+  - `COMMITS.md`: 커밋 규칙 및 메타데이터
+  - `DEAD_CODE_POLICY.md`: 데드 코드/파일 관리 정책
 
 ---
 
