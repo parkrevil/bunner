@@ -42,7 +42,7 @@ Normative: 본 SPEC은 추가적인 Static Shape를 정의하지 않는다.
 
 - 로그 이벤트는 구조화된 형태로 표현될 수 있어야 한다.
 - 실행 컨텍스트(Structural Context)와 로그 이벤트가 연결되어야 한다.
-- Panic(System Error) 및 Failure는 로그에서 구분 가능해야 한다.
+- Panic(System Error) 및 Error는 로그에서 구분 가능해야 한다.
 
 ### 3.2 MUST NOT
 
@@ -59,7 +59,7 @@ Normative: 본 SPEC은 추가적인 Observable Semantics를 정의하지 않는�
 
 ## 5. Violation Conditions
 
-- Panic/Failure 구분이 관측 불가능한 경우
+- Panic/Error 구분이 관측 불가능한 경우
 - Runtime Violation: 상관관계(Correlation)가 없어 원인 추적이 불가능한 수준의 로그가 생성되는 것이 관측되는 경우
 
 ---

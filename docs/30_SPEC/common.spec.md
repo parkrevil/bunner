@@ -18,7 +18,7 @@ L3 Implementation Contract
 
 In-Scope:
 
-- Result/Failure/Panic, 공통 에러 페이로드, 구조적 컨텍스트 등의 공유 계약
+- Result/Error/Panic, 구조적 컨텍스트 등의 공유 계약
 - DI/모듈 관련 public declarations의 최소 형상 (AOT 입력)
 
 Out-of-Scope:
@@ -76,6 +76,33 @@ Token:
 - allowed forms:
   - Class token: 클래스 선언을 참조 가능한 심볼
   - Unique symbol token: `unique symbol` 선언을 참조 가능한 심볼
+
+#### 2.1.2 Result
+
+BunnerErrorMarkerKey:
+
+- type: string
+- const: "**bunner_error**"
+
+BunnerErrorMarker:
+
+- type: object
+- required:
+  - **bunner_error**
+- properties:
+  - **bunner_error**:
+    - type: literal true
+
+Result<T, E>:
+
+- meaning: 성공이면 값 T 자체를 반환하고, 실패이면 Error 값을 반환하는 공통 결과 모델
+- constraints:
+  - E는 object여야 한다.
+  - Error 값은 BunnerErrorMarker를 포함해야 한다.
+  - 프레임워크는 E의 최소 필드를 강제하거나 자동 주입해서는 안 된다.
+- allowed forms:
+  - Success: T
+  - Error: E & BunnerErrorMarker
 
 #### 2.1.3 Function Reference
 
@@ -255,7 +282,7 @@ ProviderDeclarationList:
 ### 3.2 MUST NOT
 
 - 공통 계약이 특정 어댑터의 표현(상태 코드 등)에 종속되어서는 안 된다.
-- Failure와 Panic을 동일 타입/동일 경로로 처리하게 설계해서는 안 된다.
+- Error와 Panic을 동일 타입/동일 경로로 처리하게 설계해서는 안 된다.
 
 ---
 
@@ -283,7 +310,7 @@ ProviderDeclarationList:
 - di.spec.md는 `InjectCall` 및 `ProviderDeclaration`을 해석하여 wiring 규칙을 판정한다.
 - provider.spec.md는 `InjectableOptions.scope` 의미론을 판정한다.
 - di.spec.md는 `InjectableOptions.visibleTo` 의미론을 판정한다.
-- error-handling.spec.md는 Panic/Failure 변환 규칙을 판정한다.
+- error-handling.spec.md는 Panic/Error 변환 규칙을 판정한다.
 
 ### 6.2 Layer Priority
 

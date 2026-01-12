@@ -81,6 +81,23 @@ Location:
     - type: SourceRange
     - meaning: 관련 코드 범위(선택)
 
+HandlerId:
+
+- type: string
+- meaning: 핸들러를 결정적으로 식별하기 위한 문자열
+
+HandlerIdFormat:
+
+- type: string
+- const: "<adapterId>:<file>#<symbol>"
+
+HandlerIdFormatRules:
+
+- `HandlerId`는 아래 형식을 만족해야 한다.
+  - `<adapterId>`: AdapterId (common.spec.md)
+  - `<file>`: Location.file과 동일 규칙(프로젝트 루트 기준 정규화된 상대 경로)
+  - `<symbol>`: 비어있지 않은 문자열
+
 DiagnosticHint:
 
 - type: object

@@ -50,8 +50,7 @@ Normative: 본 SPEC은 추가적인 Static Shape를 정의하지 않는다.
 - Middleware/Guard/Pipe/Handler/Error Filter는 DI wiring의 노드로 취급되어야 하며,
   빌드 타임에 확정된 연결에 의해 의존성이 제공되어야 한다.
 
-- App-External Code에서 DI 결과에 접근해야 하는 경우, 접근 경로는 `app.get(Token)`이어야 한다.
-- `app.get(Token)`의 성공 조건 및 위반 조건은 di.spec.md의 규칙과 일치해야 한다.
+- App 표면 및 생명주기 의미론은 app.spec.md의 규칙과 일치해야 한다.
 
 ### 3.2 MUST NOT
 
@@ -82,8 +81,9 @@ Normative: 본 SPEC은 추가적인 Observable Semantics를 정의하지 않는�
 
 - throw가 발생하면 정상 실행은 즉시 이탈하며, 예외는 error-handling.spec.md의 Error Filter Chain으로 이관된다.
 - throw가 발생한 경우, 예외 처리의 관측 가능한 산출은 Result로 수렴되어야 하며, 어댑터는 Result를 프로토콜 응답으로 렌더링해야 한다.
-- Guard가 거부(Result/Failure)하는 경우 Handler는 실행되지 않으며, 어댑터는 Result 경로로 응답을 생성해야 한다.
+- Guard가 거부(Result/Error)하는 경우 Handler는 실행되지 않으며, 어댑터는 Result 경로로 응답을 생성해야 한다.
 - 실행 구성(어댑터별 wiring/초기화)은 adapter.spec.md 및 manifest.spec.md로 이관된다.
+- App 표면 및 생명주기(부트스트랩 포함) 의미론은 app.spec.md로 이관된다.
 
 ### 6.2 Layer Priority
 

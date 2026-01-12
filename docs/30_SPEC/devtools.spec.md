@@ -29,7 +29,91 @@ L3 Implementation Contract
 
 ## 2. Static Shape
 
-Normative: 본 SPEC은 추가적인 Static Shape를 정의하지 않는다.
+본 섹션은 DevTools가 소비하는 관측 산출물의 최소 형상을 정의한다.
+
+### 2.1 Core Data Shapes
+
+Normative: 아래에 정의된 형상이 계약이다.
+
+DevToolsRuntimeReportSchemaVersion:
+
+- type: string
+- const: "1"
+
+DevToolsRuntimeReport:
+
+- type: object
+- required:
+  - schemaVersion
+  - adapters
+- properties:
+  - schemaVersion: DevToolsRuntimeReportSchemaVersion
+  - adapters:
+    - type: array
+    - items: DevToolsRuntimeReportAdapter
+
+DevToolsRuntimeReportAdapter:
+
+- type: object
+- required:
+  - adapterId
+  - isApplied
+  - isListening
+  - boundHandlers
+  - options
+- properties:
+  - adapterId: AdapterId (common.spec.md)
+  - isApplied:
+    - type: boolean
+  - isListening:
+    - type: boolean
+  - boundHandlers: DevToolsRuntimeReportBoundHandlerList
+  - options:
+    - type: unknown
+    - meaning: 어댑터에 바인딩된 런타임 옵션 값(원문)
+
+DevToolsRuntimeReportBoundHandlerList:
+
+- type: array
+- items: DevToolsRuntimeReportBoundHandler
+
+DevToolsRuntimeReportBoundHandler:
+
+- type: object
+- required:
+  - id
+- properties:
+  - id:
+    - type: HandlerId (diagnostics.spec.md)
+
+DevToolsStaticGraphSchemaVersion:
+
+- type: string
+- const: "1"
+
+DevToolsStaticGraph:
+
+- type: object
+- required:
+  - schemaVersion
+  - adapters
+- properties:
+  - schemaVersion: DevToolsStaticGraphSchemaVersion
+  - adapters:
+    - type: array
+    - items: DevToolsStaticGraphAdapter
+
+DevToolsStaticGraphAdapter:
+
+- type: object
+- required:
+  - adapterId
+  - handlerCandidates
+- properties:
+  - adapterId: AdapterId (common.spec.md)
+  - handlerCandidates:
+    - type: array
+    - items: HandlerId (diagnostics.spec.md)
 
 ---
 
@@ -40,6 +124,12 @@ Normative: 본 SPEC은 추가적인 Static Shape를 정의하지 않는다.
 ### 3.1 MUST
 
 - DevTools 활성화 여부에 따라 실행 의미론이 변하지 않아야 한다.
+
+- DevTools가 생성/소비하는 런타임 관측 산출물은 실행 경로를 변경하는 근거로 사용되어서는 안 된다.
+
+- 런타임 관측 산출물이 생성되는 경우, 산출물은 `DevToolsRuntimeReport` 형상과 일치해야 한다.
+
+- 빌드 타임 관측 산출물이 생성되는 경우, 산출물은 `DevToolsStaticGraph` 형상과 일치해야 한다.
 
 ### 3.2 MUST NOT
 

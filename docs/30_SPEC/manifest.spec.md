@@ -27,6 +27,7 @@ Out-of-Scope:
 
 - 역할/DI/어댑터/실행계획의 상세 스키마 → 각 대응 SPEC
 - 부트스트랩 이후 메타데이터 소거의 구체 타이밍/방식 → execution.spec.md
+- 런타임 관측 산출물(Runtime Report) 형상 → devtools.spec.md
 
 ---
 
@@ -122,6 +123,8 @@ BunnerManifest:
 ### 3.2 MUST NOT
 
 - Manifest는 런타임 동적 판정을 요구하는 필드를 포함해서는 안 된다.
+
+- Manifest는 런타임 상태(어댑터 활성화 여부, listening 여부, 실제 바인딩 결과, host/port 및 런타임 옵션 값)를 포함해서는 안 된다.
 
 - 빌드 실패 및 위반 조건의 진단 출력은 diagnostics.spec.md의 형식을 따라야 한다.
 

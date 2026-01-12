@@ -13,6 +13,7 @@
 ## Contract Specs
 
 - [aot-ast.spec.md](aot-ast.spec.md)
+- [app.spec.md](app.spec.md)
 - [manifest.spec.md](manifest.spec.md)
 - [module-system.spec.md](module-system.spec.md)
 - [di.spec.md](di.spec.md)

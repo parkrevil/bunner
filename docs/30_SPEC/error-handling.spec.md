@@ -11,7 +11,7 @@ L3 Implementation Contract
 
 ### 1.1 Purpose
 
-본 SPEC은 Failure(값 흐름)와 Panic(throw 경로)의 분리 및 Error Filter Chain이 유효한 구현으로 성립하는 조건을 정의한다.
+본 SPEC은 Error(값 흐름)와 Panic(throw 경로)의 분리 및 Error Filter Chain이 유효한 구현으로 성립하는 조건을 정의한다.
 
 ### 1.2 Scope & Boundary
 
@@ -23,7 +23,7 @@ L3 Implementation Contract
 
 ### 1.3 Definitions
 
-- Failure: 도메인 실패로서 Result 경로(값 흐름)로 처리되는 실패.
+- Error: 도메인 실패로서 Result 경로(값 흐름)로 처리되는 에러.
 - Panic(System Error): throw로 표현되는 시스템 오류.
 
 ---
@@ -40,17 +40,17 @@ Normative: 본 SPEC은 추가적인 Static Shape를 정의하지 않는다.
 
 ### 3.1 MUST
 
-- Failure는 값 흐름(Result)으로 표현되어야 한다.
+- Error는 값 흐름(Result)으로 표현되어야 한다.
 - Panic(throw)은 Error Filter Chain을 통해 표준 Result로 변환되어야 한다.
 - throw로 발생한 예외는 Error Filter Chain을 통해 처리되어야 한다.
 - Error Filter Chain의 적용 순서/우선순위는 판정 가능해야 한다.
-- 필터 체인이 예외를 Result로 변환할 때 사용하는 표준 페이로드는 common.spec.md의 계약을 따른다.
+- 필터 체인이 예외를 Result의 Error 케이스로 변환할 때, 그 최소 형상은 common.spec.md의 Result 계약을 따른다.
 
 ### 3.2 MUST NOT
 
-- Failure를 throw로 표현하거나, Panic을 값 흐름으로 전달해서는 안 된다.
+- Error를 throw로 표현하거나, Panic을 값 흐름으로 전달해서는 안 된다.
 - 프로토콜 종속 정보(HTTP 상태 코드 등)를 도메인 에러 정의에 포함시켜서는 안 된다. (매핑은 어댑터에서 수행)
-- 예외 처리에서 “추측 기반 분류”(문자열/메시지 파싱으로 Panic/Failure를 판정)를 허용해서는 안 된다.
+- 예외 처리에서 “추측 기반 분류”(문자열/메시지 파싱으로 Panic/Error를 판정)를 허용해서는 안 된다.
 
 ---
 
@@ -63,7 +63,7 @@ Normative: 본 SPEC은 추가적인 Observable Semantics를 정의하지 않는�
 ## 5. Violation Conditions
 
 - 예외가 필터 체인을 거치지 않고 누락/삼켜지는 경우
-- Failure/Panic 판정이 예외 메시지/문자열 파싱에 의존하는 경우
+- Error/Panic 판정이 예외 메시지/문자열 파싱에 의존하는 경우
 
 ---
 

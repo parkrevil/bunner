@@ -59,7 +59,7 @@ Static Shape의 구체적 직렬화 형식 및 저장 위치는 manifest.spec.md
 ### 3.1 MUST
 
 - 어댑터는 프로토콜 입력을 실행 모델로 전달할 수 있어야 한다.
-- 어댑터는 Result/Failure/Panic을 프로토콜 표현으로 변환해야 한다. (매핑 규칙은 어댑터 소유)
+- 어댑터는 Result/Error/Panic을 프로토콜 표현으로 변환해야 한다. (매핑 규칙은 어댑터 소유)
 - 어댑터는 `pipeline`을 정적으로 선언해야 한다.
 - `pipeline.handler`는 정확히 1개여야 한다.
 - `pipeline.middlewares | pipeline.guards | pipeline.pipes`는 결정적 순서를 가져야 한다.
@@ -75,8 +75,8 @@ Static Shape의 구체적 직렬화 형식 및 저장 위치는 manifest.spec.md
 
 - Middleware Phase 기반 배치 규칙은 `pipeline.middlewares`에만 적용되어야 한다.
 
-- `pipeline.middlewares` 실행 중 어떤 PipelineStep이 Failure를 반환하면, 이후 `pipeline.guards | pipeline.pipes | pipeline.handler`는 실행되어서는 안 된다.
-  - 어댑터는 해당 Failure를 Result 경로로 프로토콜 응답으로 변환해야 한다. (매핑 규칙은 어댑터 소유)
+- `pipeline.middlewares` 실행 중 어떤 PipelineStep이 Error를 반환하면, 이후 `pipeline.guards | pipeline.pipes | pipeline.handler`는 실행되어서는 안 된다.
+  - 어댑터는 해당 Error를 Result 경로로 프로토콜 응답으로 변환해야 한다. (매핑 규칙은 어댑터 소유)
 
 - 어댑터의 정적 명세를 기반으로 Wiring 코드가 생성되어야 한다.
 
@@ -85,8 +85,14 @@ Static Shape의 구체적 직렬화 형식 및 저장 위치는 manifest.spec.md
 - Adapter Member Decorator는 Adapter Owner Decorator가 적용된 class 내부에서만 유효해야 한다.
   - 이를 위반하면 빌드 실패로 판정되어야 한다.
 
+- Controller(엔트리 선언)의 소속 어댑터 판정은 빌드 타임에 엄격하게 수행되어야 한다.
+  - 판정이 불가능하거나 모호한 경우, 빌드 실패가 관측되어야 한다.
+
 - Controller(엔트리 소유 단위의 class)에는 정확히 1개의 Adapter Owner Decorator만 적용되어야 한다.
   - 0개 또는 2개 이상이면 빌드 실패로 판정되어야 한다.
+
+- 어댑터 엔트리 선언(Controller/Handler 등)은 빌드 타임에 결정적으로 수집 가능해야 한다.
+  - 수집 결과는 문서/DevTools 산출물 입력으로 사용될 수 있어야 한다.
 
 ### 3.2 MUST NOT
 
@@ -99,7 +105,7 @@ Static Shape의 구체적 직렬화 형식 및 저장 위치는 manifest.spec.md
 
 ### 4.1 Middleware Short-Circuit
 
-- Observable: `pipeline.middlewares`에서 Failure가 관측되면, 이후 PipelineStep(guard/pipe/handler)이 실행되지 않아야 한다.
+- Observable: `pipeline.middlewares`에서 Error가 관측되면, 이후 PipelineStep(guard/pipe/handler)이 실행되지 않아야 한다.
 
 ---
 
@@ -113,7 +119,7 @@ Static Shape의 구체적 직렬화 형식 및 저장 위치는 manifest.spec.md
 
 - Build-Time Violation: Controller(엔트리 소유 단위)에 Adapter Owner Decorator가 0개 또는 2개 이상 적용되는데도 빌드가 성공하는 경우
 
-- Runtime Violation: `pipeline.middlewares`에서 Failure가 관측되는데도 `pipeline.guards | pipeline.pipes | pipeline.handler` 실행이 관측되는 경우
+- Runtime Violation: `pipeline.middlewares`에서 Error가 관측되는데도 `pipeline.guards | pipeline.pipes | pipeline.handler` 실행이 관측되는 경우
 
 ---
 
