@@ -42,7 +42,7 @@ Normative: 본 SPEC은 추가적인 Static Shape를 정의하지 않는다.
 
 - 정상 실행은 Result 기반 흐름으로 표현되어야 한다. (Result 형태는 common.spec.md에 의해 정의된다)
 - 정상 실행은 어댑터가 정적으로 선언한 Pipeline을 따라 수행되어야 한다.
-- Structural Context Propagation이 지원되어야 한다. (컨텍스트는 Pipeline을 따라 각 stage 호출에 전달되어야 한다)
+- Structural Context Propagation이 지원되어야 한다. (컨텍스트는 Pipeline을 따라 각 step 호출에 전달되어야 한다)
 - 런타임 구성 요소는 빌드 타임에 확정된 정적 연결 관계만을 따른다. (ARCHITECTURE의 Static Context Binding 전제)
 
 - Pipe에 등록되지 않은 변환(transform) 및 검증(validate)을 실행 흐름에 암묵적으로 삽입하거나 추론해서는 안 된다. (INVARIANTS의 No Implicit Pipe 전제)
@@ -80,7 +80,7 @@ Normative: 본 SPEC은 추가적인 Observable Semantics를 정의하지 않는�
 
 ### 6.1 Handoff
 
-- throw가 발생하면 정상 실행은 즉시 이탈하며, 예외는 error-handling.spec.md의 Unified Error Filter Chain으로 이관된다.
+- throw가 발생하면 정상 실행은 즉시 이탈하며, 예외는 error-handling.spec.md의 Internal Error Filter로 이관된다.
 - Guard가 거부(Result/Failure)하는 경우 Handler는 실행되지 않으며, 어댑터는 Result 경로로 응답을 생성해야 한다.
 - 실행 구성(어댑터별 wiring/초기화)은 adapter.spec.md 및 manifest.spec.md로 이관된다.
 

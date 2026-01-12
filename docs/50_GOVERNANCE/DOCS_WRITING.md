@@ -71,3 +71,33 @@ Violation: 변경된 라인에 규범 키워드가 포함되어 있고, 동시�
   - 변경된 문서 내부의 "Definitions" 또는 "용어 정의" 섹션
 Enforcement: stop
 ```
+
+```text
+Rule: DW-TERM-002
+Target: docs/**
+Violation: 아래 "용어 정의 항목" 중 동일한 Term이 2개 이상의 파일에서 정의됨
+  - GLOSSARY 항목: docs/10_FOUNDATION/GLOSSARY.md에서 `- **<Term>**:` 형태로 정의된 Term
+  - Definitions 항목: docs/**의 "Definitions" 또는 "용어 정의" 섹션에서 `- <Term>:` 형태로 정의된 Term
+Enforcement: block
+```
+
+```text
+Rule: DW-TERM-003
+Target: docs/**
+Violation: docs/10_FOUNDATION/GLOSSARY.md가 아닌 파일의 "Definitions" 또는 "용어 정의" 섹션에서 정의된 Term이,
+  - 동일 파일 밖의 다른 파일에도 등장하고,
+  - 동시에 docs/10_FOUNDATION/GLOSSARY.md에는 정의되어 있지 않음
+Enforcement: block
+```
+
+```text
+Rule: DW-TERM-004
+Target: docs/**
+Violation: "Definitions" 또는 "용어 정의" 섹션의 정의 문장에 아래 문자열 중 하나가 포함됨
+  - "동의어"
+  - "별칭"
+  - "alias"
+  - "aka"
+  - "같은 의미"
+Enforcement: block
+```

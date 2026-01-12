@@ -26,7 +26,6 @@ L3 Implementation Contract
 - Provider: DI 그래프에 의해 생성/주입되는 대상이며, 명시된 생명주기를 가진다.
 - Scope: Provider의 인스턴스 공유 범위(예: 전역/요청/모듈 등). 본 SPEC은 `singleton | request | transient`를 기본 집합으로 고정한다.
 - Resource Provider: 외부 리소스(DB, 소켓 등)를 소유하며 종료(dispose)가 필요한 Provider.
-- RequestContextId: 요청 컨텍스트를 식별하기 위한 정적 동일성 값.
 
 ---
 
@@ -51,12 +50,12 @@ Normative: 본 SPEC은 추가적인 Static Shape를 정의하지 않는다.
 - dispose가 필요한 Provider는 의존성 그래프의 역순으로 종료되어야 한다.
 - Scope는 명시적으로 선언되거나 판정 가능해야 하며, 모호하면 빌드 실패로 판정되어야 한다.
 - `singleton`은 프로세스/워커 단위로 1회 생성되어야 한다.
-- `request`는 `RequestContextId`마다 별도 인스턴스를 생성해야 한다.
+- `request`는 `ContextId`마다 별도 인스턴스를 생성해야 한다.
 - `transient`는 주입 지점마다 새 인스턴스를 생성해야 한다.
 
 - `singleton`이 `request` 의존을 사용할 때도 싱글톤 인스턴스는 재생성되지 않아야 한다.
   - `singleton` 생성 시점에 `request` 인스턴스를 생성하거나 캡처해서는 안 된다.
-  - `request` 의존은 요청 컨텍스트(`RequestContextId`)가 존재하는 구간에서만 해석되어야 한다.
+  - `request` 의존은 요청 컨텍스트(`ContextId`)가 존재하는 구간에서만 해석되어야 한다.
 
 ### 3.2 MUST NOT
 
@@ -77,7 +76,7 @@ Normative: 본 SPEC은 추가적인 Observable Semantics를 정의하지 않는�
 - Build-Time Violation: Provider scope가 판정 가능하지 않은데도 빌드가 성공하는 경우
 - Runtime Violation: `singleton | request | transient` 의미를 위반하는 동작이 관측되는 경우
 - Runtime Violation: `singleton` 재생성이 관측되는 경우
-- Runtime Violation: `request` scope가 사용되는데 `RequestContextId`로 인스턴스 경계를 판정할 수 없는 동작이 관측되는 경우
+- Runtime Violation: `request` scope가 사용되는데 `ContextId`로 인스턴스 경계를 판정할 수 없는 동작이 관측되는 경우
 
 ---
 

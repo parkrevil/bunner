@@ -30,6 +30,7 @@ Out-of-Scope:
 
 - 모듈 판정 규칙의 상세 → module-system.spec.md
 - Manifest 산출물의 상세 형상 → manifest.spec.md
+- 모듈 루트 파일의 어댑터 구성 선언 계약 → module-system.spec.md
 
 ---
 
@@ -104,6 +105,7 @@ Input:
 - 프로젝트 파일 시스템 트리
 - 프로젝트 루트 디렉토리
 - bunner config 소스(`bunner.config.ts` 또는 `bunner.config.json`)
+- 모듈 루트 파일 집합 (module-system.spec.md로 판정된 모듈 파일)
 
 Observable:
 
@@ -156,6 +158,8 @@ resolved config의 필수 규칙:
 
 - resolved bunner config의 `module` 섹션은 module-system.spec.md의 입력으로 사용되어야 한다.
 - bunner config의 소스 정보 및 resolved module config는 manifest.spec.md의 `config` 필드로 기록되어야 한다.
+
+- 모듈 루트 파일의 어댑터 구성 선언의 판정 및 형상 검증은 module-system.spec.md로 이관된다.
 
 ### 6.2 Layer Priority
 

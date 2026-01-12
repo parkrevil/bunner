@@ -1,5 +1,0 @@
-{
-  "rules_path": ".agent/AGENTS.md",
-  "target_dir": ["./packages", "./examples"],
-  "severity": "error"
-}

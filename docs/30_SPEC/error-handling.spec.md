@@ -11,11 +11,11 @@ L3 Implementation Contract
 
 ### 1.1 Purpose
 
-본 SPEC은 Failure(값 흐름)와 Panic(throw 경로)의 분리 및 Unified Error Filter Chain이 유효한 구현으로 성립하는 조건을 정의한다.
+본 SPEC은 Failure(값 흐름)와 Panic(throw 경로)의 분리 및 Internal Error Filter가 유효한 구현으로 성립하는 조건을 정의한다.
 
 ### 1.2 Scope & Boundary
 
-본 SPEC은 throw로 발생하는 예외를 표준 결과(Result)로 변환하기 위한 Error Filter Chain의 계약을 고정한다.
+본 SPEC은 throw로 발생하는 예외를 표준 결과(Result)로 변환하기 위한 Internal Error Filter의 계약을 고정한다.
 다음 항목은 본 SPEC의 소유가 아니다:
 
 - 프로토콜별 최종 오류 표현(HTTP 상태 코드 등) → adapter.spec.md에서 판정된다.
@@ -25,7 +25,7 @@ L3 Implementation Contract
 
 - Failure: 도메인 실패로서 Result 경로(값 흐름)로 처리되는 실패.
 - Panic(System Error): throw로 표현되는 시스템 오류.
-- Error Filter Chain: throw된 예외를 포착하여 표준 결과로 변환하는 단일 체인.
+- Internal Error Filter: throw된 예외(Panic)를 포착하여 표준 Result로 변환하는 필터.
 
 ---
 
@@ -42,8 +42,8 @@ Normative: 본 SPEC은 추가적인 Static Shape를 정의하지 않는다.
 ### 3.1 MUST
 
 - Failure와 Panic은 동일한 처리 경로로 합쳐지지 않아야 한다.
-- throw로 발생한 예외는 Error Filter Chain을 통해 처리되어야 한다.
-- Error Filter Chain은 체인 순서/우선순위가 판정 가능해야 한다.
+- throw로 발생한 예외는 Internal Error Filter를 통해 처리되어야 한다.
+- Internal Error Filter의 적용 순서/우선순위는 판정 가능해야 한다.
 - 필터 체인이 예외를 Result로 변환할 때 사용하는 표준 페이로드는 common.spec.md의 계약을 따른다.
 
 ### 3.2 MUST NOT

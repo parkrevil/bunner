@@ -74,7 +74,7 @@ Normative: 본 SPEC은 추가적인 Static Shape를 정의하지 않는다.
   - Token의 Provider visibleTo는 `all`이어야 한다.
 
 - DI 그래프에 순환 의존이 존재하는 경우, 각 순환 경로에는 최소 1개 이상의 lazy 의존이 포함되어야 한다.
-  - lazy 의존은 `InjectCall`에서 `inject(() => Token)` 형태로 선언된 의존을 의미한다.
+  - lazy 의존은 `InjectCall.token`이 `TokenThunk`(common.spec.md)로 선언된 의존을 의미한다.
   - 위 조건을 만족하지 못하면 빌드 실패로 판정되어야 한다.
 
 ### 3.2 MUST NOT
@@ -85,7 +85,7 @@ Normative: 본 SPEC은 추가적인 Static Shape를 정의하지 않는다.
 
 - 런타임의 `inject()`는 토큰을 해결(resolve)하거나, 컨테이너 조회를 수행해서는 안 된다.
 
-- `inject(() => Token)`의 thunk는 런타임에서 실행되거나 토큰 해결에 사용되어서는 안 된다.
+- `TokenThunk`는 런타임에서 실행되거나 토큰 해결에 사용되어서는 안 된다.
 
 - `app.get(Token)`이 아래 조건을 위반하여 성공하는 것을 허용해서는 안 된다.
   - Token의 Provider scope가 `request | transient`인 경우

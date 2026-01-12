@@ -27,15 +27,47 @@ Out-of-Scope:
 - DI 연결 규칙 및 그래프 판정 → di.spec.md
 - Provider 생명주기 및 scope 의미론 → provider.spec.md
 
+### 1.3 Definitions
+
+Normative: 본 SPEC은 file-local 용어 정의를 포함하지 않는다.
+
 ---
 
 ## 2. Static Shape
+
+---
 
 본 섹션은 CLI, 정적 분석기, 코드 생성기가 참조하는 데이터 형상(Data Shape)만을 정의한다.
 
 ### 2.1 Core Data Shapes
 
 Normative: 아래에 정의된 형상이 계약이다.
+
+#### 2.1.0 Identity Types
+
+ContextId:
+
+- type: string
+
+AdapterId:
+
+- type: string
+
+ModuleId:
+
+- type: string
+
+Context:
+
+- type: object
+- required:
+  - contextId
+  - adapterId
+- properties:
+  - contextId:
+    - type: ContextId
+  - adapterId:
+    - type: AdapterId
 
 #### 2.1.1 DI Token
 
@@ -45,12 +77,48 @@ Token:
   - Class token: 클래스 선언을 참조 가능한 심볼
   - Unique symbol token: `unique symbol` 선언을 참조 가능한 심볼
 
-#### 2.1.3 DI Factory Reference
+#### 2.1.3 Function Reference
 
 FactoryRef:
 
 - allowed forms:
   - Function ref: 함수 선언을 참조 가능한 심볼
+- meaning: 실행 단위(middleware/guard/pipe/error filter/handler 등)를 가리키는 정적 함수 참조
+
+#### 2.1.6 Common Decorator Declarations
+
+CommonDecoratorName:
+
+- type: string
+- allowed values:
+  - "@Middlewares"
+  - "@Guards"
+  - "@Pipes"
+  - "@ErrorFilters"
+
+CommonDecoratorTarget:
+
+- type: string
+- allowed values:
+  - controller
+  - handler
+
+CommonDecoratorRefList:
+
+- type: array
+- items: FactoryRef
+
+CommonDecoratorDeclaration:
+
+- type: object
+- required:
+  - name
+  - target
+  - refs
+- properties:
+  - name: CommonDecoratorName
+  - target: CommonDecoratorTarget
+  - refs: CommonDecoratorRefList
 
 #### 2.1.4 Module Reference
 
@@ -81,6 +149,24 @@ InjectableOptions:
       - Allowlist: ModuleRefList
     - meaning: 모듈 간 주입/접근 허용 범위 선언
 
+InjectableDecoratorName:
+
+- type: string
+- allowed values:
+  - "@Injectable"
+
+InjectableDeclaration:
+
+- meaning: `@Injectable()` 데코레이터가 적용된 클래스 선언의 빌드 타임 수집 결과
+- type: object
+- required:
+  - name
+  - token
+- properties:
+  - name: InjectableDecoratorName
+  - token: Token
+  - options: InjectableOptions
+
 InjectCall:
 
 - type: object
@@ -94,9 +180,9 @@ InjectCall:
 
 TokenThunk:
 
-- allowed forms:
-  - Thunk ref: `() => <TokenSymbol>` 또는 `function () { return <TokenSymbol> }` 형태의 0-arg 함수 표현
-    - note: thunk는 런타임에서 실행되거나 토큰 해결에 사용되지 않으며, 빌드 타임에 정적 wiring으로 치환되어야 한다.
+- type: FactoryRef
+- meaning: `Token`을 지연 참조하기 위한 thunk 입력
+- note: thunk는 런타임에서 실행되거나 토큰 해결에 사용되지 않으며, 빌드 타임에 정적 wiring으로 치환되어야 한다.
 
 ProviderDeclaration:
 
@@ -142,6 +228,12 @@ ProviderDeclarationList:
 - `ProviderDeclaration.useFactory`가 존재한다면, `FactoryRef` 형상과 정확히 일치해야 한다.
 - `ModuleDeclaration.providers`는 `ProviderDeclaration`의 배열이어야 한다.
 
+- `InjectableDeclaration.name`은 `"@Injectable"`이어야 한다.
+- `InjectableDeclaration.token`은 Class token 형태여야 한다.
+
+- `CommonDecoratorDeclaration`은 `CommonDecoratorName`의 허용값 중 하나여야 한다.
+- `CommonDecoratorDeclaration.refs`는 `FactoryRef`의 배열이어야 한다.
+
 - `InjectableOptions.visibleTo`는 아래 중 하나여야 한다.
   - `all` 또는 `module`
   - `ModuleRefList`
@@ -156,6 +248,9 @@ ProviderDeclarationList:
 
 - 공통 계약은 특정 프로토콜(HTTP/WS 등)에 종속되지 않아야 한다.
 - DI/모듈 관련 declarations는 빌드 타임에 정적으로 판정 가능해야 한다.
+- `Context`는 최소 `contextId`와 `adapterId`를 제공해야 한다.
+
+- `CommonDecoratorDeclaration`은 런타임 훅이 아니라, 빌드 타임에 수집/판정되는 선언으로 취급되어야 한다.
 
 ### 3.2 MUST NOT
 

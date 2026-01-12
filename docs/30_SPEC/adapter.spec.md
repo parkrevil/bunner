@@ -11,16 +11,20 @@ L3 Implementation Contract
 
 ### 1.1 Purpose
 
-## 1. Context
-
-### 1.2 Scope & Boundary
-
 본 SPEC은 `Adapter`가 유효한 구현으로 판정되기 위한
-형상 및 관측 가능한 행동의 최소 계약을 정의한다.
+정적 선언(빌드 타임 판정 입력)과, 어댑터 엔트리 선언의 판정 규칙을 정의한다.
 
 ### 1.2 Scope & Boundary
+
+본 SPEC은 어댑터 전용 데코레이터(엔트리 선언)와, 실행 파이프라인의 정적 형상을 포함한다.
 
 ### 1.3 Definitions
+
+- Step: 실행 파이프라인을 구성하는 단일 실행 단위.
+- Middleware Lifecycle: 어댑터가 정의하는 미들웨어 실행 생명주기(phase 집합 및 배치 규칙).
+- Middleware Phase: Middleware Lifecycle 내부의 단일 단계 식별자.
+- Adapter Owner Decorator: 특정 어댑터의 엔트리 선언을 소유하는 class-level 데코레이터.
+- Adapter Member Decorator: 특정 어댑터에 종속되는 member/parameter 데코레이터.
 
 ---
 
@@ -29,16 +33,17 @@ L3 Implementation Contract
 어댑터는 아래 Static Shape를 만족하는 정적 명세를 제공해야 한다.
 
 - Adapter Static Spec
-  - `pipeline`: `Stage[]` (순서가 있는 리스트)
+  - `pipeline`: `Pipeline`
 
-- `Stage`
-  - `kind`: `middleware | guard | pipe | handler`
-  - `id`: `string` (어댑터 내에서 안정적인 식별자)
-  - `pipeSteps?`: `PipeStep[]` (`kind = pipe`인 경우에만 존재)
+- `Pipeline`
+  - `middlewares`: `Step[]` (순서가 있는 리스트)
+  - `guards`: `Step[]` (순서가 있는 리스트)
+  - `pipes`: `Step[]` (순서가 있는 리스트)
+  - `handler`: `Step` (정확히 1개)
 
-- `PipeStep`
-  - `kind`: `transform | validate | custom`
+- `Step`
   - `id`: `string` (어댑터 내에서 안정적인 식별자)
+  - `ref`: `FactoryRef` (common.spec.md)
 
 Static Shape의 구체적 직렬화 형식 및 저장 위치는 manifest.spec.md에서 판정된다.
 
@@ -46,23 +51,34 @@ Static Shape의 구체적 직렬화 형식 및 저장 위치는 manifest.spec.md
 
 ## 3. Invariants & Constraints
 
-본 섹션은 CLI, 정적 분석기, 코드 생성기가 참조하는
-데이터 형상(Data Shape)만을 정의한다.
+본 섹션은 어댑터의 정적 명세가 만족해야 하는 전역 제약(결정성, 결합 경계, 배치 규칙)을 정의한다.
 
 ### 3.1 MUST
 
 - 어댑터는 프로토콜 입력을 실행 모델로 전달할 수 있어야 한다.
 - 어댑터는 Result/Failure/Panic을 프로토콜 표현으로 변환해야 한다. (매핑 규칙은 어댑터 소유)
-- 어댑터는 `pipeline`(순서 포함)을 정적으로 선언해야 한다.
-- `pipeline`은 최소 1개의 `handler` stage를 포함해야 한다.
-- `kind = pipe`인 stage는 `pipeSteps`를 순서대로 포함해야 한다.
+- 어댑터는 `pipeline`을 정적으로 선언해야 한다.
+- `pipeline.handler`는 정확히 1개여야 한다.
+- `pipeline.middlewares | pipeline.guards | pipeline.pipes`는 결정적 순서를 가져야 한다.
+
+- 어댑터는 Middleware Lifecycle을 정의해야 한다.
+- 어댑터는 module-system.spec.md에 의해 제공되는 `middlewares` 등록 입력(`ref` + `phaseId`)을 기반으로, 미들웨어들을 `pipeline.middlewares`의 Step 순서로 결정적으로 배치해야 한다.
+  - 동일한 `phaseId` 내에서는 선언된 순서를 보존해야 한다.
+
+- Middleware Phase 기반 배치 규칙은 `pipeline.middlewares`에만 적용되어야 한다.
+
+- `pipeline.middlewares` 실행 중 어떤 Step이 Failure를 반환하면, 이후 `pipeline.guards | pipeline.pipes | pipeline.handler`는 실행되어서는 안 된다.
+  - 어댑터는 해당 Failure를 Result 경로로 프로토콜 응답으로 변환해야 한다. (매핑 규칙은 어댑터 소유)
 
 - 어댑터의 정적 명세를 기반으로 Wiring 코드가 생성되어야 한다.
 
-- transform/validate는 Pipe에 명시적으로 등록된 경우에만 실행되어야 한다. (INVARIANTS의 No Implicit Pipe 전제)
-- 사용자가 특정 어댑터에 대해 pipe step을 등록(활성화)하려는 경우,
-  등록 대상 step은 반드시 해당 어댑터의 Static Shape(`pipeline` 및 `pipeSteps`)에 존재해야 한다.
-  이를 만족하지 못하면 빌드 실패로 판정되어야 한다.
+- 어댑터 간 Public API 접근은 module-system.spec.md의 `dependsOn`에 의해 명시된 경우에만 허용되어야 한다.
+
+- Adapter Member Decorator는 Adapter Owner Decorator가 적용된 class 내부에서만 유효해야 한다.
+  - 이를 위반하면 빌드 실패로 판정되어야 한다.
+
+- Controller(엔트리 소유 단위의 class)에는 정확히 1개의 Adapter Owner Decorator만 적용되어야 한다.
+  - 0개 또는 2개 이상이면 빌드 실패로 판정되어야 한다.
 
 ### 3.2 MUST NOT
 
@@ -73,17 +89,22 @@ Static Shape의 구체적 직렬화 형식 및 저장 위치는 manifest.spec.md
 
 ## 4. Observable Semantics
 
-Normative: 본 SPEC은 추가적인 Observable Semantics를 정의하지 않는다.
+### 4.1 Middleware Short-Circuit
+
+- Observable: `pipeline.middlewares`에서 Failure가 관측되면, 이후 step(guard/pipe/handler)이 실행되지 않아야 한다.
 
 ---
 
 ## 5. Violation Conditions
 
 - Build-Time Violation: Adapter Static Spec에 `pipeline`이 없는데도 빌드가 성공하는 경우
-- Build-Time Violation: `pipeline`에 `handler` stage가 없는데도 빌드가 성공하는 경우
-- Build-Time Violation: `kind = pipe` stage가 `pipeSteps` 없이 존재하는데도 빌드가 성공하는 경우
-- Build-Time Violation: `pipeSteps`가 결정적 순서를 갖지 못하는데도 빌드가 성공하는 경우
-- Build-Time Violation: 사용자가 등록(활성화)하려는 pipe step이 어댑터 Static Shape에 존재하지 않는데도 빌드가 성공하는 경우
+- Build-Time Violation: `pipeline.handler`가 없거나 2개 이상인데도 빌드가 성공하는 경우
+- Build-Time Violation: `pipeline.middlewares | pipeline.guards | pipeline.pipes`가 결정적 순서를 갖지 못하는데도 빌드가 성공하는 경우
+- Build-Time Violation: Adapter Owner Decorator가 없는 위치에서 Adapter Member Decorator가 사용되는데도 빌드가 성공하는 경우
+
+- Build-Time Violation: Controller(엔트리 소유 단위)에 Adapter Owner Decorator가 0개 또는 2개 이상 적용되는데도 빌드가 성공하는 경우
+
+- Runtime Violation: `pipeline.middlewares`에서 Failure가 관측되는데도 `pipeline.guards | pipeline.pipes | pipeline.handler` 실행이 관측되는 경우
 
 ---
 
@@ -91,7 +112,9 @@ Normative: 본 SPEC은 추가적인 Observable Semantics를 정의하지 않는�
 
 ### 6.1 Handoff
 
-Normative: 아래에 정의된 형상이 계약이다.
+- `FactoryRef` 및 DI 관련 공통 형상은 common.spec.md로 이관된다.
+- 모듈 루트 파일에서의 어댑터 선언 입력(`ModuleAdaptersDeclaration`, `dependsOn`, phaseId 기반 middlewares 선언)은 module-system.spec.md로 이관된다.
+- Adapter Static Shape(`pipeline`, `Step`)의 구체 직렬화 형식 및 저장 위치는 manifest.spec.md로 이관된다.
 
 ### 6.2 Layer Priority
 

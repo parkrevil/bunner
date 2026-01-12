@@ -14,6 +14,9 @@ L3 Implementation Contract
 본 SPEC은 Bunner의 모듈 경계(Module Boundary)가 유효한 구현으로 판정되기 위한
 정적 형상과 관측 가능한 행동의 최소 계약을 정의한다.
 
+또한, 모듈 루트 파일에서 선언되는 어댑터 의존 구성(`dependsOn`)이
+유효한 구현으로 판정되기 위한 최소 계약을 포함한다.
+
 이 SPEC의 목적은 다음 2가지를 동시에 만족시키는 것이다.
 
 - **Directory-First Modularity:** 모듈 경계는 디렉토리 구조로만 정의된다.
@@ -29,11 +32,17 @@ In-Scope (본 SPEC이 고정):
 - 모듈 이름/ID의 표준화 규칙
 - “가장 가까운 상위 모듈로 귀속” 규칙
 
+- 모듈 루트 파일의 어댑터 의존 선언(`dependsOn`)의 최소 정적 형상
+- `dependsOn` 정규화 및 위반 조건(미존재 어댑터, 순환 의존)
+
 Out-of-Scope (타 SPEC으로 위임):
 
 - 역할(Role) 식별(Decorator 기반 의미) → aot-ast.spec.md / common.spec.md
 - 모듈 간 가시성/접근 장벽의 상세 규칙 → di.spec.md
 - 실행 단위(Worker/Cron/Script) 식별 → execution.spec.md
+
+- 어댑터 Pipeline의 상세 의미론 → adapter.spec.md / execution.spec.md
+- Panic(throw) 처리 의미론 → error-handling.spec.md
 
 ---
 
@@ -98,6 +107,83 @@ ResolvedBunnerConfigModule:
 - `ResolvedBunnerConfigModule`은 위 형상과 정확히 일치해야 한다.
 - `fileName`은 반드시 단일 파일명이어야 하며, 경로 구문(`/`, `..`)을 포함해서는 안 된다.
 
+### 2.4 Module Root File Adapter Declarations
+
+본 SPEC은 모듈 루트 파일 내부에서 선언되는 어댑터 의존 선언을,
+빌드 타임 판정 입력으로 수집/검증하기 위한 최소 형상을 정의한다.
+
+ModuleAdapterId:
+
+- type: string
+
+ModuleAdapterIdList:
+
+- type: array
+- items: ModuleAdapterId
+
+ModuleAdapterDependsOn:
+
+- allowed forms:
+  - Standalone: string literal `standalone`
+  - Dependency list: ModuleAdapterIdList
+
+ModuleAdapterDeclaration:
+
+- type: object
+- required:
+  - adapterId
+- properties:
+  - adapterId: ModuleAdapterId
+  - dependsOn: ModuleAdapterDependsOn
+
+  - middlewares:
+    - type: array
+    - items: ModuleAdapterStepRegistration
+
+  - guards:
+    - type: array
+    - items: ModuleAdapterStepRegistration
+
+  - pipes:
+    - type: array
+    - items: ModuleAdapterStepRegistration
+
+  - errorFilters:
+    - type: array
+    - items: ModuleAdapterStepRegistration
+
+ModuleAdapterStepRegistration:
+
+- type: object
+- required:
+  - ref
+- properties:
+  - ref:
+    - type: FactoryRef (common.spec.md)
+    - meaning: 해당 단계에 등록될 실행 단위 함수 참조
+  - phaseId:
+    - type: string
+    - meaning: Middleware Phase 식별자 (middlewares 등록에만 사용)
+
+ModuleAdaptersDeclaration:
+
+- type: array
+- items: ModuleAdapterDeclaration
+
+### 2.5 Module Adapter Declaration Conformance Rules
+
+- `ModuleAdaptersDeclaration`은 `adapterId` 기준 오름차순의 결정적 순서를 가져야 한다.
+- `ModuleAdaptersDeclaration` 내부에서 `adapterId`는 중복될 수 없다.
+
+- `dependsOn`이 생략된 경우, `standalone`으로 정규화되어야 한다.
+- `dependsOn`이 리스트인 경우, 빈 배열이어서는 안 된다.
+
+- `middlewares`가 존재한다면, 각 item은 `ModuleAdapterStepRegistration` 형상과 정확히 일치해야 한다.
+  - 각 item은 `phaseId`를 반드시 포함해야 하며, 빈 문자열이어서는 안 된다.
+
+- `guards | pipes | errorFilters`가 존재한다면, 각 item은 `ModuleAdapterStepRegistration` 형상과 정확히 일치해야 한다.
+  - 각 item은 `phaseId`를 포함해서는 안 된다.
+
 ---
 
 ## 3. Invariants & Constraints
@@ -109,10 +195,17 @@ ResolvedBunnerConfigModule:
 - CLI는 어떤 파일명도 자동 추론해서는 안 된다.
 - 동일한 입력(프로젝트 파일 시스템 + 동일한 resolved config)에서 모듈 판정 결과는 결정적으로 동일해야 한다.
 
+- `dependsOn`이 선언된 경우, 의존 그래프는 빌드 타임에 정적으로 판정 가능해야 한다.
+- `dependsOn`의 정규화 결과는 결정적이어야 한다.
+- 모듈 루트 파일에서 참조되는 `ModuleAdapterId`가 빌드 타임에 존재하는 어댑터로 판정되지 않으면, 빌드 실패가 관측되어야 한다.
+
 ### 3.2 MUST NOT
 
 - 모듈 루트가 불명확하거나 판정 불가능한 경우, CLI는 추측으로 성공 처리해서는 안 된다.
 - 런타임에서 모듈 경계를 재탐색/재판정하는 메커니즘은 존재해서는 안 된다.
+
+- 존재하지 않는 어댑터 ID를 조용히 무시하거나 성공 처리해서는 안 된다.
+- `dependsOn`이 암묵 의존(추측)으로 대체되어서는 안 된다.
 
 ---
 
@@ -155,6 +248,10 @@ Observable:
 - Build-Time Violation: 단일 파일이 어떤 모듈에도 귀속되지 못하는 경우
 - Test-Level Violation: 동일한 입력에서 서로 다른 모듈 판정 결과가 생성되는 경우
 
+- Build-Time Violation: `dependsOn`이 리스트인데 빈 배열인데도 빌드가 성공하는 경우
+- Build-Time Violation: 존재하지 않는 어댑터 ID가 참조되는데도 빌드가 성공하는 경우
+- Build-Time Violation: `dependsOn` 의존 그래프에 순환이 존재하는데도 빌드가 성공하는 경우
+
 - 빌드 실패 및 위반 조건의 진단 출력은 diagnostics.spec.md의 형식을 따라야 한다.
 
 ---
@@ -165,6 +262,8 @@ Observable:
 
 - 모듈 판정 결과는 manifest.spec.md에 정의된 필드로 직렬화되어야 한다.
 - 모듈 경계의 가시성 장벽(외부 접근 차단)의 상세 규칙은 di.spec.md로 이관된다.
+
+- 모듈 루트 파일에서 수집된 `ModuleAdaptersDeclaration`은 adapter.spec.md의 어댑터 간 결합(허용/금지) 판정 입력으로 사용되어야 한다.
 
 ### 6.2 Layer Priority
 

@@ -70,7 +70,6 @@ Value Shape:
 - required: `["scope"]`
 - properties:
   - scope: string (allowed values: "singleton", "transient")
-- additionalProperties: false
 
 ### 2.3 Shape Conformance Rules
 
