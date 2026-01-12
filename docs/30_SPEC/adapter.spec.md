@@ -20,7 +20,6 @@ L3 Implementation Contract
 
 ### 1.3 Definitions
 
-- Step: 실행 파이프라인을 구성하는 단일 실행 단위.
 - Middleware Lifecycle: 어댑터가 정의하는 미들웨어 실행 생명주기(phase 집합 및 배치 규칙).
 - Middleware Phase: Middleware Lifecycle 내부의 단일 단계 식별자.
 - Adapter Owner Decorator: 특정 어댑터의 엔트리 선언을 소유하는 class-level 데코레이터.
@@ -36,14 +35,18 @@ L3 Implementation Contract
   - `pipeline`: `Pipeline`
 
 - `Pipeline`
-  - `middlewares`: `Step[]` (순서가 있는 리스트)
-  - `guards`: `Step[]` (순서가 있는 리스트)
-  - `pipes`: `Step[]` (순서가 있는 리스트)
-  - `handler`: `Step` (정확히 1개)
+  - `middlewares`: `PipelineStep[]` (순서가 있는 리스트)
+  - `guards`: `PipelineStep[]` (순서가 있는 리스트)
+  - `pipes`: `PipelineStep[]` (순서가 있는 리스트)
+  - `handler`: `PipelineStep` (정확히 1개)
 
-- `Step`
-  - `id`: `string` (어댑터 내에서 안정적인 식별자)
-  - `ref`: `FactoryRef` (common.spec.md)
+- `Error Filter Chain`
+  - `errorFilters`: `FactoryRef[]` (순서가 있는 리스트)
+
+- `PipelineStep`
+  - allowed forms:
+    - FactoryRef (common.spec.md)
+  - meaning: 실행 파이프라인을 구성하는 단일 실행 단위 참조
 
 Static Shape의 구체적 직렬화 형식 및 저장 위치는 manifest.spec.md에서 판정된다.
 
@@ -61,13 +64,18 @@ Static Shape의 구체적 직렬화 형식 및 저장 위치는 manifest.spec.md
 - `pipeline.handler`는 정확히 1개여야 한다.
 - `pipeline.middlewares | pipeline.guards | pipeline.pipes`는 결정적 순서를 가져야 한다.
 
+- 어댑터는 `errorFilters`를 정적으로 선언할 수 있어야 한다.
+- `errorFilters`는 결정적 순서를 가져야 한다.
+
 - 어댑터는 Middleware Lifecycle을 정의해야 한다.
-- 어댑터는 module-system.spec.md에 의해 제공되는 `middlewares` 등록 입력(`ref` + `phaseId`)을 기반으로, 미들웨어들을 `pipeline.middlewares`의 Step 순서로 결정적으로 배치해야 한다.
-  - 동일한 `phaseId` 내에서는 선언된 순서를 보존해야 한다.
+- 어댑터는 module-system.spec.md에 의해 제공되는 `middlewares` 등록 입력을 기반으로, 미들웨어들을 `pipeline.middlewares`의 PipelineStep 순서로 결정적으로 배치해야 한다.
+  - 동일한 lifecycle(phase) 내에서는 선언된 순서를 보존해야 한다.
+
+- 어댑터는 module-system.spec.md에 의해 제공되는 `errorFilters` 등록 입력을 기반으로, `errorFilters`를 결정적으로 구성할 수 있어야 한다.
 
 - Middleware Phase 기반 배치 규칙은 `pipeline.middlewares`에만 적용되어야 한다.
 
-- `pipeline.middlewares` 실행 중 어떤 Step이 Failure를 반환하면, 이후 `pipeline.guards | pipeline.pipes | pipeline.handler`는 실행되어서는 안 된다.
+- `pipeline.middlewares` 실행 중 어떤 PipelineStep이 Failure를 반환하면, 이후 `pipeline.guards | pipeline.pipes | pipeline.handler`는 실행되어서는 안 된다.
   - 어댑터는 해당 Failure를 Result 경로로 프로토콜 응답으로 변환해야 한다. (매핑 규칙은 어댑터 소유)
 
 - 어댑터의 정적 명세를 기반으로 Wiring 코드가 생성되어야 한다.
@@ -91,7 +99,7 @@ Static Shape의 구체적 직렬화 형식 및 저장 위치는 manifest.spec.md
 
 ### 4.1 Middleware Short-Circuit
 
-- Observable: `pipeline.middlewares`에서 Failure가 관측되면, 이후 step(guard/pipe/handler)이 실행되지 않아야 한다.
+- Observable: `pipeline.middlewares`에서 Failure가 관측되면, 이후 PipelineStep(guard/pipe/handler)이 실행되지 않아야 한다.
 
 ---
 
@@ -100,6 +108,7 @@ Static Shape의 구체적 직렬화 형식 및 저장 위치는 manifest.spec.md
 - Build-Time Violation: Adapter Static Spec에 `pipeline`이 없는데도 빌드가 성공하는 경우
 - Build-Time Violation: `pipeline.handler`가 없거나 2개 이상인데도 빌드가 성공하는 경우
 - Build-Time Violation: `pipeline.middlewares | pipeline.guards | pipeline.pipes`가 결정적 순서를 갖지 못하는데도 빌드가 성공하는 경우
+- Build-Time Violation: `errorFilters`가 결정적 순서를 갖지 못하는데도 빌드가 성공하는 경우
 - Build-Time Violation: Adapter Owner Decorator가 없는 위치에서 Adapter Member Decorator가 사용되는데도 빌드가 성공하는 경우
 
 - Build-Time Violation: Controller(엔트리 소유 단위)에 Adapter Owner Decorator가 0개 또는 2개 이상 적용되는데도 빌드가 성공하는 경우
@@ -113,8 +122,8 @@ Static Shape의 구체적 직렬화 형식 및 저장 위치는 manifest.spec.md
 ### 6.1 Handoff
 
 - `FactoryRef` 및 DI 관련 공통 형상은 common.spec.md로 이관된다.
-- 모듈 루트 파일에서의 어댑터 선언 입력(`ModuleAdaptersDeclaration`, `dependsOn`, phaseId 기반 middlewares 선언)은 module-system.spec.md로 이관된다.
-- Adapter Static Shape(`pipeline`, `Step`)의 구체 직렬화 형식 및 저장 위치는 manifest.spec.md로 이관된다.
+- 모듈 루트 파일에서의 어댑터 선언 입력(`AdapterConfig`, `dependsOn`, lifecycle 기반 middlewares 선언)은 module-system.spec.md로 이관된다.
+- Adapter Static Shape(`pipeline`, `PipelineStep`)의 구체 직렬화 형식 및 저장 위치는 manifest.spec.md로 이관된다.
 
 ### 6.2 Layer Priority
 

@@ -112,77 +112,92 @@ ResolvedBunnerConfigModule:
 본 SPEC은 모듈 루트 파일 내부에서 선언되는 어댑터 의존 선언을,
 빌드 타임 판정 입력으로 수집/검증하기 위한 최소 형상을 정의한다.
 
-ModuleAdapterId:
-
-- type: string
-
-ModuleAdapterIdList:
+AdapterIdList:
 
 - type: array
-- items: ModuleAdapterId
+- items: AdapterId (common.spec.md)
 
-ModuleAdapterDependsOn:
+AdapterDependsOn:
 
 - allowed forms:
   - Standalone: string literal `standalone`
-  - Dependency list: ModuleAdapterIdList
+  - Dependency list: AdapterIdList
 
-ModuleAdapterDeclaration:
-
-- type: object
-- required:
-  - adapterId
-- properties:
-  - adapterId: ModuleAdapterId
-  - dependsOn: ModuleAdapterDependsOn
-
-  - middlewares:
-    - type: array
-    - items: ModuleAdapterStepRegistration
-
-  - guards:
-    - type: array
-    - items: ModuleAdapterStepRegistration
-
-  - pipes:
-    - type: array
-    - items: ModuleAdapterStepRegistration
-
-  - errorFilters:
-    - type: array
-    - items: ModuleAdapterStepRegistration
-
-ModuleAdapterStepRegistration:
+AdapterConfig:
 
 - type: object
-- required:
-  - ref
-- properties:
-  - ref:
-    - type: FactoryRef (common.spec.md)
-    - meaning: 해당 단계에 등록될 실행 단위 함수 참조
-  - phaseId:
-    - type: string
-    - meaning: Middleware Phase 식별자 (middlewares 등록에만 사용)
+- meaning: 모듈 루트 파일에서 선언되는 `adapters` 필드의 최소 계약
+- keys: AdapterId (common.spec.md)
+- values: AdapterInstanceConfig
 
-ModuleAdaptersDeclaration:
+AdapterInstanceConfig:
+
+- type: object
+- properties:
+  - dependsOn: AdapterDependsOn
+
+  - middlewares: MiddlewareRegistry
+  - guards: PipelineStepList
+  - pipes: PipelineStepList
+  - errorFilters: ErrorFilterRefList
+
+MiddlewareRegistry:
+
+- type: object
+- meaning: lifecycle/phase 기반 미들웨어 등록
+- keys: MiddlewareLifecycleId
+- values: MiddlewareRegistrationInputList
+
+MiddlewareLifecycleId:
+
+- type: string
+- allowed forms (AST-level):
+  - string literal key (e.g., `"BeforeRequest"`)
+  - computed key whose expression is a member reference `<Identifier>.<Identifier>`
+    - normalization: use the property identifier as the lifecycle id
+
+MiddlewareRegistrationInputList:
 
 - type: array
-- items: ModuleAdapterDeclaration
+- items: MiddlewareRegistrationInput
 
-### 2.5 Module Adapter Declaration Conformance Rules
+MiddlewareRegistrationInput:
 
-- `ModuleAdaptersDeclaration`은 `adapterId` 기준 오름차순의 결정적 순서를 가져야 한다.
-- `ModuleAdaptersDeclaration` 내부에서 `adapterId`는 중복될 수 없다.
+- allowed forms (AST-level):
+  - Token ref: Identifier reference to a middleware token
+  - Registration object: object literal `{ token: <Identifier>, options?: <Any AOT-Serializable Expression> }`
+  - Call/new expressions that are AOT-serializable
+
+PipelineStepList:
+
+- type: array
+- items: PipelineStep
+
+PipelineStep:
+
+- meaning: 실행 파이프라인 단계(middleware/guard/pipe/handler)에 대응되는 정적 실행 단위 참조
+- allowed forms (AST-level):
+  - FactoryRef (common.spec.md)
+
+ErrorFilterRefList:
+
+- type: array
+- items: FactoryRef (common.spec.md)
+
+### 2.5 Adapter Declarations Conformance Rules
+
+- `AdapterConfig`는 결정적으로 처리되어야 한다.
+  - adapterId 키 순서는 code point 오름차순으로 정규화되어야 한다.
 
 - `dependsOn`이 생략된 경우, `standalone`으로 정규화되어야 한다.
 - `dependsOn`이 리스트인 경우, 빈 배열이어서는 안 된다.
 
-- `middlewares`가 존재한다면, 각 item은 `ModuleAdapterStepRegistration` 형상과 정확히 일치해야 한다.
-  - 각 item은 `phaseId`를 반드시 포함해야 하며, 빈 문자열이어서는 안 된다.
+- `middlewares`가 존재한다면, `MiddlewareRegistry` 형상과 정확히 일치해야 한다.
+  - 각 lifecycle 키는 `MiddlewareLifecycleId` 규칙에 의해 string으로 정규화 가능해야 한다.
+  - 각 lifecycle 값은 `MiddlewareRegistrationInputList` 형상과 정확히 일치해야 한다.
 
-- `guards | pipes | errorFilters`가 존재한다면, 각 item은 `ModuleAdapterStepRegistration` 형상과 정확히 일치해야 한다.
-  - 각 item은 `phaseId`를 포함해서는 안 된다.
+- `guards | pipes`가 존재한다면, 각 값은 `PipelineStepList` 형상과 정확히 일치해야 한다.
+- `errorFilters`가 존재한다면, 각 값은 `ErrorFilterRefList` 형상과 정확히 일치해야 한다.
 
 ---
 
@@ -197,7 +212,7 @@ ModuleAdaptersDeclaration:
 
 - `dependsOn`이 선언된 경우, 의존 그래프는 빌드 타임에 정적으로 판정 가능해야 한다.
 - `dependsOn`의 정규화 결과는 결정적이어야 한다.
-- 모듈 루트 파일에서 참조되는 `ModuleAdapterId`가 빌드 타임에 존재하는 어댑터로 판정되지 않으면, 빌드 실패가 관측되어야 한다.
+- 모듈 루트 파일에서 참조되는 `AdapterId`가 빌드 타임에 존재하는 어댑터로 판정되지 않으면, 빌드 실패가 관측되어야 한다.
 
 ### 3.2 MUST NOT
 
@@ -263,7 +278,7 @@ Observable:
 - 모듈 판정 결과는 manifest.spec.md에 정의된 필드로 직렬화되어야 한다.
 - 모듈 경계의 가시성 장벽(외부 접근 차단)의 상세 규칙은 di.spec.md로 이관된다.
 
-- 모듈 루트 파일에서 수집된 `ModuleAdaptersDeclaration`은 adapter.spec.md의 어댑터 간 결합(허용/금지) 판정 입력으로 사용되어야 한다.
+- 모듈 루트 파일에서 수집된 `AdapterConfig`는 adapter.spec.md의 어댑터 간 결합(허용/금지) 판정 입력으로 사용되어야 한다.
 
 ### 6.2 Layer Priority
 
