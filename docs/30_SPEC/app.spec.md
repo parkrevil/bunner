@@ -18,12 +18,14 @@ L3 Implementation Contract
 
 In-Scope:
 
-- `createApp`의 부트스트랩 단계(Env/Config preload 포함)와 완료 조건
-- `createApp`의 Entry Module 지정 입력 및 판정 규칙
+- `createApplication`의 부트스트랩 단계(Env/Config preload 포함)와 완료 조건
+- `createApplication`의 Entry Module 지정 입력 및 판정 규칙
 - `app.start`, `app.stop`, `app.get(Token)`의 관측 가능한 의미론
-- `app.applyAdapter(AdapterId, options)`의 판정 규칙 및 허용 범위
+- `app.attachAdapter(AdapterId, options)`의 판정 규칙 및 허용 범위
 - App lifecycle hook의 수집(AST) 규칙 및 호출 순서(결정성)
 - App 표면에서의 실패 표현(throw/panic) 및 금지 규칙
+- Config Section 등록 입력의 최소 형상 및 App 표면에서의 접근 규칙
+- App-External Code에서 제공되는 Config Loader 바인딩 입력 및 preload 단계에서의 실행 규칙
 
 Out-of-Scope:
 
@@ -75,9 +77,52 @@ AppLifecycleHookDeclaration:
   - methodName: AppLifecycleHookMethodName
   - token: Token (common.spec.md)
 
+AppConfigInput:
+
+- meaning: App-External Code에서 Env/Config preload를 위해 제공되는 입력
+- type: object
+- required:
+  - loader
+- properties:
+  - env:
+    - type: array
+    - items:
+      - type: string
+    - meaning: Env preload에 사용될 파일 경로 목록
+  - loader:
+    - type: FactoryRef (common.spec.md)
+    - meaning: Config preload 단계에서 실행될 Loader 함수 참조
+
+ConfigRawValue:
+
+- meaning: Env/Config preload 단계에서 입력으로 허용되는 JSON 호환 값
+- allowed forms:
+  - object: key는 string, value는 ConfigRawValue
+  - array: item은 ConfigRawValue
+  - string
+  - number
+  - boolean
+  - null
+
+ConfigSectionRegistrationDeclaration:
+
+- meaning: Config Section 등록의 빌드 타임 수집 결과
+- type: object
+- required:
+  - token
+  - raw
+- properties:
+  - token:
+    - type: Token (common.spec.md)
+  - raw:
+    - type: ConfigRawValue
+
 ### 2.2 Shape Conformance Rules
 
 - `AppLifecycleHookDeclaration.target`가 `injectable`인 경우, `token`은 반드시 존재해야 한다.
+- `AppConfigInput.env`가 존재하는 경우, string 배열이어야 한다.
+- `AppConfigInput.loader`는 FactoryRef여야 한다.
+- `ConfigSectionRegistrationDeclaration.token`은 Class token이어야 한다.
 
 ---
 
@@ -85,14 +130,31 @@ AppLifecycleHookDeclaration:
 
 ### 3.1 MUST
 
-- `createApp`은 비동기적으로 완료되어야 한다.
+- `createApplication`은 비동기적으로 완료되어야 한다.
 
-- `createApp`은 정확히 1개의 Entry Module을 입력으로 받아야 한다.
+- `createApplication`은 정확히 1개의 Entry Module을 입력으로 받아야 한다.
   - Entry Module은 ModuleRef(common.spec.md)로 빌드 타임에 직접 판정 가능해야 한다.
 
-- `createApp`은 Env/Config preload를 포함해야 하며, preload 결과는 런타임 동안 변경되지 않아야 한다.
+- `createApplication`은 Env/Config preload를 포함해야 하며, preload 결과는 런타임 동안 변경되지 않아야 한다.
 
-- `createApp`은 빌드 타임에 생성된 Manifest 산출물을 기반으로 부트스트랩을 수행해야 한다.
+- Env/Config preload는 `createApplication`의 완료 조건에 포함되어야 한다.
+  - Observable: `createApplication`이 성공적으로 완료된 이후, App-External Code는 `app.get(Token)`을 통해 ConfigService 및 Config Section 값을 접근할 수 있어야 한다.
+
+- Env preload는 App-External Code가 제공한 AppConfigInput.env를 사용해야 한다.
+
+- Config preload는 App-External Code가 제공한 AppConfigInput.loader를 실행하여 수행되어야 한다.
+  - loader 실행은 `createApplication` 완료 이전에 관측되어야 한다.
+  - loader 실행이 실패하면 `createApplication`에서 throw가 관측되어야 한다.
+  - 프레임워크는 loader 실행에 대해 타임아웃/재시도를 적용해서는 안 된다.
+
+- Config Section 등록은 `ConfigSectionRegistrationDeclaration` 형상으로 빌드 타임 수집 가능해야 한다.
+  - `ConfigSectionRegistrationDeclaration.raw`는 ConfigRawValue에 부합해야 한다.
+  - Config Section 등록은 AppConfigInput.loader 내부의 등록 호출로부터 빌드 타임에 수집 가능해야 한다.
+    - 등록 호출은 callee 식별자가 `defineConfig`인 호출로 판정되어야 한다.
+  - Config Section 값은 transform/validate 완료 결과여야 하며, 등록된 token(Class token)과 동일한 클래스 인스턴스로 관측되어야 한다.
+  - Env/Config preload 완료 이후, 프레임워크는 raw 입력을 런타임에서 장기 보관하거나 재노출해서는 안 된다.
+
+- `createApplication`은 빌드 타임에 생성된 Manifest 산출물을 기반으로 부트스트랩을 수행해야 한다.
   - Manifest 형상 및 결정성은 manifest.spec.md가 판정한다.
 
 - App의 부트스트랩 이후 구조 판정을 위한 메타데이터는 실행 경로를 변경하는 근거로 사용되어서는 안 된다.
@@ -100,11 +162,11 @@ AppLifecycleHookDeclaration:
 
 - `app.start`는 App의 실행을 시작해야 한다.
 
-- `app.applyAdapter(AdapterId, options)`는 App-External Code에서 어댑터 옵션을 바인딩하기 위한 입력으로 사용될 수 있어야 한다.
+- `app.attachAdapter(AdapterId, options)`는 App-External Code에서 어댑터 옵션을 바인딩하기 위한 입력으로 사용될 수 있어야 한다.
 
-- `app.applyAdapter`의 AdapterId 인자는 빌드 타임에 AdapterId(common.spec.md)로 직접 판정 가능해야 한다.
+- `app.attachAdapter`의 AdapterId 인자는 빌드 타임에 AdapterId(common.spec.md)로 직접 판정 가능해야 한다.
 
-- `app.applyAdapter`는 정적 그래프(Manifest 및 정적 wiring)를 변경해서는 안 된다.
+- `app.attachAdapter`는 정적 그래프(Manifest 및 정적 wiring)를 변경해서는 안 된다.
 
 - `app.stop`는 App의 종료를 수행해야 하며, App이 소유하는 모든 리소스(Provider 및 Adapter-owned resources)를 정리해야 한다.
 
@@ -128,11 +190,11 @@ AppLifecycleHookDeclaration:
 
 ### 3.2 MUST NOT
 
-- `createApp | app.start | app.stop | app.get(Token)`은 Result를 반환해서는 안 된다.
+- `createApplication | app.start | app.stop | app.get(Token)`은 Result를 반환해서는 안 된다.
 
-- `app.applyAdapter`는 `app.start` 이후에 관측되어서는 안 된다.
+- `app.attachAdapter`는 `app.start` 이후에 관측되어서는 안 된다.
 
-- `createApp | app.start | app.stop | app.get(Token) | app.applyAdapter`는 Result를 반환해서는 안 된다.
+- `createApplication | app.start | app.stop | app.get(Token) | app.attachAdapter`는 Result를 반환해서는 안 된다.
 
 - App lifecycle hook은 모듈 경계(module-system.spec.md)의 런타임 엔티티를 전제로 해서는 안 된다.
 
@@ -142,10 +204,10 @@ AppLifecycleHookDeclaration:
 
 ### 4.1 Input / Observable Outcome
 
-- Input: App-External Code에서의 `createApp` 호출
+- Input: App-External Code에서의 `createApplication` 호출
 - Observable:
-  - `createApp`이 성공하면 App 인스턴스가 생성되어야 한다.
-  - `createApp`이 실패하면 throw가 관측되어야 한다.
+  - `createApplication`이 성공하면 App 인스턴스가 생성되어야 한다.
+  - `createApplication`이 실패하면 throw가 관측되어야 한다.
 
 - Input: App-External Code에서의 `app.start` 호출
 - Observable:
@@ -166,6 +228,8 @@ AppLifecycleHookDeclaration:
 ## 5. Violation Conditions
 
 - Build-Time Violation: App lifecycle hook이 런타임 리플렉션에 의해 결정되는데도 빌드가 성공하는 경우
+- Build-Time Violation: `ConfigSectionRegistrationDeclaration.raw`가 ConfigRawValue에 부합하지 않는데도 빌드가 성공하는 경우
+- Build-Time Violation: 등록되지 않은 Class token에 대해 `app.get(Token)`/DI 주입이 성공하도록 빌드되는 경우
 - Runtime Violation: `app.stop`에서 throw가 관측되는 경우
 
 ---

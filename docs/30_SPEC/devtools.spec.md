@@ -57,15 +57,15 @@ DevToolsRuntimeReportAdapter:
 - type: object
 - required:
   - adapterId
-  - isApplied
-  - isListening
+  - isAttached
+  - isRunning
   - boundHandlers
   - options
 - properties:
   - adapterId: AdapterId (common.spec.md)
-  - isApplied:
+  - isAttached:
     - type: boolean
-  - isListening:
+  - isRunning:
     - type: boolean
   - boundHandlers: DevToolsRuntimeReportBoundHandlerList
   - options:
@@ -140,7 +140,11 @@ DevToolsStaticGraphAdapter:
 
 ## 4. Observable Semantics
 
-Normative: 본 SPEC은 추가적인 Observable Semantics를 정의하지 않는다.
+### 4.1 Adapter Status Fields
+
+- `DevToolsRuntimeReportAdapter.isAttached`는 App-External Code에서 해당 `adapterId`에 대해 `app.attachAdapter` 호출이 throw 없이 완료된 경우에만 true여야 한다.
+
+- `DevToolsRuntimeReportAdapter.isRunning`은 해당 `adapterId`의 어댑터가 `app.start` 이후 실행 상태로 전이된 경우에만 true여야 한다.
 
 ---
 

@@ -16,7 +16,7 @@ Bunner 프로젝트에서 사용되는 주요 기술 용어와 도메인 개념�
 
 - **Entry Module**: Application(App)을 구성하기 위한 시작점으로 지정되는 단일 모듈 참조이다.
 
-- **app.applyAdapter**: App-External Code에서 특정 AdapterId에 대한 런타임 옵션을 바인딩하고, 해당 어댑터를 실행 준비 상태로 전이시키는 App 조작이다.
+- **app.attachAdapter**: App-External Code에서 특정 AdapterId에 대한 런타임 옵션을 바인딩하고, 해당 어댑터를 실행 준비 상태로 전이시키는 App 조작이다.
 
 - **Adapter Activation**: App 실행 중 특정 어댑터가 실제로 활성화(적용)되어 실행 경로를 생성할 수 있는 상태가 되는 것을 의미한다.
 - **Adapter Option Binding**: 특정 어댑터의 구조(정적 그래프)를 변경하지 않고, host/port 같은 런타임 옵션 값을 연결하는 행위다.
@@ -25,10 +25,15 @@ Bunner 프로젝트에서 사용되는 주요 기술 용어와 도메인 개념�
 
 - **DevTools Static Graph**: 빌드 타임에 수집된 정적 그래프(바인딩 후보 포함)를 기록한 DevTools 입력 산출물이다.
 
-- **createApp**: App 인스턴스를 생성하는 부트스트랩 진입점이다.
+- **createApplication**: App 인스턴스를 생성하는 부트스트랩 진입점이다.
 - **app.start**: App을 실행 상태로 전이시키는 실행 진입점이다.
 - **app.stop**: App을 종료 상태로 전이시키는 종료 진입점이다.
 - **app.get(Token)**: App-External Code에서 singleton/all Provider 인스턴스에 접근하기 위한 진입점이다.
+
+- **defineConfig**: Config Section을 등록하기 위한 App-External Code의 등록 호출 식별자이다.
+
+- **isAttached**: DevTools runtime report에서 특정 어댑터의 옵션 바인딩(attach)이 완료되었음을 나타내는 상태 값이다.
+- **isRunning**: DevTools runtime report에서 특정 어댑터가 실행 상태에 진입했음을 나타내는 상태 값이다.
 
 - **onModuleInit**: `@Injectable()` Provider 초기화 시점에 호출되는 애플리케이션 생명주기 훅 메서드명이다.
 - **onModuleDestroy**: `@Injectable()` Provider 종료(dispose) 시점에 호출되는 애플리케이션 생명주기 훅 메서드명이다.
