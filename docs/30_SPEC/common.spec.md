@@ -123,6 +123,19 @@ CommonDecoratorName:
   - "@Pipes"
   - "@ErrorFilters"
 
+RefListDecoratorName:
+
+- type: string
+- allowed values:
+  - "@Guards"
+  - "@Pipes"
+  - "@ErrorFilters"
+
+MiddlewaresDecoratorName:
+
+- type: string
+- const: "@Middlewares"
+
 CommonDecoratorTarget:
 
 - type: string
@@ -135,7 +148,7 @@ CommonDecoratorRefList:
 - type: array
 - items: FactoryRef
 
-CommonDecoratorDeclaration:
+RefListDecoratorDeclaration:
 
 - type: object
 - required:
@@ -143,9 +156,29 @@ CommonDecoratorDeclaration:
   - target
   - refs
 - properties:
-  - name: CommonDecoratorName
+  - name: RefListDecoratorName
   - target: CommonDecoratorTarget
   - refs: CommonDecoratorRefList
+
+MiddlewaresDecoratorDeclaration:
+
+- type: object
+- required:
+  - name
+  - target
+  - lifecycleId
+  - refs
+- properties:
+  - name: MiddlewaresDecoratorName
+  - target: CommonDecoratorTarget
+  - lifecycleId: MiddlewareLifecycleId (module-system.spec.md)
+  - refs: CommonDecoratorRefList
+
+CommonDecoratorDeclaration:
+
+- allowed forms:
+  - RefListDecoratorDeclaration
+  - MiddlewaresDecoratorDeclaration
 
 #### 2.1.4 Module Reference
 
@@ -258,8 +291,15 @@ ProviderDeclarationList:
 - `InjectableDeclaration.name`은 `"@Injectable"`이어야 한다.
 - `InjectableDeclaration.token`은 Class token 형태여야 한다.
 
-- `CommonDecoratorDeclaration`은 `CommonDecoratorName`의 허용값 중 하나여야 한다.
-- `CommonDecoratorDeclaration.refs`는 `FactoryRef`의 배열이어야 한다.
+- `RefListDecoratorDeclaration.name`은 `RefListDecoratorName`의 허용값 중 하나여야 한다.
+- `RefListDecoratorDeclaration.refs`는 `FactoryRef`의 배열이어야 한다.
+
+- `MiddlewaresDecoratorDeclaration.lifecycleId`는 module-system.spec.md의 `MiddlewareLifecycleId` 규칙을 만족해야 한다.
+- `MiddlewaresDecoratorDeclaration.refs`는 `FactoryRef`의 배열이어야 한다.
+
+- "@Middlewares"는 아래 2가지 입력 형태를 모두 지원해야 하며, 빌드 타임 수집 결과는 `MiddlewaresDecoratorDeclaration`(1개 이상)으로 정규화되어야 한다.
+  - 2-arg call: `(lifecycleId, refs)`
+  - 1-arg call: `({ [lifecycleId]: refs, ... })`
 
 - `InjectableOptions.visibleTo`는 아래 중 하나여야 한다.
   - `all` 또는 `module`

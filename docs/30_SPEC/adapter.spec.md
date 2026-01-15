@@ -33,6 +33,8 @@ L3 Implementation Contract
 
 - Adapter Static Spec
   - `pipeline`: `Pipeline`
+  - `supportedMiddlewareLifecycles`: `SupportedMiddlewareLifecycleSet`
+  - `entryDecorators`: `AdapterEntryDecorators`
 
 - `Pipeline`
   - `middlewares`: `PipelineStep[]` (순서가 있는 리스트)
@@ -40,13 +42,31 @@ L3 Implementation Contract
   - `pipes`: `PipelineStep[]` (순서가 있는 리스트)
   - `handler`: `PipelineStep` (정확히 1개)
 
-- `Error Filter Chain`
-  - `errorFilters`: `FactoryRef[]` (순서가 있는 리스트)
-
 - `PipelineStep`
   - allowed forms:
     - FactoryRef (common.spec.md)
   - meaning: 실행 파이프라인을 구성하는 단일 실행 단위 참조
+
+- `SupportedMiddlewareLifecycleSet`
+  - type: object
+  - meaning: 어댑터가 지원하는 middleware lifecycle id 집합
+  - keys: MiddlewareLifecycleId (module-system.spec.md)
+  - values: literal true
+
+- `AdapterEntryDecorators`
+  - type: object
+  - required:
+    - controller
+    - handler
+  - properties:
+    - controller:
+      - type: array
+      - items: string
+      - meaning: 해당 어댑터에서 Controller(엔트리 소유 단위)로 판정되는 class-level 데코레이터 이름 리스트
+    - handler:
+      - type: array
+      - items: string
+      - meaning: 해당 어댑터에서 Handler(엔트리 실행 단위)로 판정되는 method-level 데코레이터 이름 리스트
 
 Static Shape의 구체적 직렬화 형식 및 저장 위치는 manifest.spec.md에서 판정된다.
 
@@ -64,14 +84,21 @@ Static Shape의 구체적 직렬화 형식 및 저장 위치는 manifest.spec.md
 - `pipeline.handler`는 정확히 1개여야 한다.
 - `pipeline.middlewares | pipeline.guards | pipeline.pipes`는 결정적 순서를 가져야 한다.
 
-- 어댑터는 `errorFilters`를 정적으로 선언할 수 있어야 한다.
-- `errorFilters`는 결정적 순서를 가져야 한다.
-
 - 어댑터는 Middleware Lifecycle을 정의해야 한다.
+- 어댑터는 지원하는 middleware lifecycle id 집합을 정적으로 제공해야 한다.
 - 어댑터는 module-system.spec.md에 의해 제공되는 `middlewares` 등록 입력을 기반으로, 미들웨어들을 `pipeline.middlewares`의 PipelineStep 순서로 결정적으로 배치해야 한다.
   - 동일한 lifecycle(phase) 내에서는 선언된 순서를 보존해야 한다.
 
-- 어댑터는 module-system.spec.md에 의해 제공되는 `errorFilters` 등록 입력을 기반으로, `errorFilters`를 결정적으로 구성할 수 있어야 한다.
+- module-system.spec.md의 `middlewares`에 등장하는 lifecycle id(정규화 결과)가, 어댑터가 제공한 지원 집합에 포함되지 않으면 빌드 실패가 관측되어야 한다.
+- common.spec.md의 `@Middlewares` 선언에 등장하는 lifecycle id(정규화 결과)가, 어댑터가 제공한 지원 집합에 포함되지 않으면 빌드 실패가 관측되어야 한다.
+
+- 어댑터는 module-system.spec.md의 `errorFilters` 등록 입력과 common.spec.md의 `@ErrorFilters` 선언 입력을 기반으로, Error Filter Chain을 결정적으로 구성할 수 있어야 한다.
+
+- 어댑터는 특정 adapterId 범위에서 파이프라인 구성 입력을 아래 순서로 합성해야 한다.
+  - `middlewares | guards | pipes`: module-system.spec.md 입력 → controller 데코레이터 입력 → handler 데코레이터 입력
+  - `errorFilters`: handler 데코레이터 입력 → controller 데코레이터 입력 → module-system.spec.md 입력
+  - 중복은 제거되어서는 안 된다.
+  - 각 입력 소스 내부의 선언 순서는 보존되어야 한다.
 
 - Middleware Phase 기반 배치 규칙은 `pipeline.middlewares`에만 적용되어야 한다.
 
@@ -91,6 +118,15 @@ Static Shape의 구체적 직렬화 형식 및 저장 위치는 manifest.spec.md
 - Controller(엔트리 소유 단위의 class)에는 정확히 1개의 Adapter Owner Decorator만 적용되어야 한다.
   - 0개 또는 2개 이상이면 빌드 실패로 판정되어야 한다.
 
+- 모든 어댑터는 Controller 용 데코레이터와 Handler 용 데코레이터를 공식 지원해야 한다.
+  - Adapter Static Spec의 `entryDecorators.controller | entryDecorators.handler`는 반드시 존재해야 한다.
+  - `entryDecorators.controller`는 비어있어서는 안 된다.
+  - `entryDecorators.handler`는 비어있어서는 안 된다.
+
+- Handler(엔트리 실행 단위)는 Controller class의 method로 판정되어야 한다.
+  - Handler 데코레이터는 반드시 Controller로 판정된 class의 method에 적용되어야 한다.
+  - 위 조건을 위반하면 빌드 실패가 관측되어야 한다.
+
 - 어댑터 엔트리 선언(Controller/Handler 등)은 빌드 타임에 결정적으로 수집 가능해야 한다.
   - 수집 결과는 문서/DevTools 산출물 입력으로 사용될 수 있어야 한다.
 
@@ -107,6 +143,10 @@ Static Shape의 구체적 직렬화 형식 및 저장 위치는 manifest.spec.md
 
 - Observable: `pipeline.middlewares`에서 Error가 관측되면, 이후 PipelineStep(guard/pipe/handler)이 실행되지 않아야 한다.
 
+### 4.2 Error Filter Chain Application Order
+
+- Observable: Error Filter Chain이 적용되는 경우, 인덱스 0부터 순서대로 적용이 시도되어야 한다.
+
 ---
 
 ## 5. Violation Conditions
@@ -114,7 +154,9 @@ Static Shape의 구체적 직렬화 형식 및 저장 위치는 manifest.spec.md
 - Build-Time Violation: Adapter Static Spec에 `pipeline`이 없는데도 빌드가 성공하는 경우
 - Build-Time Violation: `pipeline.handler`가 없거나 2개 이상인데도 빌드가 성공하는 경우
 - Build-Time Violation: `pipeline.middlewares | pipeline.guards | pipeline.pipes`가 결정적 순서를 갖지 못하는데도 빌드가 성공하는 경우
-- Build-Time Violation: `errorFilters`가 결정적 순서를 갖지 못하는데도 빌드가 성공하는 경우
+- Build-Time Violation: module-system.spec.md의 `middlewares`에 어댑터가 지원하지 않는 lifecycle id가 존재하는데도 빌드가 성공하는 경우
+- Build-Time Violation: common.spec.md의 `@Middlewares`에 어댑터가 지원하지 않는 lifecycle id가 존재하는데도 빌드가 성공하는 경우
+- Build-Time Violation: Error Filter Chain을 결정적으로 구성할 수 없는데도 빌드가 성공하는 경우
 - Build-Time Violation: Adapter Owner Decorator가 없는 위치에서 Adapter Member Decorator가 사용되는데도 빌드가 성공하는 경우
 
 - Build-Time Violation: Controller(엔트리 소유 단위)에 Adapter Owner Decorator가 0개 또는 2개 이상 적용되는데도 빌드가 성공하는 경우

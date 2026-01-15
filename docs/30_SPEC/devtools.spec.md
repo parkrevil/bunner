@@ -131,6 +131,12 @@ DevToolsStaticGraphAdapter:
 
 - 빌드 타임 관측 산출물이 생성되는 경우, 산출물은 `DevToolsStaticGraph` 형상과 일치해야 한다.
 
+- `DevToolsStaticGraphAdapter.handlerCandidates`는 adapter.spec.md가 정의하는 Handler(Controller class의 method) 단위를 식별하는 `HandlerId`의 리스트여야 한다.
+
+- `DevToolsRuntimeReportAdapter.boundHandlers`는 adapter.spec.md가 정의하는 Handler(Controller class의 method) 단위를 식별하는 `HandlerId`의 리스트여야 한다.
+
+- 런타임 관측 산출물이 생성되는 경우, `boundHandlers`의 모든 항목은 동일 `adapterId`의 `handlerCandidates`에 포함되어야 한다.
+
 ### 3.2 MUST NOT
 
 - DevTools는 실행 경로를 변경하거나, 구조 판정을 대체해서는 안 된다.

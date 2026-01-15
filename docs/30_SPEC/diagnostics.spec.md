@@ -89,7 +89,7 @@ HandlerId:
 HandlerIdFormat:
 
 - type: string
-- const: "<adapterId>:<file>#<symbol>"
+- const: `"<adapterId>:<file>#<symbol>"`
 
 HandlerIdFormatRules:
 
@@ -97,6 +97,11 @@ HandlerIdFormatRules:
   - `<adapterId>`: AdapterId (common.spec.md)
   - `<file>`: Location.file과 동일 규칙(프로젝트 루트 기준 정규화된 상대 경로)
   - `<symbol>`: 비어있지 않은 문자열
+    - `<symbol>`은 adapter.spec.md가 정의하는 Handler(Controller class의 method) 단위를 결정적으로 식별해야 한다.
+    - `<symbol>`은 아래 형식을 만족해야 한다.
+      - `<symbol>`은 `"<controllerClassName>.<handlerMethodName>"` 형식이어야 한다.
+      - `<controllerClassName>`은 비어있지 않은 문자열
+      - `<handlerMethodName>`은 비어있지 않은 문자열
 
 DiagnosticHint:
 
