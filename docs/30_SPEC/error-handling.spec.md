@@ -23,8 +23,7 @@ L3 Implementation Contract
 
 ### 1.3 Definitions
 
-- Error: 도메인 실패로서 Result 경로(값 흐름)로 처리되는 에러.
-- Panic(System Error): throw로 표현되는 시스템 오류.
+- `Error` 및 `Panic(System Error)`의 정의는 docs/10_FOUNDATION/GLOSSARY.md를 따른다.
 
 ---
 

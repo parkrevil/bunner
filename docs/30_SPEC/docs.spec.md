@@ -23,8 +23,8 @@ L3 Implementation Contract
 
 ### 1.3 Definitions
 
-- OpenAPI/AsyncAPI Artifact: 표준 스펙 포맷으로 생성되는 API 명세 산출물.
-- Consistency: 실행 표면과 명세 산출물이 불일치하지 않는 성질.
+- `OpenAPI/AsyncAPI Artifact`의 정의는 docs/10_FOUNDATION/GLOSSARY.md를 따른다.
+- `Consistency`의 정의는 docs/10_FOUNDATION/GLOSSARY.md를 따른다.
 
 ---
 

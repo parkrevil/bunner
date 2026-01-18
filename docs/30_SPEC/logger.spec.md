@@ -23,8 +23,8 @@ L3 Implementation Contract
 
 ### 1.3 Definitions
 
-- Structured Log: 키-값 기반으로 파싱 가능한 로그 이벤트.
-- Correlation: 하나의 요청/작업/실행 흐름을 연결하는 식별자/컨텍스트.
+- `Structured Log`의 정의는 docs/10_FOUNDATION/GLOSSARY.md를 따른다.
+- `Correlation`의 정의는 docs/10_FOUNDATION/GLOSSARY.md를 따른다.
 
 ---
 

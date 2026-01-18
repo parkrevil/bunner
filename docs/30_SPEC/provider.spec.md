@@ -23,9 +23,9 @@ L3 Implementation Contract
 
 ### 1.3 Definitions
 
-- Provider: DI 그래프에 의해 생성/주입되는 대상이며, 명시된 생명주기를 가진다.
-- Scope: Provider의 인스턴스 공유 범위(예: 전역/요청/모듈 등). 본 SPEC은 `singleton | request | transient`를 기본 집합으로 고정한다.
-- Resource Provider: 외부 리소스(DB, 소켓 등)를 소유하며 종료(dispose)가 필요한 Provider.
+- `Provider`의 정의는 docs/10_FOUNDATION/GLOSSARY.md를 따른다.
+- `Scope`의 정의는 docs/10_FOUNDATION/GLOSSARY.md를 따른다.
+- `Resource Provider`의 정의는 docs/10_FOUNDATION/GLOSSARY.md를 따른다.
 
 ---
 

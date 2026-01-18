@@ -23,8 +23,8 @@ L3 Implementation Contract
 
 ### 1.3 Definitions
 
-- Wiring: 빌드 타임에 확정된 정적 연결 코드(또는 계획).
-- Dependency Cycle: 의존성 그래프에서 순환 경로가 존재하는 상태.
+- `Wiring`의 정의는 docs/10_FOUNDATION/GLOSSARY.md를 따른다.
+- `DI Cycle`의 정의는 docs/10_FOUNDATION/GLOSSARY.md를 따른다.
 
 ---
 

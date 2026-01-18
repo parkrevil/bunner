@@ -20,10 +20,10 @@ L3 Implementation Contract
 
 ### 1.3 Definitions
 
-- Middleware Lifecycle: 어댑터가 정의하는 미들웨어 실행 생명주기(phase 집합 및 배치 규칙).
-- Middleware Phase: Middleware Lifecycle 내부의 단일 단계 식별자.
-- Adapter Owner Decorator: 특정 어댑터의 엔트리 선언을 소유하는 class-level 데코레이터.
-- Adapter Member Decorator: 특정 어댑터에 종속되는 member/parameter 데코레이터.
+- `Middleware Lifecycle`의 정의는 docs/10_FOUNDATION/GLOSSARY.md를 따른다.
+- `Middleware Phase`의 정의는 docs/10_FOUNDATION/GLOSSARY.md를 따른다.
+- `Adapter Owner Decorator`의 정의는 docs/10_FOUNDATION/GLOSSARY.md를 따른다.
+- `Adapter Member Decorator`의 정의는 docs/10_FOUNDATION/GLOSSARY.md를 따른다.
 
 ---
 

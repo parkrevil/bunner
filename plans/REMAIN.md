@@ -176,3 +176,183 @@
   - Identity에 직접 영향이 있으므로 L1/L2에 두는 것이 우선: `docs/10_FOUNDATION/INVARIANTS.md` 또는 `docs/20_ARCHITECTURE/ARCHITECTURE.md` (또는 전용 SSOT 문서) + L3에서 참조
 - 검증 기준
   - 동일한 파일 시스템 입력에서, 경로를 포함하는 모든 ID가 안정적이며 비교 가능하다.
+
+---
+
+## 10. “AOT-serializable” 판정 규칙 부재 (major)
+
+- 문제
+  - `module-system.spec.md`는 `MiddlewareRegistrationInput`에서 다음을 허용한다:
+    - `{ token: <Identifier>, options?: <Any AOT-Serializable Expression> }`
+    - “Call/new expressions that are AOT-serializable”
+  - 그러나 “AOT-serializable”의 판정 규칙(허용 AST 형태/금지 형태/정규화/결정성 입력 포함 범위)이 SSOT로 정의돼 있지 않다.
+- 왜 문제인가
+  - 동일 입력에서 `options`의 의미가 구현체마다 달라질 수 있어, 빌드 타임 판정 및 결정성 계약을 만족하는 구현을 기계적으로 검증할 수 없다.
+- 필요 결정
+  - “AOT-serializable”을 단일 판정 규칙으로 고정한다.
+    - 최소 폐쇄: 허용 AST 형태를 열거하고(예: 리터럴/배열/오브젝트 리터럴 등), 호출/생성 표현식 허용 여부 및 허용 시 조건(순수성/외부 캡처 금지/결정성 입력 한정)을 판정형으로 정의한다.
+- SSOT 반영 대상
+  - `docs/30_SPEC/module-system.spec.md`
+  - (정의 소유를 분리할 경우) `docs/30_SPEC/aot-ast.spec.md` 또는 신규 `*.spec.md` + `module-system.spec.md`에서 참조
+- 검증 기준
+  - “AOT-serializable”을 구현하기 위한 validator가 휴리스틱 없이 구현 가능하다.
+  - 불허 형태가 입력됐을 때 Build-Time Violation이 정의돼 있고 diagnostics 형식으로 관측 가능하다.
+
+---
+
+## 11. “표준 오류 페이로드” SSOT 정의 부재 (major)
+
+- 문제
+  - `docs.spec.md`는 API 명세 생성 입력으로 “표준 오류 페이로드”를 요구한다.
+  - 그러나 L3(`common.spec.md`, `error-handling.spec.md` 포함) 어디에도 “표준 오류 페이로드”의 정의/형상/출처가 닫혀 있지 않다.
+- 왜 문제인가
+  - 문서 생성은 “필수 입력이 누락되면 빌드 실패”를 위반 조건으로 요구하는데, 무엇을 생성/검증해야 하는지 SSOT가 없어 구현이 임의 해석에 의존한다.
+- 필요 결정
+  - “표준 오류 페이로드”의 단일 정의(형상, 어떤 실패에서 포함되는지, source of truth)를 SSOT로 고정한다.
+  - docs.spec.md에서 참조하는 용어가 실제로 존재하는 정본 정의로 연결되도록 handoff를 닫는다.
+- SSOT 반영 대상
+  - `docs/30_SPEC/docs.spec.md`
+  - `docs/30_SPEC/common.spec.md` 및/또는 `docs/30_SPEC/error-handling.spec.md` (정의 소유 위치에 따라)
+  - DW-TERM 규칙에 따라 필요 시 `docs/10_FOUNDATION/GLOSSARY.md`
+- 검증 기준
+  - “표준 오류 페이로드”가 단일 스키마로 정의돼 있으며, docs generator가 이를 입력으로 삼는 것을 기계적으로 검증 가능하다.
+
+---
+
+## 12. MCP Server “명령/도구 표면” 계약 미폐쇄 (blocking)
+
+- 문제
+  - `mcp-server.spec.md`는 “서버가 제공하는 명령/도구 표면이 명시되지 않았는데도 서버가 시작/등록에 성공하면 위반”을 정의한다.
+  - 동시에 본 SPEC은 추가적인 Static Shape/Observable Semantics를 정의하지 않으므로, “명시해야 하는 표면”이 SSOT로 닫히지 않는다.
+- 왜 문제인가
+  - 구현이 어떤 명령/도구를 제공해야 하는지, 또는 제공 중인 표면이 완전한지의 판정 기준이 없어 빌드/테스트 위반을 기계적으로 검증할 수 없다.
+- 필요 결정
+  - MCP Server가 제공하는 명령/도구 표면을 판정형(명령 이름, 입력/출력 최소 형상, 결정성/부작용 제약)으로 고정한다.
+- SSOT 반영 대상
+  - `docs/30_SPEC/mcp-server.spec.md`
+  - 필요 시 `docs/30_SPEC/diagnostics.spec.md` (명령 실패 시 진단 형식이 요구되면)
+- 검증 기준
+  - 명령/도구 표면이 명시된 리스트(또는 스키마)로 존재하며, 누락/추가가 테스트 레벨에서 기계적으로 검출 가능하다.
+
+---
+
+## 13. DTO “스키마로 판정 가능”의 판정 기준 부재 (major)
+
+- 문제
+  - `dto.spec.md`는 DTO가 “스키마로 정의 가능”해야 하고, “스키마로 판정 가능하지 않은데도 빌드가 성공하면 위반”을 요구한다.
+  - 그러나 본 SPEC은 추가 Static Shape를 정의하지 않아, “스키마로 판정 가능”의 구체 판정 규칙(허용 선언/데코레이터/중첩/배열/옵셔널 등)이 닫혀 있지 않다.
+- 왜 문제인가
+  - DTO 스키마 판정의 합/불합이 구현체마다 갈라질 수 있어, 빌드 실패 조건을 기계적으로 재현/검증할 수 없다.
+- 필요 결정
+  - DTO 스키마 판정 규칙을 단일 SSOT로 고정한다.
+    - 최소 폐쇄: “스키마로 판정 가능한 DTO”의 허용 형태를 열거하고, 금지 형태 및 위반 시 진단을 정의한다.
+- SSOT 반영 대상
+  - `docs/30_SPEC/dto.spec.md`
+  - `docs/30_SPEC/docs.spec.md` (DTO 스키마를 입력으로 요구하므로 연결 필요)
+  - 필요 시 `docs/30_SPEC/diagnostics.spec.md`
+- 검증 기준
+  - DTO 입력에 대해 스키마 판정이 항상 결정적이며, 판정 불가/금지 형태는 Build-Time Violation으로 관측된다.
+
+---
+
+## 14. 용어(GLOSSARY) 중복/미사용/누락 정합성 미폐쇄 (major)
+
+- 문제
+  - `docs/50_GOVERNANCE/DOCS_WRITING.md`의 DW-TERM 규칙은 “규범 키워드가 포함된 라인에 새 백틱 토큰이 추가되면, GLOSSARY 또는 해당 문서의 Definitions에 정의돼 있어야 함”과 “Term 중복 정의 금지/파일-로컬 정의의 범위 제한”을 강제한다.
+  - 현재 L3 문서들에는 "Definitions"에서 Term을 정의하지만(`- <Term>:`), 해당 Term이 다른 문서에도 등장하거나(=file-local이 아님) GLOSSARY에 존재하지 않아 DW-TERM-003 위반 가능성이 열려 있다.
+  - 또한 GLOSSARY에 존재하지만 L3 스펙군에서 동일 Term 문자열로는 거의/전혀 사용되지 않는 항목이 있어(미사용), 용어 SSOT로서의 정합성이 닫히지 않는다.
+
+  - (확정된 DW-TERM-003 위반)
+    - `MCP Server`
+      - 정의: `docs/30_SPEC/mcp-server.spec.md`의 `### 1.3 Definitions`
+      - 동일 파일 밖 등장: `docs/30_SPEC/devtools.spec.md`의 `### 1.2 Scope & Boundary`
+      - GLOSSARY 미정의: `docs/10_FOUNDATION/GLOSSARY.md`
+    - `Error`, `Panic(System Error)`
+      - 정의: `docs/30_SPEC/error-handling.spec.md`의 `### 1.3 Definitions`
+      - 동일 파일 밖 등장: `docs/30_SPEC/logger.spec.md`의 `### 3.1 MUST`
+      - GLOSSARY 미정의: `docs/10_FOUNDATION/GLOSSARY.md`
+    - `Wiring`
+      - 정의: `docs/30_SPEC/di.spec.md`의 `### 1.3 Definitions`
+      - 동일 파일 밖 등장: `docs/30_SPEC/adapter.spec.md`의 `### 3.1 MUST`
+      - GLOSSARY 미정의: `docs/10_FOUNDATION/GLOSSARY.md`
+
+  - (용어 드리프트 리스크: DW-TERM 위반은 아님)
+    - `docs/10_FOUNDATION/GLOSSARY.md`에는 `DI Cycle`이 정의되어 있으나, `docs/30_SPEC/di.spec.md`는 `Dependency Cycle`을 별도 Term으로 정의한다.
+
+  - (누락 가능성이 높은 Definitions 정의 예시)
+    - `docs/30_SPEC/provider.spec.md`: `Provider`, `Scope`, `Resource Provider`
+    - `docs/30_SPEC/di.spec.md`: `Wiring`, `Dependency Cycle`
+    - `docs/30_SPEC/error-handling.spec.md`: `Error`, `Panic(System Error)`
+    - `docs/30_SPEC/adapter.spec.md`: `Middleware Lifecycle`, `Middleware Phase`, `Adapter Owner Decorator`, `Adapter Member Decorator`
+    - `docs/30_SPEC/dto.spec.md`: `DTO Transformer`, `DTO Validator`
+    - `docs/30_SPEC/docs.spec.md`: `OpenAPI/AsyncAPI Artifact`, `Consistency`
+    - `docs/30_SPEC/logger.spec.md`: `Structured Log`, `Correlation`
+    - `docs/30_SPEC/ffi.spec.md`: `FFI Boundary`, `Safety`
+    - `docs/30_SPEC/drizzle-orm.spec.md`: `ORM Integration`
+    - `docs/30_SPEC/devtools.spec.md`: `Non-intrusive`
+    - `docs/30_SPEC/mcp-server.spec.md`: `MCP Server`
+
+  - (미사용/불일치 가능성이 있는 GLOSSARY 항목 예시)
+    - `Context Pollution`, `Repository Hygiene`, `Persona` 등은 L3 계약(spec)에서 직접 사용되는 범위가 불명확하다.
+    - GLOSSARY의 `DI Cycle`과 L3의 `Dependency Cycle`처럼, 동일 개념의 명명 규칙이 분산될 수 있다.
+
+- 왜 문제인가
+  - Term SSOT가 닫히지 않으면, 문서 변경 시 DW-TERM 집행이 “추측/사람 판단”에 의존하게 되고, 용어 중복/드리프트가 누적된다.
+  - 계약 문서(L3)가 동일 개념을 서로 다른 문자열로 부르면, 구현/진단/테스트 문구가 분기되어 기계적 검증 가능성이 떨어진다.
+
+- 필요 결정
+  - (A) L3 스펙군에서 2개 이상 파일에 등장하는 Term은 모두 GLOSSARY로 승격하고, 각 spec의 Definitions에서는 중복 정의를 제거한다.
+  - (B) “file-local Definitions”를 허용할 Term의 기준을 판정형으로 고정한다(동일 파일 외 등장 금지 또는 등장 시 GLOSSARY 승격).
+  - (C) 동일 개념에 대해 단일 표기(정본 Term 문자열)를 선택하고, 모든 L3에서 그 표기만 사용하도록 정렬한다.
+
+- SSOT 반영 대상
+  - `docs/10_FOUNDATION/GLOSSARY.md`
+  - Definitions를 가진 각 L3 문서: `docs/30_SPEC/{adapter,di,provider,error-handling,dto,docs,logger,ffi,drizzle-orm,devtools,mcp-server}.spec.md`
+  - (필요 시) `docs/50_GOVERNANCE/DOCS_WRITING.md`의 DW-TERM 규칙을 변경하지 않고도 통과 가능하도록 문서 정렬
+
+- 검증 기준
+  - DW-TERM-002 위반(동일 Term의 2개 이상 파일 정의)이 존재하지 않는다.
+  - DW-TERM-003 위반(파일-로컬 Definitions Term이 다른 파일에 등장하지만 GLOSSARY 미정의)이 존재하지 않는다.
+  - GLOSSARY Term은 L3 스펙군에서 실제로 사용되거나, 사용 범위가 L1/L2/거버넌스 등으로 명확히 정당화되어 있다.
+
+---
+
+## 15. 문서 간 명명/표기/위임 드리프트(불일치) 전수 목록 (major)
+
+- 문제
+  - 동일 개념/계약이 문서 간 서로 다른 이름/표기/위임으로 기술되어, 구현이 “어느 문장을 정본으로 따라야 하는지” 판정 불가능한 지점이 남아 있다.
+  - (P0 / 계약 충돌급)
+    - `docs/30_SPEC/common.spec.md` Result 마커 토큰 불일치
+      - `BunnerErrorMarkerKey`의 const: `"**bunner_error**"`
+      - `BunnerErrorMarker`의 required property: `__bunner_error__`
+      - 동일 축(에러 마커)에서 키/형상이 달라 구현이 분기된다.
+  - (P1 / handoff 미수신)
+    - `docs/30_SPEC/adapter.spec.md` → `manifest.spec.md`로 “Adapter Static Shape 직렬화/저장 위치” handoff하나, `manifest.spec.md`에 수신 필드/섹션이 없다.
+    - `docs/30_SPEC/docs.spec.md`가 “manifest.spec.md의 산출물 섹션”을 참조하나, `manifest.spec.md`에 해당 섹션이 없다.
+    - `docs/30_SPEC/provider.spec.md`가 “scope의 프로세스 경계 해석”을 `cluster.spec.md`로 이관하나, `cluster.spec.md`에 구체 규칙이 없다.
+  - (P2 / 용어·식별자 표기 드리프트)
+    - `docs/30_SPEC/module-system.spec.md`의 `MiddlewareLifecycleId` 규칙에서 `<PhaseId>`를 사용하나, L1 `GLOSSARY.md`에는 `PhaseId` 용어가 없다(대신 `Middleware Phase`만 존재).
+    - 여러 SPEC에서 “Structural Context / Structural Context Propagation”을 사용하나, L1 `GLOSSARY.md`에는 해당 용어 항목이 없다(현재는 서술 용어로만 존재).
+  - (P3 / 표기(케이싱) 및 필드명 드리프트)
+    - `docs/30_SPEC/diagnostics.spec.md`의 `HandlerIdFormat` placeholder가 `adapterId`로 표기되지만, 타입/용어는 `AdapterId`로 서술된다.
+    - `docs/30_SPEC/aot-ast.spec.md`의 `BunnerConfigSource.(path, format)`과 `docs/30_SPEC/manifest.spec.md`의 `ManifestConfig.(sourcePath, sourceFormat)`이 같은 축을 가리키지만 필드명이 다르다.
+  - (P3 / 용어 재사용으로 인한 오해 리스크)
+    - L1 `INVARIANTS.md`의 “Alias(별칭) 없음(경로 동일성)”과 L3 `common.spec.md`의 `useExisting` 설명의 “별칭(alias)”이 서로 다른 의미로 재사용되어 오해 위험이 있다.
+
+- 왜 문제인가
+  - 동일 구현이 문서 해석에 따라 서로 다른 산출물/정렬/키를 만들 수 있어, L3의 “기계적 검증 가능성” 목표가 붕괴한다.
+
+- 필요 결정
+  - (A) P0 항목은 단일 정본(키/형상)을 선택해 `common.spec.md`에서 모순 없이 닫는다.
+  - (B) P1 항목은 handoff 문구를 “실제로 존재하는 수신 스키마/섹션”으로 연결하거나, 수신 문서를 확장해 수신되도록 닫는다.
+  - (C) P2/P3 항목은 “정본 용어/정본 필드명/정본 표기”를 1개로 고정하고 전 문서에서 정렬한다.
+
+- SSOT 반영 대상
+  - P0: `docs/30_SPEC/common.spec.md`
+  - P1: `docs/30_SPEC/manifest.spec.md`, `docs/30_SPEC/adapter.spec.md`, `docs/30_SPEC/docs.spec.md`, `docs/30_SPEC/provider.spec.md`, `docs/30_SPEC/cluster.spec.md`
+  - P2/P3: `docs/10_FOUNDATION/GLOSSARY.md` + 관련 L3 문서들
+
+- 검증 기준
+  - P0: Result Error 케이스 마커의 “키/형상”이 단일 규칙으로 정의되어 있고, 테스트에서 1가지 형태만 허용된다.
+  - P1: 모든 handoff 문장이 “수신 문서의 실제 필드/섹션”에 1:1로 대응된다.
+  - P2/P3: 동일 개념/입력에 대해 문서 간 표기/이름이 분기되지 않는다.

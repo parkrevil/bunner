@@ -23,7 +23,7 @@ L3 Implementation Contract
 
 ### 1.3 Definitions
 
-- Normal Path: 예외(throw)가 발생하지 않는 실행 경로.
+- `Normal Path`의 정의는 docs/10_FOUNDATION/GLOSSARY.md를 따른다.
 
 ---
 

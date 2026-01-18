@@ -23,7 +23,7 @@ L3 Implementation Contract
 
 ### 1.3 Definitions
 
-- MCP Server: 개발자(사용자)가 프레임워크와 상호작용하며 분석/생성/변경/검증을 수행하도록 돕는 서버.
+- `MCP Server`의 정의는 docs/10_FOUNDATION/GLOSSARY.md를 따른다.
 
 ---
 

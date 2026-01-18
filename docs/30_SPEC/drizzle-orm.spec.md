@@ -22,7 +22,7 @@ L3 Implementation Contract
 
 ### 1.3 Definitions
 
-- ORM Integration: 데이터 계층을 프레임워크 구조/DI/Provider 모델에 연결하는 기능.
+- `ORM Integration`의 정의는 docs/10_FOUNDATION/GLOSSARY.md를 따른다.
 
 ---
 

@@ -22,8 +22,8 @@ L3 Implementation Contract
 
 ### 1.3 Definitions
 
-- FFI Boundary: JS/Bun 런타임과 네이티브(Rust) 사이의 호출 경계.
-- Safety: 메모리/리소스/오류 전파가 정의된 계약을 따르는 성질.
+- `FFI Boundary`의 정의는 docs/10_FOUNDATION/GLOSSARY.md를 따른다.
+- `Safety`의 정의는 docs/10_FOUNDATION/GLOSSARY.md를 따른다.
 
 ---
 

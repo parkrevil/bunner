@@ -23,8 +23,8 @@ L3 Implementation Contract
 
 ### 1.3 Definitions
 
-- DTO Transformer: 입력을 DTO 값으로 변환하는 transform 동작.
-- DTO Validator: DTO 값을 검사하는 validate 동작.
+- `DTO Transformer`의 정의는 docs/10_FOUNDATION/GLOSSARY.md를 따른다.
+- `DTO Validator`의 정의는 docs/10_FOUNDATION/GLOSSARY.md를 따른다.
 
 ---
 

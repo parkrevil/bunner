@@ -23,7 +23,7 @@ L3 Implementation Contract
 
 ### 1.3 Definitions
 
-- Non-intrusive: DevTools가 활성화되어도 실행 결과/경로/판정이 바뀌지 않는 성질.
+- `Non-intrusive`의 정의는 docs/10_FOUNDATION/GLOSSARY.md를 따른다.
 
 ---
 
