@@ -29,6 +29,10 @@ Out-of-Scope:
 - 부트스트랩 이후 메타데이터 소거의 구체 타이밍/방식 → execution.spec.md
 - 런타임 관측 산출물(Runtime Report) 형상 → devtools.spec.md
 
+### 1.3 Definitions
+
+Normative: 본 SPEC은 추가적인 용어 정의를 도입하지 않는다.
+
 ---
 
 ## 2. Static Shape

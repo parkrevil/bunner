@@ -23,8 +23,7 @@ L3 Implementation Contract
 
 ### 1.3 Definitions
 
-- `Structured Log`의 정의는 docs/10_FOUNDATION/GLOSSARY.md를 따른다.
-- `Correlation`의 정의는 docs/10_FOUNDATION/GLOSSARY.md를 따른다.
+Normative: 본 SPEC은 추가적인 용어 정의를 도입하지 않는다.
 
 ---
 
@@ -41,7 +40,7 @@ Normative: 본 SPEC은 추가적인 Static Shape를 정의하지 않는다.
 ### 3.1 MUST
 
 - 로그 이벤트는 구조화된 형태로 표현될 수 있어야 한다.
-- 실행 컨텍스트(Structural Context)와 로그 이벤트가 연결되어야 한다.
+- 컨텍스트(Context)와 로그 이벤트가 연결되어야 한다.
 - Panic(System Error) 및 Error는 로그에서 구분 가능해야 한다.
 
 ### 3.2 MUST NOT

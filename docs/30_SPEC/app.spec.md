@@ -20,7 +20,7 @@ In-Scope:
 
 - `createApplication`의 부트스트랩 단계(Env/Config preload 포함)와 완료 조건
 - `createApplication`의 Entry Module 지정 입력 및 판정 규칙
-- `app.start`, `app.stop`, `app.get(Token)`의 관측 가능한 의미론
+- `app.start`, `app.stop`, `app.get`의 관측 가능한 의미론
 - `app.attachAdapter(AdapterId, options)`의 판정 규칙 및 허용 범위
 - App lifecycle hook의 수집(AST) 규칙 및 호출 순서(결정성)
 - App 표면에서의 실패 표현(throw/panic) 및 금지 규칙
@@ -38,7 +38,7 @@ Out-of-Scope:
 
 ### 1.3 Definitions
 
-Normative: 본 SPEC은 file-local 용어 정의를 포함하지 않는다.
+Normative: 본 SPEC은 추가적인 용어 정의를 도입하지 않는다.
 
 ---
 
@@ -136,7 +136,7 @@ ConfigSectionRegistrationDeclaration:
 - `createApplication`은 Env/Config preload를 포함해야 하며, preload 결과는 런타임 동안 변경되지 않아야 한다.
 
 - Env/Config preload는 `createApplication`의 완료 조건에 포함되어야 한다.
-  - Observable: `createApplication`이 성공적으로 완료된 이후, App-External Code는 `app.get(Token)`을 통해 ConfigService 및 Config Section 값을 접근할 수 있어야 한다.
+  - Observable: `createApplication`이 성공적으로 완료된 이후, App-External Code는 `app.get`을 통해 ConfigService 및 Config Section 값을 접근할 수 있어야 한다.
 
 - Env preload는 App-External Code가 제공한 AppConfigInput.env를 사용해야 한다.
 
@@ -168,8 +168,8 @@ ConfigSectionRegistrationDeclaration:
 
 - `app.stop`는 App의 종료를 수행해야 하며, App이 소유하는 모든 리소스(Provider 및 Adapter-owned resources)를 정리해야 한다.
 
-- `app.get(Token)`은 App-External Code에서 DI 결과에 접근하는 유일한 경로여야 한다.
-  - `app.get(Token)`의 성공 조건은 di.spec.md의 규칙과 일치해야 한다.
+- `app.get`은 App-External Code에서 DI 결과에 접근하는 유일한 경로여야 한다.
+  - `app.get`의 성공 조건은 di.spec.md의 규칙과 일치해야 한다.
 
 - App lifecycle hook은 런타임 리플렉션이 아니라 AST 기반 수집 결과에 의해 결정되어야 한다.
   - 대상은 `@Injectable()`이 적용된 클래스(Provider)여야 한다.
@@ -188,11 +188,11 @@ ConfigSectionRegistrationDeclaration:
 
 ### 3.2 MUST NOT
 
-- `createApplication | app.start | app.stop | app.get(Token)`은 Result를 반환해서는 안 된다.
+- `createApplication | app.start | app.stop | app.get`은 Result를 반환해서는 안 된다.
 
 - `app.attachAdapter`는 `app.start` 이후에 관측되어서는 안 된다.
 
-- `createApplication | app.start | app.stop | app.get(Token) | app.attachAdapter`는 Result를 반환해서는 안 된다.
+- `createApplication | app.start | app.stop | app.get | app.attachAdapter`는 Result를 반환해서는 안 된다.
 
 - App lifecycle hook은 모듈 경계(module-system.spec.md)의 런타임 엔티티를 전제로 해서는 안 된다.
 
@@ -227,7 +227,7 @@ ConfigSectionRegistrationDeclaration:
 
 - Build-Time Violation: App lifecycle hook이 런타임 리플렉션에 의해 결정되는데도 빌드가 성공하는 경우
 - Build-Time Violation: `ConfigSectionRegistrationDeclaration.raw`가 ConfigRawValue에 부합하지 않는데도 빌드가 성공하는 경우
-- Build-Time Violation: 등록되지 않은 Class token에 대해 `app.get(Token)`/DI 주입이 성공하도록 빌드되는 경우
+- Build-Time Violation: 등록되지 않은 Class token에 대해 `app.get`/DI 주입이 성공하도록 빌드되는 경우
 - Runtime Violation: `app.stop`에서 throw가 관측되는 경우
 
 ---
@@ -236,7 +236,7 @@ ConfigSectionRegistrationDeclaration:
 
 ### 6.1 Handoff
 
-- DI 그래프 판정 및 `app.get(Token)` 성공 조건 → di.spec.md
+- DI 그래프 판정 및 `app.get` 성공 조건 → di.spec.md
 - Provider init/dispose 순서 및 의미론 → provider.spec.md
 - 어댑터 파이프라인(정상 실행) 의미론 및 Result 사용 범위 → execution.spec.md
 - throw 처리(에러 필터 체인) 의미론 → error-handling.spec.md

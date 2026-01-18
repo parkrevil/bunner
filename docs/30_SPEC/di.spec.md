@@ -23,8 +23,7 @@ L3 Implementation Contract
 
 ### 1.3 Definitions
 
-- `Wiring`의 정의는 docs/10_FOUNDATION/GLOSSARY.md를 따른다.
-- `DI Cycle`의 정의는 docs/10_FOUNDATION/GLOSSARY.md를 따른다.
+Normative: 본 SPEC은 추가적인 용어 정의를 도입하지 않는다.
 
 ---
 
@@ -70,16 +69,16 @@ Normative: 본 SPEC은 추가적인 Static Shape를 정의하지 않는다.
 - `InjectCall.token`은 빌드 타임에 Token(common.spec.md)으로 직접 판정 가능해야 한다.
   - Token을 변수로 전달하거나, Token 판정을 불가능하게 만드는 형태는 허용되지 않는다.
 
-- App-External Code에서 DI 결과에 접근해야 하는 경우, 접근 경로는 `app.get(Token)`이어야 한다.
+- App-External Code에서 DI 결과에 접근해야 하는 경우, 접근 경로는 `app.get`이어야 한다.
 
-- `app.get(Token)`의 Token 인자는 빌드 타임에 Token(common.spec.md)으로 직접 판정 가능해야 한다.
+- `app.get`의 Token 인자는 빌드 타임에 Token(common.spec.md)으로 직접 판정 가능해야 한다.
   - Token을 변수로 전달하거나, Token 판정을 불가능하게 만드는 형태는 허용되지 않는다.
 
-- `app.get(Token)`은 아래 조건을 모두 만족하는 경우에만 성공해야 한다.
+- `app.get`은 아래 조건을 모두 만족하는 경우에만 성공해야 한다.
   - Token의 Provider scope는 `singleton`이어야 한다.
   - Token의 Provider visibleTo는 `all`이어야 한다.
 
-- `app.get(Token)`은 위 조건을 만족하지 못하는 경우 throw가 관측되어야 한다.
+- `app.get`은 위 조건을 만족하지 못하는 경우 throw가 관측되어야 한다.
 
 - DI 그래프에 순환 의존이 존재하는 경우, 각 순환 경로에는 최소 1개 이상의 lazy 의존이 포함되어야 한다.
   - lazy 의존은 `InjectCall.token`이 `TokenThunk`(common.spec.md)로 선언된 의존을 의미한다.
@@ -95,7 +94,7 @@ Normative: 본 SPEC은 추가적인 Static Shape를 정의하지 않는다.
 
 - `TokenThunk`는 런타임에서 실행되거나 토큰 해결에 사용되어서는 안 된다.
 
-- `app.get(Token)`이 아래 조건을 위반하여 성공하는 것을 허용해서는 안 된다.
+- `app.get`이 아래 조건을 위반하여 성공하는 것을 허용해서는 안 된다.
   - Token의 Provider scope가 `request | transient`인 경우
   - Token의 Provider visibleTo가 `module` 또는 `ModuleRefList`인 경우
 
@@ -115,13 +114,13 @@ Normative: 본 SPEC은 추가적인 Static Shape를 정의하지 않는다.
 - 런타임 토큰 조회나 동적 토큰 해석이 발견되는데 빌드가 성공하는 경우
 
 - Build-Time Violation: `InjectCall.token`이 빌드 타임에 Token으로 직접 판정 가능하지 않은데도 빌드가 성공하는 경우
-- Build-Time Violation: `app.get(Token)`의 Token 인자가 빌드 타임에 Token으로 직접 판정 가능하지 않은데도 빌드가 성공하는 경우
-- Build-Time Violation: `app.get(Token)` 호출이 존재하고, Token의 Provider scope가 `singleton`이 아니거나 visibleTo가 `all`이 아닌데도 빌드가 성공하는 경우
+- Build-Time Violation: `app.get`의 Token 인자가 빌드 타임에 Token으로 직접 판정 가능하지 않은데도 빌드가 성공하는 경우
+- Build-Time Violation: `app.get` 호출이 존재하고, Token의 Provider scope가 `singleton`이 아니거나 visibleTo가 `all`이 아닌데도 빌드가 성공하는 경우
 - Build-Time Violation: App-External Code에서 `inject()` 호출이 가능한데도 빌드가 성공하는 경우
 
 - Runtime Violation: App-External Code에서 `inject()` 호출이 관측되는 경우
-- Runtime Violation: `app.get(Token)`이 `singleton`이 아닌 토큰에 대해 성공하는 경우
-- Runtime Violation: `app.get(Token)`이 visibleTo가 `all`이 아닌 토큰에 대해 성공하는 경우
+- Runtime Violation: `app.get`이 `singleton`이 아닌 토큰에 대해 성공하는 경우
+- Runtime Violation: `app.get`이 visibleTo가 `all`이 아닌 토큰에 대해 성공하는 경우
 
 - 빌드 실패 및 위반 조건의 진단 출력은 diagnostics.spec.md의 형식을 따라야 한다.
 

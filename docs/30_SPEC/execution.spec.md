@@ -23,7 +23,7 @@ L3 Implementation Contract
 
 ### 1.3 Definitions
 
-- `Normal Path`의 정의는 docs/10_FOUNDATION/GLOSSARY.md를 따른다.
+Normative: 본 SPEC은 추가적인 용어 정의를 도입하지 않는다.
 
 ---
 
@@ -42,7 +42,7 @@ Normative: 본 SPEC은 추가적인 Static Shape를 정의하지 않는다.
 
 - 정상 실행은 Result 기반 흐름으로 표현되어야 한다. (Result 형태는 common.spec.md에 의해 정의된다)
 - 정상 실행은 어댑터가 정적으로 선언한 Pipeline을 따라 수행되어야 한다.
-- Structural Context Propagation이 지원되어야 한다. (컨텍스트는 Pipeline을 따라 각 PipelineStep 호출에 전달되어야 한다)
+- 컨텍스트(Context)는 Pipeline을 따라 각 PipelineStep 호출에 전달되어야 한다.
 - 런타임 구성 요소는 빌드 타임에 확정된 정적 연결 관계만을 따른다. (ARCHITECTURE의 Static Context Binding 전제)
 
 - Pipe에 등록되지 않은 변환(transform) 및 검증(validate)을 실행 흐름에 암묵적으로 삽입하거나 추론해서는 안 된다. (INVARIANTS의 No Implicit Pipe 전제)

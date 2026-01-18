@@ -28,6 +28,10 @@ Out-of-Scope:
 - 어떤 상황에서 어떤 `code`를 발생시키는지의 상세 → 각 기능 SPEC
 - 진단 메시지 문구의 다국어/브랜딩/색상 등 표현 세부
 
+### 1.3 Definitions
+
+Normative: 본 SPEC은 추가적인 용어 정의를 도입하지 않는다.
+
 ---
 
 ## 2. Static Shape

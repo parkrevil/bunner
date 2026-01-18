@@ -23,9 +23,7 @@ L3 Implementation Contract
 
 ### 1.3 Definitions
 
-- `Provider`의 정의는 docs/10_FOUNDATION/GLOSSARY.md를 따른다.
-- `Scope`의 정의는 docs/10_FOUNDATION/GLOSSARY.md를 따른다.
-- `Resource Provider`의 정의는 docs/10_FOUNDATION/GLOSSARY.md를 따른다.
+Normative: 본 SPEC은 추가적인 용어 정의를 도입하지 않는다.
 
 ---
 

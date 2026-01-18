@@ -23,6 +23,8 @@ L3 Implementation Contract
 
 ### 1.3 Definitions
 
+Normative: 본 SPEC은 추가적인 용어 정의를 도입하지 않는다.
+
 ---
 
 ## 2. Static Shape

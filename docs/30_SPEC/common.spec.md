@@ -29,7 +29,7 @@ Out-of-Scope:
 
 ### 1.3 Definitions
 
-Normative: 본 SPEC은 file-local 용어 정의를 포함하지 않는다.
+Normative: 본 SPEC은 추가적인 용어 정의를 도입하지 않는다.
 
 ---
 

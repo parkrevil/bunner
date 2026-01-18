@@ -44,6 +44,10 @@ Out-of-Scope (타 SPEC으로 위임):
 - 어댑터 Pipeline의 상세 의미론 → adapter.spec.md / execution.spec.md
 - Panic(throw) 처리 의미론 → error-handling.spec.md
 
+### 1.3 Definitions
+
+Normative: 본 SPEC은 추가적인 용어 정의를 도입하지 않는다.
+
 ---
 
 ## 2. Static Shape
@@ -154,8 +158,8 @@ MiddlewareLifecycleId:
 - allowed forms (AST-level):
   - string literal key (e.g., `"http:BeforeRequest"`)
     - constraints:
-      - MUST be in the form `"<AdapterId>:<PhaseId>"`
-      - `<PhaseId>` MUST be non-empty and MUST NOT contain `:`
+      - MUST be in the form `"<AdapterId>:<middlewarePhase>"`
+      - `<middlewarePhase>` MUST be non-empty and MUST NOT contain `:`
 
 MiddlewareRegistrationInputList:
 

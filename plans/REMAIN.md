@@ -259,61 +259,41 @@
 
 - 문제
   - `docs/50_GOVERNANCE/DOCS_WRITING.md`의 DW-TERM 규칙은 “규범 키워드가 포함된 라인에 새 백틱 토큰이 추가되면, GLOSSARY 또는 해당 문서의 Definitions에 정의돼 있어야 함”과 “Term 중복 정의 금지/파일-로컬 정의의 범위 제한”을 강제한다.
-  - 현재 L3 문서들에는 "Definitions"에서 Term을 정의하지만(`- <Term>:`), 해당 Term이 다른 문서에도 등장하거나(=file-local이 아님) GLOSSARY에 존재하지 않아 DW-TERM-003 위반 가능성이 열려 있다.
-  - 또한 GLOSSARY에 존재하지만 L3 스펙군에서 동일 Term 문자열로는 거의/전혀 사용되지 않는 항목이 있어(미사용), 용어 SSOT로서의 정합성이 닫히지 않는다.
+  - (현황) L3 스펙군의 `### 1.3 Definitions` 형식 불일치(위임 문장/빈 섹션/섹션 누락)는 정렬되었다.
+    - 모든 `docs/30_SPEC/*.spec.md`에 `### 1.3 Definitions`가 존재한다.
+    - 각 `Definitions`는 허용되는 1줄(또는 file-local 정의 라인)만 포함한다.
+  - (정책 확정)
+    - GLOSSARY는 전역 용어집이지만, “사용(used) 판정” 검색 범위는 `docs/**.md`로 제한한다.
+    - used 판정은 **라벨 문자열의 완벽일치(exact match)**로 고정한다.
+    - GLOSSARY의 Term 라벨에는 괄호를 허용하지 않는다.
 
-  - (확정된 DW-TERM-003 위반)
-    - `MCP Server`
-      - 정의: `docs/30_SPEC/mcp-server.spec.md`의 `### 1.3 Definitions`
-      - 동일 파일 밖 등장: `docs/30_SPEC/devtools.spec.md`의 `### 1.2 Scope & Boundary`
-      - GLOSSARY 미정의: `docs/10_FOUNDATION/GLOSSARY.md`
-    - `Error`, `Panic(System Error)`
-      - 정의: `docs/30_SPEC/error-handling.spec.md`의 `### 1.3 Definitions`
-      - 동일 파일 밖 등장: `docs/30_SPEC/logger.spec.md`의 `### 3.1 MUST`
-      - GLOSSARY 미정의: `docs/10_FOUNDATION/GLOSSARY.md`
-    - `Wiring`
-      - 정의: `docs/30_SPEC/di.spec.md`의 `### 1.3 Definitions`
-      - 동일 파일 밖 등장: `docs/30_SPEC/adapter.spec.md`의 `### 3.1 MUST`
-      - GLOSSARY 미정의: `docs/10_FOUNDATION/GLOSSARY.md`
+  - (최근 정렬 완료)
+    - `docs/**.md`에서 `app.get(Token)` 표기를 `app.get`으로 정렬했고, `GLOSSARY.md`도 `app.get` 엔트리로 정렬했다.
+    - `GLOSSARY.md`의 괄호 포함 라벨을 제거했다: `Contract`, `Panic`, `AOT`, `Reflections`, `Persona`.
+    - 현재 `docs/**.md`에서 `app.get(Token)` 잔존은 0건이다.
 
   - (용어 드리프트 리스크: DW-TERM 위반은 아님)
-    - `docs/10_FOUNDATION/GLOSSARY.md`에는 `DI Cycle`이 정의되어 있으나, `docs/30_SPEC/di.spec.md`는 `Dependency Cycle`을 별도 Term으로 정의한다.
-
-  - (누락 가능성이 높은 Definitions 정의 예시)
-    - `docs/30_SPEC/provider.spec.md`: `Provider`, `Scope`, `Resource Provider`
-    - `docs/30_SPEC/di.spec.md`: `Wiring`, `Dependency Cycle`
-    - `docs/30_SPEC/error-handling.spec.md`: `Error`, `Panic(System Error)`
-    - `docs/30_SPEC/adapter.spec.md`: `Middleware Lifecycle`, `Middleware Phase`, `Adapter Owner Decorator`, `Adapter Member Decorator`
-    - `docs/30_SPEC/dto.spec.md`: `DTO Transformer`, `DTO Validator`
-    - `docs/30_SPEC/docs.spec.md`: `OpenAPI/AsyncAPI Artifact`, `Consistency`
-    - `docs/30_SPEC/logger.spec.md`: `Structured Log`, `Correlation`
-    - `docs/30_SPEC/ffi.spec.md`: `FFI Boundary`, `Safety`
-    - `docs/30_SPEC/drizzle-orm.spec.md`: `ORM Integration`
-    - `docs/30_SPEC/devtools.spec.md`: `Non-intrusive`
-    - `docs/30_SPEC/mcp-server.spec.md`: `MCP Server`
-
-  - (미사용/불일치 가능성이 있는 GLOSSARY 항목 예시)
-    - `Context Pollution`, `Repository Hygiene`, `Persona` 등은 L3 계약(spec)에서 직접 사용되는 범위가 불명확하다.
-    - GLOSSARY의 `DI Cycle`과 L3의 `Dependency Cycle`처럼, 동일 개념의 명명 규칙이 분산될 수 있다.
+    - 동일 개념이 서로 다른 문자열로 기술되면(한국어/영문/혼용 포함), 구현/진단/테스트 문구가 분기될 수 있다.
 
 - 왜 문제인가
   - Term SSOT가 닫히지 않으면, 문서 변경 시 DW-TERM 집행이 “추측/사람 판단”에 의존하게 되고, 용어 중복/드리프트가 누적된다.
   - 계약 문서(L3)가 동일 개념을 서로 다른 문자열로 부르면, 구현/진단/테스트 문구가 분기되어 기계적 검증 가능성이 떨어진다.
 
 - 필요 결정
-  - (A) L3 스펙군에서 2개 이상 파일에 등장하는 Term은 모두 GLOSSARY로 승격하고, 각 spec의 Definitions에서는 중복 정의를 제거한다.
-  - (B) “file-local Definitions”를 허용할 Term의 기준을 판정형으로 고정한다(동일 파일 외 등장 금지 또는 등장 시 GLOSSARY 승격).
-  - (C) 동일 개념에 대해 단일 표기(정본 Term 문자열)를 선택하고, 모든 L3에서 그 표기만 사용하도록 정렬한다.
+  - (A) GLOSSARY는 전역 용어집으로 유지한다.
+  - (B) 사용되지 않는 Term은 모두 삭제한다.
+  - (C) “사용(used)” 판정 기준은 “라벨 문자열 전체 완벽일치 + `docs/**.md`”로 고정한다.
+  - (잔여 작업) 위 기준으로 `docs/10_FOUNDATION/GLOSSARY.md`의 Term 전수조사를 다시 수행해, `docs/**.md`에서 사용처가 0인 Term을 제거한다.
 
 - SSOT 반영 대상
   - `docs/10_FOUNDATION/GLOSSARY.md`
-  - Definitions를 가진 각 L3 문서: `docs/30_SPEC/{adapter,di,provider,error-handling,dto,docs,logger,ffi,drizzle-orm,devtools,mcp-server}.spec.md`
-  - (필요 시) `docs/50_GOVERNANCE/DOCS_WRITING.md`의 DW-TERM 규칙을 변경하지 않고도 통과 가능하도록 문서 정렬
+  - (선택) `docs/30_SPEC/logger.spec.md` 등 L3 문서(정본 Term을 실제 계약 문장에 포함시킬 경우)
 
 - 검증 기준
   - DW-TERM-002 위반(동일 Term의 2개 이상 파일 정의)이 존재하지 않는다.
   - DW-TERM-003 위반(파일-로컬 Definitions Term이 다른 파일에 등장하지만 GLOSSARY 미정의)이 존재하지 않는다.
-  - GLOSSARY Term은 L3 스펙군에서 실제로 사용되거나, 사용 범위가 L1/L2/거버넌스 등으로 명확히 정당화되어 있다.
+  - 모든 `docs/30_SPEC/*.spec.md`의 `### 1.3 Definitions`는 DW-TERM-001의 Definitions 순수성 조건을 만족한다.
+  - GLOSSARY Term은 (A) 최소 1개 이상의 SSOT 문서에서 실제로 사용되거나, (B) 사용 축(예: 거버넌스 전용)이 명시되어 있다.
 
 ---
 
@@ -331,8 +311,8 @@
     - `docs/30_SPEC/docs.spec.md`가 “manifest.spec.md의 산출물 섹션”을 참조하나, `manifest.spec.md`에 해당 섹션이 없다.
     - `docs/30_SPEC/provider.spec.md`가 “scope의 프로세스 경계 해석”을 `cluster.spec.md`로 이관하나, `cluster.spec.md`에 구체 규칙이 없다.
   - (P2 / 용어·식별자 표기 드리프트)
-    - `docs/30_SPEC/module-system.spec.md`의 `MiddlewareLifecycleId` 규칙에서 `<PhaseId>`를 사용하나, L1 `GLOSSARY.md`에는 `PhaseId` 용어가 없다(대신 `Middleware Phase`만 존재).
-    - 여러 SPEC에서 “Structural Context / Structural Context Propagation”을 사용하나, L1 `GLOSSARY.md`에는 해당 용어 항목이 없다(현재는 서술 용어로만 존재).
+    - (해결: 2-A) `docs/30_SPEC/module-system.spec.md`의 `MiddlewareLifecycleId` 규칙의 `<PhaseId>` 표기를 제거하고, `Middleware Phase` 축과 충돌하지 않는 placeholder로 정렬한다.
+    - (해결: 3-B) 여러 SPEC에서 사용하던 “Structural Context / Structural Context Propagation” 표현은 `Context`/컨텍스트 전달 규칙으로 치환한다.
   - (P3 / 표기(케이싱) 및 필드명 드리프트)
     - `docs/30_SPEC/diagnostics.spec.md`의 `HandlerIdFormat` placeholder가 `adapterId`로 표기되지만, 타입/용어는 `AdapterId`로 서술된다.
     - `docs/30_SPEC/aot-ast.spec.md`의 `BunnerConfigSource.(path, format)`과 `docs/30_SPEC/manifest.spec.md`의 `ManifestConfig.(sourcePath, sourceFormat)`이 같은 축을 가리키지만 필드명이 다르다.

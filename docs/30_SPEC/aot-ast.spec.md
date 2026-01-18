@@ -32,6 +32,10 @@ Out-of-Scope:
 - Manifest 산출물의 상세 형상 → manifest.spec.md
 - 모듈 루트 파일의 어댑터 구성 선언 계약 → module-system.spec.md
 
+### 1.3 Definitions
+
+Normative: 본 SPEC은 추가적인 용어 정의를 도입하지 않는다.
+
 ---
 
 ## 2. Static Shape
