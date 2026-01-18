@@ -51,7 +51,7 @@ Normative: 본 SPEC은 추가적인 Static Shape를 정의하지 않는다.
 - `common.spec.md`에 정의된 `InjectCall`은 빌드 타임에 정적 wiring으로 치환 가능해야 한다.
 
 - `InjectCall`은 앱 내부 실행 경로 전반에서 해석 가능해야 한다.
-  - 최소 범위: middleware, guard, handler, error filter
+  - 최소 범위: middleware, guard, handler, exception filter
 
 - `common.spec.md`의 `InjectableOptions.visibleTo`는 아래 규칙으로 해석되어야 한다.
   - visibleTo가 생략된 경우, `module`로 판정되어야 한다.

@@ -81,8 +81,6 @@ AppConfigInput:
 
 - meaning: App-External Code에서 Env/Config preload를 위해 제공되는 입력
 - type: object
-- required:
-  - loader
 - properties:
   - env:
     - type: array
@@ -121,7 +119,7 @@ ConfigSectionRegistrationDeclaration:
 
 - `AppLifecycleHookDeclaration.target`가 `injectable`인 경우, `token`은 반드시 존재해야 한다.
 - `AppConfigInput.env`가 존재하는 경우, string 배열이어야 한다.
-- `AppConfigInput.loader`는 FactoryRef여야 한다.
+- `AppConfigInput.loader`가 존재하는 경우, FactoryRef여야 한다.
 - `ConfigSectionRegistrationDeclaration.token`은 Class token이어야 한다.
 
 ---
@@ -142,14 +140,14 @@ ConfigSectionRegistrationDeclaration:
 
 - Env preload는 App-External Code가 제공한 AppConfigInput.env를 사용해야 한다.
 
-- Config preload는 App-External Code가 제공한 AppConfigInput.loader를 실행하여 수행되어야 한다.
+- Config preload는 App-External Code가 제공한 AppConfigInput.loader가 존재하는 경우에만 수행되어야 한다.
   - loader 실행은 `createApplication` 완료 이전에 관측되어야 한다.
   - loader 실행이 실패하면 `createApplication`에서 throw가 관측되어야 한다.
   - 프레임워크는 loader 실행에 대해 타임아웃/재시도를 적용해서는 안 된다.
 
 - Config Section 등록은 `ConfigSectionRegistrationDeclaration` 형상으로 빌드 타임 수집 가능해야 한다.
   - `ConfigSectionRegistrationDeclaration.raw`는 ConfigRawValue에 부합해야 한다.
-  - Config Section 등록은 AppConfigInput.loader 내부의 등록 호출로부터 빌드 타임에 수집 가능해야 한다.
+  - AppConfigInput.loader가 존재하는 경우, Config Section 등록은 loader 내부의 등록 호출로부터 빌드 타임에 수집 가능해야 한다.
     - 등록 호출은 callee 식별자가 `defineConfig`인 호출로 판정되어야 한다.
   - Config Section 값은 transform/validate 완료 결과여야 하며, 등록된 token(Class token)과 동일한 클래스 인스턴스로 관측되어야 한다.
   - Env/Config preload 완료 이후, 프레임워크는 raw 입력을 런타임에서 장기 보관하거나 재노출해서는 안 된다.

@@ -139,7 +139,7 @@ AdapterInstanceConfig:
   - middlewares: MiddlewareRegistry
   - guards: PipelineStepList
   - pipes: PipelineStepList
-  - errorFilters: ErrorFilterRefList
+  - exceptionFilters: ExceptionFilterRefList
 
 MiddlewareRegistry:
 
@@ -152,9 +152,10 @@ MiddlewareLifecycleId:
 
 - type: string
 - allowed forms (AST-level):
-  - string literal key (e.g., `"BeforeRequest"`)
-  - computed key whose expression is a member reference `<Identifier>.<Identifier>`
-    - normalization: use the property identifier as the lifecycle id
+  - string literal key (e.g., `"http:BeforeRequest"`)
+    - constraints:
+      - MUST be in the form `"<AdapterId>:<PhaseId>"`
+      - `<PhaseId>` MUST be non-empty and MUST NOT contain `:`
 
 MiddlewareRegistrationInputList:
 
@@ -179,7 +180,7 @@ PipelineStep:
 - allowed forms (AST-level):
   - FactoryRef (common.spec.md)
 
-ErrorFilterRefList:
+ExceptionFilterRefList:
 
 - type: array
 - items: FactoryRef (common.spec.md)
@@ -193,11 +194,12 @@ ErrorFilterRefList:
 - `dependsOn`이 리스트인 경우, 빈 배열이어서는 안 된다.
 
 - `middlewares`가 존재한다면, `MiddlewareRegistry` 형상과 정확히 일치해야 한다.
-  - 각 lifecycle 키는 `MiddlewareLifecycleId` 규칙에 의해 string으로 정규화 가능해야 한다.
+  - 각 lifecycle 키는 `MiddlewareLifecycleId` 규칙을 만족하는 string literal이어야 한다.
+  - 각 lifecycle 키는 해당 `AdapterConfig`의 adapterId 키 접두사(`<adapterId>:`)를 포함해야 한다.
   - 각 lifecycle 값은 `MiddlewareRegistrationInputList` 형상과 정확히 일치해야 한다.
 
 - `guards | pipes`가 존재한다면, 각 값은 `PipelineStepList` 형상과 정확히 일치해야 한다.
-- `errorFilters`가 존재한다면, 각 값은 `ErrorFilterRefList` 형상과 정확히 일치해야 한다.
+- `exceptionFilters`가 존재한다면, 각 값은 `ExceptionFilterRefList` 형상과 정확히 일치해야 한다.
 
 ---
 

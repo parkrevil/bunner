@@ -47,7 +47,7 @@ Normative: 본 SPEC은 추가적인 Static Shape를 정의하지 않는다.
 
 - Pipe에 등록되지 않은 변환(transform) 및 검증(validate)을 실행 흐름에 암묵적으로 삽입하거나 추론해서는 안 된다. (INVARIANTS의 No Implicit Pipe 전제)
 
-- Middleware/Guard/Pipe/Handler/Error Filter는 DI wiring의 노드로 취급되어야 하며,
+- Middleware/Guard/Pipe/Handler/Exception Filter는 DI wiring의 노드로 취급되어야 하며,
   빌드 타임에 확정된 연결에 의해 의존성이 제공되어야 한다.
 
 - App 표면 및 생명주기 의미론은 app.spec.md의 규칙과 일치해야 한다.
@@ -79,7 +79,7 @@ Normative: 본 SPEC은 추가적인 Observable Semantics를 정의하지 않는�
 
 ### 6.1 Handoff
 
-- throw가 발생하면 정상 실행은 즉시 이탈하며, 예외는 error-handling.spec.md의 Error Filter Chain으로 이관된다.
+- throw가 발생하면 정상 실행은 즉시 이탈하며, 예외는 error-handling.spec.md의 Exception Filter Chain으로 이관된다.
 - throw가 발생한 경우, 예외 처리의 관측 가능한 산출은 Result로 수렴되어야 하며, 어댑터는 Result를 프로토콜 응답으로 렌더링해야 한다.
 - Guard가 거부(Result/Error)하는 경우 Handler는 실행되지 않으며, 어댑터는 Result 경로로 응답을 생성해야 한다.
 - 실행 구성(어댑터별 wiring/초기화)은 adapter.spec.md 및 manifest.spec.md로 이관된다.

@@ -88,9 +88,9 @@ BunnerErrorMarker:
 
 - type: object
 - required:
-  - **bunner_error**
+  - `__bunner_error__`
 - properties:
-  - **bunner_error**:
+  - `__bunner_error__`:
     - type: literal true
 
 Result<T, E>:
@@ -110,7 +110,7 @@ FactoryRef:
 
 - allowed forms:
   - Function ref: 함수 선언을 참조 가능한 심볼
-- meaning: 실행 단위(middleware/guard/pipe/error filter/handler 등)를 가리키는 정적 함수 참조
+- meaning: 실행 단위(middleware/guard/pipe/exception filter/handler 등)를 가리키는 정적 함수 참조
 
 #### 2.1.6 Common Decorator Declarations
 
@@ -121,7 +121,7 @@ CommonDecoratorName:
   - "@Middlewares"
   - "@Guards"
   - "@Pipes"
-  - "@ErrorFilters"
+  - "@ExceptionFilters"
 
 RefListDecoratorName:
 
@@ -129,7 +129,7 @@ RefListDecoratorName:
 - allowed values:
   - "@Guards"
   - "@Pipes"
-  - "@ErrorFilters"
+  - "@ExceptionFilters"
 
 MiddlewaresDecoratorName:
 

@@ -11,11 +11,11 @@ L3 Implementation Contract
 
 ### 1.1 Purpose
 
-본 SPEC은 Error(값 흐름)와 Panic(throw 경로)의 분리 및 Error Filter Chain이 유효한 구현으로 성립하는 조건을 정의한다.
+본 SPEC은 Error(값 흐름)와 Panic(throw 경로)의 분리 및 Exception Filter Chain이 유효한 구현으로 성립하는 조건을 정의한다.
 
 ### 1.2 Scope & Boundary
 
-본 SPEC은 throw로 발생하는 예외를 표준 결과(Result)로 변환하기 위한 Error Filter Chain의 계약을 고정한다.
+본 SPEC은 throw로 발생하는 예외를 표준 결과(Result)로 변환하기 위한 Exception Filter Chain의 계약을 고정한다.
 다음 항목은 본 SPEC의 소유가 아니다:
 
 - 프로토콜별 최종 오류 표현(HTTP 상태 코드 등) → adapter.spec.md에서 판정된다.
@@ -41,9 +41,9 @@ Normative: 본 SPEC은 추가적인 Static Shape를 정의하지 않는다.
 ### 3.1 MUST
 
 - Error는 값 흐름(Result)으로 표현되어야 한다.
-- Panic(throw)은 Error Filter Chain을 통해 표준 Result로 변환되어야 한다.
-- throw로 발생한 예외는 Error Filter Chain을 통해 처리되어야 한다.
-- Error Filter Chain의 적용 순서/우선순위는 판정 가능해야 한다.
+- Panic(throw)은 Exception Filter Chain을 통해 표준 Result로 변환되어야 한다.
+- throw로 발생한 예외는 Exception Filter Chain을 통해 처리되어야 한다.
+- Exception Filter Chain의 적용 순서/우선순위는 판정 가능해야 한다.
 - 필터 체인이 예외를 Result의 Error 케이스로 변환할 때, 그 최소 형상은 common.spec.md의 Result 계약을 따른다.
 
 ### 3.2 MUST NOT
@@ -72,7 +72,7 @@ Normative: 본 SPEC은 추가적인 Observable Semantics를 정의하지 않는�
 ### 6.1 Handoff
 
 - 최종 표현(상태 코드/프레임 등)은 adapter.spec.md로 이관된다.
-  - 어댑터는 Error Filter Chain이 산출한 Result를 프로토콜 응답으로 렌더링해야 한다.
+  - 어댑터는 Exception Filter Chain이 산출한 Result를 프로토콜 응답으로 렌더링해야 한다.
 
 - 빌드 실패 및 위반 조건의 진단 출력은 diagnostics.spec.md의 형식을 따라야 한다.
 
