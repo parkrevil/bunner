@@ -24,8 +24,6 @@ L3 Implementation Contract
 
 Normative: 본 SPEC은 추가적인 용어 정의를 도입하지 않는다.
 
----
-
 ## 2. Static Shape
 
 Normative: 본 SPEC은 추가적인 Static Shape를 정의하지 않는다.

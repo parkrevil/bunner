@@ -20,11 +20,15 @@ L3 Implementation Contract
 - Out-of-Scope: 본 SPEC이 정의하지 않는 영역
   (타 SPEC에서 정의되는 계약, 엔지니어링 선택, 구현 상세)
 
-### 1.3 Definitions
+Definitions 작성 규칙:
 
 - 본 섹션에는 **본 파일에서만 사용하는 용어**만 정의한다.
 - 정의할 용어가 없으면 아래 1줄로 명시한다.
   - `Normative: 본 SPEC은 추가적인 용어 정의를 도입하지 않는다.`
+
+### 1.3 Definitions
+
+Normative: 본 SPEC은 추가적인 용어 정의를 도입하지 않는다.
 
 ---
 

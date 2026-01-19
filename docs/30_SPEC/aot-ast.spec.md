@@ -25,6 +25,7 @@ In-Scope:
 - bunner config 파일의 강제 로딩 규칙(`bunner.config.ts` 또는 `bunner.config.json`)
 - bunner config의 실행/해석 결과(resolved object)의 최소 계약
 - AOT 판정의 결정성 입력 정의(동일 입력의 의미)
+- 산출물 루트 디렉토리의 고정 위치
 
 Out-of-Scope:
 
@@ -32,11 +33,13 @@ Out-of-Scope:
 - Manifest 산출물의 상세 형상 → manifest.spec.md
 - 모듈 루트 파일의 어댑터 구성 선언 계약 → module-system.spec.md
 
+- 산출물의 파일 경로/파일명/디렉토리 분할 규칙
+  - 산출물의 경로/이름을 계약으로 고정하는 것
+  - 단, 산출물 루트 디렉토리는 본 SPEC에서 고정한다.
+
 ### 1.3 Definitions
 
 Normative: 본 SPEC은 추가적인 용어 정의를 도입하지 않는다.
-
----
 
 ## 2. Static Shape
 
@@ -78,6 +81,14 @@ ResolvedBunnerConfig:
 - properties:
   - module: ResolvedBunnerConfigModule
 
+BuildProfile:
+
+- type: string
+- allowed values:
+  - minimal
+  - standard
+  - full
+
 ### 2.2 Shape Conformance Rules
 
 - CLI가 최종적으로 취득하는 bunner config는 `ResolvedBunnerConfig`에 부합해야 한다.
@@ -92,6 +103,10 @@ ResolvedBunnerConfig:
 - 구조적 사실(모듈 경계, 의존 관계, 역할)은 빌드 타임에 정적으로 확정되어야 한다.
 - CLI는 bunner config를 빌드 타임에 로딩하여, AOT 판정의 입력으로 포함해야 한다.
 - CLI는 모호함이 발견되면 추측하지 않고 빌드를 즉시 중단해야 한다.
+- Build profile은 BuildProfile로 판정 가능해야 한다.
+- Build profile minimal은 Manifest만 생성해야 한다.
+- Build profile standard는 Manifest와 Interface Catalog를 생성해야 한다.
+- Build profile full은 Manifest, Interface Catalog, Runtime Observation Artifact를 생성해야 한다.
 
 ### 3.2 MUST NOT
 
@@ -125,6 +140,8 @@ resolved config의 필수 규칙:
 
 - resolved bunner config는 `module.fileName`을 반드시 포함해야 한다.
 - CLI는 `module.fileName`에 대해 어떠한 기본값도 설정해서는 안 된다.
+
+- 산출물 디렉토리는 `<PROJECT_ROOT>/.bunner`로 고정되어야 한다.
 
 결정성(determinism) 입력 정의:
 

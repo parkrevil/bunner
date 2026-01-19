@@ -40,8 +40,6 @@ Out-of-Scope:
 
 Normative: 본 SPEC은 추가적인 용어 정의를 도입하지 않는다.
 
----
-
 ## 2. Static Shape
 
 본 섹션은 CLI, 정적 분석기, 코드 생성기가 참조하는 데이터 형상(Data Shape)만을 정의한다.

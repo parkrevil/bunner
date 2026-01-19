@@ -31,8 +31,6 @@ Out-of-Scope:
 
 Normative: 본 SPEC은 추가적인 용어 정의를 도입하지 않는다.
 
----
-
 ## 2. Static Shape
 
 ---
@@ -79,30 +77,32 @@ Token:
 
 #### 2.1.2 Result
 
-BunnerErrorMarkerKey:
-
-- type: string
-- const: "**bunner_error**"
-
-BunnerErrorMarker:
+BunnerError:
 
 - type: object
 - required:
   - `__bunner_error__`
+  - stack
+  - cause
 - properties:
   - `__bunner_error__`:
     - type: literal true
+  - stack:
+    - type: string
+  - cause:
+    - type: unknown
 
 Result<T, E>:
 
 - meaning: 성공이면 값 T 자체를 반환하고, 실패이면 Error 값을 반환하는 공통 결과 모델
 - constraints:
   - E는 object여야 한다.
-  - Error 값은 BunnerErrorMarker를 포함해야 한다.
-  - 프레임워크는 E의 최소 필드를 강제하거나 자동 주입해서는 안 된다.
+  - Error 값은 BunnerError 형상을 만족해야 한다.
+  - Error 값의 stack은 비어있지 않은 string이어야 한다.
+  - Error 값의 cause는 반드시 존재해야 한다.
 - allowed forms:
   - Success: T
-  - Error: E & BunnerErrorMarker
+  - Error: BunnerError
 
 #### 2.1.3 Function Reference
 
@@ -306,6 +306,7 @@ ProviderDeclarationList:
   - `ModuleRefList`
 
 - `ModuleRefList`는 빈 배열이어서는 안 된다.
+- `AdapterId`는 다음 문자만 포함해야 한다: 영문 대문자, 영문 소문자, 숫자, `.`, `_`, `-`.
 
 ---
 
@@ -334,12 +335,49 @@ ProviderDeclarationList:
 - Observable:
   - declarations는 AOT 입력으로 사용 가능해야 한다.
 
+### 4.2 Bunner Error Construction
+
+- Input: 프레임워크가 Error 값을 생성해야 하는 상황에서, 단일 입력 값 X를 받는 경우
+- Observable:
+  - 프레임워크는 항상 BunnerError 형상의 Error 값을 생성해야 한다.
+
+  - captured stack은 Error 값 생성 시점에 캡처된 stack trace string을 의미한다.
+
+  - 생성된 Error 값의 cause는 항상 X여야 한다.
+
+  - 생성된 Error 값의 stack은 아래 규칙을 따라야 한다.
+    - X가 ECMAScript Error 객체이고, 동시에 X.stack이 비어있지 않은 string이면, 생성된 Error 값의 stack은 X.stack과 동일해야 한다.
+    - 그 외의 경우, 생성된 Error 값의 stack은 captured stack과 동일해야 한다.
+
+  - 생성된 Error 값은 외부로 노출되기 전에 반드시 Object.freeze()된 상태여야 한다.
+
+### 4.3 error Helper
+
+- Input: 프레임워크가 제공하는 error 헬퍼 함수가 단일 입력 값 X를 받는 경우
+- Observable:
+  - error 헬퍼는 항상 BunnerError 값을 반환해야 한다.
+  - error 헬퍼는 어떤 경우에도 throw가 관측되어서는 안 된다.
+
+  - error 헬퍼의 반환값은 4.2 Bunner Error Construction의 규칙을 만족해야 한다.
+    - 반환된 Error 값의 cause는 항상 X여야 한다.
+    - 반환된 Error 값의 stack은 4.2의 stack 규칙을 따라야 한다.
+
+### 4.4 isError Helper
+
+- Input: 프레임워크가 제공하는 isError 헬퍼 함수가 단일 입력 값 X를 받는 경우
+- Observable:
+  - isError 헬퍼는 항상 boolean을 반환해야 한다.
+  - isError 헬퍼는 어떤 경우에도 throw가 관측되어서는 안 된다.
+
+  - isError(X) === true인 필요충분조건은, **bunner_error** === true인 경우여야 한다.
+
 ---
 
 ## 5. Violation Conditions
 
 - Build-Time Violation: `Token`이 허용된 형태가 아닌데도 빌드가 성공하는 경우
 - Build-Time Violation: `ProviderDeclaration`이 계약 형상과 불일치하는데도 빌드가 성공하는 경우
+- Build-Time Violation: `AdapterId`가 허용되지 않은 문자를 포함하는데도 빌드가 성공하는 경우
 
 ---
 

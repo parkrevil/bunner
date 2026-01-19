@@ -21,6 +21,7 @@ In-Scope:
 - Manifest의 최소 형상(스키마 버전 포함)
 - 모듈 판정 결과를 Manifest에 직렬화하는 최소 필드
 - bunner config의 **resolved 결과** 중 모듈 판정에 필요한 최소 필드의 기록
+- Core Build Artifact(실행에 필요한 정적 진실)의 최소 필드
 - 결정성(determinism) 및 불변성(immutability) 제약
 
 Out-of-Scope:
@@ -28,12 +29,13 @@ Out-of-Scope:
 - 역할/DI/어댑터/실행계획의 상세 스키마 → 각 대응 SPEC
 - 부트스트랩 이후 메타데이터 소거의 구체 타이밍/방식 → execution.spec.md
 - 런타임 관측 산출물(Runtime Report) 형상 → devtools.spec.md
+- Runtime Observation Artifact 및 Interface Catalog Artifact 형상 → devtools.spec.md 및 docs.spec.md
+
+- Manifest 산출물의 파일 경로/파일명/디렉토리 분할 규칙
 
 ### 1.3 Definitions
 
 Normative: 본 SPEC은 추가적인 용어 정의를 도입하지 않는다.
-
----
 
 ## 2. Static Shape
 
@@ -42,7 +44,7 @@ Normative: 본 SPEC은 추가적인 용어 정의를 도입하지 않는다.
 ManifestSchemaVersion:
 
 - type: string
-- const: "1"
+- const: "2"
 
 ManifestConfigSourceFormat:
 
@@ -92,6 +94,127 @@ ManifestModule:
   - file:
     - type: string
 
+ProviderScope:
+
+- type: string
+- allowed values:
+  - singleton
+  - request
+  - transient
+
+ManifestDiNode:
+
+- type: object
+- required:
+  - id
+  - token
+  - deps
+  - scope
+  - provider
+- properties:
+  - id:
+    - type: string
+    - meaning: 결정적 정렬을 위한 식별자
+  - token:
+    - type: Token (common.spec.md)
+  - deps:
+    - type: array
+    - items: Token (common.spec.md)
+  - scope: ProviderScope
+  - provider:
+    - type: ProviderDeclaration (common.spec.md)
+
+ManifestDiGraph:
+
+- type: object
+- required:
+  - nodes
+- properties:
+  - nodes:
+    - type: array
+    - items: ManifestDiNode
+
+Pipeline:
+
+- type: object
+- required:
+  - middlewares
+  - guards
+  - pipes
+  - handler
+- properties:
+  - middlewares:
+    - type: PipelineStepList
+  - guards:
+    - type: PipelineStepList
+  - pipes:
+    - type: PipelineStepList
+  - handler:
+    - type: PipelineStep
+
+PipelineStepList:
+
+- type: array
+- items: PipelineStep
+
+PipelineStep:
+
+- allowed forms:
+  - FactoryRef (common.spec.md)
+
+SupportedMiddlewareLifecycleSet:
+
+- type: object
+- meaning: 어댑터가 지원하는 middleware lifecycle id 집합
+- keys: MiddlewareLifecycleId (module-system.spec.md)
+- values: literal true
+
+AdapterEntryDecorators:
+
+- type: object
+- required:
+  - controller
+  - handler
+- properties:
+  - controller:
+    - type: array
+    - items: string
+  - handler:
+    - type: array
+    - items: string
+
+AdapterStaticSpec:
+
+- type: object
+- required:
+  - pipeline
+  - supportedMiddlewareLifecycles
+  - entryDecorators
+- properties:
+  - pipeline: Pipeline
+  - supportedMiddlewareLifecycles: SupportedMiddlewareLifecycleSet
+  - entryDecorators: AdapterEntryDecorators
+
+ManifestAdapterStaticSpecSet:
+
+- type: object
+- keys: AdapterId (common.spec.md)
+- values: AdapterStaticSpec
+
+ManifestHandlerEntry:
+
+- type: object
+- required:
+  - id
+- properties:
+  - id:
+    - type: HandlerId (diagnostics.spec.md)
+
+ManifestHandlerIndex:
+
+- type: array
+- items: ManifestHandlerEntry
+
 BunnerManifest:
 
 - type: object
@@ -99,18 +222,26 @@ BunnerManifest:
   - schemaVersion
   - config
   - modules
+  - adapterStaticSpecs
+  - diGraph
+  - handlerIndex
 - properties:
   - schemaVersion: ManifestSchemaVersion
   - config: ManifestConfig
   - modules:
     - type: array
     - items: ManifestModule
+  - adapterStaticSpecs: ManifestAdapterStaticSpecSet
+  - diGraph: ManifestDiGraph
+  - handlerIndex: ManifestHandlerIndex
 
 ### 2.2 Shape Conformance Rules
 
 - Manifest 파일은 `BunnerManifest`와 정확히 일치해야 한다.
 - `modules` 배열은 반드시 결정적 순서를 가져야 한다.
   - 정렬 키는 `id`의 오름차순이어야 한다.
+- `diGraph.nodes` 배열은 `id` 오름차순으로 정렬되어야 한다.
+- `handlerIndex` 배열은 `id` 오름차순으로 정렬되어야 한다.
 
 ---
 
@@ -123,12 +254,17 @@ BunnerManifest:
 - Manifest의 `modules`는 `id` 오름차순으로 정렬되어야 한다.
 - Manifest는 런타임에서 수정될 수 없어야 한다.
 - Manifest는 모듈 판정 결과를 module-system.spec.md와 모순 없이 표현해야 한다.
+- Manifest는 DI 그래프 정규화 결과를 포함해야 한다.
+- Manifest는 Adapter Static Spec의 정적 결과를 포함해야 한다.
+- Manifest는 Handler 판정 결과의 정적 인덱스를 포함해야 한다.
 
 ### 3.2 MUST NOT
 
 - Manifest는 런타임 동적 판정을 요구하는 필드를 포함해서는 안 된다.
 
 - Manifest는 런타임 상태(어댑터 활성화 여부, listening 여부, 실제 바인딩 결과, host/port 및 런타임 옵션 값)를 포함해서는 안 된다.
+
+- Manifest는 Runtime Observation Artifact 또는 Interface Catalog Artifact를 포함해서는 안 된다.
 
 - 빌드 실패 및 위반 조건의 진단 출력은 diagnostics.spec.md의 형식을 따라야 한다.
 
@@ -161,6 +297,9 @@ Observable:
 - Build-Time Violation: Manifest가 생성되지 않았는데 빌드가 성공으로 판정되는 경우
 - Test-Level Violation: 동일 입력에서 서로 다른 Manifest가 생성되는 경우
 - Build-Time Violation: `modules` 배열이 `id` 오름차순 결정적 정렬을 따르지 않는 경우
+- Build-Time Violation: `diGraph.nodes` 배열이 `id` 오름차순 결정적 정렬을 따르지 않는 경우
+- Build-Time Violation: `handlerIndex` 배열이 `id` 오름차순 결정적 정렬을 따르지 않는 경우
+- Build-Time Violation: Manifest에 diGraph, adapterStaticSpecs, handlerIndex 중 하나라도 누락되었는데 빌드가 성공으로 판정되는 경우
 - Runtime Violation: 런타임에서 Manifest 수정이 관측되거나, 수정이 실행 경로를 변경하는 경우
 
 ---
@@ -171,6 +310,9 @@ Observable:
 
 - module-system.spec.md의 모듈 판정 결과는 `BunnerManifest.modules`로 직렬화되어야 한다.
 - bunner config 로딩 규칙은 aot-ast.spec.md가 정의하며, 그 결과는 `BunnerManifest.config`로 기록되어야 한다.
+- DI 그래프 정규화 결과는 `BunnerManifest.diGraph`로 직렬화되어야 한다.
+- Adapter Static Spec 정적 결과는 `BunnerManifest.adapterStaticSpecs`로 직렬화되어야 한다.
+- Handler 판정 결과의 정적 인덱스는 `BunnerManifest.handlerIndex`로 직렬화되어야 한다.
 
 ### 6.2 Layer Priority
 

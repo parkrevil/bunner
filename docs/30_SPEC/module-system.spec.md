@@ -48,8 +48,6 @@ Out-of-Scope (타 SPEC으로 위임):
 
 Normative: 본 SPEC은 추가적인 용어 정의를 도입하지 않는다.
 
----
-
 ## 2. Static Shape
 
 본 섹션은 CLI, 정적 분석기, 코드 생성기가 참조하는 데이터 형상(Data Shape)만을 정의한다.
@@ -166,12 +164,22 @@ MiddlewareRegistrationInputList:
 - type: array
 - items: MiddlewareRegistrationInput
 
+JsonLiteralValue:
+
+- meaning: AST 레벨에서 기계적으로 판정 가능한 JSON 리터럴 값
+- allowed forms (AST-level):
+  - string literal
+  - number literal
+  - boolean literal
+  - null literal
+  - array literal (각 요소는 JsonLiteralValue)
+  - object literal (각 value는 JsonLiteralValue)
+
 MiddlewareRegistrationInput:
 
 - allowed forms (AST-level):
   - Token ref: Identifier reference to a middleware token
-  - Registration object: object literal `{ token: <Identifier>, options?: <Any AOT-Serializable Expression> }`
-  - Call/new expressions that are AOT-serializable
+  - Registration object: object literal `{ token: <Identifier>, options?: <JsonLiteralValue> }`
 
 PipelineStepList:
 

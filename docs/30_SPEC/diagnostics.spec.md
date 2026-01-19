@@ -32,8 +32,6 @@ Out-of-Scope:
 
 Normative: 본 SPEC은 추가적인 용어 정의를 도입하지 않는다.
 
----
-
 ## 2. Static Shape
 
 ### 2.1 Core Data Shapes
@@ -42,9 +40,17 @@ DiagnosticSeverity:
 
 - type: string
 - allowed values:
-  - error
-  - warning
+  - trace
+  - debug
   - info
+  - warning
+  - error
+  - fatal
+
+DiagnosticSeverityOrder:
+
+- type: string
+- const: `"trace" < "debug" < "info" < "warning" < "error" < "fatal"`
 
 DiagnosticCode:
 
@@ -206,6 +212,8 @@ Diagnostic:
 - 동일 입력에서 CLI가 산출하는 진단 레코드 집합은 결정적으로 동일해야 한다.
 - 진단 레코드는 반드시 결정적 순서로 정렬되어야 한다.
   - 정렬 키(오름차순): `severity`, `code`, `summary`, `where[0].file`
+  - `severity`는 아래 고정 순서로 비교되어야 한다.
+    - `trace` < `debug` < `info` < `warning` < `error` < `fatal`
 
 ---
 

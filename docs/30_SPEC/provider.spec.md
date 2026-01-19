@@ -19,13 +19,10 @@ L3 Implementation Contract
 다음 항목은 본 SPEC의 소유가 아니다:
 
 - DI 그래프 연결 규칙 → di.spec.md에서 판정된다.
-- 클러스터 모드의 프로세스 의미론 → cluster.spec.md에서 판정된다. (단, provider 의미론에 영향이 있으면 handoff로 연결)
 
 ### 1.3 Definitions
 
 Normative: 본 SPEC은 추가적인 용어 정의를 도입하지 않는다.
-
----
 
 ## 2. Static Shape
 
@@ -58,7 +55,7 @@ Normative: 본 SPEC은 추가적인 Static Shape를 정의하지 않는다.
 ### 3.2 MUST NOT
 
 - 종료가 필요한 Provider를 누락된 dispose로 방치하는 것을 “정상”으로 취급해서는 안 된다.
-- 클러스터/프로세스 모드에 따라 동일 Scope의 의미가 암묵적으로 바뀌어서는 안 된다. (변경이 있다면 cluster.spec.md에서 명시되어야 함)
+- 동일 Scope의 의미가 실행 모드에 따라 암묵적으로 바뀌어서는 안 된다.
 - `request` 의존을 주입한다는 이유로 `singleton`을 재생성하는 동작을 허용해서는 안 된다.
 
 ---
@@ -81,8 +78,6 @@ Normative: 본 SPEC은 추가적인 Observable Semantics를 정의하지 않는�
 ## 6. Handoff & Priority
 
 ### 6.1 Handoff
-
-- Provider 스코프의 ‘프로세스 경계’ 해석은 cluster.spec.md로 이관된다.
 
 - 빌드 실패 및 위반 조건의 진단 출력은 diagnostics.spec.md의 형식을 따라야 한다.
 

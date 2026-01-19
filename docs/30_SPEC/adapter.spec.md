@@ -22,8 +22,6 @@ L3 Implementation Contract
 
 Normative: 본 SPEC은 추가적인 용어 정의를 도입하지 않는다.
 
----
-
 ## 2. Static Shape
 
 어댑터는 아래 Static Shape를 만족하는 정적 명세를 제공해야 한다.
@@ -174,6 +172,7 @@ Static Shape의 구체적 직렬화 형식 및 저장 위치는 manifest.spec.md
 - `FactoryRef` 및 DI 관련 공통 형상은 common.spec.md로 이관된다.
 - 모듈 루트 파일에서의 어댑터 선언 입력(`AdapterConfig`, `dependsOn`, lifecycle 기반 middlewares 선언)은 module-system.spec.md로 이관된다.
 - Adapter Static Shape(`pipeline`, `PipelineStep`)의 구체 직렬화 형식 및 저장 위치는 manifest.spec.md로 이관된다.
+- 어댑터가 판정한 라우팅/이벤트 표면의 정적 결과는 Interface Catalog 입력으로 사용되어야 한다.
 
 ### 6.2 Layer Priority
 

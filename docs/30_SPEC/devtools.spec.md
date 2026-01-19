@@ -20,12 +20,13 @@ L3 Implementation Contract
 
 - MCP Server의 분석/변경 명령 표면 → mcp-server.spec.md에서 판정된다.
 - 로깅 이벤트의 구조 → logger.spec.md에서 판정된다.
+- Core Build Artifact(Manifest) 형상 → manifest.spec.md에서 판정된다.
+
+- DevTools 산출물의 파일 경로/파일명/디렉토리 분할 규칙
 
 ### 1.3 Definitions
 
 Normative: 본 SPEC은 추가적인 용어 정의를 도입하지 않는다.
-
----
 
 ## 2. Static Shape
 
@@ -114,6 +115,11 @@ DevToolsStaticGraphAdapter:
   - handlerCandidates:
     - type: array
     - items: HandlerId (diagnostics.spec.md)
+
+Runtime Observation Artifact:
+
+- meaning: CLI가 산출하는 런타임 관측 산출물
+- shape: DevToolsRuntimeReport
 
 ---
 

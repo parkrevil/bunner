@@ -25,8 +25,6 @@ L3 Implementation Contract
 
 Normative: 본 SPEC은 추가적인 용어 정의를 도입하지 않는다.
 
----
-
 ## 2. Static Shape
 
 Normative: 본 SPEC은 추가적인 Static Shape를 정의하지 않는다.
@@ -132,6 +130,7 @@ Normative: 본 SPEC은 추가적인 Static Shape를 정의하지 않는다.
 
 - 그래프의 노드(Provider/Component/Factory 등)의 생명주기 의미론은 provider.spec.md로 이관된다.
 - Wiring 산출물의 형식은 manifest.spec.md로 이관된다.
+- DI 그래프 정규화 결과는 manifest.spec.md의 Core Build Artifact 필드로 직렬화되어야 한다.
 - App 표면(create/start/stop/get) 의미론 → app.spec.md
 
 ### 6.2 Layer Priority

@@ -19,13 +19,11 @@ L3 Implementation Contract
 다음 항목은 본 SPEC의 소유가 아니다:
 
 - Core 내부 로직의 구조 경계 정의 → ARCHITECTURE.md가 SSOT다.
-- Provider 생명주기 자체의 정의 → provider.spec.md가 SSOT이며, 본 SPEC은 ‘프로세스 경계 해석’만 규정한다.
+- Provider 생명주기 및 스코프 의미론의 정의 → provider.spec.md가 SSOT다.
 
 ### 1.3 Definitions
 
 Normative: 본 SPEC은 추가적인 용어 정의를 도입하지 않는다.
-
----
 
 ## 2. Static Shape
 

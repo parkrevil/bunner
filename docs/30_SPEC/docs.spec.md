@@ -19,17 +19,134 @@ L3 Implementation Contract
 다음 항목은 본 SPEC의 소유가 아니다:
 
 - 명세를 표시하는 UI/DevTools → devtools.spec.md에서 판정된다.
-- 문서 파일 배치/이름 → STRUCTURE.md 또는 manifest.spec.md의 산출물 섹션
+- 명세 산출물의 파일 경로/파일명/디렉토리 분할 규칙 → 외부 패키지의 책임
+- Core Build Artifact(Manifest) 형상 → manifest.spec.md에서 판정된다.
 
 ### 1.3 Definitions
 
 Normative: 본 SPEC은 추가적인 용어 정의를 도입하지 않는다.
 
----
-
 ## 2. Static Shape
 
-Normative: 본 SPEC은 추가적인 Static Shape를 정의하지 않는다.
+본 섹션은 문서 생성 입력으로 사용되는 Interface Catalog의 최소 형상을 정의한다.
+
+### 2.1 Core Data Shapes
+
+Normative: 아래에 정의된 형상이 계약이다.
+
+InterfaceCatalogSchemaVersion:
+
+- type: string
+- const: "1"
+
+InterfaceSchemaRef:
+
+- type: string
+
+InterfaceCatalogEntryKind:
+
+- type: string
+- allowed values:
+  - rest
+  - event
+  - rpc
+
+InterfaceCapability:
+
+- type: string
+- allowed values:
+  - multiplexing
+  - streaming
+
+RestSurface:
+
+- type: object
+- required:
+  - method
+  - path
+- properties:
+  - method:
+    - type: string
+  - path:
+    - type: string
+
+EventSurface:
+
+- type: object
+- required:
+  - channel
+  - direction
+- properties:
+  - channel:
+    - type: string
+  - direction:
+    - type: string
+    - allowed values:
+      - publish
+      - subscribe
+
+RpcSurface:
+
+- type: object
+- required:
+  - service
+  - method
+- properties:
+  - service:
+    - type: string
+  - method:
+    - type: string
+
+InterfaceSurface:
+
+- allowed forms:
+  - RestSurface
+  - EventSurface
+  - RpcSurface
+
+InterfaceCatalogEntry:
+
+- type: object
+- required:
+  - id
+  - kind
+  - adapterId
+  - surface
+- properties:
+  - id:
+    - type: string
+  - kind: InterfaceCatalogEntryKind
+  - adapterId: AdapterId (common.spec.md)
+  - handlerId:
+    - type: HandlerId (diagnostics.spec.md)
+  - surface: InterfaceSurface
+  - inputSchemas:
+    - type: array
+    - items: InterfaceSchemaRef
+  - outputSchemas:
+    - type: array
+    - items: InterfaceSchemaRef
+  - errorSchemas:
+    - type: array
+    - items: InterfaceSchemaRef
+  - securityRefs:
+    - type: array
+    - items: string
+  - capabilities:
+    - type: array
+    - items: InterfaceCapability
+
+InterfaceCatalog:
+
+- type: object
+- required:
+  - schemaVersion
+  - entries
+- properties:
+  - schemaVersion: InterfaceCatalogSchemaVersion
+  - entries:
+    - type: array
+    - items: InterfaceCatalogEntry
 
 ---
 
@@ -40,11 +157,8 @@ Normative: 본 SPEC은 추가적인 Static Shape를 정의하지 않는다.
 ### 3.1 MUST
 
 - API 명세는 adapter/execution/dto/error 모델과 정합해야 한다.
-- API 명세 생성은 다음 입력을 사용할 수 있어야 한다:
-  - 어댑터의 라우팅/이벤트 표면
-  - DTO 스키마
-  - 표준 오류 페이로드
-  - 인증/인가 메타데이터(존재한다면)
+- Interface Catalog는 빌드 타임에 생성 가능해야 하며 동일 입력에서 결정적으로 동일해야 한다.
+- API 명세 생성은 Interface Catalog를 입력으로 사용해야 한다.
 - 명세 산출물은 동일 입력에서 결정적으로 동일해야 한다.
 - 불일치가 검출되면 빌드 실패 또는 명시적 실패로 판정되어야 한다.
 
@@ -63,8 +177,9 @@ Normative: 본 SPEC은 추가적인 Observable Semantics를 정의하지 않는�
 
 ## 5. Violation Conditions
 
-- Build-Time Violation: 명세 생성에 필요한 입력(어댑터 표면/DTO 스키마/오류 페이로드)이 누락되었는데도 생성이 성공하는 경우
+- Build-Time Violation: 명세 생성에 필요한 입력(어댑터 표면/DTO 스키마)이 누락되었는데도 생성이 성공하는 경우
 - Build-Time Violation: 실행 표면과 명세가 불일치한데도 생성이 성공으로 판정되는 경우
+- Build-Time Violation: Interface Catalog가 생성되지 않았는데도 빌드가 성공으로 판정되는 경우
 
 ---
 
@@ -73,7 +188,8 @@ Normative: 본 SPEC은 추가적인 Observable Semantics를 정의하지 않는�
 ### 6.1 Handoff
 
 - DTO 스키마는 dto.spec.md를 따른다.
-- 오류 페이로드는 common.spec.md 및 error-handling.spec.md를 따른다.
+
+- Interface Catalog는 어댑터 및 DTO/에러 모델의 정적 판정 결과를 입력으로 생성되어야 한다.
 
 - 빌드 실패 및 위반 조건의 진단 출력은 diagnostics.spec.md의 형식을 따라야 한다.
 
