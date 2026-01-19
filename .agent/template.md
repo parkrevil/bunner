@@ -8,18 +8,39 @@ description: 단일 Run Plan 템플릿 (에이전트 실행 입력)
 >
 > - 본 문서는 **입력 양식**만을 정의한다.
 > - 모든 규칙·판정·승인·중단의 정본은 아래 문서를 따른다.
->   - 규칙(SSOT): [docs/specs/spec.md](../docs/specs/spec.md), [ARCHITECTURE.md](../ARCHITECTURE.md), [STRUCTURE.md](../STRUCTURE.md), [STYLEGUIDE.md](../STYLEGUIDE.md), [AGENTS.md](../AGENTS.md)
+>   - 정본(문서 지도): [docs/00_INDEX.md](../../docs/00_INDEX.md)
+>   - 권한/행동 제한: [AGENTS.md](../../AGENTS.md)
 >   - 프로세스: [workflow.md](workflow.md)
 
 ## 작성 가이드
 
-- 저장 위치: `docs/plans/<yymmdd>_<seq>_<plan-name>.md`
+- 저장 위치: `plans/<yymmdd>_<seq>_<plan-name>.md`
 - 상태(status): [workflow.md](workflow.md)의 상태 머신을 따른다.
 - 승인/중단/전이 규칙: [workflow.md](workflow.md)를 따른다.
 
+### 필수 헤더 (Plan 파일)
+
+Plan 파일은 frontmatter에 최소한 아래 필드를 포함해야 한다.
+
+```yaml
+---
+status: draft
+---
+```
+
+> `status` 값은 [workflow.md](workflow.md)의 상태 머신을 따른다.
+
 ---
 
-## 0) 시발점(원문)
+## 0) Persona / Handshake (필수)
+
+- Persona:
+  - `@Architect` | `@Implementer` | `@Reviewer`
+
+- Handshake (AGENTS.md 형식 그대로):
+  - "<여기에 AGENTS.md의 Handshake 문구를 그대로 붙여넣는다>"
+
+## 0) 원문(사용자 입력)
 
 - 원문:
   - "<사용자가 최초로 입력한 문장 그대로>"
@@ -47,7 +68,7 @@ description: 단일 Run Plan 템플릿 (에이전트 실행 입력)
 ### Scope
 
 - 변경 대상과 이유:
-  - <path>: <이유>
+  - path/to/file: <이유>
 
 - 변경 유형:
   - [ ] 생성
@@ -103,19 +124,19 @@ description: 단일 Run Plan 템플릿 (에이전트 실행 입력)
   - <검증 방법>
 
 - 변경 파일:
-  - <path>
+  - path/to/file
     - 목적: <...>
     - 변경 내용: <...>
     - 주의 사항: <...>
 
-### Step 2) ...
+### Step 2) <단계명>
 
 ---
 
 ## 6) 검증 / 완료 조건
 
 - [ ] `bun run verify` 통과
-- [ ] `.agent/workflow.md` 절차 준수
+- [ ] [workflow.md](workflow.md) 절차 준수
 
 ---
 
@@ -128,7 +149,7 @@ description: 단일 Run Plan 템플릿 (에이전트 실행 입력)
   - <방법>
 
 - verify 실패:
-  - `docs/governance/SAFEGUARDS.md` 절차를 따른다.
+  - [docs/50_GOVERNANCE/SAFEGUARDS.md](../../docs/50_GOVERNANCE/SAFEGUARDS.md) 절차를 따른다.
 
 ---
 
@@ -139,6 +160,6 @@ description: 단일 Run Plan 템플릿 (에이전트 실행 입력)
 - 변경 요약:
   - <...>
 - 승인 증거:
-  - `ㅇㅇ`
+  - `<승인 토큰>`
 - 영향 범위:
   - <...>

@@ -207,6 +207,15 @@ Diagnostic:
     - type: array
     - items: Cycle
 
+DiagnosticMessageText:
+
+- meaning: 사람이 읽을 수 있는 자연스러운 문자열 메시지
+- type: string
+- constraints:
+  - 길이는 1 이상이어야 한다.
+  - 최소 1개의 공백 문자를 포함해야 한다.
+  - 최소 1개의 문자(영문/한글/숫자 중 하나)를 포함해야 한다.
+
 ### 2.2 Deterministic Output Rules
 
 - 동일 입력에서 CLI가 산출하는 진단 레코드 집합은 결정적으로 동일해야 한다.
@@ -224,6 +233,17 @@ Diagnostic:
 - CLI는 빌드 실패/거부 조건에서 최소 1개 이상의 `Diagnostic`을 산출해야 한다.
 - `Diagnostic`은 `2. Static Shape`와 정확히 일치해야 한다.
 - `Location.file`은 프로젝트 루트 기준 정규화된 상대 경로여야 한다.
+
+- Diagnostic의 summary/why/how.title/how.details(존재하는 경우)는 모두 DiagnosticMessageText를 만족해야 한다.
+
+- Diagnostic에 포함된 모든 세부 정보는 summary/why/how.title/how.details 문자열에 보존되어야 한다.
+  - 보존 판정 규칙: 아래 항목 각각의 문자열 값이 summary/why/how.title/how.details의 연결 문자열에 부분 문자열로 포함되어야 한다.
+    - Diagnostic.code
+    - Diagnostic.severity
+    - 모든 Location.file
+    - Location.symbol이 존재하는 경우 해당 값
+    - CycleNode.id
+    - CycleEdge.from, CycleEdge.to
 
 ### 3.2 MUST NOT
 

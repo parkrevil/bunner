@@ -6,16 +6,17 @@ description: 단일 포괄 워크플로우 (정본)
 
 이 문서는 **작업 진행 순서, 승인 조건, 중단 조건**만을 정의한다.
 
-- 설계/구조 정본: [ARCHITECTURE.md](../ARCHITECTURE.md)
-- 규칙/제약 정본: [docs/specs/spec.md](../docs/specs/spec.md)
-- 권한/행동 제한 정본: [AGENTS.md](../AGENTS.md)
+- 정본(문서 지도): [docs/00_INDEX.md](../../docs/00_INDEX.md)
+- 권한/행동 제한 정본: [AGENTS.md](../../AGENTS.md)
+- 승인 아티팩트(토큰) 정본: [OVERVIEW.md](../../docs/50_GOVERNANCE/OVERVIEW.md)
 - 실행 입력 템플릿: [template.md](template.md)
 
 ---
 
 ## 적용 범위
 
-- 단순 작업 예외를 제외한 모든 작업에 적용한다.
+- 이 Workflow는 사용자가 명시적으로 “계획(Plan) 작성”을 요청한 경우에만 적용한다.
+- 그 외(질문/설명/분석/토론, 또는 파일 변경 요청 포함)는 본 Workflow의 적용 대상이 아니다.
 
 ---
 
@@ -31,9 +32,11 @@ exploration → draft → negotiation → proposed → accepted → in-progress 
 ## Plan 상태 규칙 (MUST)
 
 - Plan은 새 작업 시작 시 1회만 생성한다.
-- Plan 수정은 `in-progress`에서만 가능하다.
-- Plan 변경은 반드시 사용자 승인(`ㅇㅇ`) 후 `Plan Changes`에 append-only로 기록한다.
-- `accepted | implemented | canceled` 상태의 Plan 본문은 불변이다.
+- Plan 본문은 `draft | negotiation | proposed` 상태에서만 수정할 수 있다.
+- `accepted | in-progress | implemented | canceled` 상태의 Plan 본문은 불변이다.
+- Plan 변경이 필요한 경우:
+  - `draft | negotiation | proposed`: Plan 본문을 직접 수정한다.
+  - `in-progress`: 사용자 승인 아티팩트(토큰) 후 `Plan Changes`에 append-only로 기록한다.
 
 ---
 
@@ -76,7 +79,7 @@ exploration → draft → negotiation → proposed → accepted → in-progress 
 ## Phase 4: Proposed
 
 - Spec/Architecture 변경이 필요한 경우, **변경 필요성만 명시**한다.
-- 실제 변경은 사용자 승인(`ㅇㅇ`) 이후에만 가능하다.
+- 실제 변경은 사용자 승인 아티팩트(토큰) 이후에만 가능하다.
 - 최종 승인을 요청한다.
 
 ---
@@ -85,7 +88,7 @@ exploration → draft → negotiation → proposed → accepted → in-progress 
 
 ### 승인 조건 (ALL)
 
-1. 사용자 승인 키워드 `ㅇㅇ`
+1. 사용자 승인 아티팩트(토큰)
 2. Plan `status: accepted`
 3. 관련 문서(Spec/ADR) `status: accepted` (있는 경우)
 
@@ -96,6 +99,8 @@ exploration → draft → negotiation → proposed → accepted → in-progress 
 ## Phase 6: Implementation
 
 - Plan `status`를 `in-progress`로 전환한다.
+- 이 Phase에서 실제 파일 변경은 Phase 5의 승인 조건이 충족된 경우에만 허용한다.
+- 금지/보호 영역(특히 SSOT) 변경 필요성 발견 시 즉시 중단하고 Phase 3으로 복귀한다.
 - Step 단위로 구현 및 최소 검증을 수행한다.
 - 설계 위반 발견 시 즉시 중단하고 Phase 3으로 복귀한다.
 - `bun run verify` 통과 시 `status: implemented`로 전환한다.
@@ -114,7 +119,7 @@ exploration → draft → negotiation → proposed → accepted → in-progress 
 
 ## verify 실패 처리
 
-- 실패 시 [docs/governance/SAFEGUARDS.md](../docs/governance/SAFEGUARDS.md)를 따른다.
+- 실패 시 [SAFEGUARDS.md](../../docs/50_GOVERNANCE/SAFEGUARDS.md)를 따른다.
 - 추가 수정/재시도 여부는 사용자 판단을 기다린다.
 
 ---
