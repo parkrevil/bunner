@@ -16,6 +16,8 @@ export { bootstrapApplication } from './src/application/bootstrap-application';
 
 export { Container } from './src/injector/container';
 
+export { getRuntimeContext, registerRuntimeContext } from './src/runtime/runtime-context';
+
 export { ClusterManager } from './src/cluster/cluster-manager';
 export { ClusterBaseWorker } from './src/cluster/cluster-base-worker';
 export { expose } from './src/cluster/ipc';

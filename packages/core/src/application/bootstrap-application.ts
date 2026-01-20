@@ -3,6 +3,7 @@ import type { BunnerApplicationOptions, ConfigService, EnvService, EnvSource, Pr
 import { config as dotenvConfig } from 'dotenv';
 
 import { BunnerScanner } from '../injector/scanner';
+import { getRuntimeContext } from '../runtime/runtime-context';
 
 import type { BunnerApplication } from './bunner-application';
 import { createApplication } from './create-application';
@@ -235,7 +236,7 @@ export async function bootstrapApplication(entry: unknown, options?: BootstrapAp
     mergedProviders.push({ provide: CONFIG_SERVICE, useValue: configService });
   }
 
-  const aotContainer = (globalThis as any).__BUNNER_CONTAINER__;
+  const aotContainer = getRuntimeContext().container;
   const providedContainer = (options as any)?.container;
   const app = await createApplication(entry, {
     ...(options ?? {}),

@@ -52,55 +52,30 @@ async function bootstrap() {
   try {
     console.log("${isDev ? '🌟 Bunner Server Starting (AOT)...' : '[Entry] Server Initializing...'}");
 
-    const manifestFileName = ${isDev ? "'./manifest.ts'" : "'./manifest.js'"};
-    const manifestUrl = new URL(manifestFileName, import.meta.url);
-
-    Object.defineProperty(globalThis, '__BUNNER_MANIFEST_PATH__', {
-      value: manifestUrl.href,
-      writable: false,
-      configurable: false,
-    });
-
-    const manifest = await import(manifestFileName);
-
-    const manifestApi = manifest as unknown as {
-      createScopedKeysMap?: () => unknown;
-      createContainer?: () => unknown;
-      adapterConfig?: unknown;
-      registerDynamicModules?: (...args: unknown[]) => unknown;
-    };
-
-    if (typeof manifestApi.createScopedKeysMap === 'function') {
-      Object.defineProperty(globalThis, '__BUNNER_SCOPED_KEYS__', {
-        value: manifestApi.createScopedKeysMap(),
-        writable: false,
-        configurable: false,
-      });
-    }
-
-    const injector = {
-      createContainer: manifestApi.createContainer,
-      adapterConfig: manifestApi.adapterConfig,
-      registerDynamicModules: manifestApi.registerDynamicModules,
-    };
-
-    const container = injector.createContainer && injector.createContainer();
+    const runtimeFileName = ${isDev ? "'./runtime.ts'" : "'./runtime.js'"};
+    const runtimeModule = await import(runtimeFileName);
+    const metadataRegistry = runtimeModule.metadataRegistry ??
+      (typeof runtimeModule.createMetadataRegistry === 'function' ? runtimeModule.createMetadataRegistry() : undefined);
+    const scopedKeys = runtimeModule.scopedKeysMap ??
+      (typeof runtimeModule.createScopedKeysMap === 'function' ? runtimeModule.createScopedKeysMap() : undefined);
+    const container = runtimeModule.createContainer && runtimeModule.createContainer();
 
     if (!container) {
       throw new Error('[Entry Error] Failed to create container.');
     }
 
-    Object.defineProperty(globalThis, '__BUNNER_CONTAINER__', {
-      value: container,
-      writable: false,
-      configurable: false,
+    const { registerRuntimeContext } = await import("@bunner/core");
+
+    registerRuntimeContext({
+      container,
+      metadataRegistry,
+      scopedKeys,
+      isAotRuntime: true,
     });
-    
-    Object.defineProperty(globalThis, '__BUNNER_ADAPTER_CONFIG__', {
-      value: injector.adapterConfig,
-      writable: false,
-      configurable: false,
-    });
+
+    if (typeof runtimeModule.registerDynamicModules === 'function') {
+      await runtimeModule.registerDynamicModules(container);
+    }
 
     console.log("[Entry] Loading Application Module...");
 

@@ -1,5 +1,5 @@
 import { BunnerErrorFilter } from '@bunner/common';
-import { Container } from '@bunner/core';
+import { Container, registerRuntimeContext } from '@bunner/core';
 import { describe, expect, it, mock } from 'bun:test';
 import { StatusCodes } from 'http-status-codes';
 
@@ -238,7 +238,7 @@ describe('BunnerHttpAdapter.addErrorFilters', () => {
     const onCall = mock(() => {});
     const metadataRegistry = createAdapterRegistry();
 
-    (globalThis as any).__BUNNER_METADATA_REGISTRY__ = metadataRegistry;
+    registerRuntimeContext({ metadataRegistry });
 
     const container = new Container();
 

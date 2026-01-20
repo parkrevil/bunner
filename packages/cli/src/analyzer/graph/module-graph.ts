@@ -15,11 +15,14 @@ export class ModuleGraph {
   public classMap: Map<string, ModuleNode> = new Map();
   public classDefinitions: Map<string, { metadata: ClassMetadata; filePath: string }> = new Map();
 
-  constructor(private fileMap: Map<string, FileAnalysis>) {}
+  constructor(
+    private fileMap: Map<string, FileAnalysis>,
+    private moduleFileName: string,
+  ) {}
 
   build(): Map<string, ModuleNode> {
     const allFiles = Array.from(this.fileMap.keys()).sort(compareCodePoint);
-    const discovery = new ModuleDiscovery(allFiles);
+    const discovery = new ModuleDiscovery(allFiles, this.moduleFileName);
     const moduleMap = discovery.discover();
 
     discovery.getOrphans();

@@ -12,13 +12,6 @@ async function importDataModule<TModule extends Record<string, unknown>>(jsCode:
   return (await import(moduleUrl)) as TModule;
 }
 
-function stripExports(code: string): string {
-  return code
-    .replace(/\bexport\s+function\s+/g, 'function ')
-    .replace(/\bexport\s+const\s+/g, 'const ')
-    .replace(/\bexport\s*\{\s*\}\s*;?/g, '');
-}
-
 function createSingleModuleGraph(): ModuleGraph {
   const modulePath = '/app/src/app/__module__.ts';
   const fileMap = new Map<string, FileAnalysis>();
@@ -37,7 +30,7 @@ function createSingleModuleGraph(): ModuleGraph {
     },
   });
 
-  const graph = new ModuleGraph(fileMap);
+  const graph = new ModuleGraph(fileMap, '__module__.ts');
 
   graph.build();
 
@@ -62,47 +55,7 @@ function transpileTsModule(tsSnippet: string): string {
 }
 
 describe('ManifestGenerator.generate', () => {
-  it('should define __BUNNER_METADATA_REGISTRY__ as non-writable and non-configurable', () => {
-    const graph = createSingleModuleGraph();
-    const gen = new ManifestGenerator();
-    const code = gen.generate(graph, [], '/out');
-
-    expect(code).toContain("Object.defineProperty(globalThis, '__BUNNER_METADATA_REGISTRY__'");
-    expect(code).toContain('writable: false');
-    expect(code).toContain('configurable: false');
-  });
-
-  it('should generate a scoped keys map that throws on mutation', async () => {
-    const graph = createSingleModuleGraph();
-    const gen = new ManifestGenerator();
-    const code = gen.generate(graph, [], '/out');
-    const deepFreezeBlock = extractGeneratedBlock({
-      code,
-      matcher: /const deepFreeze = \([\s\S]*?\n};/,
-      name: 'deepFreeze block',
-    });
-    const sealMapBlock = extractGeneratedBlock({
-      code,
-      matcher: /const sealMap = <K, V>\([\s\S]*?\n};/,
-      name: 'sealMap block',
-    });
-    const createScopedKeysMapBlock = extractGeneratedBlock({
-      code,
-      matcher: /export function createScopedKeysMap\(\)\s*\{[\s\S]*?\n\}/,
-      name: 'createScopedKeysMap block',
-    });
-    const tsSnippet = `${deepFreezeBlock}\n${sealMapBlock}\n${createScopedKeysMapBlock}`;
-    const jsSnippet = transpileTsModule(tsSnippet);
-    const mod = await importDataModule<{ createScopedKeysMap: () => Map<unknown, unknown> }>(jsSnippet);
-    const map = mod.createScopedKeysMap();
-
-    expect(Object.isFrozen(map)).toBe(true);
-    expect(() => map.set('k', 'v')).toThrow(/immutable/i);
-    expect(() => map.delete('k')).toThrow(/immutable/i);
-    expect(() => map.clear()).toThrow(/immutable/i);
-  });
-
-  it('should prevent __BUNNER_METADATA_REGISTRY__ reassignment and redefinition', async () => {
+  it('should export a sealed metadata registry', async () => {
     const graph = createSingleModuleGraph();
     const gen = new ManifestGenerator();
     const code = gen.generate(graph, [], '/out');
@@ -121,41 +74,45 @@ describe('ManifestGenerator.generate', () => {
       matcher: /export function createMetadataRegistry\(\)\s*\{[\s\S]*?\n\}/,
       name: 'createMetadataRegistry block',
     });
-    const registryDefineBlock = extractGeneratedBlock({
-      code,
-      matcher: /const registry = createMetadataRegistry\(\);[\s\S]*?export const metadataRegistry = registry;\n/,
-      name: 'registry define block',
-    });
-    const sandbox = {} as Record<string, unknown>;
-    const createMetadataRegistryInnerBlock = stripExports(createMetadataRegistryBlock);
-    const registryDefineInnerBlock = stripExports(registryDefineBlock);
-    const tsSnippet = `
-      export function setupRegistry(sandbox: Record<string, unknown>): unknown {
-        const globalThis = sandbox as unknown as Record<string, unknown>;
-
-        ${deepFreezeBlock}
-
-        ${sealMapBlock}
-
-        ${createMetadataRegistryInnerBlock}
-
-        ${registryDefineInnerBlock}
-
-        return (sandbox as any).__BUNNER_METADATA_REGISTRY__;
-      }
-    `;
+    const tsSnippet = `${deepFreezeBlock}\n${sealMapBlock}\n${createMetadataRegistryBlock}\nexport const metadataRegistry = createMetadataRegistry();`;
     const jsSnippet = transpileTsModule(tsSnippet);
-    const mod = await importDataModule<{ setupRegistry: (sandbox: Record<string, unknown>) => unknown }>(jsSnippet);
-    const registry = mod.setupRegistry(sandbox) as Map<unknown, unknown>;
+    const mod = await importDataModule<{ metadataRegistry: Map<unknown, unknown> }>(jsSnippet);
+    const registry = mod.metadataRegistry;
 
-    expect(registry).toBeInstanceOf(Map);
-    expect(() => {
-      (sandbox as any).__BUNNER_METADATA_REGISTRY__ = new Map();
-    }).toThrow();
-    expect(() => {
-      Object.defineProperty(sandbox, '__BUNNER_METADATA_REGISTRY__', { value: new Map() });
-    }).toThrow();
-    expect((sandbox as any).__BUNNER_METADATA_REGISTRY__).toBe(registry);
+    expect(Object.isFrozen(registry)).toBe(true);
+    expect(() => registry.set('k', 'v')).toThrow(/immutable/i);
+    expect(() => registry.delete('k')).toThrow(/immutable/i);
+    expect(() => registry.clear()).toThrow(/immutable/i);
+  });
+
+  it('should export a scoped keys map that throws on mutation', async () => {
+    const graph = createSingleModuleGraph();
+    const gen = new ManifestGenerator();
+    const code = gen.generate(graph, [], '/out');
+    const deepFreezeBlock = extractGeneratedBlock({
+      code,
+      matcher: /const deepFreeze = \([\s\S]*?\n};/,
+      name: 'deepFreeze block',
+    });
+    const sealMapBlock = extractGeneratedBlock({
+      code,
+      matcher: /const sealMap = <K, V>\([\s\S]*?\n};/,
+      name: 'sealMap block',
+    });
+    const createScopedKeysMapBlock = extractGeneratedBlock({
+      code,
+      matcher: /export function createScopedKeysMap\(\)\s*\{[\s\S]*?\n\}/,
+      name: 'createScopedKeysMap block',
+    });
+    const tsSnippet = `${deepFreezeBlock}\n${sealMapBlock}\n${createScopedKeysMapBlock}\nexport const scopedKeysMap = createScopedKeysMap();`;
+    const jsSnippet = transpileTsModule(tsSnippet);
+    const mod = await importDataModule<{ scopedKeysMap: Map<unknown, unknown> }>(jsSnippet);
+    const map = mod.scopedKeysMap;
+
+    expect(Object.isFrozen(map)).toBe(true);
+    expect(() => map.set('k', 'v')).toThrow(/immutable/i);
+    expect(() => map.delete('k')).toThrow(/immutable/i);
+    expect(() => map.clear()).toThrow(/immutable/i);
   });
 
   it('should deep-freeze nested metadata-like objects', async () => {

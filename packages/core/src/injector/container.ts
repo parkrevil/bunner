@@ -1,5 +1,7 @@
 import type { BunnerContainer } from '@bunner/common';
 
+import { getRuntimeContext } from '../runtime/runtime-context';
+
 export type FactoryFn<T = any> = (container: Container) => T;
 export type Token = any;
 
@@ -107,7 +109,7 @@ export class Container implements BunnerContainer {
   }
 
   private resolveDepsFor(ctor: any, scope: string, _c: Container): any[] {
-    const registry = (globalThis as any).__BUNNER_METADATA_REGISTRY__;
+    const registry = getRuntimeContext().metadataRegistry;
 
     if (!registry || !registry.has(ctor)) {
       return [];

@@ -9,10 +9,8 @@ describe('EntryGenerator.generate', () => {
 
     expect(code).toContain('if (workersCount <= 1)');
     expect(code).toContain('await bootstrap();');
-    expect(code).toContain("const manifestFileName = './manifest.js'");
-    expect(code).toContain('new URL(manifestFileName, import.meta.url)');
-    expect(code).toContain('__BUNNER_MANIFEST_PATH__');
-    expect(code).toContain('await import(manifestFileName)');
+    expect(code).toContain("const runtimeFileName = './runtime.js'");
+    expect(code).toContain('await import(runtimeFileName)');
     expect(code).toContain('new ClusterManager');
   });
 

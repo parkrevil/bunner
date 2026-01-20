@@ -87,8 +87,8 @@ describe('ModuleGraph.build', () => {
     fileMap2.set(modulePath, moduleFile);
     fileMap2.set(servicePath, serviceFile);
 
-    const graph1 = new ModuleGraph(fileMap1);
-    const graph2 = new ModuleGraph(fileMap2);
+    const graph1 = new ModuleGraph(fileMap1, '__module__.ts');
+    const graph2 = new ModuleGraph(fileMap2, '__module__.ts');
     const modules1 = graph1.build();
     const modules2 = graph2.build();
 
@@ -127,7 +127,7 @@ describe('ModuleGraph.build', () => {
       }),
     );
 
-    const graph = new ModuleGraph(fileMap);
+    const graph = new ModuleGraph(fileMap, '__module__.ts');
 
     expect(() => graph.build()).toThrow(/Circular dependency detected/);
   });

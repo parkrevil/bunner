@@ -1,3 +1,5 @@
+import { getRuntimeContext } from '../runtime/runtime-context';
+
 export class MetadataConsumer {
   private static cliRegistry = new Map<any, any>();
 
@@ -6,8 +8,12 @@ export class MetadataConsumer {
   }
 
   static getCombinedMetadata(target: Function) {
-    if (this.cliRegistry.size === 0 && (globalThis as any).__BUNNER_METADATA_REGISTRY__) {
-      this.cliRegistry = (globalThis as any).__BUNNER_METADATA_REGISTRY__;
+    if (this.cliRegistry.size === 0) {
+      const runtimeRegistry = getRuntimeContext().metadataRegistry;
+
+      if (runtimeRegistry) {
+        this.cliRegistry = runtimeRegistry;
+      }
     }
 
     const cliMeta = this.cliRegistry.get(target);

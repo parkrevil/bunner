@@ -1,5 +1,5 @@
 import type { BunnerAdapter, ErrorFilterToken } from '@bunner/common';
-import { ClusterManager, type ClusterBaseWorker, type BunnerApplicationNormalizedOptions } from '@bunner/core';
+import { ClusterManager, getRuntimeContext, type ClusterBaseWorker, type BunnerApplicationNormalizedOptions } from '@bunner/core';
 
 import { BunnerHttpServer } from './bunner-http-server';
 import {
@@ -81,10 +81,12 @@ export class BunnerHttpAdapter implements BunnerAdapter {
     if (isSingleProcess) {
       this.httpServer = new BunnerHttpServer();
 
+      const runtimeContext = getRuntimeContext();
+
       await this.httpServer.boot(context.container, {
         ...this.options,
-        metadata: (globalThis as any).__BUNNER_METADATA_REGISTRY__,
-        scopedKeys: (globalThis as any).__BUNNER_SCOPED_KEYS__,
+        metadata: runtimeContext.metadataRegistry,
+        scopedKeys: runtimeContext.scopedKeys,
         middlewares: this.middlewareRegistry,
         errorFilters: this.errorFilterTokens,
         internalRoutes: this.internalRoutes,
@@ -130,9 +132,9 @@ export class BunnerHttpAdapter implements BunnerAdapter {
   }
 
   protected resolveWorkerScript(): URL {
-    const hasAotManifest = !!(globalThis as any).__BUNNER_MANIFEST_PATH__;
+    const isAotRuntime = getRuntimeContext().isAotRuntime === true;
 
-    if (hasAotManifest) {
+    if (isAotRuntime) {
       return new URL('./bunner-http-worker.ts', import.meta.url);
     }
 

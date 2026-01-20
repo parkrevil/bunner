@@ -1,5 +1,5 @@
 import type { BunnerContainer, BunnerErrorFilter, BunnerMiddleware } from '@bunner/common';
-import { Container } from '@bunner/core';
+import { Container, registerRuntimeContext } from '@bunner/core';
 
 import {
   BunnerRequest,
@@ -30,7 +30,7 @@ export function createHttpTestHarness(params: {
 }): HttpTestHarness {
   const { metadataRegistry, providers, routerOptions } = params;
 
-  (globalThis as any).__BUNNER_METADATA_REGISTRY__ = metadataRegistry;
+  registerRuntimeContext({ metadataRegistry });
 
   const container = new Container();
 

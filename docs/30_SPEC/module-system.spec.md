@@ -254,6 +254,14 @@ Observable:
 - 모든 프레임워크-인식 대상 파일은 정확히 1개의 모듈에 귀속되어야 한다.
 - 모듈 정의 파일이 없는 디렉토리의 구성 요소는 가장 가까운 상위 모듈로 귀속되어야 한다.
 
+프레임워크-인식 대상 파일 판정 규칙(관측 가능한 결과로서의 규칙):
+
+- 프레임워크-인식 대상 파일은, 빌드 타임 정적 분석(AOT) 과정에서 아래 조건 중 하나라도 만족하는 파일 집합으로 판정되어야 한다.
+  - 모듈 루트 파일(이 SPEC의 모듈 루트 판정 규칙에 의해 모듈 루트로 판정되는 디렉토리 내부의 resolved fileName 파일)
+  - 모듈 루트 파일에서 export 되는 모듈 마커(ModuleRef) 선언을 포함하는 파일(common.spec.md)
+  - DI 입력으로 수집되는 선언을 포함하는 파일(common.spec.md)
+  - 어댑터/실행/문서 산출을 위한 빌드 타임 입력으로 수집되는 선언을 포함하는 파일(각 대응 SPEC)
+
 모듈 루트 판정 규칙(관측 가능한 결과로서의 규칙):
 
 - 디렉토리 `D` 내부에 resolved `fileName`이 존재하면, `D`는 모듈 루트로 판정되어야 한다.
@@ -274,7 +282,7 @@ Observable:
 
 - Build-Time Violation: resolved bunner config에 `module.fileName`이 존재하지 않는 경우
 - Build-Time Violation: `fileName`이 단일 파일명이 아니거나, 경로 구문(`/`, `..`)을 포함하는 경우
-- Build-Time Violation: 단일 파일이 어떤 모듈에도 귀속되지 못하는 경우
+- Build-Time Violation: 프레임워크-인식 대상 파일이 어떤 모듈에도 귀속되지 못하는 경우
 - Test-Level Violation: 동일한 입력에서 서로 다른 모듈 판정 결과가 생성되는 경우
 
 - Build-Time Violation: `dependsOn`이 리스트인데 빈 배열인데도 빌드가 성공하는 경우

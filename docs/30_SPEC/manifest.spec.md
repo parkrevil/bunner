@@ -250,13 +250,17 @@ BunnerManifest:
 ### 3.1 MUST
 
 - CLI는 빌드 타임에 Manifest를 생성해야 한다.
+- Manifest 산출물은 `BunnerManifest` 데이터의 JSON(UTF-8) 표현으로 관측 가능해야 한다.
 - Manifest는 동일 입력(프로젝트 파일 시스템 + 동일한 resolved config)에서 결정적으로 동일해야 한다.
 - Manifest의 `modules`는 `id` 오름차순으로 정렬되어야 한다.
 - Manifest는 런타임에서 수정될 수 없어야 한다.
+- Manifest가 런타임 메모리에 존재하는 동안, Manifest에 대한 변경 시도는 throw로 관측되어야 한다.
 - Manifest는 모듈 판정 결과를 module-system.spec.md와 모순 없이 표현해야 한다.
 - Manifest는 DI 그래프 정규화 결과를 포함해야 한다.
 - Manifest는 Adapter Static Spec의 정적 결과를 포함해야 한다.
 - Manifest는 Handler 판정 결과의 정적 인덱스를 포함해야 한다.
+
+- App 부트스트랩 완료 이후, 구조 판정 및 wiring을 위한 메타데이터(Manifest 포함)에 접근 가능한 런타임 경로는 존재해서는 안 된다.
 
 ### 3.2 MUST NOT
 

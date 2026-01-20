@@ -1,11 +1,12 @@
+import { getRuntimeContext } from '@bunner/core';
+
 import { isMap, isRecord } from '../common';
 import { OpenApiFactory } from '../spec-factory';
 
 import type { Doc } from './interfaces';
 
 export function buildDocsForHttpAdapters(httpAdapterNames: string[], registry?: Map<any, any>): Doc[] {
-  const globalRecord = globalThis as unknown as Record<string, unknown>;
-  const registryValue = registry ?? globalRecord['__BUNNER_METADATA_REGISTRY__'];
+  const registryValue = registry ?? getRuntimeContext().metadataRegistry;
 
   if (!registryValue) {
     throw new Error('Scalar: No Metadata Registry found. Ensure app.init() completes before Scalar binding.');

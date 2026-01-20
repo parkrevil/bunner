@@ -8,6 +8,7 @@
   "dependencies": {},
   "peerDependencies": {
     "bun": "*",
-    "@bunner/common": "workspace:*"
+    "@bunner/common": "workspace:*",
+    "@bunner/core": "workspace:*"
   }
 }

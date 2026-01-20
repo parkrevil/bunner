@@ -1,5 +1,7 @@
 import type { Class } from '@bunner/common';
 
+import { getRuntimeContext } from '../runtime/runtime-context';
+
 import type { Container } from './container';
 import type { ModuleMetadata } from './types';
 
@@ -36,7 +38,7 @@ export class BunnerScanner {
 
     this.registerProvider(moduleClass);
 
-    const registry = this.registry ?? (globalThis as any).__BUNNER_METADATA_REGISTRY__;
+    const registry = this.registry ?? getRuntimeContext().metadataRegistry;
 
     if (!registry || !registry.has(moduleClass)) {
       return;
@@ -114,8 +116,9 @@ export class BunnerScanner {
   // I must implement it here or expose it in Container.
   // Implementing here is fine.
   private resolveDepsFor(ctor: any, c: Container): any[] {
-    const registry = this.registry ?? (globalThis as any).__BUNNER_METADATA_REGISTRY__;
-    const scopedKeys = (globalThis as any).__BUNNER_SCOPED_KEYS__ as Map<any, string> | undefined;
+    const runtimeContext = getRuntimeContext();
+    const registry = this.registry ?? runtimeContext.metadataRegistry;
+    const scopedKeys = runtimeContext.scopedKeys;
 
     if (!registry || !registry.has(ctor)) {
       return [];

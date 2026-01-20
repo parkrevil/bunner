@@ -1,4 +1,4 @@
-import { dirname, sep } from 'path';
+import { basename, dirname, sep } from 'path';
 
 import { compareCodePoint } from '../common';
 
@@ -6,10 +6,13 @@ export class ModuleDiscovery {
   private moduleMap: Map<string, Set<string>> = new Map();
   private orphanFiles: Set<string> = new Set();
 
-  constructor(private filePaths: string[]) {}
+  constructor(
+    private filePaths: string[],
+    private moduleFileName: string,
+  ) {}
 
   public discover(): Map<string, Set<string>> {
-    const modules = this.filePaths.filter(p => p.endsWith('__module__.ts'));
+    const modules = this.filePaths.filter(p => basename(p) === this.moduleFileName);
     const sortedModules = [...modules].sort((a, b) => {
       const diff = b.length - a.length;
 
@@ -26,7 +29,7 @@ export class ModuleDiscovery {
     sortedModules.forEach(m => this.moduleMap.set(m, new Set()));
 
     for (const file of sortedFiles) {
-      if (file.endsWith('__module__.ts')) {
+      if (basename(file) === this.moduleFileName) {
         continue;
       }
 

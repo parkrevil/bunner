@@ -1,31 +1,66 @@
-import { join } from 'path';
+import { basename, join, relative } from 'path';
 
-import type { BunnerConfig } from './interfaces';
+import { ConfigLoadError } from './errors';
+import type { ConfigLoadResult, ConfigModule, ResolvedBunnerConfig } from './interfaces';
 
 export class ConfigLoader {
-  static async load(cwd: string = process.cwd()): Promise<BunnerConfig> {
-    const configPaths = [join(cwd, 'bunner.config.ts'), join(cwd, 'bunner.config.js')];
+  static async load(cwd: string = process.cwd()): Promise<ConfigLoadResult> {
+    const configCandidates = [
+      { path: join(cwd, 'bunner.config.ts'), format: 'ts' as const },
+      { path: join(cwd, 'bunner.config.json'), format: 'json' as const },
+    ];
 
-    for (const path of configPaths) {
-      if (await Bun.file(path).exists()) {
-        try {
-          console.info(`🔧 Loading config from ${path}`);
+    for (const candidate of configCandidates) {
+      if (!(await Bun.file(candidate.path).exists())) {
+        continue;
+      }
 
-          const mod = await import(path);
+      try {
+        console.info(`🔧 Loading config from ${candidate.path}`);
 
-          return mod.default ?? mod;
-        } catch (error) {
-          console.error(`❌ Failed to load config at ${path}`, error);
+        const config =
+          candidate.format === 'ts'
+            ? ((await import(candidate.path)) as ConfigModule)
+            : (JSON.parse(await Bun.file(candidate.path).text()) as ResolvedBunnerConfig);
+        const resolved = (
+          candidate.format === 'ts' ? ((config as ConfigModule).default ?? (config as unknown)) : config
+        ) as ResolvedBunnerConfig;
+        const moduleConfig = resolved?.module;
+        const fileName = moduleConfig?.fileName;
 
+        if (!moduleConfig || typeof moduleConfig !== 'object') {
+          throw new ConfigLoadError('Invalid bunner config: module is required.', relative(cwd, candidate.path));
+        }
+
+        if (typeof fileName !== 'string' || fileName.length === 0) {
+          throw new ConfigLoadError('Invalid bunner config: module.fileName is required.', relative(cwd, candidate.path));
+        }
+
+        if (basename(fileName) !== fileName || fileName.includes('/') || fileName.includes('\\')) {
+          throw new ConfigLoadError(
+            'Invalid bunner config: module.fileName must be a single filename.',
+            relative(cwd, candidate.path),
+          );
+        }
+
+        return {
+          config: resolved,
+          source: {
+            path: relative(cwd, candidate.path),
+            format: candidate.format,
+          },
+        };
+      } catch (error) {
+        console.error(`❌ Failed to load config at ${candidate.path}`, error);
+
+        if (error instanceof ConfigLoadError) {
           throw error;
         }
+
+        throw new ConfigLoadError('Failed to load bunner config.', relative(cwd, candidate.path));
       }
     }
 
-    console.warn('⚠️ No config found, using defaults.');
-
-    return {
-      entry: './src/main.ts',
-    };
+    throw new ConfigLoadError('Missing bunner config: bunner.config.ts or bunner.config.json is required.');
   }
 }
