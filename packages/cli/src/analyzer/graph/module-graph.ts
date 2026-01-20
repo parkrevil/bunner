@@ -1,3 +1,5 @@
+import { basename, dirname } from 'path';
+
 import { compareCodePoint } from '../../common';
 import type { ClassMetadata } from '../interfaces';
 import { ModuleDiscovery } from '../module-discovery';
@@ -24,8 +26,14 @@ export class ModuleGraph {
     const allFiles = Array.from(this.fileMap.keys()).sort(compareCodePoint);
     const discovery = new ModuleDiscovery(allFiles, this.moduleFileName);
     const moduleMap = discovery.discover();
+    const orphans = discovery.getOrphans();
 
-    discovery.getOrphans();
+    if (orphans.size > 0) {
+      const sortedOrphans = Array.from(orphans.values()).sort(compareCodePoint);
+      const summary = sortedOrphans.join('\n');
+
+      throw new Error(`[Bunner AOT] Orphan files detected:\n${summary}`);
+    }
 
     const moduleEntries = Array.from(moduleMap.entries()).sort(([a], [b]) => compareCodePoint(a, b));
 
@@ -33,12 +41,18 @@ export class ModuleGraph {
       const moduleFile = this.fileMap.get(modulePath);
       const rawDef = moduleFile?.moduleDefinition;
 
+      if (rawDef?.nameDeclared && !rawDef?.name) {
+        throw new Error(`[Bunner AOT] Module name must be a statically determinable string literal (${modulePath}).`);
+      }
+
       if (!moduleFile) {
         continue;
       }
 
+      const moduleRootDir = dirname(modulePath);
+      const moduleName = rawDef?.name ?? basename(moduleRootDir);
       const syntheticMeta: ClassMetadata = {
-        className: rawDef?.name || 'AnonymousModule',
+        className: moduleName,
         heritage: undefined,
         decorators: [],
         constructorParams: [],
@@ -49,7 +63,7 @@ export class ModuleGraph {
       const node = new ModuleNode(syntheticMeta);
 
       node.filePath = modulePath;
-      node.name = rawDef?.name || 'AnonymousModule';
+      node.name = moduleName;
       node.moduleDefinition = rawDef;
 
       this.modules.set(modulePath, node);

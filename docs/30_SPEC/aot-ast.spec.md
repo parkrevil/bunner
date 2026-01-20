@@ -104,6 +104,8 @@ BuildProfile:
 - CLI는 bunner config를 빌드 타임에 로딩하여, AOT 판정의 입력으로 포함해야 한다.
 - CLI는 모호함이 발견되면 추측하지 않고 빌드를 즉시 중단해야 한다.
 - Build profile은 BuildProfile로 판정 가능해야 한다.
+- Build profile은 빌드 호출 입력에 의해 명시될 수 있어야 한다.
+- Build profile이 빌드 호출 입력에 의해 명시된 경우, 해당 값은 우선 적용되어야 한다.
 - Build profile minimal은 Manifest만 생성해야 한다.
 - Build profile standard는 Manifest와 Interface Catalog를 생성해야 한다.
 - Build profile full은 Manifest, Interface Catalog, Runtime Observation Artifact를 생성해야 한다.
@@ -124,6 +126,7 @@ Input:
 - 프로젝트 파일 시스템 트리
 - 프로젝트 루트 디렉토리
 - bunner config 소스(`bunner.config.ts` 또는 `bunner.config.json`)
+- 빌드 호출 입력(선택): build profile 선택
 - 모듈 루트 파일 집합 (module-system.spec.md로 판정된 모듈 파일)
 
 Observable:
@@ -148,6 +151,7 @@ resolved config의 필수 규칙:
 - "동일 입력"은 최소한 다음을 포함해야 한다.
   - 프로젝트 파일 시스템의 동일 상태
   - resolved bunner config의 동일 상태
+  - effective build profile의 동일 상태
 
 - bunner config 소스가 환경변수 등을 사용하더라도, 결정성 입력은 resolved bunner config를 기준으로 판정되어야 한다.
 
@@ -169,6 +173,7 @@ resolved config의 필수 규칙:
 - Build-Time Violation: bunner config 파일이 존재하지 않는데 빌드가 성공하는 경우
 - Build-Time Violation: resolved config에 `module.fileName`이 존재하지 않는데 빌드가 성공하는 경우
 - Build-Time Violation: resolved config가 계약 형상(`ResolvedBunnerConfigModule`)을 위반하는 경우
+- Build-Time Violation: effective build profile이 BuildProfile 허용값을 위반하는데도 빌드가 성공하는 경우
 - Test-Level Violation: 동일 입력에서 AOT 판정 결과 또는 산출물이 비결정적으로 달라지는 경우
 
 ---

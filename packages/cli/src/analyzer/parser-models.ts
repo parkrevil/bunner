@@ -6,6 +6,7 @@ export interface ReExport {
 
 export interface ModuleDefinition {
   name?: string;
+  nameDeclared?: boolean;
   providers: unknown[];
   adapters?: unknown;
   imports: Record<string, string>;

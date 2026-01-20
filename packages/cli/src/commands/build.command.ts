@@ -1,3 +1,4 @@
+import { mkdir, rm } from 'fs/promises';
 import { join, resolve, dirname } from 'path';
 
 import { Glob } from 'bun';
@@ -7,20 +8,21 @@ import { ConfigLoader, ConfigLoadError, compareCodePoint, scanGlobSorted, writeI
 import { buildDiagnostic, reportDiagnostics } from '../diagnostics';
 import { EntryGenerator, ManifestGenerator } from '../generator';
 
-import type { CollectedClass } from './types';
+import type { CollectedClass, CommandOptions } from './types';
 
-export async function build() {
+export async function build(commandOptions?: CommandOptions) {
   console.info('🚀 Starting Bunner Production Build...');
 
   try {
     const configResult = await ConfigLoader.load();
     const config = configResult.config;
     const moduleFileName = config.module.fileName;
-    const buildProfile = config.compiler?.profile ?? 'full';
+    const buildProfile = commandOptions?.profile ?? config.compiler?.profile ?? 'full';
     const projectRoot = process.cwd();
     const srcDir = resolve(projectRoot, 'src');
     const outDir = resolve(projectRoot, 'dist');
     const bunnerDir = resolve(projectRoot, '.bunner');
+    const buildTempDir = resolve(outDir, '.bunner-temp');
 
     console.info(`📂 Project Root: ${projectRoot}`);
     console.info(`📂 Source Dir: ${srcDir}`);
@@ -138,6 +140,8 @@ export async function build() {
 
     console.info('🛠️  Generating intermediate manifests...');
 
+    await mkdir(bunnerDir, { recursive: true });
+
     const manifestFile = join(bunnerDir, 'manifest.json');
     const manifestJson = manifestGen.generateJson({
       graph,
@@ -147,13 +151,14 @@ export async function build() {
     });
 
     await writeIfChanged(manifestFile, manifestJson);
+    await mkdir(buildTempDir, { recursive: true });
 
-    const runtimeFile = join(bunnerDir, 'runtime.ts');
-    const runtimeCode = manifestGen.generate(graph, allClasses, bunnerDir);
+    const runtimeFile = join(buildTempDir, 'runtime.ts');
+    const runtimeCode = manifestGen.generate(graph, allClasses, buildTempDir);
 
     await writeIfChanged(runtimeFile, runtimeCode);
 
-    const entryPointFile = join(bunnerDir, 'entry.ts');
+    const entryPointFile = join(buildTempDir, 'entry.ts');
     const entryGen = new EntryGenerator();
     const buildEntryContent = entryGen.generate(userMain, false, { workers: config.workers });
 
@@ -174,18 +179,23 @@ export async function build() {
       throw new Error(`Invalid build profile: ${buildProfile}`);
     }
 
+    const interfaceCatalogFile = join(bunnerDir, 'interface-catalog.json');
+    const runtimeReportFile = join(bunnerDir, 'runtime-report.json');
+
     if (buildProfile === 'standard' || buildProfile === 'full') {
-      const interfaceCatalogFile = join(bunnerDir, 'interface-catalog.json');
       const interfaceCatalogJson = JSON.stringify({ schemaVersion: '1', entries: [] }, null, 2);
 
       await writeIfChanged(interfaceCatalogFile, interfaceCatalogJson);
+    } else {
+      await rm(interfaceCatalogFile, { force: true });
     }
 
     if (buildProfile === 'full') {
-      const runtimeReportFile = join(bunnerDir, 'runtime-report.json');
       const runtimeReportJson = JSON.stringify({ schemaVersion: '1', adapters: [] }, null, 2);
 
       await writeIfChanged(runtimeReportFile, runtimeReportJson);
+    } else {
+      await rm(runtimeReportFile, { force: true });
     }
 
     console.info('📦 Bundling application, manifest, and workers...');
@@ -210,13 +220,10 @@ export async function build() {
     });
 
     if (!buildResult.success) {
-      console.error('❌ Build failed!');
+      const logMessages = buildResult.logs.map(log => log.message).join('\n');
+      const reason = logMessages.length > 0 ? `Build failed:\n${logMessages}` : 'Build failed.';
 
-      for (const log of buildResult.logs) {
-        console.error(log.message, log);
-      }
-
-      throw new Error('Build failed');
+      throw new Error(reason);
     }
 
     console.info('✅ Build Complete!');

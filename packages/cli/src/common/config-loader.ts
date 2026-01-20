@@ -51,8 +51,6 @@ export class ConfigLoader {
           },
         };
       } catch (error) {
-        console.error(`❌ Failed to load config at ${candidate.path}`, error);
-
         if (error instanceof ConfigLoadError) {
           throw error;
         }

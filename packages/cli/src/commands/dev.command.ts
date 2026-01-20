@@ -1,28 +1,32 @@
-import { join, resolve } from 'path';
+import { mkdir, rm } from 'fs/promises';
+import { join, resolve, relative } from 'path';
 
 import { Glob } from 'bun';
 
 import { AstParser, ModuleGraph, type FileAnalysis } from '../analyzer';
 import { ConfigLoader, ConfigLoadError, scanGlobSorted, writeIfChanged } from '../common';
 import { buildDiagnostic, reportDiagnostics } from '../diagnostics';
-import { EntryGenerator, ManifestGenerator } from '../generator';
+import { ManifestGenerator } from '../generator';
 import { ProjectWatcher } from '../watcher';
 
-import type { CollectedClass } from './types';
+import type { CommandOptions } from './types';
 
-export async function dev() {
+export async function dev(commandOptions?: CommandOptions) {
   console.info('🚀 Starting Bunner Dev...');
 
   try {
     const configResult = await ConfigLoader.load();
     const config = configResult.config;
     const moduleFileName = config.module.fileName;
-    const buildProfile = config.compiler?.profile ?? 'full';
+    const buildProfile = commandOptions?.profile ?? config.compiler?.profile ?? 'full';
     const projectRoot = process.cwd();
     const srcDir = resolve(projectRoot, 'src');
     const outDir = resolve(projectRoot, '.bunner');
     const parser = new AstParser();
     const fileCache = new Map<string, FileAnalysis>();
+    const toProjectRelativePath = (filePath: string): string => {
+      return relative(projectRoot, filePath) || '.';
+    };
 
     async function analyzeFile(filePath: string) {
       try {
@@ -39,55 +43,80 @@ export async function dev() {
         });
 
         return true;
-      } catch (e) {
-        console.error(`❌ Parse Error (${filePath})`, e);
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : 'Unknown parse error.';
+        const diagnostic = buildDiagnostic({
+          code: 'PARSE_FAILED',
+          severity: 'fatal',
+          summary: 'Parse failed.',
+          reason,
+          file: toProjectRelativePath(filePath),
+        });
+
+        reportDiagnostics({ diagnostics: [diagnostic] });
 
         return false;
       }
     }
 
+    const reportDevFailure = (reason: string, file: string = '.'): void => {
+      const diagnostic = buildDiagnostic({
+        code: 'DEV_FAILED',
+        severity: 'fatal',
+        summary: 'Dev failed.',
+        reason,
+        file,
+      });
+
+      reportDiagnostics({ diagnostics: [diagnostic] });
+    };
+
     async function rebuild() {
-      const allFileAnalyses = Array.from(fileCache.values());
-      const allClasses: CollectedClass[] = allFileAnalyses.flatMap(fileAnalysis => {
-        return fileAnalysis.classes.map(metadata => ({ metadata, filePath: fileAnalysis.filePath }));
-      });
-      const fileMap = new Map(fileCache.entries());
-      const graph = new ModuleGraph(fileMap, moduleFileName);
+      try {
+        const fileMap = new Map(fileCache.entries());
+        const graph = new ModuleGraph(fileMap, moduleFileName);
 
-      graph.build();
+        graph.build();
 
-      const manifestGen = new ManifestGenerator();
-      const manifestJson = manifestGen.generateJson({
-        graph,
-        projectRoot,
-        source: configResult.source,
-        resolvedConfig: config,
-      });
-      const runtimeCode = manifestGen.generate(graph, allClasses, outDir);
+        const manifestGen = new ManifestGenerator();
+        const manifestJson = manifestGen.generateJson({
+          graph,
+          projectRoot,
+          source: configResult.source,
+          resolvedConfig: config,
+        });
 
-      await writeIfChanged(join(outDir, 'manifest.json'), manifestJson);
-      await writeIfChanged(join(outDir, 'runtime.ts'), runtimeCode);
+        await mkdir(outDir, { recursive: true });
+        await writeIfChanged(join(outDir, 'manifest.json'), manifestJson);
 
-      const userMain = join(srcDir, config.entry ?? 'main.ts');
-      const entryGen = new EntryGenerator();
-      const indexContent = entryGen.generate(userMain, true, { workers: config.workers });
+        if (!['minimal', 'standard', 'full'].includes(buildProfile)) {
+          throw new Error(`Invalid build profile: ${buildProfile}`);
+        }
 
-      await writeIfChanged(join(outDir, 'entry.ts'), indexContent);
+        const interfaceCatalogPath = join(outDir, 'interface-catalog.json');
+        const runtimeReportPath = join(outDir, 'runtime-report.json');
 
-      if (!['minimal', 'standard', 'full'].includes(buildProfile)) {
-        throw new Error(`Invalid build profile: ${buildProfile}`);
-      }
+        if (buildProfile === 'standard' || buildProfile === 'full') {
+          const interfaceCatalogJson = JSON.stringify({ schemaVersion: '1', entries: [] }, null, 2);
 
-      if (buildProfile === 'standard' || buildProfile === 'full') {
-        const interfaceCatalogJson = JSON.stringify({ schemaVersion: '1', entries: [] }, null, 2);
+          await writeIfChanged(interfaceCatalogPath, interfaceCatalogJson);
+        } else {
+          await rm(interfaceCatalogPath, { force: true });
+        }
 
-        await writeIfChanged(join(outDir, 'interface-catalog.json'), interfaceCatalogJson);
-      }
+        if (buildProfile === 'full') {
+          const runtimeReportJson = JSON.stringify({ schemaVersion: '1', adapters: [] }, null, 2);
 
-      if (buildProfile === 'full') {
-        const runtimeReportJson = JSON.stringify({ schemaVersion: '1', adapters: [] }, null, 2);
+          await writeIfChanged(runtimeReportPath, runtimeReportJson);
+        } else {
+          await rm(runtimeReportPath, { force: true });
+        }
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : 'Unknown dev error.';
 
-        await writeIfChanged(join(outDir, 'runtime-report.json'), runtimeReportJson);
+        reportDevFailure(reason);
+
+        throw error;
       }
     }
 
@@ -136,7 +165,7 @@ export async function dev() {
     await rebuild();
 
     console.info('🛠️  AOT artifacts generated.');
-    console.info(`   Entry: ${join(outDir, 'entry.ts')}`);
+    console.info(`   Manifest: ${join(outDir, 'manifest.json')}`);
 
     const projectWatcher = new ProjectWatcher(srcDir);
 
@@ -158,7 +187,11 @@ export async function dev() {
           await analyzeFile(fullPath);
         }
 
-        await rebuild();
+        try {
+          await rebuild();
+        } catch (_error) {
+          return;
+        }
       })();
     });
 

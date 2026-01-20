@@ -53,36 +53,14 @@ async function bootstrap() {
     console.log("${isDev ? '🌟 Bunner Server Starting (AOT)...' : '[Entry] Server Initializing...'}");
 
     const runtimeFileName = ${isDev ? "'./runtime.ts'" : "'./runtime.js'"};
-    const runtimeModule = await import(runtimeFileName);
-    const metadataRegistry = runtimeModule.metadataRegistry ??
-      (typeof runtimeModule.createMetadataRegistry === 'function' ? runtimeModule.createMetadataRegistry() : undefined);
-    const scopedKeys = runtimeModule.scopedKeysMap ??
-      (typeof runtimeModule.createScopedKeysMap === 'function' ? runtimeModule.createScopedKeysMap() : undefined);
-    const container = runtimeModule.createContainer && runtimeModule.createContainer();
-
-    if (!container) {
-      throw new Error('[Entry Error] Failed to create container.');
-    }
-
-    const { registerRuntimeContext } = await import("@bunner/core");
-
-    registerRuntimeContext({
-      container,
-      metadataRegistry,
-      scopedKeys,
-      isAotRuntime: true,
-    });
-
-    if (typeof runtimeModule.registerDynamicModules === 'function') {
-      await runtimeModule.registerDynamicModules(container);
-    }
+    await import(runtimeFileName);
 
     console.log("[Entry] Loading Application Module...");
 
     await import("${userMainImportPath}");
 
+
   } catch (err) {
-    console.error('[Entry Error] Failed to bootstrap application:', err);
     throw err;
   }
 }

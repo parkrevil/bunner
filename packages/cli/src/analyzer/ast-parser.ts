@@ -243,6 +243,7 @@ export class AstParser {
 
   private extractModuleDefinition(node: NodeRecord): ModuleDefinition {
     let name: string | undefined;
+    let nameDeclared = false;
     const providers: unknown[] = [];
     let adapters: unknown = undefined;
     const properties = node.properties;
@@ -263,6 +264,8 @@ export class AstParser {
         }
 
         if (keyName === 'name') {
+          nameDeclared = true;
+
           const value = this.asNode(prop.value);
 
           if (value) {
@@ -304,6 +307,7 @@ export class AstParser {
 
     return {
       name,
+      nameDeclared,
       providers,
       adapters,
       imports: { ...this.currentImports },

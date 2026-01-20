@@ -1,10 +1,19 @@
 #!/usr/bin/env bun
 import { parseArgs } from 'util';
 import { dev, build } from '../commands';
+import { buildDiagnostic, reportDiagnostics } from '../diagnostics';
 
-const { positionals } = parseArgs({
+import type { CommandOptions } from '../commands/types';
+
+const { positionals, values } = parseArgs({
   args: Bun.argv.slice(2),
   allowPositionals: true,
+  strict: false,
+  options: {
+    profile: {
+      type: 'string',
+    },
+  },
 });
 
 const command = positionals[0];
@@ -14,22 +23,52 @@ const printUsage = (): void => {
   console.info('Commands:');
   console.info('  dev    Generate AOT artifacts and watch');
   console.info('  build  Generate build output');
+  console.info('Options:');
+  console.info('  --profile <minimal|standard|full>');
 };
+
+const reportInvalidCommand = (value: string | undefined): void => {
+  const commandValue = value ?? '(missing)';
+  const diagnostic = buildDiagnostic({
+    code: 'INVALID_COMMAND',
+    severity: 'fatal',
+    summary: 'Unknown command.',
+    reason: `Unsupported command: ${commandValue}.`,
+    file: '.',
+  });
+
+  reportDiagnostics({ diagnostics: [diagnostic] });
+};
+
+const resolveProfileOption = (value: unknown): string | undefined => {
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  return undefined;
+};
+
+const createCommandOptions = (): CommandOptions => {
+  const profile = resolveProfileOption(values.profile);
+
+  return { profile };
+};
+
+const commandOptions = createCommandOptions();
 
 try {
   switch (command) {
     case 'dev':
-      await dev();
+      await dev(commandOptions);
       break;
     case 'build':
-      await build();
+      await build(commandOptions);
       break;
     default:
+      reportInvalidCommand(command);
       printUsage();
       process.exitCode = 1;
   }
 } catch (error) {
-  console.error(error);
-
   process.exitCode = 1;
 }

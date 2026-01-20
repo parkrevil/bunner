@@ -74,7 +74,7 @@ ModuleId:
 ModuleName:
 
 - type: string
-- meaning: 모듈 루트 디렉토리의 basename
+- meaning: 모듈 루트 디렉토리의 basename, 또는 모듈 루트 파일에서 선언된 모듈 이름
 
 ModuleDescriptor:
 
@@ -224,6 +224,8 @@ ExceptionFilterRefList:
 - CLI는 어떤 파일명도 자동 추론해서는 안 된다.
 - 동일한 입력(프로젝트 파일 시스템 + 동일한 resolved config)에서 모듈 판정 결과는 결정적으로 동일해야 한다.
 
+- 모듈 이름은 빌드 타임에 정적으로 판정 가능해야 한다.
+
 - `dependsOn`이 선언된 경우, 의존 그래프는 빌드 타임에 정적으로 판정 가능해야 한다.
 - `dependsOn`의 정규화 결과는 결정적이어야 한다.
 - 모듈 루트 파일에서 참조되는 `AdapterId`가 빌드 타임에 존재하는 어댑터로 판정되지 않으면, 빌드 실패가 관측되어야 한다.
@@ -269,7 +271,8 @@ Observable:
 
 모듈 ID/이름 규칙(관측 가능한 결과로서의 규칙):
 
-- 모듈 이름은 모듈 루트 디렉토리의 basename이어야 한다.
+- 모듈 루트 파일에서 모듈 이름이 string literal로 선언되어 있고 빌드 타임에 정적으로 판정 가능한 경우, 모듈 이름은 해당 값이어야 한다.
+- 그 외의 경우, 모듈 이름은 모듈 루트 디렉토리의 basename이어야 한다.
 - 모듈 ID는 프로젝트 루트 기준 모듈 루트 디렉토리의 정규화된 상대 경로여야 한다.
 
 ### 4.2 State Conditions
@@ -284,6 +287,8 @@ Observable:
 - Build-Time Violation: `fileName`이 단일 파일명이 아니거나, 경로 구문(`/`, `..`)을 포함하는 경우
 - Build-Time Violation: 프레임워크-인식 대상 파일이 어떤 모듈에도 귀속되지 못하는 경우
 - Test-Level Violation: 동일한 입력에서 서로 다른 모듈 판정 결과가 생성되는 경우
+
+- Build-Time Violation: 모듈 루트 파일에 모듈 이름 선언이 존재하지만, 빌드 타임에 정적으로 판정 가능한 string literal이 아닌데도 빌드가 성공하는 경우
 
 - Build-Time Violation: `dependsOn`이 리스트인데 빈 배열인데도 빌드가 성공하는 경우
 - Build-Time Violation: 존재하지 않는 어댑터 ID가 참조되는데도 빌드가 성공하는 경우

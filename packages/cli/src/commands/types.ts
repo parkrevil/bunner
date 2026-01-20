@@ -4,3 +4,7 @@ export interface CollectedClass {
   metadata: ClassMetadata;
   filePath: string;
 }
+
+export interface CommandOptions {
+  profile?: string;
+}
