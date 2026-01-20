@@ -1,6 +1,6 @@
 import { dirname, relative } from 'path';
 
-import { type ClassMetadata, ModuleGraph, type ModuleNode } from '../analyzer';
+import { type AdapterStaticSpec, type ClassMetadata, ModuleGraph, type ModuleNode } from '../analyzer';
 import { compareCodePoint, PathResolver } from '../common';
 
 import { ImportRegistry } from './import-registry';
@@ -147,7 +147,7 @@ export const scopedKeysMap = createScopedKeysMap();
   }
 
   private buildJsonModel(params: ManifestJsonParams): Record<string, unknown> {
-    const { graph, projectRoot, source, resolvedConfig } = params;
+    const { graph, projectRoot, source, resolvedConfig, adapterStaticSpecs, handlerIndex } = params;
     const sortedModules = Array.from(graph.modules.values()).sort((a, b) => compareCodePoint(a.filePath, b.filePath));
     const moduleDescriptors = sortedModules.map(node => {
       const moduleRoot = dirname(node.filePath);
@@ -266,6 +266,15 @@ export const scopedKeysMap = createScopedKeysMap();
 
     const sortedDiNodes = diNodes.sort((a, b) => compareCodePoint(String(a.id), String(b.id)));
 
+    const sortedAdapterStaticSpecs: Record<string, AdapterStaticSpec> = {};
+    const sortedAdapterIds = Object.keys(adapterStaticSpecs).sort(compareCodePoint);
+
+    sortedAdapterIds.forEach(adapterId => {
+      sortedAdapterStaticSpecs[adapterId] = adapterStaticSpecs[adapterId]!;
+    });
+
+    const sortedHandlerIndex = [...handlerIndex].sort((a, b) => compareCodePoint(a.id, b.id));
+
     return {
       schemaVersion: '2',
       config: {
@@ -276,11 +285,11 @@ export const scopedKeysMap = createScopedKeysMap();
         },
       },
       modules: sortedModuleDescriptors,
-      adapterStaticSpecs: {},
+      adapterStaticSpecs: sortedAdapterStaticSpecs,
       diGraph: {
         nodes: sortedDiNodes,
       },
-      handlerIndex: [],
+      handlerIndex: sortedHandlerIndex,
     };
   }
 }

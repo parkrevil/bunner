@@ -15,6 +15,9 @@ export interface FileAnalysis {
   reExports: ReExport[];
   exports: string[];
   imports?: Record<string, string>;
+  importEntries?: import('../interfaces').ImportEntry[];
+  exportedValues?: Record<string, unknown>;
+  localValues?: Record<string, unknown>;
   moduleDefinition?: ModuleDefinition;
 }
 

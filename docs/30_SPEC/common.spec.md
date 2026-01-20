@@ -112,6 +112,12 @@ FactoryRef:
   - Function ref: 함수 선언을 참조 가능한 심볼
 - meaning: 실행 단위(middleware/guard/pipe/exception filter/handler 등)를 가리키는 정적 함수 참조
 
+DecoratorRef:
+
+- allowed forms:
+  - Function ref: 함수 선언을 참조 가능한 심볼
+- meaning: 엔트리 판정(decorator) 입력으로 사용되는 정적 함수 참조
+
 #### 2.1.6 Common Decorator Declarations
 
 CommonDecoratorName:
@@ -166,12 +172,12 @@ MiddlewaresDecoratorDeclaration:
 - required:
   - name
   - target
-  - lifecycleId
+  - phaseId
   - refs
 - properties:
   - name: MiddlewaresDecoratorName
   - target: CommonDecoratorTarget
-  - lifecycleId: MiddlewareLifecycleId (module-system.spec.md)
+  - phaseId: MiddlewarePhaseId (adapter.spec.md)
   - refs: CommonDecoratorRefList
 
 CommonDecoratorDeclaration:
@@ -294,12 +300,12 @@ ProviderDeclarationList:
 - `RefListDecoratorDeclaration.name`은 `RefListDecoratorName`의 허용값 중 하나여야 한다.
 - `RefListDecoratorDeclaration.refs`는 `FactoryRef`의 배열이어야 한다.
 
-- `MiddlewaresDecoratorDeclaration.lifecycleId`는 module-system.spec.md의 `MiddlewareLifecycleId` 규칙을 만족해야 한다.
+- `MiddlewaresDecoratorDeclaration.phaseId`는 module-system.spec.md의 `MiddlewarePhaseId` 규칙을 만족해야 한다.
 - `MiddlewaresDecoratorDeclaration.refs`는 `FactoryRef`의 배열이어야 한다.
 
 - "@Middlewares"는 아래 2가지 입력 형태를 모두 지원해야 하며, 빌드 타임 수집 결과는 `MiddlewaresDecoratorDeclaration`(1개 이상)으로 정규화되어야 한다.
-  - 2-arg call: `(lifecycleId, refs)`
-  - 1-arg call: `({ [lifecycleId]: refs, ... })`
+  - 2-arg call: `(phaseId, refs)`
+  - 1-arg call: `({ [phaseId]: refs, ... })`
 
 - `InjectableOptions.visibleTo`는 아래 중 하나여야 한다.
   - `all` 또는 `module`

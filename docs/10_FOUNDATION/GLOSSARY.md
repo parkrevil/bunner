@@ -57,8 +57,10 @@ Bunner 프로젝트에서 사용되는 주요 기술 용어와 도메인 개념�
 - **Error**: 도메인 실패로서 Result 경로(값 흐름)로 처리되는 에러.
 - **Panic**: throw로 표현되는 시스템 오류.
 - **Middleware**: 입력/컨텍스트를 전처리하거나 공통 cross-cut을 적용하는 실행 단계이다.
-- **Middleware Lifecycle**: 어댑터가 정의하는 미들웨어 실행 생명주기(phase 집합 및 배치 규칙).
-- **Middleware Phase**: Middleware Lifecycle 내부의 단일 단계 식별자.
+- **Middleware Phase**: 어댑터가 정의하는 미들웨어 실행 단계 식별자.
+- **Middleware Phase Id**: Middleware Phase를 식별하기 위한 문자열이다.
+- **Middleware Phase Order**: Middleware Phase Id의 순서가 있는 리스트이며, 미들웨어 실행 순서를 결정한다.
+- **DecoratorRef**: 엔트리 판정(decorator) 입력으로 사용되는 정적 함수 참조이다.
 - **Adapter Owner Decorator**: 특정 어댑터의 엔트리 선언을 소유하는 class-level 데코레이터.
 - **Adapter Member Decorator**: 특정 어댑터에 종속되는 member/parameter 데코레이터.
 - **Guard**: 핸들러 접근을 제어하는 실행 단계이다. 목적은 보안/권한/접근 제어이며, 데이터 변환/검증과 무관하다.

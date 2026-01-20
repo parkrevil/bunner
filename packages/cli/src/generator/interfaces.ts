@@ -1,4 +1,5 @@
 import type { ModuleGraph } from '../analyzer/graph/module-graph';
+import type { AdapterStaticSpec, HandlerIndexEntry } from '../analyzer/interfaces';
 import type { BunnerConfigSource, ResolvedBunnerConfig } from '../common/interfaces';
 
 export interface GenerateConfig {
@@ -11,4 +12,6 @@ export interface ManifestJsonParams {
   projectRoot: string;
   source: BunnerConfigSource;
   resolvedConfig: ResolvedBunnerConfig;
+  adapterStaticSpecs: Record<string, AdapterStaticSpec>;
+  handlerIndex: HandlerIndexEntry[];
 }

@@ -3,7 +3,7 @@ import { join, resolve, dirname } from 'path';
 
 import { Glob } from 'bun';
 
-import { AstParser, ModuleGraph, type FileAnalysis } from '../analyzer';
+import { AdapterSpecResolver, AstParser, ModuleGraph, type FileAnalysis } from '../analyzer';
 import { ConfigLoader, ConfigLoadError, compareCodePoint, scanGlobSorted, writeIfChanged } from '../common';
 import { buildDiagnostic, reportDiagnostics } from '../diagnostics';
 import { EntryGenerator, ManifestGenerator } from '../generator';
@@ -30,6 +30,7 @@ export async function build(commandOptions?: CommandOptions) {
 
     const parser = new AstParser();
     const manifestGen = new ManifestGenerator();
+    const adapterSpecResolver = new AdapterSpecResolver();
     const fileMap = new Map<string, FileAnalysis>();
     const allClasses: CollectedClass[] = [];
 
@@ -78,6 +79,9 @@ export async function build(commandOptions?: CommandOptions) {
           reExports: parseResult.reExports,
           exports: parseResult.exports,
           imports: parseResult.imports,
+          importEntries: parseResult.importEntries,
+          exportedValues: parseResult.exportedValues,
+          localValues: parseResult.localValues,
           moduleDefinition: parseResult.moduleDefinition,
         });
 
@@ -138,6 +142,8 @@ export async function build(commandOptions?: CommandOptions) {
 
     graph.build();
 
+    const adapterSpecResolution = await adapterSpecResolver.resolve({ fileMap, projectRoot });
+
     console.info('🛠️  Generating intermediate manifests...');
 
     await mkdir(bunnerDir, { recursive: true });
@@ -148,6 +154,8 @@ export async function build(commandOptions?: CommandOptions) {
       projectRoot,
       source: configResult.source,
       resolvedConfig: config,
+      adapterStaticSpecs: adapterSpecResolution.adapterStaticSpecs,
+      handlerIndex: adapterSpecResolution.handlerIndex,
     });
 
     await writeIfChanged(manifestFile, manifestJson);
@@ -169,6 +177,8 @@ export async function build(commandOptions?: CommandOptions) {
       projectRoot,
       source: configResult.source,
       resolvedConfig: config,
+      adapterStaticSpecs: adapterSpecResolution.adapterStaticSpecs,
+      handlerIndex: adapterSpecResolution.handlerIndex,
     });
 
     if (manifestJsonGuard !== manifestJson) {

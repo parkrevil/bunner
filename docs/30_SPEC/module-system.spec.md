@@ -146,18 +146,9 @@ AdapterInstanceConfig:
 MiddlewareRegistry:
 
 - type: object
-- meaning: lifecycle/phase 기반 미들웨어 등록
-- keys: MiddlewareLifecycleId
+- meaning: middleware phase 기반 미들웨어 등록 (phase id는 해당 adapterId 스코프 내부에서만 의미가 있다)
+- keys: MiddlewarePhaseId (adapter.spec.md)
 - values: MiddlewareRegistrationInputList
-
-MiddlewareLifecycleId:
-
-- type: string
-- allowed forms (AST-level):
-  - string literal key (e.g., `"http:BeforeRequest"`)
-    - constraints:
-      - MUST be in the form `"<AdapterId>:<middlewarePhase>"`
-      - `<middlewarePhase>` MUST be non-empty and MUST NOT contain `:`
 
 MiddlewareRegistrationInputList:
 
@@ -206,9 +197,8 @@ ExceptionFilterRefList:
 - `dependsOn`이 리스트인 경우, 빈 배열이어서는 안 된다.
 
 - `middlewares`가 존재한다면, `MiddlewareRegistry` 형상과 정확히 일치해야 한다.
-  - 각 lifecycle 키는 `MiddlewareLifecycleId` 규칙을 만족하는 string literal이어야 한다.
-  - 각 lifecycle 키는 해당 `AdapterConfig`의 adapterId 키 접두사(`<adapterId>:`)를 포함해야 한다.
-  - 각 lifecycle 값은 `MiddlewareRegistrationInputList` 형상과 정확히 일치해야 한다.
+  - 각 phase 키는 `MiddlewarePhaseId` 규칙을 만족하는 string literal이어야 한다.
+  - 각 phase 값은 `MiddlewareRegistrationInputList` 형상과 정확히 일치해야 한다.
 
 - `guards | pipes`가 존재한다면, 각 값은 `PipelineStepList` 형상과 정확히 일치해야 한다.
 - `exceptionFilters`가 존재한다면, 각 값은 `ExceptionFilterRefList` 형상과 정확히 일치해야 한다.

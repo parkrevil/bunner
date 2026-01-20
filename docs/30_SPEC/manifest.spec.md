@@ -162,11 +162,16 @@ PipelineStep:
 - allowed forms:
   - FactoryRef (common.spec.md)
 
-SupportedMiddlewareLifecycleSet:
+MiddlewarePhaseOrder:
+
+- type: array
+- items: MiddlewarePhaseId (adapter.spec.md)
+
+SupportedMiddlewarePhaseSet:
 
 - type: object
-- meaning: 어댑터가 지원하는 middleware lifecycle id 집합
-- keys: MiddlewareLifecycleId (module-system.spec.md)
+- meaning: 어댑터가 지원하는 middleware phase id 집합
+- keys: MiddlewarePhaseId (adapter.spec.md)
 - values: literal true
 
 AdapterEntryDecorators:
@@ -177,23 +182,36 @@ AdapterEntryDecorators:
   - handler
 - properties:
   - controller:
-    - type: array
-    - items: string
+    - type: DecoratorRef (common.spec.md)
   - handler:
     - type: array
-    - items: string
+    - items: DecoratorRef (common.spec.md)
+
+AdapterRuntimeSpec:
+
+- type: object
+- required:
+  - start
+  - stop
+- properties:
+  - start: FactoryRef (common.spec.md)
+  - stop: FactoryRef (common.spec.md)
 
 AdapterStaticSpec:
 
 - type: object
 - required:
   - pipeline
-  - supportedMiddlewareLifecycles
+  - middlewarePhaseOrder
+  - supportedMiddlewarePhases
   - entryDecorators
+  - runtime
 - properties:
   - pipeline: Pipeline
-  - supportedMiddlewareLifecycles: SupportedMiddlewareLifecycleSet
+  - middlewarePhaseOrder: MiddlewarePhaseOrder
+  - supportedMiddlewarePhases: SupportedMiddlewarePhaseSet
   - entryDecorators: AdapterEntryDecorators
+  - runtime: AdapterRuntimeSpec
 
 ManifestAdapterStaticSpecSet:
 

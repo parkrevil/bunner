@@ -3,7 +3,7 @@ import { join, resolve, relative } from 'path';
 
 import { Glob } from 'bun';
 
-import { AstParser, ModuleGraph, type FileAnalysis } from '../analyzer';
+import { AdapterSpecResolver, AstParser, ModuleGraph, type FileAnalysis } from '../analyzer';
 import { ConfigLoader, ConfigLoadError, scanGlobSorted, writeIfChanged } from '../common';
 import { buildDiagnostic, reportDiagnostics } from '../diagnostics';
 import { ManifestGenerator } from '../generator';
@@ -23,6 +23,7 @@ export async function dev(commandOptions?: CommandOptions) {
     const srcDir = resolve(projectRoot, 'src');
     const outDir = resolve(projectRoot, '.bunner');
     const parser = new AstParser();
+    const adapterSpecResolver = new AdapterSpecResolver();
     const fileCache = new Map<string, FileAnalysis>();
     const toProjectRelativePath = (filePath: string): string => {
       return relative(projectRoot, filePath) || '.';
@@ -39,6 +40,9 @@ export async function dev(commandOptions?: CommandOptions) {
           reExports: parseResult.reExports,
           exports: parseResult.exports,
           imports: parseResult.imports,
+          importEntries: parseResult.importEntries,
+          exportedValues: parseResult.exportedValues,
+          localValues: parseResult.localValues,
           moduleDefinition: parseResult.moduleDefinition,
         });
 
@@ -78,12 +82,16 @@ export async function dev(commandOptions?: CommandOptions) {
 
         graph.build();
 
+        const adapterSpecResolution = await adapterSpecResolver.resolve({ fileMap, projectRoot });
+
         const manifestGen = new ManifestGenerator();
         const manifestJson = manifestGen.generateJson({
           graph,
           projectRoot,
           source: configResult.source,
           resolvedConfig: config,
+          adapterStaticSpecs: adapterSpecResolution.adapterStaticSpecs,
+          handlerIndex: adapterSpecResolution.handlerIndex,
         });
 
         await mkdir(outDir, { recursive: true });

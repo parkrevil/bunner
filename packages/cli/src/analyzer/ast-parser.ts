@@ -3,7 +3,7 @@ import { dirname, resolve } from 'path';
 import { parseSync } from 'oxc-parser';
 
 import { AstTypeResolver, type TypeInfo } from './ast-type-resolver';
-import type { ClassMetadata, DecoratorMetadata } from './interfaces';
+import type { ClassMetadata, DecoratorMetadata, ImportEntry } from './interfaces';
 import type { ModuleDefinition, ParseResult, ReExport } from './parser-models';
 
 type NodeRecord = Record<string, unknown> & {
@@ -39,6 +39,9 @@ export class AstParser {
     const reExports: ReExport[] = [];
     const localExports: string[] = [];
     const imports: Record<string, string> = {};
+    const importEntries: ImportEntry[] = [];
+    const localValues: Record<string, unknown> = {};
+    const exportedValues: Record<string, unknown> = {};
 
     this.currentImports = {};
 
@@ -64,6 +67,7 @@ export class AstParser {
         }
 
         const resolvedSource = this.resolvePath(filename, sourceValue);
+        importEntries.push({ source: sourceValue, resolvedSource, isRelative: sourceValue.startsWith('.') });
         const specifiersValue = node.specifiers;
 
         if (!Array.isArray(specifiersValue)) {
@@ -191,6 +195,13 @@ export class AstParser {
               continue;
             }
 
+            if (decl?.init) {
+              const initValue = this.parseExpression(decl.init);
+
+              localValues[declName] = initValue;
+              exportedValues[declName] = initValue;
+            }
+
             if (declName === 'module') {
               localExports.push('module');
 
@@ -207,6 +218,57 @@ export class AstParser {
           }
 
           return;
+        }
+
+        const specifiersValue = node.specifiers;
+
+        if (Array.isArray(specifiersValue)) {
+          for (const specValue of specifiersValue) {
+            const spec = this.asNode(specValue);
+
+            if (!spec) {
+              continue;
+            }
+
+            const local = this.asNode(spec.local);
+            const exported = this.asNode(spec.exported);
+            const localName = local ? this.getString(local, 'name') : null;
+            const exportedName = exported ? this.getString(exported, 'name') : null;
+
+            if (!localName || !exportedName) {
+              continue;
+            }
+
+            localExports.push(exportedName);
+
+            if (Object.prototype.hasOwnProperty.call(localValues, localName)) {
+              exportedValues[exportedName] = localValues[localName];
+            }
+          }
+        }
+
+        return;
+      }
+
+      if (node.type === 'VariableDeclaration') {
+        const declarations = node.declarations;
+
+        if (!Array.isArray(declarations)) {
+          return;
+        }
+
+        for (const declValue of declarations) {
+          const decl = this.asNode(declValue);
+          const declId = decl ? this.asNode(decl.id) : null;
+          const declName = declId ? this.getString(declId, 'name') : null;
+
+          if (!declName) {
+            continue;
+          }
+
+          if (decl?.init) {
+            localValues[declName] = this.parseExpression(decl.init);
+          }
         }
 
         return;
@@ -238,7 +300,16 @@ export class AstParser {
 
     traverse(program);
 
-    return { classes, reExports, exports: localExports, imports, moduleDefinition };
+    return {
+      classes,
+      reExports,
+      exports: localExports,
+      imports,
+      importEntries,
+      exportedValues,
+      localValues,
+      moduleDefinition,
+    };
   }
 
   private extractModuleDefinition(node: NodeRecord): ModuleDefinition {

@@ -143,4 +143,36 @@ describe('ManifestGenerator.generate', () => {
       (sample.decorators as Array<unknown>).push({ name: 'Y', arguments: [] });
     }).toThrow();
   });
+
+  it('should include adapterStaticSpecs and handlerIndex in JSON output', () => {
+    const graph = createSingleModuleGraph();
+    const gen = new ManifestGenerator();
+    const json = gen.generateJson({
+      graph,
+      projectRoot: '/app',
+      source: { path: '/app/bunner.config.ts', format: 'ts' },
+      resolvedConfig: { module: { fileName: '__module__.ts' } },
+      adapterStaticSpecs: {
+        test: {
+          pipeline: {
+            middlewares: ['dispatchBefore'],
+            guards: [],
+            pipes: [],
+            handler: 'dispatchHandler',
+          },
+          middlewarePhaseOrder: ['Before'],
+          supportedMiddlewarePhases: { Before: true },
+          entryDecorators: { controller: 'Controller', handler: ['Get'] },
+          runtime: { start: 'startAdapter', stop: 'stopAdapter' },
+        },
+      },
+      handlerIndex: [{ id: 'test:src/controllers.ts#SampleController.handle' }],
+    });
+    const parsed = JSON.parse(json) as Record<string, unknown>;
+    const adapterSpecs = parsed.adapterStaticSpecs as Record<string, unknown>;
+    const handlerIndex = parsed.handlerIndex as Array<Record<string, unknown>>;
+
+    expect(adapterSpecs.test).toBeDefined();
+    expect(handlerIndex).toEqual([{ id: 'test:src/controllers.ts#SampleController.handle' }]);
+  });
 });
