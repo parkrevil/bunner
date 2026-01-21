@@ -1,5 +1,3 @@
-내가 구상한 DX 다 검토해서 문제점과 보강해야될걸 말해라
-DX 변경하지않는다
 
 export enum AdapterMiddlewarePhase {
   OnRequest,
@@ -21,7 +19,7 @@ defineAdapter({
   pipeline: [AdapterMiddlewarePhase.OnRequest, Guards, Pipes, AdapterMiddlewarePhase.PreHandler, Handler, AdapterMiddlewarePhase.OnResponse],
 })
 
-export class SomeAdapter interface BunnerAdapter {
+export class SomeAdapter extends BunnerAdapter {
   makeContext(ctx: BunnerContext): AdapterContext | Promise<AdapterContext> {
 
   }
