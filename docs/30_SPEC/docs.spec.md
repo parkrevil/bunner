@@ -148,6 +148,19 @@ InterfaceCatalog:
     - type: array
     - items: InterfaceCatalogEntry
 
+### 2.2 Shape Conformance Rules
+
+- `InterfaceCatalog.entries`는 반드시 결정적 순서를 가져야 한다.
+  - 정렬 키는 `id`의 오름차순이어야 한다.
+
+- `InterfaceCatalog.entries`의 각 `InterfaceCatalogEntry.id`는 중복되어서는 안 된다.
+
+- `InterfaceCatalogEntry.kind`가 `rest | rpc`인 경우, `handlerId`는 반드시 존재해야 한다.
+
+- `InterfaceCatalogEntry.kind`가 `event`이고, `surface.direction`이 `subscribe`인 경우, `handlerId`는 반드시 존재해야 한다.
+
+- `handlerId`가 존재하는 경우, 해당 `handlerId`의 `<adapterId>`는 `InterfaceCatalogEntry.adapterId`와 동일해야 한다.
+
 ---
 
 ## 3. Invariants & Constraints

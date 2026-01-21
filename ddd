@@ -1,0 +1,93 @@
+내가 구상한 DX 다 검토해서 문제점과 보강해야될걸 말해라
+DX 변경하지않는다
+
+export enum AdapterMiddlewarePhase {
+  OnRequest,
+  PreHandler,
+  OnResponse,
+}
+
+
+defineAdapter({
+  name: "adapter-name",
+  classRef: AdapterClass Type,
+  decorators: {
+    controller: ClassDecorator,
+    handler: MethodDecorator[],
+    class: ClassDecorator[],
+    method: MethodDecorator[],
+    parameter: ParameterDecorator[],
+  },
+  pipeline: [AdapterMiddlewarePhase.OnRequest, Guards, Pipes, AdapterMiddlewarePhase.PreHandler, Handler, AdapterMiddlewarePhase.OnResponse],
+})
+
+export class SomeAdapter interface BunnerAdapter {
+  makeContext(ctx: BunnerContext): AdapterContext | Promise<AdapterContext> {
+
+  }
+
+  start(): Promise<void> {
+
+  }
+
+  stop(): Promise<void> {
+
+  }
+}
+
+
+
+
+
+
+
+
+큐/이벤트/HTTP/gRPC를 서로 안 싸우게 만드는 방법은 “파이프라인은 정책 실행기만, 프로토콜별 수신/매칭/ack·응답은 어댑터만”으로 역할을 고정하는 겁니다. 즉, 모든 프로토콜을 아래 하나로 통일합니다.
+
+공통 해법(프로토콜 무관)
+Adapter = Ingress + Selector + Egress
+Core = Runner(정책 파이프라인) + DI + Handler invoke
+
+Selector(어댑터 소유): 프로토콜 입력을 보고 handlerKey를 고른다 (HTTP route, gRPC method, event name, queue topic…)
+Runner(core 소유): handlerKey에 대해 정적(빌드타임)으로 합성된 middlewares/guards/pipes/exceptionFilters/handler를 실행한다
+경계에서 오가는 런타임 데이터는 최소화:
+run(handlerKey, baseContext, protocolContext, input) 정도
+“라우팅 메타데이터 잔뜩을 core로 보내서 판단”은 금지 (그게 충돌/정책 혼입의 원인)
+여기서 사람들이 말하는 dispatcher는 “프로토콜 정책 엔진”이 아니라, (선택된 handlerKey로) core runner를 호출하는 얇은 브리지면 됩니다. 라우팅은 dispatcher가 아니라 selector가 합니다.
+
+HTTP
+Ingress: request 수신
+Selector: method + path (+ host)로 정적 route table에서 handlerKey 선택
+Runner 호출: run(handlerKey, ..., protocolContext=httpReqRes, input=parsedBody/params/query)
+Egress: 반환값/에러를 HTTP response로 직렬화
+라우팅은 HTTP 의미론이라 어댑터가 하고, 인증/검증/변환 같은 정책은 runner(guards/pipes)로만 하게 분리하면 충돌이 없습니다.
+
+gRPC (unary / streaming)
+Ingress: server 등록 + call 수신
+Selector: service/method로 정적 method table에서 handlerKey 선택
+unary: 1회 선택
+streaming: “stream 시작”에서 1회 선택 후, stream 이벤트(on data/end/error)는 protocolContext가 들고 있음
+Runner 호출
+unary: run(handlerKey, ..., input=requestMessage) → responseMessage 반환
+streaming: 두 가지 중 하나로 단순화
+stream을 protocolContext로 넘기고 handler가 stream을 직접 사용(단, 정책은 runner가 적용)
+stream 이벤트를 “메시지 단위 invocation”으로 래핑해서 매 메시지마다 run (백프레셔/ordering 규칙을 어댑터가 책임)
+deadline/cancel은 protocolContext에서 관측하고, runner에는 “취소됨” 플래그 정도만 전달.
+
+이벤트(EventEmitter/Bus)
+Ingress: .on(eventName) 등록
+Selector: eventName → handlerKey (정적 map)
+Runner 호출: run(handlerKey, ..., input=eventPayload)
+Egress: 반환을 어디에 쓰는지는 이벤트 시스템 의미론(보통 없음). 필요하면 어댑터가 후속 emit/ack 수행
+큐(Queue: Kafka/SQS/Rabbit 등)
+Ingress: consumer 등록(poll/subscribe)
+Selector: topic/queueName + messageType → handlerKey (정적 map)
+Runner 호출: run(handlerKey, ..., input=decodedMessage)
+Egress(핵심): ack/nack/retry는 어댑터 정책으로 고정해야 프로토콜 간 충돌이 없습니다.
+runner 결과가 ok면 ack
+runner 결과가 “재시도 가능 에러”면 nack/requeue (또는 DLQ)
+ordering/at-least-once/exactly-once 같은 보증도 어댑터가 책임지고 core는 관여하지 않음
+결론(충돌이 사라지는 이유)
+프로토콜마다 다른 건 “어떻게 handlerKey를 고르느냐 + 어떻게 응답/ack 하느냐”뿐이라 어댑터에 격리됨
+core는 “선택된 handler를 정책 파이프라인으로 실행”만 하므로 HTTP/큐/gRPC/이벤트가 서로의 규칙을 침범할 수가 없음
+원하면, 이걸 코드/산출물 관점으로 더 구체화해서 “빌드타임에 무엇을 생성해야 selector가 결정적으로 동작하는지(HTTP route table, gRPC method table, topic map 등)”까지 설계 초안으로 내려줄까요?

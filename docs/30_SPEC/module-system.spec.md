@@ -135,7 +135,10 @@ AdapterConfig:
 AdapterInstanceConfig:
 
 - type: object
+- required:
+  - adapterName
 - properties:
+  - adapterName: AdapterName (common.spec.md)
   - dependsOn: AdapterDependsOn
 
   - middlewares: MiddlewareRegistry
@@ -197,7 +200,9 @@ ExceptionFilterRefList:
 - `dependsOn`이 리스트인 경우, 빈 배열이어서는 안 된다.
 
 - `middlewares`가 존재한다면, `MiddlewareRegistry` 형상과 정확히 일치해야 한다.
-  - 각 phase 키는 `MiddlewarePhaseId` 규칙을 만족하는 string literal이어야 한다.
+  - 각 phase 키는 `MiddlewarePhaseId` 규칙을 만족해야 한다.
+    - string literal 키
+    - computed property name 키 (예: `{ [SomePhaseToken]: [...] }`)
   - 각 phase 값은 `MiddlewareRegistrationInputList` 형상과 정확히 일치해야 한다.
 
 - `guards | pipes`가 존재한다면, 각 값은 `PipelineStepList` 형상과 정확히 일치해야 한다.
@@ -218,7 +223,12 @@ ExceptionFilterRefList:
 
 - `dependsOn`이 선언된 경우, 의존 그래프는 빌드 타임에 정적으로 판정 가능해야 한다.
 - `dependsOn`의 정규화 결과는 결정적이어야 한다.
-- 모듈 루트 파일에서 참조되는 `AdapterId`가 빌드 타임에 존재하는 어댑터로 판정되지 않으면, 빌드 실패가 관측되어야 한다.
+
+- `AdapterInstanceConfig.adapterName`은 빌드 타임에 존재하는 어댑터(패키지)의 AdapterRegistrationInput.name(adapter.spec.md)로 판정 가능해야 한다.
+  - 판정 불가능하거나, 대응되는 어댑터가 존재하지 않으면, 빌드 실패가 관측되어야 한다.
+
+- `dependsOn`이 리스트인 경우, 각 원소는 동일 `AdapterConfig`의 키 집합에 포함되어야 한다.
+  - 포함되지 않는 `AdapterId`가 존재하면, 빌드 실패가 관측되어야 한다.
 
 ### 3.2 MUST NOT
 

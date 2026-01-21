@@ -3,9 +3,11 @@ import { dirname, join } from 'path';
 
 import { describe, expect, it } from 'bun:test';
 
-import { AdapterSpecResolver, AstParser } from './index';
 import { PathResolver } from '../common';
+
 import type { FileAnalysis } from './graph/interfaces';
+
+import { AdapterSpecResolver, AstParser } from './index';
 
 async function createTempDir(): Promise<string> {
   const base = join(process.cwd(), '.tmp-adapter-spec');
@@ -31,7 +33,6 @@ describe('AdapterSpecResolver', () => {
 
     await mkdir(srcDir, { recursive: true });
     await mkdir(adapterDir, { recursive: true });
-
     await writeFileContent(
       entryFile,
       [
@@ -43,9 +44,9 @@ describe('AdapterSpecResolver', () => {
         'function dispatchHandler() {}',
         '',
         'export class TestAdapter {',
-        "  static adapterId = 'test';",
-        "  static middlewarePhaseOrder = ['Before'];",
-        "  static supportedMiddlewarePhases = { Before: true };",
+        '  static adapterId = \'test\';',
+        '  static middlewarePhaseOrder = [\'Before\'];',
+        '  static supportedMiddlewarePhases = { Before: true };',
         '  static entryDecorators = { controller: Controller, handler: [Get] };',
         '  static runtime = { start: startAdapter, stop: stopAdapter };',
         '  static pipeline = { middlewares: [dispatchBefore], guards: [], pipes: [], handler: dispatchHandler };',
@@ -55,7 +56,6 @@ describe('AdapterSpecResolver', () => {
         '',
       ].join('\n'),
     );
-
     await writeFileContent(
       controllerFile,
       [
@@ -67,7 +67,7 @@ describe('AdapterSpecResolver', () => {
         '@Controller()',
         'class SampleController {',
         '  @Get()',
-        "  @Middlewares('Before', [mwOne])",
+        '  @Middlewares(\'Before\', [mwOne])',
         '  handle() {}',
         '}',
       ].join('\n'),
@@ -105,7 +105,6 @@ describe('AdapterSpecResolver', () => {
     const expectedId = `test:${expectedFile}#SampleController.handle`;
 
     expect(result.handlerIndex.map(entry => entry.id)).toEqual([expectedId]);
-
     await rm(projectRoot, { recursive: true, force: true });
   });
 
@@ -118,7 +117,6 @@ describe('AdapterSpecResolver', () => {
 
     await mkdir(srcDir, { recursive: true });
     await mkdir(adapterDir, { recursive: true });
-
     await writeFileContent(entryFile, 'export const notAdapterSpec = 123;');
     await writeFileContent(controllerFile, 'class SampleController {}');
 
@@ -147,7 +145,12 @@ describe('AdapterSpecResolver', () => {
 
     const resolver = new AdapterSpecResolver();
 
-    await expect(resolver.resolve({ fileMap, projectRoot })).rejects.toThrow('No adapterSpec exports found');
+    try {
+      await resolver.resolve({ fileMap, projectRoot });
+      throw new Error('Expected resolver.resolve to throw');
+    } catch (error) {
+      expect(String(error)).toContain('No adapterSpec exports found');
+    }
 
     await rm(projectRoot, { recursive: true, force: true });
   });

@@ -67,7 +67,9 @@ export class AstParser {
         }
 
         const resolvedSource = this.resolvePath(filename, sourceValue);
+
         importEntries.push({ source: sourceValue, resolvedSource, isRelative: sourceValue.startsWith('.') });
+
         const specifiersValue = node.specifiers;
 
         if (!Array.isArray(specifiersValue)) {

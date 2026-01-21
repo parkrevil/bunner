@@ -121,6 +121,28 @@ Runtime Observation Artifact:
 - meaning: CLI가 산출하는 런타임 관측 산출물
 - shape: DevToolsRuntimeReport
 
+### 2.2 Shape Conformance Rules
+
+- `DevToolsRuntimeReport.adapters` 배열은 반드시 결정적 순서를 가져야 한다.
+  - 정렬 키는 `adapterId`의 오름차순이어야 한다.
+
+- `DevToolsRuntimeReport.adapters`의 각 `adapterId`는 중복되어서는 안 된다.
+
+- `DevToolsRuntimeReportAdapter.boundHandlers` 배열은 반드시 결정적 순서를 가져야 한다.
+  - 정렬 키는 `id`의 오름차순이어야 한다.
+
+- `DevToolsRuntimeReportAdapter.boundHandlers`의 각 `id`는 중복되어서는 안 된다.
+
+- `DevToolsStaticGraph.adapters` 배열은 반드시 결정적 순서를 가져야 한다.
+  - 정렬 키는 `adapterId`의 오름차순이어야 한다.
+
+- `DevToolsStaticGraph.adapters`의 각 `adapterId`는 중복되어서는 안 된다.
+
+- `DevToolsStaticGraphAdapter.handlerCandidates` 배열은 반드시 결정적 순서를 가져야 한다.
+  - 정렬 키는 `id`의 오름차순이어야 한다.
+
+- `DevToolsStaticGraphAdapter.handlerCandidates`의 각 `id`는 중복되어서는 안 된다.
+
 ---
 
 ## 3. Invariants & Constraints

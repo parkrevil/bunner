@@ -34,7 +34,6 @@ Normative: 본 SPEC은 추가적인 Static Shape를 정의하지 않는다.
 ## 3. Invariants & Constraints
 
 - 정상 실행은 Result(또는 공통 결과 계약)에 의해 표현된다.
-- 실행 흐름은 어댑터 개발자가 직관적으로 구성할 수 있는 모델이어야 한다.
 
 ### 3.1 MUST
 

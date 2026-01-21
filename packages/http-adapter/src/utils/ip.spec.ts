@@ -185,7 +185,7 @@ describe('sanitizeIpCandidate', () => {
 describe('stripOptionalQuotes', () => {
   it('removes matching quotes and unescapes characters', () => {
     expect(__internals.stripOptionalQuotes('"value"')).toBe('value');
-    expect(__internals.stripOptionalQuotes("'va\\'lue'")).toBe("va'lue");
+    expect(__internals.stripOptionalQuotes('\'va\\\'lue\'')).toBe('va\'lue');
     expect(__internals.stripOptionalQuotes('value')).toBe('value');
   });
 });

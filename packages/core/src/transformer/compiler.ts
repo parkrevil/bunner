@@ -13,7 +13,7 @@ export class TransformerCompiler {
     const bodyLines: string[] = [];
 
     bodyLines.push('const instance = new Target();'); // Target will be passed as arg
-    bodyLines.push("if (!plain || typeof plain !== 'object') return instance;");
+    bodyLines.push('if (!plain || typeof plain !== \'object\') return instance;');
 
     for (const [propName, prop] of Object.entries(metadata.properties)) {
       let closed = false;

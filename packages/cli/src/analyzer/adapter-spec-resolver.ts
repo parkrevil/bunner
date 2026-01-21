@@ -1,7 +1,9 @@
 import { parseSync } from 'oxc-parser';
 
-import { AstParser } from './ast-parser';
 import { PathResolver } from '../common';
+
+import { AstParser } from './ast-parser';
+import type { FileAnalysis } from './graph/interfaces';
 import type {
   AdapterSpecExtraction,
   AdapterSpecResolution,
@@ -11,7 +13,6 @@ import type {
   PipelineSpec,
   HandlerIndexEntry,
 } from './interfaces';
-import type { FileAnalysis } from './graph/interfaces';
 
 export class AdapterSpecResolver {
   private parser = new AstParser();
@@ -298,6 +299,7 @@ export class AdapterSpecResolver {
   ): HandlerIndexEntry[] {
     const entries: HandlerIndexEntry[] = [];
     const seen = new Set<string>();
+
     for (const analysis of fileMap.values()) {
       for (const cls of analysis.classes) {
         const controllerAdapterId = controllerAdapterMap.get(cls.className);
@@ -326,7 +328,6 @@ export class AdapterSpecResolver {
             }
 
             seen.add(id);
-
             entries.push({ id });
           }
         }
@@ -411,7 +412,6 @@ export class AdapterSpecResolver {
         }
 
         this.assertValidPhaseId(key, adapterId, 'middlewares');
-
         phaseIds.push(key);
       }
     }
@@ -533,12 +533,18 @@ export class AdapterSpecResolver {
         continue;
       }
 
-      if (stmt.type === 'ClassDeclaration') {
-        const id = this.asRecord(stmt.id);
+      const exportedDeclaration =
+        stmt.type === 'ExportNamedDeclaration' || stmt.type === 'ExportDefaultDeclaration'
+          ? this.asRecord(stmt.declaration)
+          : null;
+      const candidate = exportedDeclaration ?? stmt;
+
+      if (candidate.type === 'ClassDeclaration') {
+        const id = this.asRecord(candidate.id);
         const name = id ? this.getString(id, 'name') : null;
 
         if (name === className) {
-          return stmt;
+          return candidate;
         }
       }
     }
@@ -646,7 +652,6 @@ export class AdapterSpecResolver {
       }
 
       this.assertValidPhaseId(literal, className, `AdapterClass.${field}`);
-
       values.push(literal);
     }
 

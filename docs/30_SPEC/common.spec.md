@@ -47,6 +47,10 @@ ContextId:
 
 - type: string
 
+AdapterName:
+
+- type: string
+
 AdapterId:
 
 - type: string
@@ -300,12 +304,16 @@ ProviderDeclarationList:
 - `RefListDecoratorDeclaration.name`은 `RefListDecoratorName`의 허용값 중 하나여야 한다.
 - `RefListDecoratorDeclaration.refs`는 `FactoryRef`의 배열이어야 한다.
 
-- `MiddlewaresDecoratorDeclaration.phaseId`는 module-system.spec.md의 `MiddlewarePhaseId` 규칙을 만족해야 한다.
+- `MiddlewaresDecoratorDeclaration.phaseId`는 adapter.spec.md의 MiddlewarePhaseId(AST-level 허용 형태 및 정규화 규칙)를 만족해야 한다.
 - `MiddlewaresDecoratorDeclaration.refs`는 `FactoryRef`의 배열이어야 한다.
 
 - "@Middlewares"는 아래 2가지 입력 형태를 모두 지원해야 하며, 빌드 타임 수집 결과는 `MiddlewaresDecoratorDeclaration`(1개 이상)으로 정규화되어야 한다.
   - 2-arg call: `(phaseId, refs)`
   - 1-arg call: `({ [phaseId]: refs, ... })`
+
+Normative:
+
+- "@Middlewares"의 입력 phaseId는 adapter.spec.md의 MiddlewarePhaseId(AST-level 허용 형태 및 정규화 규칙)를 따라야 한다.
 
 - `InjectableOptions.visibleTo`는 아래 중 하나여야 한다.
   - `all` 또는 `module`
@@ -313,6 +321,7 @@ ProviderDeclarationList:
 
 - `ModuleRefList`는 빈 배열이어서는 안 된다.
 - `AdapterId`는 다음 문자만 포함해야 한다: 영문 대문자, 영문 소문자, 숫자, `.`, `_`, `-`.
+- `AdapterName`은 비어있지 않은 string이어야 한다.
 
 ---
 

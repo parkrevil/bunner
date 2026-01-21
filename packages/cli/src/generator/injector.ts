@@ -309,10 +309,10 @@ export class InjectorGenerator {
 
         factoryEntries.push(`  (${stable} || []).forEach(p => {`);
         factoryEntries.push('    let token = p.provide;');
-        factoryEntries.push("    if (typeof p === 'function') token = p.name;");
+        factoryEntries.push('    if (typeof p === \'function\') token = p.name;');
         factoryEntries.push('');
         factoryEntries.push('    let factory;');
-        factoryEntries.push("    if (Object.prototype.hasOwnProperty.call(p, 'useValue')) factory = () => p.useValue;");
+        factoryEntries.push('    if (Object.prototype.hasOwnProperty.call(p, \'useValue\')) factory = () => p.useValue;');
         factoryEntries.push('    else if (p.useClass) factory = () => new p.useClass();');
         factoryEntries.push('    else if (p.useFactory) {');
         factoryEntries.push('      factory = (c) => {');

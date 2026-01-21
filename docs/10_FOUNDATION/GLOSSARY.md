@@ -45,10 +45,13 @@ Bunner 프로젝트에서 사용되는 주요 기술 용어와 도메인 개념�
 - **Engine**: 프레임워크의 핵심 실행 엔진이다. Engine은 빌드 타임에 확정된 정적 연결(wiring)에 의해 실행 경로가 고정되며, 런타임에 사용자에 의해 교체·후킹·변형될 수 없다.
 
 - **ContextId**: 요청 컨텍스트를 식별하기 위한 정적 동일성 값이다.
-- **AdapterId**: 어댑터를 식별하기 위한 정적 동일성 값이다.
+- **AdapterName**: 어댑터 패키지(프로토콜 구현)를 식별하기 위한 이름이다.
+- **AdapterId**: App에 attach되는 어댑터 인스턴스를 식별하기 위한 정적 동일성 값이다.
 - **HandlerId**: 핸들러를 결정적으로 식별하기 위한 문자열이다. (형식/규칙은 diagnostics.spec.md의 HandlerId 계약을 따른다)
 - **ModuleId**: 모듈을 식별하기 위한 정적 동일성 값이다.
 - **Context**: 실행 시점의 컨텍스트 오브젝트이며, 최소 `contextId`와 `adapterId`를 포함한다.
+
+- **BunnerAdapter**: 런타임 어댑터 실행체의 기반 추상 클래스이다. 각 프로토콜 어댑터의 실행체는 `BunnerAdapter`를 상속하는 concrete class로 구현되어야 한다.
 
 - **Pipeline**: 어댑터가 정적으로 선언하는 실행 단계열(순서 포함)이다. 프레임워크/컴파일러는 Pipeline 선언을 인지하여 정적 wiring을 생성한다.
 - **PipelineStep**: Pipeline을 구성하는 단일 실행 단위이다.

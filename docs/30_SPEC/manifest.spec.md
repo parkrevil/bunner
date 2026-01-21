@@ -278,6 +278,11 @@ BunnerManifest:
 - Manifest는 Adapter Static Spec의 정적 결과를 포함해야 한다.
 - Manifest는 Handler 판정 결과의 정적 인덱스를 포함해야 한다.
 
+- Manifest의 `adapterStaticSpecs`는 module-system.spec.md의 모듈 루트 파일 `AdapterConfig`를 기반으로 결정적으로 구성되어야 한다.
+  - `adapterStaticSpecs`의 key 집합은 `AdapterConfig`의 key 집합과 정확히 일치해야 한다.
+  - 각 `adapterId`에 대한 `AdapterStaticSpec` 값은, 해당 `adapterId`에 대응되는 AdapterInstanceConfig.adapterName(module-system.spec.md)과 동일한 AdapterRegistrationInput.name(adapter.spec.md)을 가진 어댑터 패키지의 정적 판정 결과로부터 구성되어야 한다.
+  - 서로 다른 `adapterId`가 동일한 adapterName을 참조하는 경우, 해당 `adapterId`들의 `AdapterStaticSpec` 값은 서로 동일해야 한다.
+
 - App 부트스트랩 완료 이후, 구조 판정 및 wiring을 위한 메타데이터(Manifest 포함)에 접근 가능한 런타임 경로는 존재해서는 안 된다.
 
 ### 3.2 MUST NOT

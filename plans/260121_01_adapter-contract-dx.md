@@ -1,5 +1,5 @@
 ---
-status: draft
+status: implemented
 ---
 
 # Run Plan
@@ -132,6 +132,12 @@ status: draft
   - docs/30_SPEC/adapter.spec.md 및 docs/30_SPEC/manifest.spec.md에서 `supportedMiddlewarePhases`의 key가 MiddlewarePhaseId로 정의되어 있음 확인
   - `pipeline.middlewares.length`와 `middlewarePhaseOrder.length` 불일치가 위반 조건으로 존재함 확인
 
+- 진행 체크리스트:
+  - [x] 금지 용어 잔존 0건 확인
+  - [x] `middlewarePhaseOrder` 스키마 정합 확인
+  - [x] `supportedMiddlewarePhases` key가 MiddlewarePhaseId로 정의됨 확인
+  - [x] `pipeline.middlewares.length` 제약 조건 명시 확인
+
 ### Step 2) (후속) 구현 착수 준비
 
 - 작업 내용:
@@ -164,6 +170,10 @@ status: draft
 
 - 구현 착수 시 추가 확인(SSOT 정합성):
   - module-system.spec.md 및 adapter.spec.md의 문구에 "lifecycle" 잔여가 없는지 재확인(Phase 단일화 후속 정리 필요 시 별도 승인 후 처리)
+
+- 진행 체크리스트:
+  - [x] 구현 체크리스트 및 구현 단계 문서화 완료
+  - [x] 구현 착수 시 추가 확인 항목 정리 완료
 
 ### Step 3) (구현) CLI가 adapterSpec/handlerIndex를 생성
 
@@ -250,19 +260,24 @@ status: draft
   - adapterSpec 수집/파싱 유닛 테스트(새 파일 가능)
     - `defineAdapter(Identifier)`만 허용, string literal/static field 판정 실패 케이스 검증
 
+- 진행 체크리스트:
+  - [x] 사용자 승인 아티팩트(토큰) 확보
+  - [x] CLI 분석/생성 로직 구현
+  - [x] 테스트 추가 및 `bun run verify` 통과
+
 ---
 
 ## 6) 검증 / 완료 조건
 
 - (문서)
-  - [ ] SSOT 전역 용어 단일화(금지 용어 0건)
-  - [ ] L3 문서 간 참조 일관성 유지
-  - [ ] DOCS_WRITING 규율 위반 없음
+  - [x] SSOT 전역 용어 단일화(금지 용어 0건)
+  - [x] L3 문서 간 참조 일관성 유지
+  - [x] DOCS_WRITING 규율 위반 없음
 
 - (구현, Step 3 수행 시)
-  - [ ] `bun run verify` 통과
-  - [ ] CLI 산출물(Manifest)의 `adapterStaticSpecs` / `handlerIndex`가 spec 형상과 정렬 규칙을 만족
-  - [ ] 동일 입력에서 결과가 결정적(순서/내용 변동 없음)
+  - [x] `bun run verify` 통과
+  - [x] CLI 산출물(Manifest)의 `adapterStaticSpecs` / `handlerIndex`가 spec 형상과 정렬 규칙을 만족
+  - [x] 동일 입력에서 결과가 결정적(순서/내용 변동 없음)
 
 ---
 

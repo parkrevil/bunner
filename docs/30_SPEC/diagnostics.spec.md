@@ -105,6 +105,7 @@ HandlerIdFormatRules:
 
 - `HandlerId`는 아래 형식을 만족해야 한다.
   - `<adapterId>`: AdapterId (common.spec.md)
+    - `<adapterId>`는 module-system.spec.md의 모듈 루트 파일 `AdapterConfig` 키 집합에 포함되어야 한다.
   - `<file>`: Location.file과 동일 규칙(프로젝트 루트 기준 정규화된 상대 경로)
   - `<symbol>`: 비어있지 않은 문자열
     - `<symbol>`은 adapter.spec.md가 정의하는 Handler(Controller class의 method) 단위를 결정적으로 식별해야 한다.

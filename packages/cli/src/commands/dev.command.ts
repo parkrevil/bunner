@@ -83,7 +83,6 @@ export async function dev(commandOptions?: CommandOptions) {
         graph.build();
 
         const adapterSpecResolution = await adapterSpecResolver.resolve({ fileMap, projectRoot });
-
         const manifestGen = new ManifestGenerator();
         const manifestJson = manifestGen.generateJson({
           graph,

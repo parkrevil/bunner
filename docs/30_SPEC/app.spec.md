@@ -162,6 +162,9 @@ ConfigSectionRegistrationDeclaration:
 
 - `app.attachAdapter`의 AdapterId 인자는 빌드 타임에 AdapterId(common.spec.md)로 직접 판정 가능해야 한다.
 
+- `app.attachAdapter`의 AdapterId 인자는 module-system.spec.md의 모듈 루트 파일 `AdapterConfig` 키 집합에 포함되어야 한다.
+  - 포함되지 않으면, 빌드 실패가 관측되어야 한다.
+
 - `app.attachAdapter`는 정적 그래프(Manifest 및 정적 wiring)를 변경해서는 안 된다.
 
 - `app.stop`는 App의 종료를 수행해야 하며, App이 소유하는 모든 리소스(Provider 및 Adapter-owned resources)를 정리해야 한다.
@@ -185,8 +188,6 @@ ConfigSectionRegistrationDeclaration:
 - `app.stop`은 어떤 경우에도 throw가 관측되어서는 안 된다.
 
 ### 3.2 MUST NOT
-
-- `createApplication | app.start | app.stop | app.get`은 Result를 반환해서는 안 된다.
 
 - `app.attachAdapter`는 `app.start` 이후에 관측되어서는 안 된다.
 

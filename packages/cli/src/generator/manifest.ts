@@ -265,7 +265,6 @@ export const scopedKeysMap = createScopedKeysMap();
     });
 
     const sortedDiNodes = diNodes.sort((a, b) => compareCodePoint(String(a.id), String(b.id)));
-
     const sortedAdapterStaticSpecs: Record<string, AdapterStaticSpec> = {};
     const sortedAdapterIds = Object.keys(adapterStaticSpecs).sort(compareCodePoint);
 
