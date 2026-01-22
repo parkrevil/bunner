@@ -15,7 +15,7 @@ L3 Implementation Contract
 
 ### 1.2 Scope & Boundary
 
-본 SPEC은 어댑터가 정적으로 선언한 Pipeline을 따라 수행되는 정상 실행 의미론을 판정 가능한 계약으로 고정한다.
+본 SPEC은 manifest.spec.md의 `AdapterStaticSpec.pipeline`을 따라 수행되는 정상 실행 의미론을 판정 가능한 계약으로 고정한다.
 다음 항목은 본 SPEC의 소유가 아니다:
 
 - throw로 발생한 예외의 처리(필터 체인) → error-handling.spec.md에서 판정된다.
@@ -38,9 +38,13 @@ Normative: 본 SPEC은 추가적인 Static Shape를 정의하지 않는다.
 ### 3.1 MUST
 
 - 정상 실행은 Result 기반 흐름으로 표현되어야 한다. (Result 형태는 common.spec.md에 의해 정의된다)
-- 정상 실행은 어댑터가 정적으로 선언한 Pipeline을 따라 수행되어야 한다.
-- 컨텍스트(Context)는 Pipeline을 따라 각 PipelineStep 호출에 전달되어야 한다.
+- 정상 실행은 manifest.spec.md의 `AdapterStaticSpec.pipeline`을 따라 수행되어야 한다.
+- 컨텍스트(Context)는 manifest.spec.md의 `AdapterStaticSpec.pipeline`을 따라 각 PipelineStep 호출에 전달되어야 한다.
 - 런타임 구성 요소는 빌드 타임에 확정된 정적 연결 관계만을 따른다. (ARCHITECTURE의 Static Context Binding 전제)
+
+- App 부트스트랩 완료 이후, 구조 판정 및 wiring을 위한 메타데이터(Manifest 포함)에 접근 가능한 런타임 경로는 존재해서는 안 된다.
+
+- App 부트스트랩 완료 이후, Manifest(및 그 파생 데이터)에 대한 접근 시도는 throw로 관측되어야 한다.
 
 - Pipe에 등록되지 않은 변환(transform) 및 검증(validate)을 실행 흐름에 암묵적으로 삽입하거나 추론해서는 안 된다. (INVARIANTS의 No Implicit Pipe 전제)
 
@@ -66,8 +70,8 @@ Normative: 본 SPEC은 추가적인 Observable Semantics를 정의하지 않는�
 
 ## 5. Violation Conditions
 
-- Runtime Violation: Normal Path에서 예외(throw)가 관측되는 경우
-- Runtime Violation: 실행 단계가 어댑터가 정적으로 선언한 Pipeline 순서를 위반하는 경우
+- Runtime Violation: 예외(throw)가 error-handling.spec.md의 Exception Filter Chain에 의해 처리되지 않고, throw가 어댑터의 프로토콜 입력 처리 경계 밖으로 전파되는 경우
+- Runtime Violation: 실행 단계가 manifest.spec.md의 `AdapterStaticSpec.pipeline` 순서를 위반하는 경우
 - 빌드 실패 및 위반 조건의 진단 출력은 diagnostics.spec.md의 형식을 따라야 한다.
 
 ---

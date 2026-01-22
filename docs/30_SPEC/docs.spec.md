@@ -126,9 +126,6 @@ InterfaceCatalogEntry:
   - outputSchemas:
     - type: array
     - items: InterfaceSchemaRef
-  - errorSchemas:
-    - type: array
-    - items: InterfaceSchemaRef
   - securityRefs:
     - type: array
     - items: string

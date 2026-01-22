@@ -333,12 +333,16 @@ Normative:
 - DI/모듈 관련 declarations는 빌드 타임에 정적으로 판정 가능해야 한다.
 - `Context`는 최소 `contextId`와 `adapterId`를 제공해야 한다.
 
+- Result를 해석할 때, 값이 `BunnerError` 형상을 만족하면 Error 케이스로 판정되어야 한다.
+
 - `CommonDecoratorDeclaration`은 런타임 훅이 아니라, 빌드 타임에 수집/판정되는 선언으로 취급되어야 한다.
 
 ### 3.2 MUST NOT
 
 - 공통 계약이 특정 어댑터의 표현(상태 코드 등)에 종속되어서는 안 된다.
 - Error와 Panic을 동일 타입/동일 경로로 처리하게 설계해서는 안 된다.
+
+- Bunner가 빌드 타임에 수집/판정 입력으로 취급하는 데코레이터 선언(`CommonDecoratorDeclaration`, `InjectableDeclaration`, adapter.spec.md의 `AdapterEntryDecorators` 등)의 런타임 실행(부작용, 메타데이터 기록 등)을 전제로 해서는 안 된다.
 
 ---
 
@@ -384,7 +388,7 @@ Normative:
   - isError 헬퍼는 항상 boolean을 반환해야 한다.
   - isError 헬퍼는 어떤 경우에도 throw가 관측되어서는 안 된다.
 
-  - isError(X) === true인 필요충분조건은, **bunner_error** === true인 경우여야 한다.
+  - isError(X) === true인 필요충분조건은, `X.__bunner_error__ === true`인 경우여야 한다.
 
 ---
 

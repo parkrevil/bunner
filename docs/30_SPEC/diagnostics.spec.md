@@ -237,14 +237,6 @@ DiagnosticMessageText:
 
 - Diagnostic의 summary/why/how.title/how.details(존재하는 경우)는 모두 DiagnosticMessageText를 만족해야 한다.
 
-- Diagnostic에 포함된 모든 세부 정보는 summary/why/how.title/how.details 문자열에 보존되어야 한다.
-  - 보존 판정 규칙: 아래 항목 각각의 문자열 값이 summary/why/how.title/how.details의 연결 문자열에 부분 문자열로 포함되어야 한다.
-    - Diagnostic.code
-    - Diagnostic.severity
-    - 모든 Location.file
-    - Location.symbol이 존재하는 경우 해당 값
-    - CycleNode.id
-    - CycleEdge.from, CycleEdge.to
 
 ### 3.2 MUST NOT
 

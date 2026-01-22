@@ -307,6 +307,9 @@ Observable:
 
 - 모듈 루트 파일에서 수집된 `AdapterConfig`는 adapter.spec.md의 어댑터 간 결합(허용/금지) 판정 입력으로 사용되어야 한다.
 
+- 모듈 루트 파일에서 수집된 `middlewares | guards | pipes` 입력은 adapter.spec.md의 `AdapterRegistrationInput.pipeline`과 결합되어,
+  실행 순서가 결정적으로 구성된 뒤 manifest.spec.md의 `AdapterStaticSpec.pipeline`로 직렬화되어야 한다.
+
 ### 6.2 Layer Priority
 
 본 문서는 L3 SPEC에 속한다.

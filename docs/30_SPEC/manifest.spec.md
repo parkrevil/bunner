@@ -44,7 +44,7 @@ Normative: 본 SPEC은 추가적인 용어 정의를 도입하지 않는다.
 ManifestSchemaVersion:
 
 - type: string
-- const: "2"
+- const: "3"
 
 ManifestConfigSourceFormat:
 
@@ -136,21 +136,9 @@ ManifestDiGraph:
 
 Pipeline:
 
-- type: object
-- required:
-  - middlewares
-  - guards
-  - pipes
-  - handler
-- properties:
-  - middlewares:
-    - type: PipelineStepList
-  - guards:
-    - type: PipelineStepList
-  - pipes:
-    - type: PipelineStepList
-  - handler:
-    - type: PipelineStep
+- type: array
+- items: PipelineStep
+- meaning: 빌드 타임에 결정적으로 구성된 실행 순서(정적 wiring 산출물)
 
 PipelineStepList:
 
@@ -161,18 +149,6 @@ PipelineStep:
 
 - allowed forms:
   - FactoryRef (common.spec.md)
-
-MiddlewarePhaseOrder:
-
-- type: array
-- items: MiddlewarePhaseId (adapter.spec.md)
-
-SupportedMiddlewarePhaseSet:
-
-- type: object
-- meaning: 어댑터가 지원하는 middleware phase id 집합
-- keys: MiddlewarePhaseId (adapter.spec.md)
-- values: literal true
 
 AdapterEntryDecorators:
 
@@ -202,14 +178,10 @@ AdapterStaticSpec:
 - type: object
 - required:
   - pipeline
-  - middlewarePhaseOrder
-  - supportedMiddlewarePhases
   - entryDecorators
   - runtime
 - properties:
   - pipeline: Pipeline
-  - middlewarePhaseOrder: MiddlewarePhaseOrder
-  - supportedMiddlewarePhases: SupportedMiddlewarePhaseSet
   - entryDecorators: AdapterEntryDecorators
   - runtime: AdapterRuntimeSpec
 
@@ -273,6 +245,7 @@ BunnerManifest:
 - Manifest의 `modules`는 `id` 오름차순으로 정렬되어야 한다.
 - Manifest는 런타임에서 수정될 수 없어야 한다.
 - Manifest가 런타임 메모리에 존재하는 동안, Manifest에 대한 변경 시도는 throw로 관측되어야 한다.
+- App 부트스트랩 완료 이후, Manifest(및 그 파생 데이터)에 대한 접근 시도는 throw로 관측되어야 한다.
 - Manifest는 모듈 판정 결과를 module-system.spec.md와 모순 없이 표현해야 한다.
 - Manifest는 DI 그래프 정규화 결과를 포함해야 한다.
 - Manifest는 Adapter Static Spec의 정적 결과를 포함해야 한다.

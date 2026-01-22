@@ -18,7 +18,6 @@ status: draft
   - "아니 defineAdapter 와 Adapter 구현 인터페이스, HTTP Adapter 에 적용까지 계획을 시작한다. 논의해야하며 DX를 최우선으로 한다. 어댑터 제작자에게 명확하고 직관적인 틀을 제공해야한다"
 
 - 에이전트 해석(검증 가능하게):
-- 에이전트 해석(검증 가능하게):
   - 무엇을 변경하는가:
     - (계약) `defineAdapter` / `adapterSpec` / 어댑터 등록 DX(파이프라인 skeleton, phase enum, decorators 확장, classRef 강제) 및 실행 모델(dispatch) 을 DX 우선으로 확정한다.
     - (적용) `@bunner/http-adapter`가 위 계약을 충족하는 `adapterSpec`을 패키지 루트 엔트리에서 제공하도록 한다.
@@ -26,7 +25,6 @@ status: draft
     - 어댑터 제작자 관점에서 “최소한의 보일러플레이트 + 기계적 판정 가능”한 등록 틀이 확정된다.
     - CLI가 `@bunner/http-adapter` 패키지 루트 entry file의 `adapterSpec`을 빌드 타임에 결정적으로 수집 가능하다.
     - 프레임워크(빌드 타임)가 Handler별 실행 파이프라인(HandlerExecutionPlan)을 결정적으로 조립하고, 런타임은 `dispatch(handlerId, ctx, input)` 경로로만 실행된다.
-    - examples 실행 시 단순 HTTP 요청 1개 이상이 성공한다.
   - 명시적 제약:
     - L1/L2: 빌드 타임 판정(추측 금지), 결정성, 경계/Facade 원칙 준수.
     - L3: `adapter.spec.md`, `manifest.spec.md`, `common.spec.md`, `module-system.spec.md`, `app.spec.md` 계약과 정합.
@@ -64,7 +62,6 @@ status: draft
 
 - 전 어댑터 패키지 일괄 마이그레이션.
 - 런타임 실행 엔진 전체 교체.
-- 기존 예제 앱 전체 업데이트(필요 시 최소 스모크 업데이트만).
 
 ---
 
@@ -97,10 +94,10 @@ status: draft
 - CLI(AOT) `pipeline` 입력은 현재 객체형(`PipelineSpec`)을 전제로 한다.
 - HTTP Adapter 런타임은 현재 `method+path → handler 함수 직접 호출` 구조이며, `handlerId → dispatch(...)` 접합부가 존재하지 않는다.
 - HTTP Adapter의 `Controller`/`RestController` 데코레이터는 현재 `adapterId` 옵션을 받지 않는다.
-- examples는 현재 `bunnerHttpAdapter(...)`로 부트스트랩하며, 컨트롤러는 `@Controller('path')` / `@RestController('path')` 형태를 사용한다.
+- HTTP Adapter의 `Controller`/`RestController` 데코레이터는 현재 `adapterIds` 옵션을 받지 않는다.
 
-따라서 본 Plan이 주장하는 DX(defineAdapter object literal / pipeline skeleton DSL / controller adapterId 필수 / dispatch 기반 실행)로 이동하려면,
-반드시 CLI·http-adapter·examples에 대한 접합/이행 Step이 포함되어야 한다.
+따라서 본 Plan이 주장하는 DX(defineAdapter object literal / pipeline skeleton DSL / controller adapterIds(없음=all, 있음=subset) / dispatch 기반 실행)로 이동하려면,
+반드시 CLI·http-adapter에 대한 접합/이행 Step이 포함되어야 한다.
 
 ### 4.1 DX 최우선 결론(초안) — 논의 시작점
 
@@ -127,9 +124,11 @@ status: draft
     - 어댑터는 Selector로 `handlerId`를 결정하고 `dispatch(handlerId, ctx, input)`를 호출한다.
 
 - **파이프라인은 “실행 step 목록”이 아니라 “합성/실행 순서 skeleton”이다**
-  - DX는 아래 형태를 고정한다.
-    - `pipeline: [OnRequest, Guards, Pipes, PreHandler, Handler, OnResponse]`
-  - 빌드 타임이 Handler별 실행 파이프라인(HandlerExecutionPlan)을 결정적으로 조립한다.
+  - DX는 아래 형태(순서 선언)로 고정한다.
+    - `pipeline: [MiddlewarePhase.1, Guards, Pipes, Handler, MiddlewarePhase.2]`
+  - Reserved token(`Guards | Pipes | Handler`)은 string literal이 아니라 **Identifier reference**로만 표현한다.
+  - 어댑터는 pipeline에서 “순서”만 정한다.
+  - 빌드 타임(프레임워크)이 module/controller/handler 등록 입력을 기반으로 Handler별 실행 파이프라인(HandlerExecutionPlan)을 결정적으로 조립한다.
   - 런타임은 `dispatch(handlerId, ctx, input)`만 호출한다.
 
 ### 4.2 질문별 정리(규범적 답변)
@@ -154,10 +153,11 @@ status: draft
     - class/method/parameter: selectorKey 구성 입력 수집(선택)
   - 빌드 타임은 Handler별 실행 파이프라인을 조립한다(HandlerExecutionPlan 생성).
 
-- Q4) “Controller 데코레이터에 adapterId는?”
+- Q4) “Controller 데코레이터에 adapterIds는?”
   - Controller 데코레이터는 어댑터가 제공한다.
-  - Controller 데코레이터는 표준 옵션으로 `adapterId`를 지원해야 하며,
-    - Controller 선언에서 `adapterId`가 정의되지 않으면 빌드 타임 에러가 발생해야 한다.
+  - Controller 데코레이터는 표준 옵션으로 `adapterIds?: AdapterId[]`를 지원해야 한다.
+    - `adapterIds`가 생략된 경우: 해당 Controller는 해당 데코레이터(=해당 어댑터)의 모든 adapterId에 반영되어야 한다.
+    - `adapterIds`가 존재하는 경우: 해당 Controller는 지정된 adapterId에만 반영되어야 한다.
 
 ### 4.3 `defineAdapter` 공개 위치: `@bunner/common`(초안)
 
@@ -187,7 +187,7 @@ status: draft
 
 - (합의 완료) 런타임 실행 진입은 `dispatch(handlerId, ctx, input)`로 고정한다.
 - (합의 완료) BaseContext는 프레임워크가 제공하고, 어댑터는 ingress에서 ctx를 확장한다(`makeContext` 훅 없음).
-- (합의 완료) Controller 선언에서 `adapterId` 미정의는 빌드 타임 에러다.
+- (합의 완료) Controller 데코레이터의 `adapterIds`는 선택이며, 미정의는 “모든 adapterId에 반영”으로 정규화된다.
 - (합의 완료) `runtime.start/stop` 모델은 제거하고, `classRef`(BunnerAdapter 구현)는 필수다.
 
 ### 4.7 Handler별 실행 파이프라인 조립(빌드 타임) — 최종 합의
@@ -205,25 +205,28 @@ status: draft
   - `handler`: 최종 실행 단위
 - 런타임은 `dispatch(handlerId, ctx, input)`만 호출하며, 런타임 조립/추론은 금지한다.
 
-### 4.8 결정 필요(Blocking) — 이 Plan을 구현 가능하게 만드는 최소 결론
+### 4.8 결정 완료(Resolved) — 이 Plan의 구현 전제
 
-아래 항목이 결론 나지 않으면 Step 2~Step 5는 착수할 수 없다.
+아래 항목은 본 Plan의 구현 전제로 고정한다.
 
 1) `defineAdapter` 입력 형상
-  - A안: `defineAdapter(<object literal>)`
-  - B안: `defineAdapter(<AdapterClassRef Identifier>)` (현 구현 유지)
+  - 고정: `defineAdapter(<object literal>)`
 
 2) `pipeline` 입력 형상
-  - A안: pipeline skeleton DSL(혼합 배열)
-  - B안: 현재 CLI의 `PipelineSpec`(객체형) 유지
+  - 고정: phase/order 배열(순서 선언)
+    - 예: `pipeline: [MiddlewarePhase.1, Guards, Pipes, Handler, MiddlewarePhase.2]`
+  - 고정: Reserved token(`Guards | Pipes | Handler`)은 Identifier reference로만 허용한다.
 
-3) Controller에 `adapterId` 강제 도입 방식
-  - A안: 즉시 강제(미정의=빌드 실패) + examples/테스트/데코레이터 시그니처 동시 이행
-  - B안: 단계적 도입(이번 슬라이스에서는 기존 시그니처 허용) + 후속 슬라이스에서 강제
+3) Controller 데코레이터의 adapterIds 의미
+  - 고정: Controller class에는 해당 어댑터용 Controller 데코레이터가 정확히 1개 존재해야 한다.
+  - 고정: `adapterIds` 생략 → “해당 데코레이터(=해당 어댑터)의 모든 adapterId에 반영”
+  - 고정: `adapterIds` 존재 → “지정된 adapterId에만 반영”
 
 4) `bunnerHttpAdapter(...)` 유지/이행
-  - A안: 유지(내부 구현만 새 모델로 접합)
-  - B안: 폐기/대체(bootstrap API 변경 + examples 이행)
+  - 고정: 유지(내부 구현만 새 모델로 접합)
+
+5) `bootstrapApplication` 제거
+  - 고정: 제거. App-External Code는 `createApplication`을 직접 사용한다.
 
 ---
 
@@ -233,11 +236,11 @@ status: draft
 
 - 작업 내용:
   - `defineAdapter` 사용 경험을 “어댑터 제작자 관점”에서 1개 템플릿으로 고정한다.
-  - pipeline skeleton DSL(혼합 배열) 문법과 정규화 규칙을 확정한다.
+  - pipeline(phase/order 배열) 문법과 정규화 규칙을 확정한다.
   - 실행 모델을 `dispatch(handlerId, ctx, input)`로 확정하고, ctx 확장 규칙(ingress에서 병합)을 확정한다.
-  - Controller 선언에서 `adapterId` 미정의 시 빌드 실패 규칙을 확정한다.
+  - Controller 데코레이터의 `adapterIds` 의미(없음=all, 있음=subset)를 확정한다.
   - HandlerId 발급 규칙과 selectorKey → handlerId 매핑 테이블 생성 규칙을 확정한다.
-  - (필수) 4.8 결정 필요(Blocking) 4개 항목을 결론낸다.
+  - (필수) 4.8 결정 완료(Resolved) 항목을 Plan Changes에 append-only로 기록한다.
 
 - 산출물:
   - (필요 시) ADR 초안 1개: runtime 상태 전달/stop 연계 방식.
@@ -262,11 +265,29 @@ status: draft
   - L2 의존성 방향 위반 없음.
   - `defineAdapter`는 빌드 타임 수집 입력이며 런타임 지능을 요구하지 않음.
 
+### Step 2.5) createApplication 정합(필수) — app.spec.md 계약 구현/검증
+
+- 작업 내용(후속 Implementer):
+  - `bootstrapApplication`을 제거하고, App-External Code는 `createApplication`만으로 부트스트랩을 수행해야 한다.
+  - `createApplication`이 app.spec.md의 MUST/MUST NOT/Observable/Violation을 만족하도록 구현/수정한다.
+  - Env/Config preload가 `createApplication` 완료 이전에 관측되도록 하고, 실패 시 `createApplication`에서 throw가 관측되도록 한다.
+  - `createApplication`이 빌드 타임 Manifest 산출물을 기반으로 부트스트랩하도록 한다.
+  - `app.attachAdapter`가 `app.start` 이후에 관측되지 않도록 강제한다.
+  - `createApplication | app.start | app.stop | app.get | app.attachAdapter`가 Result를 반환하지 않도록 보장한다.
+  - `app.stop`은 best-effort로 종료 처리를 수행해야 한다(중간에 실패해도 가능한 한 계속 진행).
+  - 종료 처리 중 Error가 발생해도 종료 처리를 즉시 중단해서는 안 된다(에러는 누적 기록).
+  - 종료 처리(모든 stop 훅/단계) 시도를 완료한 뒤, Error가 1개라도 누적되었다면 `app.stop`에서 throw가 관측되어야 한다.
+  - throw는 단일 Error로 집계되어야 하며, 원인 Error들을 보존해야 한다(예: AggregateError 또는 `errors: Error[]`를 포함하는 Error).
+
+- 중간 검증:
+  - `bun run verify`가 통과한다.
+  - app.spec.md의 Violation Conditions가 테스트 또는 검증 루틴으로 커버된다.
+
 ### Step 3) CLI(AOT) 정합(필수) — defineAdapter/pipeline 입력을 결정에 맞게 수집
 
 - 작업 내용(후속 Implementer):
   - 4.8의 결론에 따라, CLI analyzer가 `@bunner/http-adapter`의 `adapterSpec`과 정적 스펙을 **결정적으로** 수집하도록 수정한다.
-  - `handlerIndex` 생성과 Controller 소유권 판정 규칙(특히 adapterId 강제 여부)을 결정에 맞게 반영한다.
+  - `handlerIndex` 생성과 Controller 소유권 판정 규칙(특히 adapterIds 없음=all / 있음=subset)을 결정에 맞게 반영한다.
   - 관련 테스트를 결론에 맞게 수정/추가한다.
 
 - 중간 검증:
@@ -280,30 +301,19 @@ status: draft
     - object literal은 최종 합의된 `AdapterRegistrationInput` 형상을 만족해야 한다.
     - `name`은 module-system.spec.md의 AdapterInstanceConfig.adapterName과 동일해야 한다(manifest.spec.md의 adapterStaticSpecs 구성 규칙).
     - `classRef`는 필수이며, `BunnerAdapter` 구현 클래스여야 한다.
-    - `decorators.controller`는 `adapterId` 옵션을 지원해야 하며, 미정의는 빌드 실패로 판정되어야 한다.
-    - `pipeline`은 pipeline skeleton DSL(혼합 배열) 형태를 사용한다.
+    - `decorators.controller`는 `adapterIds?: AdapterId[]` 옵션을 지원해야 한다.
+      - `adapterIds` 미정의는 빌드 실패가 아니라 “all”로 정규화되어야 한다.
+    - `pipeline`은 phase/order 배열(순서 선언) 형태를 사용한다.
     - `runtime.start/stop` 모델은 사용하지 않는다(제거).
   - HTTP Adapter는 ingress에서 ctx 확장 → selector로 handlerId 결정 → `dispatch(handlerId, ctx, input)` 호출 흐름을 따른다.
 
 - 추가 작업(필수):
   - 4.8의 결론에 따라, `bunnerHttpAdapter(...)`가 유지되는 경우 해당 경로로 생성된 `BunnerHttpAdapter`가 새 실행 모델과 접합되도록 한다.
-  - Controller/RestController 데코레이터 시그니처 변경이 발생하는 경우, examples 및 패키지 테스트/유틸(예: scalar/openapi) 영향 범위를 선언한다.
+  - Controller/RestController 데코레이터 시그니처 변경이 발생하는 경우, 패키지 테스트/유틸(예: scalar/openapi) 영향 범위를 선언한다.
 
 - 중간 검증:
   - CLI가 http-adapter의 `adapterSpec`을 수집 가능.
   - `bun run verify` 통과.
-
-### Step 5) Examples 스모크(필수) — 단순 요청 성공 보장
-
-- 작업 내용(후속 Implementer):
-  - examples를 실행한다.
-  - 아래 중 1개 이상 요청이 200으로 성공함을 확인한다.
-    - `GET http://localhost:5001/users`
-    - `GET http://localhost:5001/posts`
-    - `GET http://localhost:5001/billing/history`
-
-- 중간 검증:
-  - 응답 status가 200이고 body가 비어있지 않다.
 
 ---
 
@@ -312,9 +322,8 @@ status: draft
 - [ ] (계약) 합의된 DX 템플릿 1개가 존재한다.
 - [ ] (적용) `@bunner/http-adapter`가 `adapterSpec`을 제공한다.
 - [ ] (정합) pipeline skeleton, phase enum, decorators 확장, handlerId/dispatch 모델이 문서/구현에 일관되게 반영된다.
-- [ ] (빌드) Controller 선언에서 `adapterId` 미정의는 빌드 실패로 관측된다.
+- [ ] (빌드) Controller 데코레이터의 `adapterIds` 의미(없음=all, 있음=subset)가 빌드 타임 결과에 반영된다.
 - [ ] `bun run verify` 통과.
-- [ ] examples 실행 후 단순 HTTP 요청 1개 이상이 200으로 성공한다.
 
 ---
 
@@ -323,7 +332,7 @@ status: draft
 - 리스크:
   - 기존 `packages/http-adapter`는 현재 `HttpMiddlewareLifecycle` 기반으로 동작하므로, 외부 사용자 코드/설정과의 Breaking 가능성이 있다.
   - pipeline skeleton DSL 및 `dispatch(handlerId, ctx, input)` 실행 경로로의 전환은 기존 런타임 코드와의 접합부에서 Breaking 가능성이 있다.
-  - `adapterId` 강제 및 데코레이터 시그니처 변경은 examples 및 통합 테스트에 즉시 영향을 준다.
+  - `adapterId` 강제 및 데코레이터 시그니처 변경은 통합 테스트에 즉시 영향을 준다.
 
 - 롤백:
   - HTTP Adapter 표면 API를 유지하면서 내부적으로만 phase로 매핑하는 shim 전략을 우선 적용할 수 있다.
@@ -332,5 +341,6 @@ status: draft
 
 ## Plan Changes (append-only)
 
-- 2026-01-21: DX 최종 합의 반영(파이프라인 skeleton DSL, core dispatch 모델, classRef 강제, runtime.start/stop 제거, controller adapterId 필수, HandlerExecutionPlan 빌드 타임 조립 명시)
-- 2026-01-22: Preflight(현 구현 관측) 추가, 결정 필요(Blocking) 섹션 추가, CLI 정합/Examples 스모크 Step 및 DoD 보강, 중복 라인 제거
+- 2026-01-21: DX 최종 합의 반영(파이프라인 skeleton DSL, core dispatch 모델, classRef 강제, runtime.start/stop 제거, controller adapterIds(없음=all, 있음=subset), HandlerExecutionPlan 빌드 타임 조립 명시)
+- 2026-01-22: Preflight(현 구현 관측) 추가, 결정 필요(Blocking) 섹션 추가, CLI 정합 Step 및 DoD 보강, 중복 라인 제거
+- 2026-01-22: pipeline token 명칭을 Guards/Pipes로 정합, createApplication 작업 Step 추가

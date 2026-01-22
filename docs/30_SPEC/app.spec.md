@@ -185,7 +185,11 @@ ConfigSectionRegistrationDeclaration:
 
 - `onApplicationShutdown` 훅은 모든 `onModuleDestroy` 훅 호출 이후에 1회 호출되어야 한다.
 
-- `app.stop`은 어떤 경우에도 throw가 관측되어서는 안 된다.
+- `app.stop`은 종료 처리 중 Error가 발생하더라도 가능한 한 종료 처리를 계속 수행해야 한다.
+- 종료 처리 중 Error가 1개라도 발생하면, 종료 처리 완료 이후 `app.stop`에서 throw가 관측되어야 한다.
+- 종료 처리 중 Error가 없으면, `app.stop`에서 throw가 관측되어서는 안 된다.
+- `app.stop`에서 throw되는 값은 Error여야 하며, `errors`(Error[])를 포함해야 한다.
+- `errors`는 종료 처리 중 발생한 Error들을 관측 순서대로 포함해야 한다.
 
 ### 3.2 MUST NOT
 
@@ -214,7 +218,8 @@ ConfigSectionRegistrationDeclaration:
 - Input: App-External Code에서의 `app.stop` 호출
 - Observable:
   - `app.stop` 호출은 종료 처리를 수행해야 한다.
-  - `app.stop` 호출에서 throw가 관측되어서는 안 된다.
+  - 종료 처리 중 Error가 없으면, `app.stop` 호출에서 throw가 관측되어서는 안 된다.
+  - 종료 처리 중 Error가 1개라도 있으면, `app.stop` 호출에서 throw가 관측되어야 한다.
 
 ### 4.2 State Conditions
 
@@ -227,7 +232,9 @@ ConfigSectionRegistrationDeclaration:
 - Build-Time Violation: App lifecycle hook이 런타임 리플렉션에 의해 결정되는데도 빌드가 성공하는 경우
 - Build-Time Violation: `ConfigSectionRegistrationDeclaration.raw`가 ConfigRawValue에 부합하지 않는데도 빌드가 성공하는 경우
 - Build-Time Violation: 등록되지 않은 Class token에 대해 `app.get`/DI 주입이 성공하도록 빌드되는 경우
-- Runtime Violation: `app.stop`에서 throw가 관측되는 경우
+- Runtime Violation: 종료 처리 중 Error가 없는데도 `app.stop`에서 throw가 관측되는 경우
+- Runtime Violation: 종료 처리 중 Error가 있는데도 `app.stop`에서 throw가 관측되지 않는 경우
+- Runtime Violation: `app.stop`에서 throw되는 값이 Error가 아니거나 `errors`(Error[])를 포함하지 않는 경우
 
 ---
 
