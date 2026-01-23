@@ -78,6 +78,10 @@ Normative: 본 SPEC은 추가적인 Static Shape를 정의하지 않는다.
 
 - `app.get`은 위 조건을 만족하지 못하는 경우 throw가 관측되어야 한다.
 
+- `app.get`의 성공 조건을 위반하는 사용이 존재하는 경우, 빌드 실패가 관측되어야 한다.
+  - 빌드 실패 진단은 diagnostics.spec.md의 Diagnostic 형식을 따라야 한다.
+  - 진단에는 최소한 판정된 Provider scope/visibleTo와 위반된 조건이 포함되어야 한다.
+
 - `TokenThunk`(common.spec.md)는 빌드 타임 수집/정적 wiring 치환을 위한 입력 형태일 뿐이며, DI 그래프의 순환 의존을 허용하거나 완화하는 근거로 사용되어서는 안 된다.
   - 단, 순환 의존이 발견된 경우 진단 출력(diagnostics.spec.md)의 `how` 힌트에서 `TokenThunk` 형태를 사용한 표현을 안내하는 것은 허용된다.
 

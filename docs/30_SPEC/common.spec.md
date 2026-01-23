@@ -91,10 +91,20 @@ BunnerError:
 - properties:
   - `__bunner_error__`:
     - type: literal true
+    - meaning: 프레임워크의 Error 판정용 예약 필드
   - stack:
     - type: string
+    - meaning: 비어있지 않은 stack trace string
   - cause:
     - type: unknown
+    - meaning: opaque 사용자 입력 값. 프레임워크는 cause의 구조/직렬화 가능성/의미를 해석하지 않는다.
+
+NOTE:
+
+- `__bunner_error__`는 예약 필드다. `Result`의 Success 값이 이 필드를 의미론적으로 사용해서는 안 된다.
+  - `isError(X) === true` 판정은 `X.__bunner_error__ === true`에 의해 수행된다.
+  - CLI는 Success 값 생성이 정적으로 판정 가능한 경우(예: object literal), Success 값이 `__bunner_error__ === true`를 포함하는 것을 경고(또는 빌드 실패)로 관측해야 한다.
+  - 위 경고를 회피해도, `__bunner_error__ === true`인 값은 `isError` 규칙에 의해 Error로 판정된다.
 
 Result<T, E>:
 
@@ -272,7 +282,7 @@ ProviderDeclaration:
     - meaning: 팩토리 함수로 제공
   - useExisting:
     - type: Token
-    - meaning: 기존 토큰의 별칭(alias)으로 제공
+    - meaning: 기존 토큰을 그대로 forwarding하여 제공
 
 ModuleDeclaration:
 

@@ -14,6 +14,8 @@
 > **정적 분석 시점에 위반 여부가 판정 가능**해야 한다.
 > 판정 불가능한 구조는 허용되지 않는다.
 
+NOTE: 판정 가능성의 구체적 검증 절차는 **[L4/VERIFY.md](../40_ENGINEERING/VERIFY.md)** 가 정의한다.
+
 ---
 
 ## 1. 지능의 국소성 (Intelligence Locality)

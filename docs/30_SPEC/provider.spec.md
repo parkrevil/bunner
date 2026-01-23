@@ -34,6 +34,7 @@ Normative: 본 SPEC은 추가적인 Static Shape를 정의하지 않는다.
 
 - Provider 생명주기는 빌드 타임에 확정된 연결에 의해 결정되며 런타임 추론이 아니다.
 - Scope 의미론은 빌드/부트 시점에 확정되며, 런타임 입력에 따라 암묵 변경되지 않는다.
+- ContextId는 common.spec.md의 Identity Type이며, Provider SPEC은 ContextId의 포맷/생성/전파/소멸을 정의하지 않는다.
 
 ### 3.1 MUST
 
@@ -51,6 +52,10 @@ Normative: 본 SPEC은 추가적인 Static Shape를 정의하지 않는다.
 - `singleton`이 `request` 의존을 사용할 때도 싱글톤 인스턴스는 재생성되지 않아야 한다.
   - `singleton` 생성 시점에 `request` 인스턴스를 생성하거나 캡처해서는 안 된다.
   - `request` 의존은 요청 컨텍스트(`ContextId`)가 존재하는 구간에서만 해석되어야 한다.
+
+- NOTE: `singleton`이 `request` 의존을 사용할 때, 허용되는 형태는 “요청 컨텍스트가 존재하는 시점의 해석”이며
+  `singleton` 초기화 시점에 request 인스턴스를 생성/보관하는 형태는 금지된다.
+  - 예: `singleton`은 요청 컨텍스트가 존재하는 시점에만 `request` 인스턴스를 획득/사용하고, 그 참조를 장기 보관하지 않는다.
 
 ### 3.2 MUST NOT
 

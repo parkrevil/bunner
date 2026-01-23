@@ -68,12 +68,16 @@ SourceRange:
 - properties:
   - startLine:
     - type: number
+    - meaning: 0-based line index (inclusive)
   - startColumn:
     - type: number
+    - meaning: 0-based column index (inclusive)
   - endLine:
     - type: number
+    - meaning: 0-based line index (exclusive)
   - endColumn:
     - type: number
+    - meaning: 0-based column index (exclusive)
 
 Location:
 
@@ -107,12 +111,20 @@ HandlerIdFormatRules:
   - `<adapterId>`: AdapterId (common.spec.md)
     - `<adapterId>`는 module-system.spec.md의 모듈 루트 파일 `AdapterConfig` 키 집합에 포함되어야 한다.
   - `<file>`: Location.file과 동일 규칙(프로젝트 루트 기준 정규화된 상대 경로)
+    - `<file>`은 MUST NOT `:` 문자를 포함한다.
+    - `<file>`은 MUST NOT `#` 문자를 포함한다.
   - `<symbol>`: 비어있지 않은 문자열
     - `<symbol>`은 adapter.spec.md가 정의하는 Handler(Controller class의 method) 단위를 결정적으로 식별해야 한다.
     - `<symbol>`은 아래 형식을 만족해야 한다.
       - `<symbol>`은 `"<controllerClassName>.<handlerMethodName>"` 형식이어야 한다.
       - `<controllerClassName>`은 비어있지 않은 문자열
+        - MUST NOT `:` 문자를 포함한다.
+        - MUST NOT `#` 문자를 포함한다.
+        - MUST NOT `.` 문자를 포함한다.
       - `<handlerMethodName>`은 비어있지 않은 문자열
+        - MUST NOT `:` 문자를 포함한다.
+        - MUST NOT `#` 문자를 포함한다.
+        - MUST NOT `.` 문자를 포함한다.
 
 DiagnosticHint:
 
@@ -221,7 +233,14 @@ DiagnosticMessageText:
 
 - 동일 입력에서 CLI가 산출하는 진단 레코드 집합은 결정적으로 동일해야 한다.
 - 진단 레코드는 반드시 결정적 순서로 정렬되어야 한다.
-  - 정렬 키(오름차순): `severity`, `code`, `summary`, `where[0].file`
+  - `Diagnostic.where`는 반드시 비어있지 않아야 한다.
+  - 각 `Diagnostic.where`는 아래 규칙으로 결정적으로 정렬되어야 한다.
+    - 정렬 키(오름차순): `file`, `symbol`, `range.startLine`, `range.startColumn`, `range.endLine`, `range.endColumn`
+    - `symbol`이 없는 경우, 빈 문자열로 비교한다.
+    - `range`가 없는 경우, 모든 range 숫자 값은 0으로 비교한다.
+  - `representativeLocation`은 정렬된 `where`의 첫 요소(`where[0]`)로 정의된다.
+  - 진단 레코드의 정렬 키(오름차순):
+    - `severity`, `code`, `summary`, `representativeLocation.file`, `representativeLocation.symbol`, `representativeLocation.range.startLine`, `representativeLocation.range.startColumn`
   - `severity`는 아래 고정 순서로 비교되어야 한다.
     - `trace` < `debug` < `info` < `warning` < `error` < `fatal`
 

@@ -18,7 +18,9 @@
 
 ## 2. Prime Directives (최우선 지침)
 
-모든 에이전트의 사고방식을 지배하는 4대 절대 금지령이다.
+모든 에이전트의 사고방식을 지배하는 5대 절대 지침이다.
+
+Prime Directives는 실행 게이트 조건이며, 절차 가이드가 아니다.
 
 1. **STOP IF UNCERTAIN**: 모호한 지시나 문서 충돌 발생 시, 추측하지 말고 즉시 중단 후 질문하라.
 2. **NO HALLUCINATION IN COMMANDS**: 존재하지 않거나 승인되지 않은 명령어나 옵션을 사용하지 마라.
@@ -63,6 +65,59 @@
 
 > **에이전트 응답 예시:**
 > "페르소나 **@Architect**로서 작업을 시작합니다. **AGENTS.md (E0)**에 명시된 행동 제한 규약을 숙지하였으며, 작업 도중 불확실성 발생 시 즉시 중단(STOP IF UNCERTAIN)할 것을 서약합니다."
+
+---
+
+### 5. Cross-Agent Operational Requirements (도구 불문 MUST)
+
+### 5.1 매 응답 상태 보고 (MUST)
+
+에이전트는 **매 사용자 메시지에 대한 모든 응답의 맨 첫 2줄**에서,
+현재 대화에 적용 중인 **프롬프트 템플릿**과 **Tool Set(또는 동등한 제한 수준)**을 보고해야 한다.
+
+고정 포맷:
+
+1) `Prompt: <적용 중인 템플릿 경로 | none>`
+2) `Toolset: <bunner.* | manual-limited>`
+
+규칙:
+
+- 위 2줄은 어떤 설명/본문/계획/코드/도구 호출보다 먼저 나와야 한다.
+- Tool Set 개념이 없거나 선택이 불가능한 환경이면 `manual-limited`로 보고하고, 이후 행위(도구 사용/실행/변경)는 그 수준으로 자가 제한한다.
+
+### 5.2 Preflight 8줄 (MUST)
+
+에이전트는 본문을 시작하기 전에, 아래 “Preflight 8줄”을 먼저 출력해야 한다.
+
+- 구성: 상태 보고 2줄 + Preflight 6줄(= 총 8줄)
+- Preflight 6줄의 정본: [.github/prompts/README.md](.github/prompts/README.md)
+
+### 5.3 승인 게이트 (Decision Artifact) (MUST)
+
+승인이 필요한 변경을 승인 아티팩트 없이 수행하면 즉시 중단(STOP)한다.
+
+- 승인 토큰(대화 기반, 정확히 일치): `Y`, `OK`, `승인`, `진행해`, `ㅇㅇ`
+- 승인 필요 변경 유형(요약):
+  - SSOT: `docs/10..50/**`
+  - Public Facade: `packages/*/index.ts`의 export
+  - deps: `package.json`(루트 및 `packages/*/package.json`)의 deps
+
+정본: [docs/50_GOVERNANCE/OVERVIEW.md](docs/50_GOVERNANCE/OVERVIEW.md)
+
+### 5.4 매 턴 재확인 프로토콜 (MUST)
+
+규칙을 “알고도 어긴 것처럼” 만들지 않기 위해, 아래 항목을 매 턴 기계적으로 재확인한다.
+
+- 작업 분류를 `spec | docs | plan | implement | audit` 중 하나로 고정하고, 해당 템플릿 경로를 `Prompt:`에 보고한다.
+- 변경/실행 직전 L4/L5 금지 정책 및 게이트를 재확인하고, 필요 시 즉시 STOP한다.
+  - 예: “deprecated” 관련 표현/잔재 허용 여부는 항상 `docs/40_ENGINEERING/STYLEGUIDE.md` + `docs/50_GOVERNANCE/DEAD_CODE_POLICY.md`로 재확인한다.
+
+### 5.5 Plan 워크플로우 트리거 (MUST)
+
+사용자가 명시적으로 “계획(Plan) 작성”을 요청한 경우에만 `.agent` 워크플로우/템플릿을 적용한다.
+
+- Workflow 정본: [.agent/workflow.md](.agent/workflow.md)
+- Plan 템플릿 정본: [.agent/template.md](.agent/template.md)
 
 ---
 

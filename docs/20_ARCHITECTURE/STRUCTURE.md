@@ -8,7 +8,11 @@
 
 ## 1. 저장소 루트 구조 (Root Catalog)
 
-리포지토리 루트는 아래의 디렉토리 및 파일로만 구성된다(EXHAUSTIVE). 허용되지 않은 루트 디렉토리 생성을 금지한다.
+리포지토리 루트는 아래의 루트 디렉토리(1.1절 표) 및 루트 파일(1.2절 표)로만 구성된다(EXHAUSTIVE). 허용되지 않은 루트 디렉토리 생성을 금지한다.
+
+EXHAUSTIVE의 대상은 git에 트래킹되는 구성 요소이며, Exclusion Note에 정의된 항목은 트래킹 여부와 무관하게 Root Catalog 판정 대상에서 제외한다.
+
+### 1.1 허용 루트 디렉토리
 
 | 경로        | 성격           | 판정 기준                                                              |
 | :---------- | :------------- | :--------------------------------------------------------------------- |
@@ -20,9 +24,26 @@
 | `.agent/`   | **문맥**       | AI 에이전트 구동 지침 및 워크플로우 전용 공간                          |
 | `.github/`  | **자동화**     | GitHub 플랫폼 연동(Actions, Templates) 설정                            |
 | `.husky/`   | **훅**         | Git Lifecycle 제어용 클라이언트 측 스크립트                            |
-| `.jules/`   | **메타데이터** | 프레임워크 형상 관리용 내부 메타데이터                                 |
 
-> **Exclusion Note**: `node_modules/`, `dist/` 등 패키지 매니저나 빌드 도구가 자동 생성하고 관리하는 외부 의존성 및 산출물은 아키텍처 판정 범위에서 제외한다.
+### 1.2 허용 루트 파일
+
+| 경로                  | 성격         | 판정 기준                         |
+| :-------------------- | :----------- | :-------------------------------- |
+| `AGENTS.md`            | **집행**     | E0: 에이전트 행동 제한 및 게이팅  |
+| `README.md`            | **안내**     | 레포 소개 및 온보딩               |
+| `LICENSE`              | **법적**     | 라이선스                          |
+| `package.json`         | **구성**     | 루트 패키지 정의 및 스크립트      |
+| `tsconfig.json`        | **구성**     | 루트 TypeScript 설정              |
+| `eslint.config.ts`     | **구성**     | 린트 설정                         |
+| `commitlint.config.ts` | **구성**     | 커밋 린트 설정                    |
+| `knip.json`            | **구성**     | 정적 분석 도구 설정               |
+| `.gitignore`           | **구성**     | Git 제외 규칙                     |
+| `.prettierrc`          | **구성**     | 포매터 설정                       |
+| `.prettierignore`      | **구성**     | 포매터 제외 규칙                  |
+| `.lintstagedrc.json`   | **구성**     | lint-staged 설정                  |
+| `bun.lock`             | **구성**     | 의존성 잠금 파일                  |
+
+> **Exclusion Note**: `.git/`, `.vscode/`, `node_modules/`, `dist/` 등 도구가 자동 생성하거나 관리하는 항목은 Root Catalog 판정 범위에서 제외한다.
 
 ### 1.X plans/ 규칙 (Execution Artifacts)
 
@@ -32,7 +53,7 @@
 - `plans/` 하위 파일은 **제품 코드가 아니다**.
 - `plans/` 하위 파일은 **작업 단위로 생성·갱신·폐기될 수 있다**.
 - `plans/` 정리는 **해당 작업 범위에 포함될 때만** 수행할 수 있다.
-- `plans/`의 보존/삭제 기준은 **L5(GOVERNANCE)** 문서가 최종 결정한다.
+- `plans/`의 보존/삭제 기준은 **[L5(GOVERNANCE)](../50_GOVERNANCE/OVERVIEW.md)** 를 따른다.
 
 ---
 
@@ -60,7 +81,9 @@ _(주의: 이 섹션은 문서의 **배치**만을 정의하며, 권위/충돌 �
 
 - `package.json`: 패키지 식별 및 종속성 정의.
 - `tsconfig.json`: 해당 패키지의 독자적 컴파일 경계.
-- `src/index.ts`: 패키지 외부로 노출되는 **유일한 물리적 Facade**.
+- `index.ts`: 패키지 외부로 노출되는 **유일한 물리적 Facade**. (패키지 루트에 위치)
+
+패키지 내부 구조(`src/` 등)는 패키지 재량이며, 패키지 외부에서 import 가능한 경로는 `packages/<pkg>/index.ts` 하나뿐이다.
 
 ### 3.2 선택적 구성 요소 (MAY / WHEN NEEDED)
 
@@ -96,6 +119,6 @@ _(주의: 이 섹션은 문서의 **배치**만을 정의하며, 권위/충돌 �
 
 ## 5. 명명 및 스타일 제약 (Constraint Delegation)
 
-- **Directory Naming**: 모든 디렉토리 명칭은 `kebab-case`를 원칙으로 한다.
+- **Directory Naming**: 모든 디렉토리 명칭은 `kebab-case`를 원칙으로 한다. 단, `docs/<NN>_<NAME>/` 형태의 SSOT 레이어 디렉토리 및 점(.)으로 시작하는 루트 디렉토리는 예외로 한다.
 - **File Naming**: 파일 수준의 명명 규칙(접미사, 케이스 등)은 본 문서의 영역이 아니며, **[L4/STYLEGUIDE.md](../40_ENGINEERING/STYLEGUIDE.md)** 에 위임한다.
 - **Test Placement**: 테스트 파일의 상세 배치 방식은 **[L4/TESTING.md](../40_ENGINEERING/TESTING.md)** 의 결정을 따른다.

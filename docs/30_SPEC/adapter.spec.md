@@ -30,7 +30,7 @@ L3 Implementation Contract
 - defineAdapter:
   - meaning: 어댑터 제작자가 어댑터를 등록하기 위해 호출하는 빌드 타임 판정 입력 함수
 - adapterSpec:
-  - meaning: 어댑터 패키지 루트 entry file에서 named export 되어야 하는 어댑터 등록 판정 입력
+  - meaning: 어댑터 패키지 루트 `index.ts`(L2 STRUCTURE의 Facade)에서 named export 되어야 하는 어댑터 등록 판정 입력
 - AdapterRegistrationInput:
   - meaning: `defineAdapter` 호출의 단일 인자이며, 어댑터 정적 명세를 제공하는 AST-level 입력
 - PipelineToken:
@@ -130,10 +130,19 @@ Normative:
 
 Normative:
 
-- 어댑터 패키지는 패키지 루트 entry file에서 adapterSpec을 named export 해야 한다.
+- 어댑터 패키지는 패키지 루트 `index.ts`(L2 STRUCTURE의 Facade)에서 adapterSpec을 named export 해야 한다.
 - adapterSpec은 `defineAdapter(<AdapterRegistrationInput>)` 호출 표현으로 빌드 타임에 결정적으로 수집 가능해야 한다.
 - `defineAdapter` 호출은 정확히 1개의 인자를 가져야 한다.
 - `defineAdapter` 호출의 인자는 object literal이어야 한다.
+
+Example (directory layout):
+
+```text
+packages/<adapter-pkg>/
+  index.ts        # exports: adapterSpec
+  src/
+    ...
+```
 
 AdapterRegistrationInput(수집 대상 object literal)은 아래 필드를 포함해야 한다.
 
@@ -265,6 +274,11 @@ Normative:
 - Handler(엔트리 실행 단위)는 Controller class의 method로 판정되어야 한다.
   - Handler 데코레이터는 반드시 Controller로 판정된 class의 method에 적용되어야 한다.
   - 위 조건을 위반하면 빌드 실패가 관측되어야 한다.
+
+  - Handler method는 아래 조건을 모두 만족해야 한다.
+    - instance method여야 한다. (static method는 Handler로 판정되어서는 안 된다)
+    - method name은 identifier여야 한다. (computed name, string literal name, symbol-named method는 Handler로 판정되어서는 안 된다)
+    - private method(예: `#foo`)는 Handler로 판정되어서는 안 된다.
 
 - 어댑터 엔트리 선언(Controller/Handler 등)은 빌드 타임에 결정적으로 수집 가능해야 한다.
   - 수집 결과는 문서/DevTools 산출물 입력으로 사용될 수 있어야 한다.

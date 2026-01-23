@@ -33,14 +33,14 @@ Normative: 본 SPEC은 추가적인 Static Shape를 정의하지 않는다.
 
 ## 3. Invariants & Constraints
 
-- 사용자는 인프라 예외에 대해 수동 try-catch를 작성할 필요 없이, 프레임워크가 생성한 필터 체인을 통해 예외가 표준 Result로 변환됨을 보장받는다.
+- NOTE: 인프라 예외에 대한 수동 `try-catch` 금지는 L1 INVARIANTS를 따른다. (docs/10_FOUNDATION/INVARIANTS.md)
 
 ### 3.1 MUST
 
 - Error는 값 흐름(Result)으로 표현되어야 한다.
 - Panic(throw)은 Exception Filter Chain을 통해 표준 Result로 변환되어야 한다.
 - throw로 발생한 예외는 Exception Filter Chain을 통해 처리되어야 한다.
-- Exception Filter Chain의 적용 순서/우선순위는 판정 가능해야 한다.
+- Exception Filter Chain의 적용 순서/우선순위는 결정적으로 판정되어야 한다.
 - 필터 체인이 예외를 Result의 Error 케이스로 변환할 때, 그 최소 형상은 common.spec.md의 Result 계약을 따른다.
 
 ### 3.2 MUST NOT

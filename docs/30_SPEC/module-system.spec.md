@@ -74,7 +74,7 @@ ModuleId:
 ModuleName:
 
 - type: string
-- meaning: 모듈 루트 디렉토리의 basename, 또는 모듈 루트 파일에서 선언된 모듈 이름
+- meaning: 모듈의 표시 이름(display name). 모듈의 정체성(Identity)은 ModuleId(정규화된 경로)로만 결정되며, ModuleName은 정체성에 영향을 주지 않는다.
 
 ModuleDescriptor:
 

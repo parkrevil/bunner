@@ -1,40 +1,21 @@
-# Copilot Instructions
+# Agent Instructions (Entry Point)
 
-This repository is governed by the following entry document:
-
-- [AGENTS.md](../AGENTS.md)
-
-Copilot must read and follow the rules defined in that file.
+이 저장소의 정본 규칙은 [AGENTS.md](../AGENTS.md) (E0)다.
 
 ---
 
-## Quick References
+## 빠른 링크
 
-1.  **Mandatory Guide**: Always follow [AGENTS.md](../AGENTS.md)
-2.  **Documentation Index**: [docs/00_INDEX.md](../docs/00_INDEX.md)
-3.  **Authority Model**: [docs/10_FOUNDATION/SSOT_HIERARCHY.md](../docs/10_FOUNDATION/SSOT_HIERARCHY.md)
-
----
-
-## Agent Workflow Trigger (계획 시에만 .agent 적용)
-
-아래 조건을 만족하면, `.agent` 워크플로우/템플릿을 적용한다.
-
-- 사용자가 명시적으로 “계획(Plan) 작성”을 요청한 경우
-
-그 외(질문/설명/분석/토론, 또는 파일 변경 요청 포함)는 `.agent` 절차 없이 진행할 수 있다.
-
-- Workflow 정본: [../.agent/workflow.md](../.agent/workflow.md)
-- Plan 템플릿 정본: [../.agent/template.md](../.agent/template.md)
+1. 정본(E0): [AGENTS.md](../AGENTS.md)
+2. 문서 지도(내비게이션 SSOT): [docs/00_INDEX.md](../docs/00_INDEX.md)
+3. 문서 권위 위계(SSOT): [docs/10_FOUNDATION/SSOT_HIERARCHY.md](../docs/10_FOUNDATION/SSOT_HIERARCHY.md)
+4. 프롬프트 라이브러리(운영 레이어): [.github/prompts/README.md](prompts/README.md)
+5. Tool Sets 정의(참고): [.vscode/toolsets.jsonc](../.vscode/toolsets.jsonc)
 
 ---
 
-## Technical SSOT Reference
+## Notes
 
-| Area             | Document Path                                               |
-| :--------------- | :---------------------------------------------------------- |
-| **Foundation**   | `docs/10_FOUNDATION/SSOT_HIERARCHY.md`, `INVARIANTS.md`     |
-| **Architecture** | `docs/20_ARCHITECTURE/ARCHITECTURE.md`, `STRUCTURE.md`      |
-| **Contracts**    | `docs/30_SPEC/SPEC.md`, `docs/30_SPEC/*.spec.md`            |
-| **Engineering**  | `docs/40_ENGINEERING/STYLEGUIDE.md`, `TESTING.md`           |
-| **Governance**   | `docs/50_GOVERNANCE/OVERVIEW.md`, `POLICY.md`, `COMMITS.md` |
+- 프롬프트 파일(.github/prompts/**)은 반복 가능한 운영 템플릿이며, 규칙의 정본은 아니다.
+- 문서(SSOT) 변경/공개 Facade 변경/deps 변경은 승인 아티팩트가 없으면 금지다.
+  (정본: [docs/50_GOVERNANCE/OVERVIEW.md](../docs/50_GOVERNANCE/OVERVIEW.md))

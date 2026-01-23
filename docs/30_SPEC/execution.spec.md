@@ -42,9 +42,12 @@ Normative: 본 SPEC은 추가적인 Static Shape를 정의하지 않는다.
 - 컨텍스트(Context)는 manifest.spec.md의 `AdapterStaticSpec.pipeline`을 따라 각 PipelineStep 호출에 전달되어야 한다.
 - 런타임 구성 요소는 빌드 타임에 확정된 정적 연결 관계만을 따른다. (ARCHITECTURE의 Static Context Binding 전제)
 
-- App 부트스트랩 완료 이후, 구조 판정 및 wiring을 위한 메타데이터(Manifest 포함)에 접근 가능한 런타임 경로는 존재해서는 안 된다.
+- NOTE: 여기서 “접근 가능한 런타임 경로”는 public export/접근점(또는 런타임 그래프에서 도달 가능한 참조)을 의미한다.
+    “접근 시도”는 부트스트랩 이전에 획득한 stale reference를 사용하려는 행위를 포함한다.
 
-- App 부트스트랩 완료 이후, Manifest(및 그 파생 데이터)에 대한 접근 시도는 throw로 관측되어야 한다.
+- App 부트스트랩 완료 이후, 구조 판정 및 wiring을 위한 메타데이터(Manifest 포함)에 대한 public 접근점 또는 도달 가능한 참조는 존재해서는 안 된다.
+
+- App 부트스트랩 완료 이후, Manifest(및 그 파생 데이터)에 대한 접근 시도(스테일 참조 사용 포함)는 throw로 관측되어야 한다.
 
 - Pipe에 등록되지 않은 변환(transform) 및 검증(validate)을 실행 흐름에 암묵적으로 삽입하거나 추론해서는 안 된다. (INVARIANTS의 No Implicit Pipe 전제)
 

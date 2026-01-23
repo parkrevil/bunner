@@ -17,6 +17,10 @@ Bunner 프로젝트에서 사용되는 주요 기술 용어와 도메인 개념�
 - **app.attachAdapter**: App-External Code에서 특정 AdapterId에 대한 런타임 옵션을 바인딩하고, 해당 어댑터를 실행 준비 상태로 전이시키는 App 조작이다.
 
 - **Runtime Report**: 런타임에서 관측되는 실행 사실(어댑터 활성화/리스닝/바인딩/옵션 값 등)을 기록한 산출물이다.
+	- Runtime Report는 **관측(observation)** 만을 포함하며, 런타임에서의 판단/추론을 포함해서는 안 된다.
+	- Runtime Report의 생산자는 DevTools 등 관측 도구이며, 런타임 실행 경로를 변경해서는 안 된다.
+	- Runtime Report는 런타임 메모리 내 산출물로 취급하며, 앱 종료 또는 보고 완료 시점까지의 수명을 가진다.
+	- Runtime Report 생성/수집 과정에서 런타임 reflection 기반 탐색(`reflect-metadata` 등)은 금지된다.
 
 - **MCP Server**: 개발자(사용자)가 프레임워크와 상호작용하며 분석/생성/변경/검증을 수행하도록 돕는 서버.
 

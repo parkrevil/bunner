@@ -147,14 +147,14 @@ ConfigSectionRegistrationDeclaration:
   - `ConfigSectionRegistrationDeclaration.raw`는 ConfigRawValue에 부합해야 한다.
   - AppConfigInput.loader가 존재하는 경우, Config Section 등록은 loader 내부의 등록 호출로부터 빌드 타임에 수집 가능해야 한다.
     - 등록 호출은 callee 식별자가 `defineConfig`인 호출로 판정되어야 한다.
+  - 빌드 타임 수집은 loader 실행을 필요로 해서는 안 된다.
   - Config Section 값은 transform/validate 완료 결과여야 하며, 등록된 token(Class token)과 동일한 클래스 인스턴스로 관측되어야 한다.
   - Env/Config preload 완료 이후, 프레임워크는 raw 입력을 런타임에서 장기 보관하거나 재노출해서는 안 된다.
 
 - `createApplication`은 빌드 타임에 생성된 Manifest 산출물을 기반으로 부트스트랩을 수행해야 한다.
   - Manifest 형상 및 결정성은 manifest.spec.md가 판정한다.
 
-- App의 부트스트랩 이후 구조 판정을 위한 메타데이터는 실행 경로를 변경하는 근거로 사용되어서는 안 된다.
-  - 상위 문서의 Metadata Volatility 전제를 위반하는 동작은 허용되지 않는다.
+- App 부트스트랩 완료 이후 Manifest/메타데이터 접근 금지 및 접근 시도(스테일 참조 포함)의 관측 규칙은 execution.spec.md를 따른다.
 
 - `app.start`는 App의 실행을 시작해야 한다.
 
@@ -185,11 +185,14 @@ ConfigSectionRegistrationDeclaration:
 
 - `onApplicationShutdown` 훅은 모든 `onModuleDestroy` 훅 호출 이후에 1회 호출되어야 한다.
 
-- `app.stop`은 종료 처리 중 Error가 발생하더라도 가능한 한 종료 처리를 계속 수행해야 한다.
-- 종료 처리 중 Error가 1개라도 발생하면, 종료 처리 완료 이후 `app.stop`에서 throw가 관측되어야 한다.
-- 종료 처리 중 Error가 없으면, `app.stop`에서 throw가 관측되어서는 안 된다.
-- `app.stop`에서 throw되는 값은 Error여야 하며, `errors`(Error[])를 포함해야 한다.
-- `errors`는 종료 처리 중 발생한 Error들을 관측 순서대로 포함해야 한다.
+- `app.stop`은 종료 처리 중 throw가 발생하더라도 가능한 한 종료 처리를 계속 수행해야 한다.
+- 종료 처리 중 throw가 1개라도 발생하면, 종료 처리 완료 이후 `app.stop`에서 throw가 관측되어야 한다.
+- 종료 처리 중 throw가 없으면, `app.stop`에서 throw가 관측되어서는 안 된다.
+- `app.stop`에서 throw되는 값은 AggregateError 인스턴스여야 한다.
+- AggregateError의 `errors`는 종료 처리 중 관측된 throw 값들을 관측 순서대로 포함해야 한다.
+  - `errors`는 종료 처리 중 관측된 throw 값들을 strict equality(`===`)로 그대로 포함해야 한다.
+  - 프레임워크는 `errors`를 래핑/정규화/변환해서는 안 된다.
+- `app.stop`의 throw 계약은 Result/BunnerError 변환(common.spec.md)과 무관해야 한다.
 
 ### 3.2 MUST NOT
 
@@ -218,8 +221,8 @@ ConfigSectionRegistrationDeclaration:
 - Input: App-External Code에서의 `app.stop` 호출
 - Observable:
   - `app.stop` 호출은 종료 처리를 수행해야 한다.
-  - 종료 처리 중 Error가 없으면, `app.stop` 호출에서 throw가 관측되어서는 안 된다.
-  - 종료 처리 중 Error가 1개라도 있으면, `app.stop` 호출에서 throw가 관측되어야 한다.
+  - 종료 처리 중 throw가 없으면, `app.stop` 호출에서 throw가 관측되어서는 안 된다.
+  - 종료 처리 중 throw가 1개라도 있으면, `app.stop` 호출에서 throw가 관측되어야 한다.
 
 ### 4.2 State Conditions
 
@@ -232,9 +235,10 @@ ConfigSectionRegistrationDeclaration:
 - Build-Time Violation: App lifecycle hook이 런타임 리플렉션에 의해 결정되는데도 빌드가 성공하는 경우
 - Build-Time Violation: `ConfigSectionRegistrationDeclaration.raw`가 ConfigRawValue에 부합하지 않는데도 빌드가 성공하는 경우
 - Build-Time Violation: 등록되지 않은 Class token에 대해 `app.get`/DI 주입이 성공하도록 빌드되는 경우
-- Runtime Violation: 종료 처리 중 Error가 없는데도 `app.stop`에서 throw가 관측되는 경우
-- Runtime Violation: 종료 처리 중 Error가 있는데도 `app.stop`에서 throw가 관측되지 않는 경우
-- Runtime Violation: `app.stop`에서 throw되는 값이 Error가 아니거나 `errors`(Error[])를 포함하지 않는 경우
+- Runtime Violation: 종료 처리 중 throw가 없는데도 `app.stop`에서 throw가 관측되는 경우
+- Runtime Violation: 종료 처리 중 throw가 있는데도 `app.stop`에서 throw가 관측되지 않는 경우
+- Runtime Violation: `app.stop`에서 throw되는 값이 AggregateError 인스턴스가 아니거나 `errors` 배열을 포함하지 않는 경우
+- Runtime Violation: AggregateError의 `errors`가 관측 순서를 보존하지 않거나, 관측된 throw 값을 그대로 포함하지 않는 경우
 
 ---
 

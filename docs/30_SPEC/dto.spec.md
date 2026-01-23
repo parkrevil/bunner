@@ -50,7 +50,7 @@ DtoFieldSchema:
     - meaning: type이 array인 경우의 요소 스키마
   - ref:
     - type: string
-    - meaning: type이 object이고 다른 DTO를 참조하는 경우의 참조 문자열
+    - meaning: type이 object이고 다른 DTO를 참조하는 경우의 결정적 참조 문자열
 
 DtoSchema:
 
@@ -100,7 +100,13 @@ SchemaGeneratableFieldType:
   - number -> { type: "number" }
   - boolean -> { type: "boolean" }
   - T[] -> { type: "array", items: (T의 DtoFieldSchema) }
-  - DTO reference -> { type: "object", ref: (implementation-defined string) }
+  - DTO reference -> { type: "object", ref: "<file>#<symbol>" }
+
+Normative:
+
+- 위 규칙에서 `ref`는 아래 형식을 만족해야 한다.
+  - `<file>`: DTO class 선언을 포함하는 파일의 프로젝트 루트 기준 정규화된 상대 경로
+  - `<symbol>`: DTO class 식별자 이름(비어있지 않은 문자열)
 
 - DTO 스키마 생성기는 모든 DTO field에 대해 아래를 만족하는 경우에만 스키마 생성을 성공으로 판정해야 한다.
   - field type이 SchemaGeneratableFieldType으로 판정 가능하다.
