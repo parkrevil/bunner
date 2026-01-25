@@ -1,5 +1,4 @@
 import type {
-  AnyFunction,
   BunnerApplicationOptions,
   BunnerErrorFilter,
   BunnerMiddleware,
@@ -9,7 +8,17 @@ import type {
   Context,
 } from '@bunner/common';
 
+import type { BunnerRequest } from './bunner-request';
+import type { BunnerResponse } from './bunner-response';
 import type { RouteHandlerParamType } from './decorators';
+import type {
+  ControllerConstructor,
+  HttpWorkerResponseBody,
+  MiddlewareOptions,
+  RouteHandlerFunction,
+  RouteParamType,
+  RouteParamValue,
+} from './types';
 
 export enum HttpMiddlewareLifecycle {
   BeforeRequest = 'BeforeRequest',
@@ -19,7 +28,9 @@ export enum HttpMiddlewareLifecycle {
   AfterResponse = 'AfterResponse',
 }
 
-export type MiddlewareRegistrationInput<TOptions = unknown> = MiddlewareRegistration<TOptions> | MiddlewareToken<TOptions>;
+export type MiddlewareRegistrationInput<TOptions = MiddlewareOptions> =
+  | MiddlewareRegistration<TOptions>
+  | MiddlewareToken<TOptions>;
 
 export type HttpMiddlewareRegistry = Partial<Record<HttpMiddlewareLifecycle, readonly MiddlewareRegistrationInput[]>>;
 
@@ -40,31 +51,27 @@ export interface WorkerInitParams {
 export interface WorkerOptions {}
 
 export interface HttpWorkerResponse {
-  body: any;
-  init: ResponseInit;
+  readonly body: HttpWorkerResponseBody;
+  readonly init: ResponseInit;
 }
 
 export interface RouteHandlerEntry {
-  handler: AnyFunction;
-  paramType: RouteHandlerParamType[];
-  paramRefs: any[];
-  controllerClass: any;
-  methodName: string;
-  middlewares: BunnerMiddleware[];
-  errorFilters: BunnerErrorFilter[];
-  paramFactory: (req: any, res: any) => Promise<any[]>;
-}
-
-export abstract class SystemErrorHandler {
-  public abstract handle(error: unknown, ctx: Context): void | Promise<void>;
+  readonly handler: RouteHandlerFunction;
+  readonly paramType: RouteHandlerParamType[];
+  readonly paramRefs: readonly RouteParamType[];
+  readonly controllerClass: ControllerConstructor | null;
+  readonly methodName: string;
+  readonly middlewares: BunnerMiddleware[];
+  readonly errorFilters: BunnerErrorFilter[];
+  readonly paramFactory: (req: BunnerRequest, res: BunnerResponse) => Promise<readonly RouteParamValue[]>;
 }
 
 export interface ArgumentMetadata {
   type: 'body' | 'query' | 'param' | 'custom';
-  metatype?: any;
+  metatype?: RouteParamType;
   data?: string;
 }
 
-export interface PipeTransform<T = any, R = any> {
+export interface PipeTransform<T = RouteParamValue, R = RouteParamValue> {
   transform(value: T, metadata: ArgumentMetadata): R | Promise<R>;
 }

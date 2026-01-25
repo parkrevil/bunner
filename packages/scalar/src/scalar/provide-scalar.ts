@@ -1,6 +1,7 @@
 import type { Provider } from '@bunner/common';
 
 import type { ScalarSetupOptions } from './interfaces';
+
 import { ScalarConfigurer } from './scalar-configurer';
 import { ScalarSetupOptionsToken } from './tokens';
 

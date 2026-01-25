@@ -1,19 +1,21 @@
+import type { Server } from 'bun';
+
 import { type BunnerContainer, type BunnerMiddleware, type MiddlewareRegistration } from '@bunner/common';
 import { Logger } from '@bunner/logger';
-import type { Server } from 'bun';
 import { StatusCodes } from 'http-status-codes';
 
-import { BunnerHttpContext, BunnerHttpContextAdapter } from './adapter';
-import { BunnerRequest } from './bunner-request';
-import { BunnerResponse } from './bunner-response';
-import { HTTP_ERROR_FILTER } from './constants';
-import { HttpMethod } from './enums';
 import type {
   BunnerHttpServerOptions,
   HttpMiddlewareRegistry,
   HttpWorkerResponse,
   MiddlewareRegistrationInput,
 } from './interfaces';
+
+import { BunnerHttpContext, BunnerHttpContextAdapter } from './adapter';
+import { BunnerRequest } from './bunner-request';
+import { BunnerResponse } from './bunner-response';
+import { HTTP_ERROR_FILTER } from './constants';
+import { HttpMethod } from './enums';
 import { HttpMiddlewareLifecycle } from './interfaces';
 import { RequestHandler } from './request-handler';
 import { RouteHandler } from './route-handler';
@@ -32,7 +34,7 @@ export class BunnerHttpServer {
 
   async boot(container: BunnerContainer, options: any): Promise<void> {
     this.container = container;
-    this.options = options.options || options; // Handle nested options
+    this.options = options.options ?? options; // Handle nested options
 
     if ((this.options as any).middlewares) {
       this.prepareMiddlewares((this.options as any).middlewares as HttpMiddlewareRegistry);
@@ -48,8 +50,8 @@ export class BunnerHttpServer {
       });
     }
 
-    const metadataRegistry = options.metadata || new Map();
-    const scopedKeysMap = options.scopedKeys || new Map();
+    const metadataRegistry = options.metadata ?? new Map();
+    const scopedKeysMap = options.scopedKeys ?? new Map();
 
     this.routeHandler = new RouteHandler(this.container, metadataRegistry, scopedKeysMap);
 
@@ -85,7 +87,7 @@ export class BunnerHttpServer {
       params: {},
       ip: '',
       ips: [] as string[],
-      isTrustedProxy: this.options.trustProxy || false,
+      isTrustedProxy: this.options.trustProxy ?? false,
     };
     const bunnerReq = new BunnerRequest(adaptiveReq);
     const bunnerRes = new BunnerResponse(bunnerReq, { headers: new Headers(), status: 0 } as any);
@@ -102,7 +104,7 @@ export class BunnerHttpServer {
 
       const httpMethod = req.method.toUpperCase() as HttpMethod;
       let body: any = undefined;
-      const contentType = req.headers.get('content-type') || '';
+      const contentType = req.headers.get('content-type') ?? '';
 
       if (
         httpMethod !== HttpMethod.Get &&
@@ -192,7 +194,7 @@ export class BunnerHttpServer {
   }
 
   private async runMiddlewares(lifecycle: HttpMiddlewareLifecycle, ctx: BunnerHttpContext): Promise<boolean> {
-    const list = this.middlewares[lifecycle] || [];
+    const list = this.middlewares[lifecycle] ?? [];
 
     for (const middleware of list) {
       const result = await middleware.handle(ctx);
@@ -269,10 +271,10 @@ export class BunnerHttpServer {
 
   private getTokenName(token: MiddlewareRegistration['token']): string {
     if (typeof token === 'symbol') {
-      return token.description || 'symbol';
+      return token.description ?? 'symbol';
     }
 
-    return (token as any).name || 'anonymous';
+    return (token as any).name ?? 'anonymous';
   }
 
   private toResponse(workerRes: HttpWorkerResponse): Response {

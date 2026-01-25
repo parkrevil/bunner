@@ -1,4 +1,16 @@
-import type { AstRoot, AstNode, Fix, Fixer, Range, ReportDescriptor, RuleContext, Scope, SourceCode, SourceToken, Variable } from '../../src/types';
+import type {
+  AstRoot,
+  AstNode,
+  Fix,
+  Fixer,
+  Range,
+  ReportDescriptor,
+  RuleContext,
+  Scope,
+  SourceCode,
+  SourceToken,
+  Variable,
+} from '../../src/types';
 
 interface RuleContextExtras {
   filename?: string;
@@ -100,7 +112,7 @@ function createSourceCode(text: string, ast: AstRoot | null, scope: Scope | null
     getTokenAfter,
     getAllComments: () => (Array.isArray(ast?.comments) ? ast.comments : []),
   };
-  
+
   return sourceCode;
 }
 
@@ -175,7 +187,7 @@ function createRuleContext(
   sourceCode: ReturnType<typeof createSourceCode>,
   options: RuleContext['options'] = [],
   getDeclaredVariables?: (node: AstNode) => Variable[],
-  extras?: RuleContextExtras
+  extras?: RuleContextExtras,
 ) {
   const reports: ReportDescriptor[] = [];
   const context: RuleContext = {
@@ -185,7 +197,7 @@ function createRuleContext(
       reports.push(descriptor);
     },
   };
-  
+
   if (getDeclaredVariables) {
     context.getDeclaredVariables = getDeclaredVariables;
   }

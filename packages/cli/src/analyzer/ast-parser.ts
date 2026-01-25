@@ -1,30 +1,34 @@
+import { parseSync } from 'oxc-parser';
 import { dirname, resolve } from 'path';
 
-import { parseSync } from 'oxc-parser';
-
-import { AstTypeResolver, type TypeInfo } from './ast-type-resolver';
 import type { ClassMetadata, DecoratorMetadata, ImportEntry } from './interfaces';
 import type { ModuleDefinition, ParseResult, ReExport } from './parser-models';
+import type { AnalyzerValue, AnalyzerValueRecord, ExtractedParam, FactoryDependency, NodeRecord, ReExportName } from './types';
 
-type NodeRecord = Record<string, unknown> & {
-  readonly type: string;
-  readonly start?: number;
-  readonly end?: number;
-};
+import { AstTypeResolver, type TypeInfo } from './ast-type-resolver';
 
-type ExtractedParam = {
-  readonly name: string;
-  readonly type: unknown;
-  readonly typeArgs?: string[];
-  readonly decorators: DecoratorMetadata[];
-};
+const UNKNOWN_TYPE_NAME = 'Unknown';
+const UNKNOWN_CALLEE_NAME = 'unknown';
 
-type FactoryDependency = {
-  readonly name: string;
-  readonly path: string;
-  readonly start: number;
-  readonly end: number;
-};
+function isNonEmptyString(value: string | null | undefined): value is string {
+  return value !== null && value !== undefined && value !== '';
+}
+
+function isNullish(value: AnalyzerValue): value is null | undefined {
+  return value === null || value === undefined;
+}
+
+function asAnalyzerArray(value: AnalyzerValue): AnalyzerValue[] | null {
+  return Array.isArray(value) ? value : null;
+}
+
+function isAnalyzerRecord(value: AnalyzerValue): value is AnalyzerValueRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isNodeRecord(record: AnalyzerValueRecord): record is NodeRecord {
+  return typeof record.type === 'string';
+}
 
 export class AstParser {
   private currentCode: string = '';
@@ -34,19 +38,20 @@ export class AstParser {
   parse(filename: string, code: string): ParseResult {
     this.currentCode = code;
 
-    const result = parseSync(filename, code) as unknown;
+    const result = parseSync(filename, code);
     const classes: ClassMetadata[] = [];
     const reExports: ReExport[] = [];
     const localExports: string[] = [];
     const imports: Record<string, string> = {};
     const importEntries: ImportEntry[] = [];
-    const localValues: Record<string, unknown> = {};
-    const exportedValues: Record<string, unknown> = {};
+    const localValues: AnalyzerValueRecord = {};
+    const exportedValues: AnalyzerValueRecord = {};
 
     this.currentImports = {};
 
     let moduleDefinition: ModuleDefinition | undefined;
-    const traverse = (nodeValue: unknown): void => {
+
+    const traverse = (nodeValue: AnalyzerValue): void => {
       const node = this.asNode(nodeValue);
 
       if (!node) {
@@ -62,7 +67,7 @@ export class AstParser {
 
         const sourceValue = this.getNodeStringValue(node, 'source');
 
-        if (!sourceValue) {
+        if (!isNonEmptyString(sourceValue)) {
           return;
         }
 
@@ -71,12 +76,13 @@ export class AstParser {
         importEntries.push({ source: sourceValue, resolvedSource, isRelative: sourceValue.startsWith('.') });
 
         const specifiersValue = node.specifiers;
+        const specifiers = asAnalyzerArray(specifiersValue);
 
-        if (!Array.isArray(specifiersValue)) {
+        if (!specifiers) {
           return;
         }
 
-        for (const specValue of specifiersValue) {
+        for (const specValue of specifiers) {
           const spec = this.asNode(specValue);
 
           if (!spec) {
@@ -92,7 +98,7 @@ export class AstParser {
           const local = this.asNode(spec.local);
           const localName = local ? this.getString(local, 'name') : null;
 
-          if (!localName) {
+          if (!isNonEmptyString(localName)) {
             continue;
           }
 
@@ -107,7 +113,7 @@ export class AstParser {
       if (node.type === 'ExportAllDeclaration') {
         const sourceValue = this.getNodeStringValue(node, 'source');
 
-        if (!sourceValue) {
+        if (!isNonEmptyString(sourceValue)) {
           return;
         }
 
@@ -122,21 +128,22 @@ export class AstParser {
       }
 
       if (node.type === 'ExportNamedDeclaration') {
-        if (node.source) {
+        if (node.source !== undefined) {
           const sourceValue = this.getNodeStringValue(node, 'source');
 
-          if (!sourceValue) {
+          if (!isNonEmptyString(sourceValue)) {
             return;
           }
 
           const resolvedSource = this.resolvePath(filename, sourceValue);
           const specifiersValue = node.specifiers;
+          const specifiers = asAnalyzerArray(specifiersValue);
 
-          if (!Array.isArray(specifiersValue)) {
+          if (!specifiers) {
             return;
           }
 
-          const names = specifiersValue
+          const names = specifiers
             .map(specValue => {
               const spec = this.asNode(specValue);
 
@@ -149,13 +156,13 @@ export class AstParser {
               const localName = local ? this.getString(local, 'name') : null;
               const exportedName = exported ? this.getString(exported, 'name') : null;
 
-              if (!localName || !exportedName) {
+              if (!isNonEmptyString(localName) || !isNonEmptyString(exportedName)) {
                 return null;
               }
 
               return { local: localName, exported: exportedName };
             })
-            .filter((v): v is { local: string; exported: string } => v !== null);
+            .filter((value): value is ReExportName => value !== null);
 
           reExports.push({
             module: resolvedSource,
@@ -172,7 +179,7 @@ export class AstParser {
           const declId = this.asNode(declaration.id);
           const name = declId ? this.getString(declId, 'name') : null;
 
-          if (name) {
+          if (isNonEmptyString(name)) {
             localExports.push(name);
           }
 
@@ -182,9 +189,10 @@ export class AstParser {
         }
 
         if (declaration?.type === 'VariableDeclaration') {
-          const declarations = declaration.declarations;
+          const declarationsValue = declaration.declarations;
+          const declarations = asAnalyzerArray(declarationsValue);
 
-          if (!Array.isArray(declarations)) {
+          if (!declarations) {
             return;
           }
 
@@ -193,11 +201,11 @@ export class AstParser {
             const declId = decl ? this.asNode(decl.id) : null;
             const declName = declId ? this.getString(declId, 'name') : null;
 
-            if (!declName) {
+            if (!isNonEmptyString(declName)) {
               continue;
             }
 
-            if (decl?.init) {
+            if (decl?.init !== undefined) {
               const initValue = this.parseExpression(decl.init);
 
               localValues[declName] = initValue;
@@ -223,9 +231,10 @@ export class AstParser {
         }
 
         const specifiersValue = node.specifiers;
+        const specifiers = asAnalyzerArray(specifiersValue);
 
-        if (Array.isArray(specifiersValue)) {
-          for (const specValue of specifiersValue) {
+        if (specifiers) {
+          for (const specValue of specifiers) {
             const spec = this.asNode(specValue);
 
             if (!spec) {
@@ -237,7 +246,7 @@ export class AstParser {
             const localName = local ? this.getString(local, 'name') : null;
             const exportedName = exported ? this.getString(exported, 'name') : null;
 
-            if (!localName || !exportedName) {
+            if (!isNonEmptyString(localName) || !isNonEmptyString(exportedName)) {
               continue;
             }
 
@@ -253,9 +262,10 @@ export class AstParser {
       }
 
       if (node.type === 'VariableDeclaration') {
-        const declarations = node.declarations;
+        const declarationsValue = node.declarations;
+        const declarations = asAnalyzerArray(declarationsValue);
 
-        if (!Array.isArray(declarations)) {
+        if (!declarations) {
           return;
         }
 
@@ -264,11 +274,11 @@ export class AstParser {
           const declId = decl ? this.asNode(decl.id) : null;
           const declName = declId ? this.getString(declId, 'name') : null;
 
-          if (!declName) {
+          if (!isNonEmptyString(declName)) {
             continue;
           }
 
-          if (decl?.init) {
+          if (decl?.init !== undefined) {
             localValues[declName] = this.parseExpression(decl.init);
           }
         }
@@ -287,9 +297,10 @@ export class AstParser {
       }
 
       if (node.type === 'Program') {
-        const body = node.body;
+        const bodyValue = node.body;
+        const body = asAnalyzerArray(bodyValue);
 
-        if (!Array.isArray(body)) {
+        if (!body) {
           return;
         }
 
@@ -298,9 +309,8 @@ export class AstParser {
         }
       }
     };
-    const program = this.getRecord(result)?.program;
 
-    traverse(program);
+    traverse(result.program);
 
     return {
       classes,
@@ -317,11 +327,12 @@ export class AstParser {
   private extractModuleDefinition(node: NodeRecord): ModuleDefinition {
     let name: string | undefined;
     let nameDeclared = false;
-    const providers: unknown[] = [];
-    let adapters: unknown = undefined;
-    const properties = node.properties;
+    const providers: AnalyzerValue[] = [];
+    let adapters: AnalyzerValue | undefined = undefined;
+    const propertiesValue = node.properties;
+    const properties = asAnalyzerArray(propertiesValue);
 
-    if (Array.isArray(properties)) {
+    if (properties) {
       for (const propValue of properties) {
         const prop = this.asNode(propValue);
 
@@ -332,7 +343,7 @@ export class AstParser {
         const key = this.asNode(prop.key);
         const keyName = key ? this.getString(key, 'name') : null;
 
-        if (!keyName) {
+        if (!isNonEmptyString(keyName)) {
           continue;
         }
 
@@ -344,7 +355,7 @@ export class AstParser {
           if (value) {
             const literalValue = this.getString(value, 'value');
 
-            if (literalValue) {
+            if (isNonEmptyString(literalValue)) {
               name = literalValue;
             }
           }
@@ -359,14 +370,15 @@ export class AstParser {
             continue;
           }
 
-          const elements = value.elements;
+          const elementsValue = value.elements;
+          const elements = asAnalyzerArray(elementsValue);
 
-          if (!Array.isArray(elements)) {
+          if (!elements) {
             continue;
           }
 
-          for (const el of elements) {
-            providers.push(this.parseExpression(el));
+          for (const elementValue of elements) {
+            providers.push(this.parseExpression(elementValue));
           }
 
           continue;
@@ -401,12 +413,32 @@ export class AstParser {
     }
   }
 
+  private resolveTypeValue(typeInfo: TypeInfo): AnalyzerValue {
+    if (typeof typeInfo.typeName === 'string') {
+      const importSource = this.currentImports[typeInfo.typeName];
+
+      if (isNonEmptyString(importSource)) {
+        return {
+          __bunner_ref: typeInfo.typeName,
+          __bunner_import_source: importSource,
+        };
+      }
+
+      return typeInfo.typeName;
+    }
+
+    return typeInfo.typeName;
+  }
+
   private extractClassMetadata(node: NodeRecord): ClassMetadata {
     const id = this.asNode(node.id);
-    const className = id ? this.getString(id, 'name') || 'Anonymous' : 'Anonymous';
+    const className = id ? (this.getString(id, 'name') ?? 'Anonymous') : 'Anonymous';
     const decoratorsValue = node.decorators;
-    const decorators = Array.isArray(decoratorsValue)
-      ? decoratorsValue.map(d => this.extractDecorator(d)).filter((d): d is DecoratorMetadata => d !== null)
+    const decoratorValues = asAnalyzerArray(decoratorsValue);
+    const decorators = decoratorValues
+      ? decoratorValues
+          .map(value => this.extractDecorator(value))
+          .filter((decorator): decorator is DecoratorMetadata => decorator !== null)
       : [];
     const constructorParams: ClassMetadata['constructorParams'] = [];
     const methods: ClassMetadata['methods'] = [];
@@ -414,10 +446,11 @@ export class AstParser {
     let middlewares: ClassMetadata['middlewares'] = [];
     let errorFilters: ClassMetadata['errorFilters'] = [];
     const body = this.asNode(node.body);
-    const bodyBody = body?.body;
+    const bodyValue = body?.body;
+    const bodyItems = asAnalyzerArray(bodyValue);
 
-    if (Array.isArray(bodyBody)) {
-      for (const memberValue of bodyBody) {
+    if (bodyItems) {
+      for (const memberValue of bodyItems) {
         const member = this.asNode(memberValue);
 
         if (!member) {
@@ -427,11 +460,12 @@ export class AstParser {
         if (member.type === 'MethodDefinition') {
           const kind = this.getString(member, 'kind');
           const value = this.asNode(member.value);
-          const valueParams = value?.params;
+          const valueParamsValue = value?.params;
+          const valueParams = asAnalyzerArray(valueParamsValue);
           const memberDecoratorsValue = member.decorators;
 
           if (kind === 'constructor') {
-            if (Array.isArray(valueParams)) {
+            if (valueParams) {
               for (const paramValue of valueParams) {
                 const paramData = this.extractParam(paramValue);
 
@@ -448,21 +482,30 @@ export class AstParser {
             const key = this.asNode(member.key);
             const methodName = key ? this.getString(key, 'name') : null;
 
-            if (!methodName) {
+            if (!isNonEmptyString(methodName)) {
               continue;
             }
 
-            const methodDecorators = Array.isArray(memberDecoratorsValue)
-              ? memberDecoratorsValue.map(d => this.extractDecorator(d)).filter((d): d is DecoratorMetadata => d !== null)
+            const methodDecoratorValues = asAnalyzerArray(memberDecoratorsValue);
+            const methodDecorators = methodDecoratorValues
+              ? methodDecoratorValues
+                  .map(value => this.extractDecorator(value))
+                  .filter((decorator): decorator is DecoratorMetadata => decorator !== null)
               : [];
             const methodParams: ClassMetadata['methods'][number]['parameters'] = [];
 
-            if (Array.isArray(valueParams)) {
+            if (valueParams) {
               for (let index = 0; index < valueParams.length; index += 1) {
-                const p = this.extractParam(valueParams[index]);
+                const param = this.extractParam(valueParams[index]);
 
-                if (p) {
-                  methodParams.push({ ...p, index });
+                if (param) {
+                  methodParams.push({
+                    name: param.name,
+                    type: param.type,
+                    typeArgs: param.typeArgs,
+                    decorators: param.decorators,
+                    index,
+                  });
                 }
               }
             }
@@ -474,7 +517,7 @@ export class AstParser {
               errorFilters = this.extractErrorFiltersFromConfigure(value);
             }
 
-            if (methodDecorators.length > 0 || methodParams.some(p => p.decorators.length > 0)) {
+            if (methodDecorators.length > 0 || methodParams.some(param => param.decorators.length > 0)) {
               methods.push({
                 name: methodName,
                 decorators: methodDecorators,
@@ -492,15 +535,18 @@ export class AstParser {
           const key = this.asNode(member.key);
           const propName = key ? this.getString(key, 'name') : null;
 
-          if (!propName) {
+          if (!isNonEmptyString(propName)) {
             continue;
           }
 
           const memberDecoratorsValue = member.decorators;
-          const propDecorators = Array.isArray(memberDecoratorsValue)
-            ? memberDecoratorsValue.map(d => this.extractDecorator(d)).filter((d): d is DecoratorMetadata => d !== null)
+          const decoratorValues = asAnalyzerArray(memberDecoratorsValue);
+          const propDecorators = decoratorValues
+            ? decoratorValues
+                .map(value => this.extractDecorator(value))
+                .filter((decorator): decorator is DecoratorMetadata => decorator !== null)
             : [];
-          let typeInfo: TypeInfo = { typeName: 'any', typeArgs: undefined };
+          let typeInfo: TypeInfo = { typeName: 'any' };
           const typeAnnotation = this.asNode(member.typeAnnotation);
           const nestedTypeAnnotation = typeAnnotation ? this.asNode(typeAnnotation.typeAnnotation) : null;
 
@@ -513,14 +559,14 @@ export class AstParser {
 
             properties.push({
               name: propName,
-              type: typeInfo.typeName,
+              type: this.resolveTypeValue(typeInfo),
               typeArgs: typeInfo.typeArgs,
               decorators: propDecorators,
               isOptional: optional,
               isArray: typeInfo.isArray,
               isEnum: typeInfo.isEnum,
               literals: typeInfo.literals,
-              items: typeInfo.items,
+              items: typeInfo.items ? this.resolveTypeValue(typeInfo.items) : undefined,
             });
           }
         }
@@ -534,25 +580,28 @@ export class AstParser {
       if (superClass.type === 'Identifier') {
         heritage = {
           clause: 'extends',
-          typeName: this.getString(superClass, 'name') || 'Unknown',
+          typeName: this.getString(superClass, 'name') ?? UNKNOWN_TYPE_NAME,
         };
       }
 
       if (superClass.type === 'TSTypeInstantiationExpression') {
         const expression = this.asNode(superClass.expression);
-        const baseName = expression?.type === 'Identifier' ? this.getString(expression, 'name') || 'Unknown' : 'Unknown';
+        const baseName =
+          expression?.type === 'Identifier' ? (this.getString(expression, 'name') ?? UNKNOWN_TYPE_NAME) : UNKNOWN_TYPE_NAME;
 
-        if (['Partial', 'Pick', 'Omit', 'Required'].includes(baseName)) {
+        if (isNonEmptyString(baseName) && ['Partial', 'Pick', 'Omit', 'Required'].includes(baseName)) {
           const typeParameters = this.asNode(superClass.typeParameters);
           const params = typeParameters?.params;
           const typeArgs: string[] = [];
+          const paramValues = asAnalyzerArray(params);
 
-          if (Array.isArray(params)) {
-            for (const pValue of params) {
+          if (paramValues) {
+            for (const pValue of paramValues) {
               const p = this.asNode(pValue);
 
               if (!p) {
-                typeArgs.push('Unknown');
+                typeArgs.push(UNKNOWN_TYPE_NAME);
+
                 continue;
               }
 
@@ -560,12 +609,13 @@ export class AstParser {
                 const typeName = this.asNode(p.typeName);
 
                 if (typeName?.type === 'Identifier') {
-                  typeArgs.push(this.getString(typeName, 'name') || 'Unknown');
+                  typeArgs.push(this.getString(typeName, 'name') ?? UNKNOWN_TYPE_NAME);
+
                   continue;
                 }
               }
 
-              typeArgs.push('Unknown');
+              typeArgs.push(UNKNOWN_TYPE_NAME);
             }
           }
 
@@ -579,23 +629,27 @@ export class AstParser {
     }
 
     const implementsValue = node.implements;
+    const implementsList = asAnalyzerArray(implementsValue);
+    const implementItems = implementsList ?? [];
 
-    if (!heritage && Array.isArray(implementsValue) && implementsValue.length > 0) {
-      const impl = this.asNode(implementsValue[0]);
+    if (!heritage && implementItems.length > 0) {
+      const impl = this.asNode(implementItems[0]);
       const expression = impl ? this.asNode(impl.expression) : null;
       const expressionName = expression?.type === 'Identifier' ? this.getString(expression, 'name') : null;
 
-      if (expressionName && ['Partial', 'Pick', 'Omit'].includes(expressionName)) {
+      if (isNonEmptyString(expressionName) && ['Partial', 'Pick', 'Omit'].includes(expressionName)) {
         const typeParameters = impl ? this.asNode(impl.typeParameters) : null;
         const params = typeParameters?.params;
         const typeArgs: string[] = [];
+        const paramValues = asAnalyzerArray(params);
 
-        if (Array.isArray(params)) {
-          for (const pValue of params) {
+        if (paramValues) {
+          for (const pValue of paramValues) {
             const p = this.asNode(pValue);
 
             if (!p) {
-              typeArgs.push('Unknown');
+              typeArgs.push(UNKNOWN_TYPE_NAME);
+
               continue;
             }
 
@@ -603,12 +657,13 @@ export class AstParser {
               const typeName = this.asNode(p.typeName);
 
               if (typeName?.type === 'Identifier') {
-                typeArgs.push(this.getString(typeName, 'name') || 'Unknown');
+                typeArgs.push(this.getString(typeName, 'name') ?? UNKNOWN_TYPE_NAME);
+
                 continue;
               }
             }
 
-            typeArgs.push('Unknown');
+            typeArgs.push(UNKNOWN_TYPE_NAME);
           }
         }
 
@@ -635,10 +690,12 @@ export class AstParser {
 
   private extractErrorFiltersFromConfigure(funcNode: NodeRecord): ClassMetadata['errorFilters'] {
     const errorFilters: ClassMetadata['errorFilters'] = [];
+
     const error = (): never => {
       throw new Error('[Bunner AOT] addErrorFilters는 리터럴 배열 + Identifier만 지원합니다.');
     };
-    const visit = (n: unknown): void => {
+
+    const visit = (n: AnalyzerValue): void => {
       const node = this.asNode(n);
 
       if (!node) {
@@ -651,16 +708,16 @@ export class AstParser {
         const method = property ? this.getString(property, 'name') : null;
 
         if (method === 'addErrorFilters') {
-          const args = Array.isArray(node.arguments) ? node.arguments : [];
-          const arrayArg = this.asNode(args[0]);
+          const args = asAnalyzerArray(node.arguments) ?? [];
+          const arrayArg = args.length > 0 ? this.asNode(args[0]) : null;
 
-          if (!arrayArg || arrayArg.type !== 'ArrayExpression') {
+          if (arrayArg?.type !== 'ArrayExpression') {
             error();
 
             return;
           }
 
-          const elements = Array.isArray(arrayArg.elements) ? arrayArg.elements : [];
+          const elements = asAnalyzerArray(arrayArg.elements) ?? [];
 
           for (let index = 0; index < elements.length; index += 1) {
             const el = this.asNode(elements[index]);
@@ -680,7 +737,7 @@ export class AstParser {
             if (el.type === 'Identifier') {
               const name = this.getString(el, 'name');
 
-              if (!name) {
+              if (!isNonEmptyString(name)) {
                 error();
 
                 return;
@@ -706,12 +763,15 @@ export class AstParser {
         }
 
         const val = node[key];
+        const values = asAnalyzerArray(val);
 
-        if (Array.isArray(val)) {
-          val.forEach(visit);
-        } else {
-          visit(val);
+        if (values) {
+          values.forEach(visit);
+
+          return;
         }
+
+        visit(val);
       });
     };
 
@@ -722,10 +782,12 @@ export class AstParser {
 
   private extractMiddlewaresFromConfigure(funcNode: NodeRecord): ClassMetadata['middlewares'] {
     const middlewares: ClassMetadata['middlewares'] = [];
+
     const error = (): never => {
       throw new Error('[Bunner AOT] addMiddlewares는 리터럴 배열 + Identifier/withOptions만 지원합니다.');
     };
-    const visit = (n: unknown): void => {
+
+    const visit = (n: AnalyzerValue): void => {
       const node = this.asNode(n);
 
       if (!node) {
@@ -738,18 +800,20 @@ export class AstParser {
         const method = property ? this.getString(property, 'name') : null;
 
         if (method === 'addMiddlewares') {
-          const args = Array.isArray(node.arguments) ? node.arguments : [];
-          const lifecycleArg = this.asNode(args[0]);
-          const lifecycle = lifecycleArg?.type === 'Identifier' ? this.getString(lifecycleArg, 'name') || undefined : undefined;
-          const arrayArg = this.asNode(args[1]);
+          const argsValue = asAnalyzerArray(node.arguments);
+          const args = argsValue ?? [];
+          const lifecycleArg = args.length > 0 ? this.asNode(args[0]) : null;
+          const lifecycle = lifecycleArg?.type === 'Identifier' ? (this.getString(lifecycleArg, 'name') ?? undefined) : undefined;
+          const arrayArg = args.length > 1 ? this.asNode(args[1]) : null;
 
-          if (!arrayArg || arrayArg.type !== 'ArrayExpression') {
+          if (arrayArg?.type !== 'ArrayExpression') {
             error();
 
             return;
           }
 
-          const elements = Array.isArray(arrayArg.elements) ? arrayArg.elements : [];
+          const elementsValue = arrayArg.elements;
+          const elements = asAnalyzerArray(elementsValue) ?? [];
 
           for (let index = 0; index < elements.length; index += 1) {
             const el = this.asNode(elements[index]);
@@ -769,13 +833,19 @@ export class AstParser {
             if (el.type === 'Identifier') {
               const name = this.getString(el, 'name');
 
-              if (!name) {
+              if (!isNonEmptyString(name)) {
                 error();
 
                 return;
               }
 
-              middlewares.push({ name, lifecycle, index });
+              if (isNonEmptyString(lifecycle)) {
+                middlewares.push({ name, lifecycle, index });
+
+                continue;
+              }
+
+              middlewares.push({ name, index });
 
               continue;
             }
@@ -789,13 +859,19 @@ export class AstParser {
               if (innerObject?.type === 'Identifier' && propName === 'withOptions') {
                 const name = this.getString(innerObject, 'name');
 
-                if (!name) {
+                if (!isNonEmptyString(name)) {
                   error();
 
                   return;
                 }
 
-                middlewares.push({ name, lifecycle, index });
+                if (isNonEmptyString(lifecycle)) {
+                  middlewares.push({ name, lifecycle, index });
+
+                  continue;
+                }
+
+                middlewares.push({ name, index });
 
                 continue;
               }
@@ -816,12 +892,15 @@ export class AstParser {
         }
 
         const val = node[key];
+        const values = asAnalyzerArray(val);
 
-        if (Array.isArray(val)) {
-          val.forEach(visit);
-        } else {
-          visit(val);
+        if (values) {
+          values.forEach(visit);
+
+          return;
         }
+
+        visit(val);
       });
     };
 
@@ -830,9 +909,9 @@ export class AstParser {
     return middlewares;
   }
 
-  private extractDecorator(decoratorNodeValue: unknown): DecoratorMetadata | null {
+  private extractDecorator(decoratorNodeValue: AnalyzerValue): DecoratorMetadata | null {
     let name = '';
-    let args: unknown[] = [];
+    let args: AnalyzerValue[] = [];
     const decoratorNode = this.asNode(decoratorNodeValue);
 
     if (!decoratorNode) {
@@ -849,19 +928,20 @@ export class AstParser {
       const callee = this.asNode(expression.callee);
       const calleeName = callee ? this.getString(callee, 'name') : null;
 
-      if (!calleeName) {
+      if (!isNonEmptyString(calleeName)) {
         return null;
       }
 
       name = calleeName;
 
-      const argsValue = Array.isArray(expression.arguments) ? expression.arguments : [];
+      const argsValue = asAnalyzerArray(expression.arguments);
+      const argsList = argsValue ?? [];
 
-      args = argsValue.map(arg => this.parseExpression(arg));
+      args = argsList.map(arg => this.parseExpression(arg));
     } else if (expression.type === 'Identifier') {
       const calleeName = this.getString(expression, 'name');
 
-      if (!calleeName) {
+      if (!isNonEmptyString(calleeName)) {
         return null;
       }
 
@@ -871,8 +951,8 @@ export class AstParser {
     return { name, arguments: args };
   }
 
-  private parseExpression(exprValue: unknown): unknown {
-    if (!exprValue) {
+  private parseExpression(exprValue: AnalyzerValue): AnalyzerValue {
+    if (isNullish(exprValue)) {
       return null;
     }
 
@@ -894,11 +974,12 @@ export class AstParser {
       case 'NumericLiteral':
       case 'BooleanLiteral':
       case 'NullLiteral':
-        return (expr as Record<string, unknown>).value ?? null;
+        return this.getRecord(expr)?.value ?? null;
 
       case 'ObjectExpression': {
-        const obj: Record<string, unknown> = {};
-        const properties = Array.isArray(expr.properties) ? expr.properties : [];
+        const obj: AnalyzerValueRecord = {};
+        const propertiesValue = expr.properties;
+        const properties = asAnalyzerArray(propertiesValue) ?? [];
 
         for (const propValue of properties) {
           const prop = this.asNode(propValue);
@@ -911,7 +992,7 @@ export class AstParser {
             continue;
           }
 
-          if (prop.computed) {
+          if (prop.computed === true) {
             const keyExpr = this.parseExpression(prop.key);
             const valExpr = this.parseExpression(prop.value);
             const start = typeof prop.start === 'number' ? prop.start : 0;
@@ -927,9 +1008,9 @@ export class AstParser {
           const keyNode = this.asNode(prop.key);
           const keyName = keyNode ? this.getString(keyNode, 'name') : null;
           const keyValue = keyNode ? this.getString(keyNode, 'value') : null;
-          const key = keyName || keyValue;
+          const key = keyName ?? keyValue;
 
-          if (!key) {
+          if (!isNonEmptyString(key)) {
             continue;
           }
 
@@ -939,8 +1020,11 @@ export class AstParser {
         return obj;
       }
 
-      case 'ArrayExpression':
-        return (Array.isArray(expr.elements) ? expr.elements : []).map(elValue => {
+      case 'ArrayExpression': {
+        const elementsValue = expr.elements;
+        const elements = asAnalyzerArray(elementsValue) ?? [];
+
+        return elements.map(elValue => {
           const el = this.asNode(elValue);
 
           if (el?.type === 'SpreadElement') {
@@ -949,11 +1033,12 @@ export class AstParser {
 
           return this.parseExpression(elValue);
         });
+      }
 
       case 'Identifier': {
         const name = this.getString(expr, 'name');
 
-        if (!name) {
+        if (!isNonEmptyString(name)) {
           return null;
         }
 
@@ -972,14 +1057,17 @@ export class AstParser {
           return null;
         }
 
+        const argsValue = asAnalyzerArray(expr.arguments);
+        const args = argsValue ?? [];
+
         return {
-          __bunner_new: this.getString(callee, 'name') || 'Unknown',
-          args: (Array.isArray(expr.arguments) ? expr.arguments : []).map(arg => this.parseExpression(arg)),
+          __bunner_new: this.getString(callee, 'name') ?? UNKNOWN_TYPE_NAME,
+          args: args.map(arg => this.parseExpression(arg)),
         };
       }
 
       case 'CallExpression': {
-        let calleeName = 'unknown';
+        let calleeName = UNKNOWN_CALLEE_NAME;
         let importSource: string | undefined;
         const callee = this.asNode(expr.callee);
 
@@ -989,29 +1077,30 @@ export class AstParser {
           const objectName = calleeObj?.type === 'Identifier' ? this.getString(calleeObj, 'name') : null;
           const propName = calleeProp ? this.getString(calleeProp, 'name') : null;
 
-          if (objectName && propName) {
+          if (isNonEmptyString(objectName) && isNonEmptyString(propName)) {
             calleeName = `${objectName}.${propName}`;
             importSource = this.currentImports[objectName];
           }
         } else if (callee?.type === 'Identifier') {
           const name = this.getString(callee, 'name');
 
-          if (name) {
+          if (isNonEmptyString(name)) {
             calleeName = name;
             importSource = this.currentImports[name];
           }
         }
 
-        const argsValue = Array.isArray(expr.arguments) ? expr.arguments : [];
+        const argsValue = asAnalyzerArray(expr.arguments);
+        const args = argsValue ?? [];
 
-        if (calleeName === 'forwardRef' && argsValue.length > 0) {
-          const arg = this.asNode(argsValue[0]);
+        if (calleeName === 'forwardRef' && args.length > 0) {
+          const arg = this.asNode(args[0]);
           const argBody = arg ? this.asNode(arg.body) : null;
 
           if ((arg?.type === 'ArrowFunctionExpression' || arg?.type === 'FunctionExpression') && argBody?.type === 'Identifier') {
             const refName = this.getString(argBody, 'name');
 
-            if (refName) {
+            if (isNonEmptyString(refName)) {
               return { __bunner_forward_ref: refName };
             }
           }
@@ -1020,7 +1109,7 @@ export class AstParser {
         return {
           __bunner_call: calleeName,
           __bunner_import_source: importSource,
-          args: argsValue.map(arg => this.parseExpression(arg)),
+          args: args.map(arg => this.parseExpression(arg)),
         };
       }
 
@@ -1045,7 +1134,8 @@ export class AstParser {
   private extractDependencies(funcNode: NodeRecord, offset: number): FactoryDependency[] {
     const deps: FactoryDependency[] = [];
     const defined = new Set<string>();
-    const visit = (n: unknown): void => {
+
+    const visit = (n: AnalyzerValue): void => {
       const node = this.asNode(n);
 
       if (!node) {
@@ -1056,9 +1146,9 @@ export class AstParser {
         const name = this.getString(node, 'name');
         const start = typeof node.start === 'number' ? node.start : null;
         const end = typeof node.end === 'number' ? node.end : null;
-        const path = name ? this.currentImports[name] : undefined;
+        const path = isNonEmptyString(name) ? this.currentImports[name] : undefined;
 
-        if (name && path && start !== null && end !== null && !defined.has(name)) {
+        if (isNonEmptyString(name) && isNonEmptyString(path) && start !== null && end !== null && !defined.has(name)) {
           deps.push({
             name,
             path,
@@ -1068,17 +1158,17 @@ export class AstParser {
         }
       }
 
-      if (node.type === 'ArrowFunctionExpression' || node.type === 'FunctionExpression') {
-        const params = node.params;
+      if (node.type === 'FunctionExpression') {
+        const params = asAnalyzerArray(node.params);
 
-        if (Array.isArray(params)) {
+        if (params) {
           for (const pValue of params) {
             const p = this.asNode(pValue);
 
             if (p?.type === 'Identifier') {
               const name = this.getString(p, 'name');
 
-              if (name) {
+              if (isNonEmptyString(name)) {
                 defined.add(name);
               }
             }
@@ -1110,7 +1200,7 @@ export class AstParser {
     return deps;
   }
 
-  private extractParam(paramNodeValue: unknown): ExtractedParam | null {
+  private extractParam(paramNodeValue: AnalyzerValue): ExtractedParam | null {
     const paramNode = this.asNode(paramNodeValue);
 
     if (!paramNode) {
@@ -1125,8 +1215,11 @@ export class AstParser {
       }
 
       const decoratorsValue = paramNode.decorators;
-      const parentDecorators = Array.isArray(decoratorsValue)
-        ? decoratorsValue.map(d => this.extractDecorator(d)).filter((d): d is DecoratorMetadata => d !== null)
+      const parentDecoratorValues = asAnalyzerArray(decoratorsValue);
+      const parentDecorators = parentDecoratorValues
+        ? parentDecoratorValues
+            .map(value => this.extractDecorator(value))
+            .filter((decorator): decorator is DecoratorMetadata => decorator !== null)
         : [];
       const nextDecorators = [...parentDecorators, ...param.decorators];
 
@@ -1138,24 +1231,27 @@ export class AstParser {
       };
     }
 
-    if (paramNode.type === 'Identifier' || paramNode.type === 'AssignmentPattern') {
+    if (paramNode.type === 'AssignmentPattern') {
       const node = paramNode.type === 'AssignmentPattern' ? this.asNode(paramNode.left) : paramNode;
 
-      if (!node || node.type !== 'Identifier') {
+      if (node?.type !== 'Identifier') {
         return null;
       }
 
       const name = this.getString(node, 'name');
 
-      if (!name) {
+      if (!isNonEmptyString(name)) {
         return null;
       }
 
       const decoratorsValue = paramNode.decorators;
-      const decorators = Array.isArray(decoratorsValue)
-        ? decoratorsValue.map(d => this.extractDecorator(d)).filter((d): d is DecoratorMetadata => d !== null)
+      const decoratorValues = asAnalyzerArray(decoratorsValue);
+      const decorators = decoratorValues
+        ? decoratorValues
+            .map(value => this.extractDecorator(value))
+            .filter((decorator): decorator is DecoratorMetadata => decorator !== null)
         : [];
-      let typeInfo: TypeInfo = { typeName: 'any', typeArgs: undefined };
+      let typeInfo: TypeInfo = { typeName: 'any' };
       const typeAnnotation = this.asNode(node.typeAnnotation);
       const nestedTypeAnnotation = typeAnnotation ? this.asNode(typeAnnotation.typeAnnotation) : null;
 
@@ -1163,14 +1259,7 @@ export class AstParser {
         typeInfo = this.typeResolver.resolve(nestedTypeAnnotation);
       }
 
-      let typeValue: unknown = typeInfo.typeName;
-
-      if (typeof typeInfo.typeName === 'string' && this.currentImports[typeInfo.typeName]) {
-        typeValue = {
-          __bunner_ref: typeInfo.typeName,
-          __bunner_import_source: this.currentImports[typeInfo.typeName],
-        };
-      }
+      const typeValue = this.resolveTypeValue(typeInfo);
 
       return {
         name,
@@ -1183,31 +1272,29 @@ export class AstParser {
     return null;
   }
 
-  private asNode(value: unknown): NodeRecord | null {
+  private asNode(value: AnalyzerValue): NodeRecord | null {
     const record = this.getRecord(value);
 
     if (!record) {
       return null;
     }
 
-    const type = record.type;
-
-    if (typeof type !== 'string') {
+    if (!isNodeRecord(record)) {
       return null;
     }
 
-    return record as NodeRecord;
+    return record;
   }
 
-  private getRecord(value: unknown): Record<string, unknown> | null {
-    if (!value || typeof value !== 'object') {
+  private getRecord(value: AnalyzerValue): AnalyzerValueRecord | null {
+    if (!isAnalyzerRecord(value)) {
       return null;
     }
 
-    return value as Record<string, unknown>;
+    return value;
   }
 
-  private getString(node: Record<string, unknown>, key: string): string | null {
+  private getString(node: AnalyzerValueRecord, key: string): string | null {
     const value = node[key];
 
     if (typeof value !== 'string') {
@@ -1217,7 +1304,7 @@ export class AstParser {
     return value;
   }
 
-  private getNodeStringValue(node: Record<string, unknown>, key: string): string | null {
+  private getNodeStringValue(node: AnalyzerValueRecord, key: string): string | null {
     const child = this.asNode(node[key]);
 
     if (!child) {

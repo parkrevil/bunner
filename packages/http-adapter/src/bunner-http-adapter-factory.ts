@@ -1,9 +1,11 @@
 import type { ConfigService } from '@bunner/common';
-import { CONFIG_SERVICE } from '@bunner/common';
 import type { BootstrapAdapter } from '@bunner/core';
 
-import { BunnerHttpAdapter } from './bunner-http-adapter';
+import { CONFIG_SERVICE } from '@bunner/common';
+
 import type { BunnerHttpServerOptions } from './interfaces';
+
+import { BunnerHttpAdapter } from './bunner-http-adapter';
 
 export type BunnerHttpAdapterBootstrapConfig = BunnerHttpServerOptions & {
   readonly name: string;
@@ -30,6 +32,7 @@ export function bunnerHttpAdapter(resolve: (configService: ConfigService) => Bun
         for (const key of container.keys()) {
           if (typeof key === 'string' && key.endsWith(`::${tokenName}`)) {
             configService = container.get<ConfigService>(key);
+
             break;
           }
         }

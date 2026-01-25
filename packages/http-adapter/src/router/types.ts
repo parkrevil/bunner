@@ -21,6 +21,7 @@ export interface RouterOptions {
 }
 
 export type EncodedSlashBehavior = 'decode' | 'preserve' | 'reject';
+
 export type OptionalParamBehavior = 'omit' | 'setUndefined' | 'setEmptyString';
 
 export interface RegexSafetyOptions {
@@ -61,6 +62,7 @@ export type BuildStageName =
   | 'regex-safety'
   | 'route-flags'
   | 'snapshot-metadata';
+
 export type MatchStageName = 'static-fast' | 'cache' | 'dynamic';
 
 export type PatternTesterFn = (value: string) => boolean;

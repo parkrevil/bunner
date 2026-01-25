@@ -1,4 +1,5 @@
 import type { BunnerAdapter, ErrorFilterToken } from '@bunner/common';
+
 import { ClusterManager, getRuntimeContext, type ClusterBaseWorker, type BunnerApplicationNormalizedOptions } from '@bunner/core';
 
 import { BunnerHttpServer } from './bunner-http-server';
@@ -12,7 +13,9 @@ import {
 const BUNNER_HTTP_INTERNAL = Symbol.for('bunner:http:internal');
 
 type InternalRouteMethod = 'GET';
+
 type InternalRouteHandler = (...args: readonly unknown[]) => unknown;
+
 type InternalRouteEntry = {
   method: InternalRouteMethod;
   path: string;
@@ -138,6 +141,6 @@ export class BunnerHttpAdapter implements BunnerAdapter {
       return new URL('./bunner-http-worker.ts', import.meta.url);
     }
 
-    return new URL(process.argv[1] || '', 'file://');
+    return new URL(process.argv[1] ?? '', 'file://');
   }
 }

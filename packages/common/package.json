@@ -1,11 +1,11 @@
 {
   "name": "@bunner/common",
+  "type": "module",
   "module": "src/index.ts",
   "types": "src/index.ts",
-  "type": "module",
+  "dependencies": {},
   "devDependencies": {
     "@types/bun": "^1.1.0",
     "typescript": "^5.0.0"
-  },
-  "dependencies": {}
+  }
 }

@@ -1,26 +1,26 @@
-import { BACKREFERENCE_PATTERN } from './constants';
+import type { QuantifierFrame, RegexSafetyAssessment, RegexSafetyConfig } from './types';
 
-type QuantifierFrame = {
-  hadUnlimited: boolean;
-};
+import { BACKREFERENCE_PATTERN } from './constants';
 
 function hasNestedUnlimitedQuantifiers(pattern: string): boolean {
   const stack: QuantifierFrame[] = [];
   let lastAtomUnlimited = false;
 
   for (let i = 0; i < pattern.length; i++) {
-    const char = pattern[i]!;
+    const char = pattern[i];
 
     if (char === '\\') {
       i++;
 
       lastAtomUnlimited = false;
+
       continue;
     }
 
     if (char === '[') {
       i = skipCharClass(pattern, i);
       lastAtomUnlimited = false;
+
       continue;
     }
 
@@ -28,6 +28,7 @@ function hasNestedUnlimitedQuantifiers(pattern: string): boolean {
       stack.push({ hadUnlimited: false });
 
       lastAtomUnlimited = false;
+
       continue;
     }
 
@@ -36,10 +37,15 @@ function hasNestedUnlimitedQuantifiers(pattern: string): boolean {
       const groupUnlimited = Boolean(frame?.hadUnlimited);
 
       if (groupUnlimited && stack.length) {
-        stack[stack.length - 1]!.hadUnlimited = true;
+        const frame = stack[stack.length - 1];
+
+        if (frame) {
+          frame.hadUnlimited = true;
+        }
       }
 
       lastAtomUnlimited = groupUnlimited;
+
       continue;
     }
 
@@ -51,8 +57,13 @@ function hasNestedUnlimitedQuantifiers(pattern: string): boolean {
       lastAtomUnlimited = true;
 
       if (stack.length) {
-        stack[stack.length - 1]!.hadUnlimited = true;
+        const frame = stack[stack.length - 1];
+
+        if (frame) {
+          frame.hadUnlimited = true;
+        }
       }
+
       continue;
     }
 
@@ -61,6 +72,7 @@ function hasNestedUnlimitedQuantifiers(pattern: string): boolean {
 
       if (close === -1) {
         lastAtomUnlimited = false;
+
         continue;
       }
 
@@ -75,13 +87,18 @@ function hasNestedUnlimitedQuantifiers(pattern: string): boolean {
         lastAtomUnlimited = true;
 
         if (stack.length) {
-          stack[stack.length - 1]!.hadUnlimited = true;
+          const frame = stack[stack.length - 1];
+
+          if (frame) {
+            frame.hadUnlimited = true;
+          }
         }
       } else {
         lastAtomUnlimited = false;
       }
 
       i = close;
+
       continue;
     }
 
@@ -95,10 +112,11 @@ function skipCharClass(pattern: string, start: number): number {
   let i = start + 1;
 
   while (i < pattern.length) {
-    const char = pattern[i]!;
+    const char = pattern[i];
 
     if (char === '\\') {
       i += 2;
+
       continue;
     }
 
@@ -112,10 +130,7 @@ function skipCharClass(pattern: string, start: number): number {
   return pattern.length - 1;
 }
 
-export function assessRegexSafety(
-  pattern: string,
-  options: { maxLength: number; forbidBacktrackingTokens: boolean; forbidBackreferences: boolean },
-): { safe: boolean; reason?: string } {
+export function assessRegexSafety(pattern: string, options: RegexSafetyConfig): RegexSafetyAssessment {
   if (pattern.length > options.maxLength) {
     return { safe: false, reason: `Regex length ${pattern.length} exceeds limit ${options.maxLength}` };
   }

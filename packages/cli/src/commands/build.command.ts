@@ -1,14 +1,13 @@
+import { Glob } from 'bun';
 import { mkdir, rm } from 'fs/promises';
 import { join, resolve, dirname } from 'path';
 
-import { Glob } from 'bun';
+import type { CollectedClass, CommandOptions } from './types';
 
 import { AdapterSpecResolver, AstParser, ModuleGraph, type FileAnalysis } from '../analyzer';
 import { ConfigLoader, ConfigLoadError, compareCodePoint, scanGlobSorted, writeIfChanged } from '../common';
 import { buildDiagnostic, reportDiagnostics } from '../diagnostics';
 import { EntryGenerator, ManifestGenerator } from '../generator';
-
-import type { CollectedClass, CommandOptions } from './types';
 
 export async function build(commandOptions?: CommandOptions) {
   console.info('🚀 Starting Bunner Production Build...');
@@ -217,7 +216,9 @@ export async function build(commandOptions?: CommandOptions) {
     }
 
     if (workerFiles.length > 0) {
-      workerFiles.forEach((w: string) => console.info(`   Worker Entry: ${w}`));
+      workerFiles.forEach((w: string) => {
+        console.info(`   Worker Entry: ${w}`);
+      });
     }
 
     const buildResult = await Bun.build({
@@ -243,7 +244,7 @@ export async function build(commandOptions?: CommandOptions) {
       workerFiles.forEach(w => {
         const workerName = w.split('/').pop()?.replace('.ts', '.js');
 
-        console.info(`   Worker: ${join(outDir, workerName || '')}`);
+        console.info(`   Worker: ${join(outDir, workerName ?? '')}`);
       });
     }
 
@@ -261,6 +262,7 @@ export async function build(commandOptions?: CommandOptions) {
     });
 
     reportDiagnostics({ diagnostics: [diagnostic] });
+
     throw error;
   }
 }

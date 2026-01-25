@@ -1,12 +1,11 @@
-
-
 import fs from 'node:fs';
 import path from 'node:path';
+
+import type { RunOptions } from './types';
 
 import { runDocVerify } from './doc-verify';
 import { getChangedFiles } from './git-changes';
 import { runPlanTaskVerify } from './plan-task-verify';
-import type { RunOptions } from './types';
 
 const CODE_EXTENSIONS = new Set(['.ts', '.js', '.mjs', '.cjs']);
 const repoRoot = process.cwd();
@@ -41,9 +40,7 @@ const hasCodeChanges = (files: readonly string[]): boolean =>
 const hasMarkdownChanges = (files: readonly string[]): boolean => files.some(file => path.extname(file) === '.md');
 
 const listChangedTaskFiles = (files: readonly string[]): string[] =>
-  files
-    .map(normalizePath)
-    .filter(file => file.startsWith('tasks/') && file.endsWith('.md'));
+  files.map(normalizePath).filter(file => file.startsWith('tasks/') && file.endsWith('.md'));
 
 const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 

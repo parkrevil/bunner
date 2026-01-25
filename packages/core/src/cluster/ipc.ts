@@ -17,7 +17,7 @@ export function expose(obj: any) {
     void (async () => {
       const data = event.data as RPCMessage;
 
-      if (!data || !data.id || !data.method) {
+      if (!data?.id || !data.method) {
         return;
       }
 
@@ -32,7 +32,7 @@ export function expose(obj: any) {
 
         self.postMessage({ id: data.id, result } as RPCResponse);
       } catch (err: any) {
-        self.postMessage({ id: data.id, error: err.message || 'Unknown error' } as RPCResponse);
+        self.postMessage({ id: data.id, error: err.message ?? 'Unknown error' } as RPCResponse);
       }
     })();
   });
@@ -48,7 +48,7 @@ export function wrap<T extends object>(worker: Worker): Promisified<T> {
   worker.addEventListener('message', (event: MessageEvent) => {
     const data = event.data as RPCResponse;
 
-    if (!data || !data.id) {
+    if (!data?.id) {
       return;
     }
 
@@ -71,7 +71,7 @@ export function wrap<T extends object>(worker: Worker): Promisified<T> {
         return undefined;
       } // Avoid Promise wrapping confusion
 
-      return (...args: any[]) => {
+      return async (...args: any[]) => {
         return new Promise((resolve, reject) => {
           const id = crypto.randomUUID();
 

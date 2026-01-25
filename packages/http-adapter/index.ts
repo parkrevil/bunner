@@ -14,10 +14,11 @@ export {
   type BunnerHttpServerOptions,
   type HttpWorkerResponse,
   type RouteHandlerEntry,
-  SystemErrorHandler,
   type PipeTransform,
   type ArgumentMetadata,
 } from './src/interfaces';
+
+export { SystemErrorHandler } from './src/system-error-handler';
 
 export { CorsMiddleware } from './src/middlewares/cors/cors.middleware';
 export type { CorsOptions } from './src/middlewares/cors/interfaces';

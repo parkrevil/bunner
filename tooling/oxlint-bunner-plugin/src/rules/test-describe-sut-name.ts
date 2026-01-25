@@ -1,5 +1,5 @@
-import { basename } from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
+import { basename } from 'node:path';
 
 import type { AstNode, RuleContext } from '../types';
 
@@ -56,7 +56,14 @@ function isTopLevel(node: AstNode): boolean {
 
   const grandParent = parent.parent;
 
-  return parent.type === 'ExpressionStatement' && grandParent !== null && grandParent !== undefined && typeof grandParent === 'object' && !Array.isArray(grandParent) && grandParent.type === 'Program';
+  return (
+    parent.type === 'ExpressionStatement' &&
+    grandParent !== null &&
+    grandParent !== undefined &&
+    typeof grandParent === 'object' &&
+    !Array.isArray(grandParent) &&
+    grandParent.type === 'Program'
+  );
 }
 
 function getIdentifierName(node: AstNode | null | undefined): string | null {
@@ -120,7 +127,9 @@ function getImplPathFromSpec(specPath: string): string {
 }
 
 function getExportedClassNameFromText(text: string): string | null {
-  const matches = Array.from(text.matchAll(/\bexport\s+class\s+([A-Za-z0-9_]+)\b/g)).map((m) => m[1]).filter((n): n is string => typeof n === 'string' && n.length > 0);
+  const matches = Array.from(text.matchAll(/\bexport\s+class\s+([A-Za-z0-9_]+)\b/g))
+    .map(m => m[1])
+    .filter((n): n is string => typeof n === 'string' && n.length > 0);
   const unique = Array.from(new Set(matches));
 
   if (unique.length === 1) {
@@ -147,7 +156,7 @@ const testDescribeSutNameRule = {
       const implPath = getImplPathFromSpec(filename);
       const implExists = fileExists(context, implPath);
 
-      if (implExists === null || ! implExists) {
+      if (implExists === null || !implExists) {
         return fallback;
       }
 

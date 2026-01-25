@@ -1,13 +1,13 @@
-import type { Class } from './types';
+import type { AnyFunction, AnyValue, Class } from './types';
 
 export interface BunnerAdapter {
-  start(context: any): Promise<void>;
+  start(context: AnyValue): Promise<void>;
   stop(): Promise<void>;
 }
 
 export interface Context {
   getType(): string;
-  get<T = unknown>(key: string): T | undefined;
+  get<T = AnyValue>(key: string): T | undefined;
   to<TContext>(ctor: Class<TContext>): TContext;
 }
 
@@ -23,7 +23,7 @@ export interface ProviderBase {
 }
 
 export interface ProviderUseValue extends ProviderBase {
-  useValue: unknown;
+  useValue: AnyValue;
 }
 
 export interface ProviderUseClass extends ProviderBase {
@@ -35,12 +35,12 @@ export interface ProviderUseExisting extends ProviderBase {
 }
 
 export interface ProviderUseFactory extends ProviderBase {
-  useFactory: (...args: any[]) => unknown;
+  useFactory: AnyFunction;
   inject?: ProviderToken[];
 }
 
 export interface ForwardRef {
-  forwardRef: () => any;
+  forwardRef: () => AnyValue;
 }
 
 // Lifecycle Interfaces
@@ -71,22 +71,22 @@ export interface AdapterGroup<T> {
 }
 
 export interface AdapterCollection {
-  [protocol: string]: AdapterGroup<any>;
+  [protocol: string]: AdapterGroup<AnyValue>;
 }
 
 export interface Configurer {
-  configure(app: any, adapters: AdapterCollection): void;
+  configure(app: AnyValue, adapters: AdapterCollection): void;
 }
 
 export interface BunnerApplicationOptions {
   name?: string;
   logLevel?: string | number;
-  logger?: any;
-  [key: string]: any;
+  logger?: AnyValue;
+  [key: string]: AnyValue;
 }
 
 export interface ConfigService {
-  get<T = unknown>(namespace: string | symbol): T;
+  get<T = AnyValue>(namespace: string | symbol): T;
 }
 
 export interface EnvService {
@@ -131,14 +131,14 @@ export interface MiddlewareRegistration<TOptions = unknown> {
 }
 
 export interface BunnerContainer {
-  get<T = any>(token: any): T;
-  set(token: any, factory: any): void;
-  has(token: any): boolean;
-  getInstances(): IterableIterator<any>;
-  keys(): IterableIterator<any>;
+  get(token: ProviderToken): AnyValue;
+  set(token: ProviderToken, factory: AnyFunction): void;
+  has(token: ProviderToken): boolean;
+  getInstances(): IterableIterator<AnyValue>;
+  keys(): IterableIterator<ProviderToken>;
 }
 
-export abstract class BunnerErrorFilter<TError = unknown> {
+export abstract class BunnerErrorFilter<TError = AnyValue> {
   public abstract catch(error: TError, context: Context): void | Promise<void>;
 }
 
@@ -160,7 +160,7 @@ export interface AdapterConfig {
 export interface AdapterInstanceConfig {
   middlewares?: MiddlewareConfig;
   errorFilters?: ErrorFilterConfig[];
-  [key: string]: any;
+  [key: string]: AnyValue;
 }
 
 export interface MiddlewareConfig {

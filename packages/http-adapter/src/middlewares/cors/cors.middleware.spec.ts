@@ -1,9 +1,9 @@
 import { describe, expect, it, mock } from 'bun:test';
 
-import { BunnerHttpContext } from '../../adapter';
 import type { HttpAdapter } from '../../adapter/http-adapter';
-import { HeaderField, HttpMethod } from '../../enums';
 
+import { BunnerHttpContext } from '../../adapter';
+import { HeaderField, HttpMethod } from '../../enums';
 import { CORS_DEFAULT_METHODS } from './constants';
 import { CorsMiddleware } from './cors.middleware';
 
@@ -23,12 +23,15 @@ describe('CorsMiddleware', () => {
     const reqHeaders = new Headers(headers);
     const setStatus = mock();
     const resHeaders = new Headers();
+
     const setHeaderImpl = (k: string, v: string) => {
       resHeaders.set(k, v);
     };
+
     const appendHeaderImpl = (k: string, v: string) => {
       resHeaders.append(k, v);
     };
+
     const requestObj = {
       method,
       headers: reqHeaders,
@@ -46,6 +49,7 @@ describe('CorsMiddleware', () => {
 
     return new BunnerHttpContext(adapter);
   };
+
   const getResHeader = (ctx: BunnerHttpContext, name: string): string | null => {
     return (ctx.response as any)._testHeaders.get(name);
   };
@@ -226,8 +230,11 @@ describe('CorsMiddleware', () => {
     describe('Function origin', () => {
       it('should allow origin via async callback', async () => {
         const customOrigin = (origin: string | undefined, cb: (err: Error | null, allow?: boolean) => void) => {
-          setTimeout(() => cb(null, origin === 'https://allowed.com'), 10);
+          setTimeout(() => {
+            cb(null, origin === 'https://allowed.com');
+          }, 10);
         };
+
         const middleware = new CorsMiddleware({ origin: customOrigin });
         const ctx = createMockContext(HttpMethod.Get, { [HeaderField.Origin]: 'https://allowed.com' });
 
@@ -239,6 +246,7 @@ describe('CorsMiddleware', () => {
         const customOrigin = (_origin: string | undefined, cb: (err: Error | null, allow?: boolean) => void) => {
           cb(null, false);
         };
+
         const middleware = new CorsMiddleware({ origin: customOrigin });
         const ctx = createMockContext(HttpMethod.Get, { [HeaderField.Origin]: 'https://any.com' });
 
@@ -250,6 +258,7 @@ describe('CorsMiddleware', () => {
         const errorOrigin = (_: string | undefined, cb: (err: Error | null, allow?: boolean) => void) => {
           cb(new Error('Database lookup failed'));
         };
+
         const middleware = new CorsMiddleware({ origin: errorOrigin });
         const ctx = createMockContext(HttpMethod.Get, { [HeaderField.Origin]: 'https://example.com' });
 

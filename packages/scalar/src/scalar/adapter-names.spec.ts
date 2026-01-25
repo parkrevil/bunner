@@ -1,24 +1,15 @@
 import { describe, expect, it } from 'bun:test';
 
-import { resolveHttpNamesForDocuments, resolveHttpNamesForHosting } from './adapter-names';
 import type { AdapterCollectionLike } from './types';
 
-type FakeGroup = {
-  forEach: (cb: (adapter: unknown, name: string) => void) => void;
-  get?: (name: string) => unknown;
-};
+import { resolveHttpNamesForDocuments, resolveHttpNamesForHosting } from './adapter-names';
 
 function makeAdapters(names: string[]): AdapterCollectionLike {
-  const group: FakeGroup = {
-    forEach(cb) {
-      for (const name of names) {
-        cb({}, name);
-      }
-    },
-    get(name) {
-      return names.includes(name) ? {} : undefined;
-    },
-  };
+  const group = new Map<string, unknown>();
+
+  for (const name of names) {
+    group.set(name, {});
+  }
 
   return { http: group } as unknown as AdapterCollectionLike;
 }

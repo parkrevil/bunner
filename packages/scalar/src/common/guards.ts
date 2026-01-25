@@ -1,19 +1,21 @@
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
+import type { ScalarCallable, ScalarInput, ScalarKey, ScalarRecord, ScalarValue } from '../scalar/types';
+
+export function isRecord(value: ScalarInput): value is ScalarRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-export function isObjectLike(value: unknown): value is object {
+export function isObjectLike(value: ScalarInput): value is ScalarRecord | ScalarCallable {
   return (typeof value === 'object' || typeof value === 'function') && value !== null;
 }
 
-export function isMap(value: unknown): value is Map<unknown, unknown> {
+export function isMap<K extends ScalarKey, V extends ScalarInput>(value: ScalarInput): value is Map<K, V> {
   return value instanceof Map;
 }
 
 export function hasFunctionProperty<TName extends string>(
-  value: unknown,
+  value: ScalarInput,
   name: TName,
-): value is Record<TName, (...args: unknown[]) => unknown> {
+): value is Record<TName, ScalarCallable> {
   if (!isRecord(value)) {
     return false;
   }

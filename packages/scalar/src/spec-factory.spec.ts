@@ -80,6 +80,7 @@ function createRegistryForUsersController(): Map<unknown, unknown> {
 
 function createRegistryForNestedSchemaShapes(): Map<unknown, unknown> {
   class ChildDto {}
+
   class ParentDto {}
 
   const childMeta: RegistryMeta = {
@@ -144,14 +145,14 @@ describe('OpenApiFactory.create', () => {
       throw new Error('Expected /users/{id} path to exist');
     }
 
-    const operationValue = pathItem['get'];
+    const operationValue = pathItem.get;
 
     if (!isRecord(operationValue)) {
       throw new Error('Expected get operation to be a record');
     }
 
-    expect(operationValue['summary']).toBe('Get one');
-    expect(operationValue['description']).toBe('Get by id');
+    expect(operationValue.summary).toBe('Get one');
+    expect(operationValue.description).toBe('Get by id');
   });
 
   it('should generate path and query parameters from Param and Query decorators', () => {
@@ -163,13 +164,13 @@ describe('OpenApiFactory.create', () => {
       throw new Error('Expected /users/{id} path to exist');
     }
 
-    const operationValue = pathItem['get'];
+    const operationValue = pathItem.get;
 
     if (!isRecord(operationValue)) {
       throw new Error('Expected get operation to be a record');
     }
 
-    expect(operationValue['parameters']).toEqual([
+    expect(operationValue.parameters).toEqual([
       { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
       { name: 'verbose', in: 'query', required: false, schema: { type: 'string' } },
     ]);
@@ -184,19 +185,19 @@ describe('OpenApiFactory.create', () => {
       throw new Error('Expected /users path to exist');
     }
 
-    const operationValue = pathItem['post'];
+    const operationValue = pathItem.post;
 
     if (!isRecord(operationValue)) {
       throw new Error('Expected post operation to be a record');
     }
 
-    const requestBodyValue = operationValue['requestBody'];
+    const requestBodyValue = operationValue.requestBody;
 
     if (!isRecord(requestBodyValue)) {
       throw new Error('Expected requestBody to be a record');
     }
 
-    const contentValue = requestBodyValue['content'];
+    const contentValue = requestBodyValue.content;
 
     if (!isRecord(contentValue)) {
       throw new Error('Expected requestBody.content to be a record');
@@ -208,7 +209,7 @@ describe('OpenApiFactory.create', () => {
       throw new Error('Expected requestBody.content[application/json] to be a record');
     }
 
-    expect(jsonContentValue['schema']).toEqual({ $ref: '#/components/schemas/CreateUserDto' });
+    expect(jsonContentValue.schema).toEqual({ $ref: '#/components/schemas/CreateUserDto' });
   });
 
   it('should create a component schema for ApiProperty metadata', () => {
@@ -220,13 +221,13 @@ describe('OpenApiFactory.create', () => {
       throw new Error('Expected CreateUserDto schema to be a record');
     }
 
-    const propsValue = schemaValue['properties'];
+    const propsValue = schemaValue.properties;
 
     if (!isRecord(propsValue)) {
       throw new Error('Expected CreateUserDto properties to be a record');
     }
 
-    expect(propsValue['email']).toEqual({
+    expect(propsValue.email).toEqual({
       type: 'string',
       description: 'email',
       example: 'a@b.com',
@@ -243,14 +244,14 @@ describe('OpenApiFactory.create', () => {
       throw new Error('Expected ParentDto and ChildDto schemas to exist');
     }
 
-    const parentProps = parentSchemaValue['properties'];
+    const parentProps = parentSchemaValue.properties;
 
     if (!isRecord(parentProps)) {
       throw new Error('Expected ParentDto properties to be a record');
     }
 
-    expect(parentProps['child']).toEqual({ $ref: '#/components/schemas/ChildDto' });
-    expect(parentProps['children']).toEqual({
+    expect(parentProps.child).toEqual({ $ref: '#/components/schemas/ChildDto' });
+    expect(parentProps.children).toEqual({
       type: 'array',
       items: { $ref: '#/components/schemas/ChildDto' },
     });

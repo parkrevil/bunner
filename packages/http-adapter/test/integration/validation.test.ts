@@ -1,6 +1,11 @@
+import type { Class, Context } from '@bunner/common';
+
 import { BunnerErrorFilter } from '@bunner/common';
 import { describe, expect, it, mock } from 'bun:test';
 import { StatusCodes } from 'http-status-codes';
+
+import type { CombinedMetadataInput } from '../../../core/src/metadata/interfaces';
+import type { ClassMetadata, SystemError } from '../types';
 
 import { createHttpTestHarness, handleRequest, withGlobalMiddlewares } from '../http-test-kit';
 import { BunnerHttpContext, type BunnerResponse, HttpMethod } from '../index';
@@ -11,7 +16,7 @@ class CreateUserDto {
 }
 
 class ValidationController {
-  create(res: BunnerResponse, body: CreateUserDto): unknown {
+  create(res: BunnerResponse, body: CreateUserDto): Record<string, number | string> {
     res.setStatus(StatusCodes.OK);
 
     return { name: body.name, age: body.age };
@@ -23,7 +28,7 @@ class HttpStatusErrorFilter extends BunnerErrorFilter {
     super();
   }
 
-  catch(error: any, ctx: any): void {
+  catch(error: SystemError, ctx: Context): void {
     this.onCall();
 
     const http = ctx.to(BunnerHttpContext);
@@ -35,8 +40,8 @@ class HttpStatusErrorFilter extends BunnerErrorFilter {
   }
 }
 
-function createRegistry(): Map<any, any> {
-  const registry = new Map<any, any>();
+function createRegistry(): Map<Class, CombinedMetadataInput | ClassMetadata> {
+  const registry = new Map<Class, CombinedMetadataInput | ClassMetadata>();
 
   registry.set(CreateUserDto, {
     className: 'CreateUserDto',
@@ -66,7 +71,7 @@ function createRegistry(): Map<any, any> {
   });
   registry.set(ValidationController, {
     className: 'ValidationController',
-    decorators: [{ name: 'Controller', arguments: ['val'] }],
+    decorators: [{ name: 'RestController', arguments: ['val'] }],
     methods: [
       {
         name: 'create',

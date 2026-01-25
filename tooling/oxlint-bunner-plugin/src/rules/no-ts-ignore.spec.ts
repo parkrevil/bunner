@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 
-import { noTsIgnoreRule } from './no-ts-ignore';
-import { createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
 import type { CommentNode } from '../types';
+
+import { createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
+import { noTsIgnoreRule } from './no-ts-ignore';
 
 describe('no-ts-ignore', () => {
   it('should report when @ts-ignore appears in comments', () => {

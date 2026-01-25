@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 
-import { noTombstoneRule } from './no-tombstone';
-import { createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
 import type { AstNode } from '../types';
+
+import { createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
+import { noTombstoneRule } from './no-tombstone';
 
 describe('no-tombstone', () => {
   it('should report when file is empty', () => {

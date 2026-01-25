@@ -1,7 +1,8 @@
 import { Logger } from '@bunner/logger';
 
-import { START_ANCHOR_PATTERN, END_ANCHOR_PATTERN } from './constants';
 import type { BuilderConfig } from './types';
+
+import { START_ANCHOR_PATTERN, END_ANCHOR_PATTERN } from './constants';
 
 export class PatternUtils {
   private readonly compiledPatternCache = new Map<string, RegExp>();

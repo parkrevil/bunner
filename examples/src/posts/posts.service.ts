@@ -35,6 +35,6 @@ export class PostsService {
   }
 
   createComment(id: number, body: any) {
-    return this.commentsService.create(id, body);
+    this.commentsService.create(id, body);
   }
 }

@@ -1,6 +1,22 @@
-import type { BunnerContainer, Context, BunnerErrorFilter, BunnerMiddleware } from '@bunner/common';
+import type { BunnerContainer, Context } from '@bunner/common';
+
+import { BunnerErrorFilter, BunnerMiddleware } from '@bunner/common';
 import { Logger } from '@bunner/logger';
 import { StatusCodes } from 'http-status-codes';
+
+import type { RouteHandler } from './route-handler';
+import type {
+  ClassMetadata,
+  DecoratorMetadata,
+  ErrorFilterRunResult,
+  ErrorHandlingStageParams,
+  MatchCatchArgumentParams,
+  MetadataRegistryKey,
+  MatchResult,
+  ResolveTokenOptions,
+  ShouldCatchParams,
+  SystemError,
+} from './types';
 
 import { BunnerHttpContext, BunnerHttpContextAdapter } from './adapter';
 import { BunnerRequest } from './bunner-request';
@@ -13,8 +29,8 @@ import {
   HTTP_SYSTEM_ERROR_HANDLER,
 } from './constants';
 import { HttpMethod } from './enums';
-import type { HttpWorkerResponse, RouteHandlerEntry, SystemErrorHandler } from './interfaces';
-import type { RouteHandler } from './route-handler';
+import { type HttpWorkerResponse, type RouteHandlerEntry } from './interfaces';
+import { SystemErrorHandler } from './system-error-handler';
 
 export class RequestHandler {
   private readonly logger = new Logger(RequestHandler.name);
@@ -22,12 +38,13 @@ export class RequestHandler {
   private globalBeforeResponse: BunnerMiddleware[] = [];
   private globalAfterResponse: BunnerMiddleware[] = [];
   private globalErrorFilters: BunnerErrorFilter[] = [];
+  private errorFilterEngineHealthy = true;
   private systemErrorHandler: SystemErrorHandler | undefined;
 
   constructor(
     private readonly container: BunnerContainer,
     private readonly routeHandler: RouteHandler,
-    private readonly metadataRegistry: Map<any, any>,
+    private readonly metadataRegistry: Map<MetadataRegistryKey, ClassMetadata>,
   ) {
     this.loadMiddlewares();
   }
@@ -39,16 +56,13 @@ export class RequestHandler {
     path: string,
     context?: BunnerHttpContext,
   ): Promise<HttpWorkerResponse> {
-    const ctx = context ?? new BunnerHttpContext(new BunnerHttpContextAdapter(req, res));
-    let matchResult: any = undefined;
+    const ctx: Context = context ?? new BunnerHttpContext(new BunnerHttpContextAdapter(req, res));
+    let matchResult: MatchResult | undefined = undefined;
     let systemErrorHandlerCalled = false;
     let errorFiltersCalled = false;
-    let processingError: unknown = undefined;
-    const applyDefaultErrorHandler = (params: {
-      readonly error: unknown;
-      readonly stage: string;
-      readonly allowBody: boolean;
-    }): void => {
+    let processingError: SystemError | undefined = undefined;
+
+    const applyDefaultErrorHandler = (params: ErrorHandlingStageParams): void => {
       const { error, stage, allowBody } = params;
       const statusWasUnset = res.getStatus() === 0;
 
@@ -71,14 +85,11 @@ export class RequestHandler {
         });
       }
     };
-    const tryRunSystemErrorHandler = async (params: {
-      readonly error: unknown;
-      readonly stage: string;
-      readonly allowBody: boolean;
-    }): Promise<void> => {
+
+    const tryRunSystemErrorHandler = async (params: ErrorHandlingStageParams): Promise<void> => {
       const { error, stage, allowBody } = params;
 
-      if (!this.systemErrorHandler) {
+      if (this.systemErrorHandler === undefined) {
         return;
       }
 
@@ -90,10 +101,12 @@ export class RequestHandler {
 
       try {
         await this.systemErrorHandler.handle(error, ctx);
-      } catch (handlerError) {
+      } catch {
+        const handlerError = new Error('SystemErrorHandler failed');
+
         this.logger.error('SystemErrorHandler failed', {
           stage,
-          handlerToken: (this.systemErrorHandler as any)?.constructor?.name,
+          handlerToken: this.systemErrorHandler.constructor?.name,
           originalError: error,
           handlerError,
         });
@@ -110,11 +123,10 @@ export class RequestHandler {
         // 2. Routing
         matchResult = this.routeHandler.match(method, path);
 
-        if (!matchResult) {
+        if (matchResult === undefined) {
           throw new Error(`Route not found: ${method} ${path}`);
         }
 
-        // @ts-expect-error: params is dynamically assigned from router
         req.params = matchResult.params;
 
         // 3. Scoped Middlewares (Before Handler) - Pre-calculated
@@ -141,38 +153,44 @@ export class RequestHandler {
           }
         }
       }
-    } catch (e: any) {
-      this.logger.error(`Error during processing: ${e.message}`, e.stack);
+    } catch (error) {
+      const normalizedError = this.normalizeSystemError(
+        error instanceof Error || typeof error === 'string' || typeof error === 'number' || typeof error === 'boolean'
+          ? error
+          : undefined,
+      );
+      const errorMessage = this.formatSystemError(normalizedError);
+      const errorStack = normalizedError instanceof Error ? normalizedError.stack : undefined;
 
-      processingError = e;
+      this.logger.error(`Error during processing: ${errorMessage}`, errorStack);
 
-      let currentError: unknown = e;
+      processingError = normalizedError;
+
+      let currentError: SystemError = normalizedError;
 
       if (errorFiltersCalled) {
         this.logger.error('runErrorFilters reentry blocked', {
           stage: 'runErrorFilters:reentryBlocked',
-          originalError: e,
+          originalError: normalizedError,
           currentError,
         });
       } else {
         errorFiltersCalled = true;
 
         try {
-          const result = await this.runErrorFilters({
-            error: e,
-            ctx,
-            entry: matchResult?.entry,
-          });
+          const result = await this.runErrorFilters(normalizedError, ctx, matchResult?.entry);
 
           currentError = result.currentError;
-        } catch (errorFilterEngineError) {
+        } catch {
+          const engineError = new Error('ErrorFilter engine failed');
+
           this.logger.error('ErrorFilter engine failed', {
             stage: 'runErrorFilters:failed',
-            originalError: e,
-            errorFilterEngineError,
+            originalError: normalizedError,
+            errorFilterEngineError: engineError,
           });
 
-          currentError = errorFilterEngineError;
+          currentError = engineError;
         }
       }
 
@@ -188,18 +206,22 @@ export class RequestHandler {
     // 5. Before Response
     try {
       await this.runMiddlewares(this.globalBeforeResponse, ctx);
-    } catch (e) {
-      this.logger.error('Error in beforeResponse', e);
+    } catch {
+      const normalizedError = new Error('beforeResponse failed');
 
-      await tryRunSystemErrorHandler({ error: e, stage: 'beforeResponse:error', allowBody: false });
-      applyDefaultErrorHandler({ error: e, stage: 'beforeResponse:error', allowBody: false });
+      this.logger.error('Error in beforeResponse', normalizedError);
+
+      await tryRunSystemErrorHandler({ error: normalizedError, stage: 'beforeResponse:error', allowBody: false });
+      applyDefaultErrorHandler({ error: normalizedError, stage: 'beforeResponse:error', allowBody: false });
     }
 
     // 6. After Response
     try {
       await this.runMiddlewares(this.globalAfterResponse, ctx);
-    } catch (e) {
-      this.logger.error('Error in afterResponse', e);
+    } catch {
+      const normalizedError = new Error('afterResponse failed');
+
+      this.logger.error('Error in afterResponse', normalizedError);
     }
 
     if (processingError !== undefined) {
@@ -225,15 +247,34 @@ export class RequestHandler {
     return true;
   }
 
-  private async runErrorFilters(params: {
-    readonly error: unknown;
-    readonly ctx: Context;
-    readonly entry?: RouteHandlerEntry;
-  }): Promise<{ readonly originalError: unknown; readonly currentError: unknown }> {
-    const { error, ctx, entry } = params;
+  private isSystemErrorHandlerLike(value: unknown): value is { handle: (...args: readonly unknown[]) => unknown } {
+    if (value === null || value === undefined) {
+      return false;
+    }
+
+    if (typeof value !== 'object') {
+      return false;
+    }
+
+    if (!('handle' in value)) {
+      return false;
+    }
+
+    return typeof (value as { handle?: unknown }).handle === 'function';
+  }
+
+  private async runErrorFilters(
+    error: SystemError,
+    ctx: Context,
+    entry: RouteHandlerEntry | undefined,
+  ): Promise<ErrorFilterRunResult> {
+    if (!this.errorFilterEngineHealthy) {
+      throw new Error('ErrorFilter engine failed');
+    }
+
     const filters: BunnerErrorFilter[] = [...(entry?.errorFilters ?? []), ...this.globalErrorFilters];
     const originalError = error;
-    let currentError: unknown = error;
+    let currentError: SystemError = error;
 
     for (const filter of filters) {
       if (!this.shouldCatch({ error: currentError, filter })) {
@@ -241,25 +282,25 @@ export class RequestHandler {
       }
 
       try {
-        await filter.catch(currentError as any, ctx);
-      } catch (nextError) {
-        currentError = nextError;
+        await this.invokeErrorFilter(filter, currentError, ctx);
+      } catch {
+        currentError = new Error('ErrorFilter failed');
       }
     }
 
     return { originalError, currentError };
   }
 
-  private shouldCatch(params: { readonly error: unknown; readonly filter: BunnerErrorFilter }): boolean {
+  private shouldCatch(params: ShouldCatchParams): boolean {
     const { error, filter } = params;
-    const meta = this.metadataRegistry?.get((filter as any).constructor);
-    const catchDec = (meta?.decorators || []).find((d: any) => d.name === 'Catch');
+    const meta = this.findMetadataByName(filter.constructor?.name);
+    const catchDec = (meta?.decorators ?? []).find((decorator: DecoratorMetadata) => decorator.name === 'Catch');
 
     if (!catchDec) {
       return true;
     }
 
-    const args: unknown[] = catchDec.arguments || [];
+    const args = Array.from(catchDec.arguments ?? []);
 
     if (args.length === 0) {
       return true;
@@ -274,8 +315,9 @@ export class RequestHandler {
     return false;
   }
 
-  private matchesCatchArgument(params: { readonly error: unknown; readonly arg: unknown }): boolean {
+  private matchesCatchArgument(params: MatchCatchArgumentParams): boolean {
     const { error, arg } = params;
+    const errorCause = error instanceof Error ? error.cause : undefined;
 
     if (arg === String) {
       if (typeof error === 'string') {
@@ -283,6 +325,14 @@ export class RequestHandler {
       }
 
       if (error instanceof String) {
+        return true;
+      }
+
+      if (typeof errorCause === 'string') {
+        return true;
+      }
+
+      if (errorCause instanceof String) {
         return true;
       }
 
@@ -298,6 +348,14 @@ export class RequestHandler {
         return true;
       }
 
+      if (typeof errorCause === 'number') {
+        return true;
+      }
+
+      if (errorCause instanceof Number) {
+        return true;
+      }
+
       return false;
     }
 
@@ -310,16 +368,36 @@ export class RequestHandler {
         return true;
       }
 
+      if (typeof errorCause === 'boolean') {
+        return true;
+      }
+
+      if (errorCause instanceof Boolean) {
+        return true;
+      }
+
       return false;
     }
 
     if (typeof arg === 'string') {
-      return error === arg;
+      if (error === arg) {
+        return true;
+      }
+
+      if (typeof errorCause === 'string') {
+        return errorCause === arg;
+      }
+
+      if (errorCause instanceof String) {
+        return errorCause.valueOf() === arg;
+      }
+
+      return false;
     }
 
     if (typeof arg === 'function') {
       try {
-        return error instanceof (arg as any);
+        return error instanceof arg;
       } catch {
         return false;
       }
@@ -328,30 +406,61 @@ export class RequestHandler {
     return false;
   }
 
-  private loadMiddlewares() {
-    this.globalBeforeRequest = this.resolveTokens<BunnerMiddleware>(HTTP_BEFORE_REQUEST);
-    this.globalBeforeResponse = this.resolveTokens<BunnerMiddleware>(HTTP_BEFORE_RESPONSE);
-    this.globalAfterResponse = this.resolveTokens<BunnerMiddleware>(HTTP_AFTER_RESPONSE);
-    this.globalErrorFilters = this.resolveTokens<BunnerErrorFilter>(HTTP_ERROR_FILTER, { strict: true });
-    this.systemErrorHandler = this.resolveTokens<SystemErrorHandler>(HTTP_SYSTEM_ERROR_HANDLER, { strict: true })[0];
+  private normalizeSystemError(error: SystemError | null | undefined): SystemError {
+    if (error === null || error === undefined) {
+      return new Error('Processing failed');
+    }
+
+    if (error instanceof Error) {
+      return error;
+    }
+
+    if (typeof error === 'string' || typeof error === 'number' || typeof error === 'boolean') {
+      return error;
+    }
+
+    return new Error('Processing failed');
   }
 
-  private resolveTokens<T>(token: string, options?: { readonly strict?: boolean }): T[] {
+  private loadMiddlewares() {
+    this.globalBeforeRequest = this.resolveMiddlewares(HTTP_BEFORE_REQUEST);
+    this.globalBeforeResponse = this.resolveMiddlewares(HTTP_BEFORE_RESPONSE);
+    this.globalAfterResponse = this.resolveMiddlewares(HTTP_AFTER_RESPONSE);
+
+    try {
+      this.globalErrorFilters = this.resolveErrorFilters(HTTP_ERROR_FILTER, { strict: true });
+    } catch {
+      this.errorFilterEngineHealthy = false;
+      this.globalErrorFilters = [];
+    }
+
+    this.systemErrorHandler = this.resolveSystemErrorHandlers(HTTP_SYSTEM_ERROR_HANDLER, { strict: true })[0];
+  }
+
+  private resolveMiddlewares(token: string, options?: ResolveTokenOptions): BunnerMiddleware[] {
+    return this.resolveTokenValues(token, options, value => this.isMiddleware(value));
+  }
+
+  private resolveErrorFilters(token: string, options?: ResolveTokenOptions): BunnerErrorFilter[] {
+    return this.resolveTokenValues(token, options, value => this.isErrorFilter(value));
+  }
+
+  private resolveSystemErrorHandlers(token: string, options?: ResolveTokenOptions): SystemErrorHandler[] {
+    return this.resolveTokenValues(token, options, value => this.isSystemErrorHandler(value));
+  }
+
+  private resolveTokenValues<T extends BunnerMiddleware | BunnerErrorFilter | SystemErrorHandler>(
+    token: string,
+    options: ResolveTokenOptions | undefined,
+    predicate: (value: BunnerMiddleware | BunnerErrorFilter | SystemErrorHandler) => value is T,
+  ): T[] {
     const results: T[] = [];
     const strict = options?.strict === true;
 
     // 1. Direct match (Global/Legacy)
     if (this.container.has(token)) {
       try {
-        const result = this.container.get(token);
-
-        if (result) {
-          if (Array.isArray(result)) {
-            results.push(...result);
-          } else {
-            results.push(result);
-          }
-        }
+        this.collectValues(results, this.container.get(token), predicate, { strict, token });
       } catch (e) {
         if (strict) {
           throw e;
@@ -363,15 +472,7 @@ export class RequestHandler {
     for (const key of this.container.keys()) {
       if (typeof key === 'string' && key.endsWith(`::${token}`)) {
         try {
-          const result = this.container.get(key);
-
-          if (result) {
-            if (Array.isArray(result)) {
-              results.push(...result);
-            } else {
-              results.push(result);
-            }
-          }
+          this.collectValues(results, this.container.get(key), predicate, { strict, token: key });
         } catch (e) {
           if (strict) {
             throw e;
@@ -381,5 +482,111 @@ export class RequestHandler {
     }
 
     return results;
+  }
+
+  private collectValues<T extends BunnerMiddleware | BunnerErrorFilter | SystemErrorHandler>(
+    results: T[],
+    value: ReturnType<BunnerContainer['get']>,
+    predicate: (value: BunnerMiddleware | BunnerErrorFilter | SystemErrorHandler) => value is T,
+    options: { readonly strict: boolean; readonly token: string },
+  ): void {
+    if (this.isValueArray(value)) {
+      for (const entry of value) {
+        if (!this.isTokenValue(entry)) {
+          if (options.strict) {
+            throw new Error(`Invalid provider value for token: ${options.token}`);
+          }
+
+          continue;
+        }
+
+        if (predicate(entry)) {
+          results.push(entry);
+        }
+      }
+
+      return;
+    }
+
+    if (!this.isTokenValue(value)) {
+      if (options.strict) {
+        throw new Error(`Invalid provider value for token: ${options.token}`);
+      }
+
+      return;
+    }
+
+    if (predicate(value)) {
+      results.push(value);
+    }
+  }
+
+  private isTokenValue(
+    value: ReturnType<BunnerContainer['get']>,
+  ): value is BunnerMiddleware | BunnerErrorFilter | SystemErrorHandler {
+    if (value instanceof BunnerMiddleware || value instanceof BunnerErrorFilter || value instanceof SystemErrorHandler) {
+      return true;
+    }
+
+    return this.isSystemErrorHandlerLike(value);
+  }
+
+  private isMiddleware(value: BunnerMiddleware | BunnerErrorFilter | SystemErrorHandler): value is BunnerMiddleware {
+    return value instanceof BunnerMiddleware;
+  }
+
+  private isErrorFilter(value: BunnerMiddleware | BunnerErrorFilter | SystemErrorHandler): value is BunnerErrorFilter {
+    return value instanceof BunnerErrorFilter;
+  }
+
+  private isSystemErrorHandler(value: BunnerMiddleware | BunnerErrorFilter | SystemErrorHandler): value is SystemErrorHandler {
+    if (value instanceof SystemErrorHandler) {
+      return true;
+    }
+
+    return this.isSystemErrorHandlerLike(value);
+  }
+
+  private isValueArray(value: ReturnType<BunnerContainer['get']>): value is ReadonlyArray<ReturnType<BunnerContainer['get']>> {
+    return Array.isArray(value);
+  }
+
+  private formatSystemError(error: SystemError): string {
+    if (typeof error === 'string') {
+      return error;
+    }
+
+    if (typeof error === 'number' || typeof error === 'boolean') {
+      return String(error);
+    }
+
+    if (error instanceof Error) {
+      return error.message;
+    }
+
+    const errorName = typeof error.name === 'string' ? error.name : 'UnknownError';
+    const errorMessage = typeof error.message === 'string' ? error.message : 'Processing failed';
+
+    return `${errorName}: ${errorMessage}`;
+  }
+
+  private findMetadataByName(name: string | undefined): ClassMetadata | undefined {
+    if (typeof name !== 'string' || name.length === 0) {
+      return undefined;
+    }
+
+    for (const meta of this.metadataRegistry.values()) {
+      if (meta.className === name) {
+        return meta;
+      }
+    }
+
+    return undefined;
+  }
+
+  private async invokeErrorFilter(filter: BunnerErrorFilter, error: SystemError, ctx: Context): Promise<void> {
+    const catchHandler = filter.catch.bind(filter);
+
+    await catchHandler(error, ctx);
   }
 }

@@ -142,7 +142,7 @@ const noUnmodifiedLoopConditionRule = {
 
         if (callee?.type === 'MemberExpression' && callee.computed !== true) {
           const receiverName = getRootIdentifierName(callee.object);
-          const methodName = callee.property?.type === 'Identifier' ? callee.property.name ?? null : null;
+          const methodName = callee.property?.type === 'Identifier' ? (callee.property.name ?? null) : null;
 
           if (receiverName !== null && methodName !== null && mutatingMethodNames.has(methodName)) {
             out.add(receiverName);

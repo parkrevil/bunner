@@ -1,12 +1,13 @@
 import { getRuntimeContext } from '@bunner/core';
 
+import type { Doc } from './interfaces';
+import type { ScalarMetadataRegistry } from './types';
+
 import { isMap, isRecord } from '../common';
 import { OpenApiFactory } from '../spec-factory';
 
-import type { Doc } from './interfaces';
-
-export function buildDocsForHttpAdapters(httpAdapterNames: string[], registry?: Map<any, any>): Doc[] {
-  const registryValue = registry ?? getRuntimeContext().metadataRegistry;
+export function buildDocsForHttpAdapters(httpAdapterNames: string[], registry?: ScalarMetadataRegistry): Doc[] {
+  const registryValue = registry ?? (getRuntimeContext().metadataRegistry as ScalarMetadataRegistry | undefined);
 
   if (!registryValue) {
     throw new Error('Scalar: No Metadata Registry found. Ensure app.init() completes before Scalar binding.');

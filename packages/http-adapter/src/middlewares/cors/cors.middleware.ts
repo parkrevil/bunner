@@ -1,11 +1,11 @@
 import { BunnerMiddleware, type Context } from '@bunner/common';
 
-import { BunnerHttpContext } from '../../adapter';
-import { HeaderField, HttpMethod } from '../../enums';
-
-import { CORS_DEFAULT_METHODS, CORS_DEFAULT_OPTIONS_SUCCESS_STATUS } from './constants';
 import type { CorsOptions } from './interfaces';
 import type { CustomOriginFn } from './types';
+
+import { BunnerHttpContext } from '../../adapter';
+import { HeaderField, HttpMethod } from '../../enums';
+import { CORS_DEFAULT_METHODS, CORS_DEFAULT_OPTIONS_SUCCESS_STATUS } from './constants';
 
 export class CorsMiddleware extends BunnerMiddleware<CorsOptions> {
   constructor(private readonly options: CorsOptions = {}) {
@@ -19,13 +19,13 @@ export class CorsMiddleware extends BunnerMiddleware<CorsOptions> {
     const origin = req.headers.get(HeaderField.Origin);
     const method = req.method;
     // Set defaults
-    const allowedMethods = this.options.methods || CORS_DEFAULT_METHODS;
+    const allowedMethods = this.options.methods ?? CORS_DEFAULT_METHODS;
     const allowedHeaders = this.options.allowedHeaders;
     const exposedHeaders = this.options.exposedHeaders;
     const allowCredentials = this.options.credentials;
     const maxAge = this.options.maxAge;
-    const preflightContinue = this.options.preflightContinue || false;
-    const optionsSuccessStatus = this.options.optionsSuccessStatus || CORS_DEFAULT_OPTIONS_SUCCESS_STATUS;
+    const preflightContinue = this.options.preflightContinue ?? false;
+    const optionsSuccessStatus = this.options.optionsSuccessStatus ?? CORS_DEFAULT_OPTIONS_SUCCESS_STATUS;
 
     // Handle Origin
     if (!origin) {
@@ -52,7 +52,7 @@ export class CorsMiddleware extends BunnerMiddleware<CorsOptions> {
     }
 
     // Exposed Headers (Actual Request)
-    if (exposedHeaders && exposedHeaders.length > 0) {
+    if (exposedHeaders?.length > 0) {
       res.setHeader(
         HeaderField.AccessControlExposeHeaders,
         Array.isArray(exposedHeaders) ? exposedHeaders.join(',') : exposedHeaders,

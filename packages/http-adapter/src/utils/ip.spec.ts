@@ -1,8 +1,8 @@
 import type { Server } from 'bun';
+
 import { describe, it, expect } from 'bun:test';
 
 import { HeaderField } from '../enums';
-
 import { getIps, __internals } from './ip';
 
 function buildRequest(headers: Record<string, string | undefined>): Request {
@@ -185,7 +185,7 @@ describe('sanitizeIpCandidate', () => {
 describe('stripOptionalQuotes', () => {
   it('removes matching quotes and unescapes characters', () => {
     expect(__internals.stripOptionalQuotes('"value"')).toBe('value');
-    expect(__internals.stripOptionalQuotes('\'va\\\'lue\'')).toBe('va\'lue');
+    expect(__internals.stripOptionalQuotes("'va\\'lue'")).toBe("va'lue");
     expect(__internals.stripOptionalQuotes('value')).toBe('value');
   });
 });

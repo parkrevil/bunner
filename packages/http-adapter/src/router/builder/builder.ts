@@ -1,16 +1,16 @@
 import { Logger } from '@bunner/logger';
 
 import type { HttpMethod } from '../../types';
-import { NodeKind, METHOD_OFFSET } from '../schema';
 import type { BinaryRouterLayout } from '../schema';
+import type { BuilderConfig } from './types';
 
+import { NodeKind, METHOD_OFFSET } from '../schema';
 import { Flattener } from './flattener';
 import { Node } from './node';
 import { matchStaticParts, splitStaticChain, sortParamChildren } from './node-operations';
 import { acquireNode } from './node-pool';
 import { PatternUtils } from './pattern-utils';
 import { assessRegexSafety } from './regex-safety';
-import type { BuilderConfig } from './types';
 
 export class Builder<T> {
   public root: Node;
@@ -79,6 +79,7 @@ export class Builder<T> {
 
     if (node.methods.byMethod.has(method)) {
       const methodName = method;
+
       throw new Error(`Route already exists for ${methodName} at path: /${segments.join('/')}`);
     }
 
@@ -105,7 +106,7 @@ export class Builder<T> {
     }
 
     if (index !== segments.length - 1) {
-      throw new Error('Wildcard \'*\' must be the last segment');
+      throw new Error("Wildcard '*' must be the last segment");
     }
 
     const name = segment.length > 1 ? segment.slice(1) : '*';
@@ -183,14 +184,14 @@ export class Builder<T> {
       name = core.slice(1, braceIndex);
 
       if (!core.endsWith('}')) {
-        throw new Error('Parameter regex must close with \'}\'');
+        throw new Error("Parameter regex must close with '}'");
       }
 
       patternSrc = core.slice(braceIndex + 1, -1) || undefined;
     }
 
     if (!name) {
-      throw new Error('Parameter segment must have a name, eg \':id\'');
+      throw new Error("Parameter segment must have a name, eg ':id'");
     }
 
     // Validation
@@ -277,6 +278,7 @@ export class Builder<T> {
   ): void {
     if (index !== segments.length - 1) {
       const label = type === 'zero' ? ':name*' : ':name+';
+
       throw new Error(`${type === 'zero' ? 'Zero-or-more' : 'Multi-segment'} param '${label}' must be the last segment`);
     }
 
@@ -288,6 +290,7 @@ export class Builder<T> {
     } else if (node.wildcardChild.wildcardOrigin !== type || node.wildcardChild.segment !== name) {
       const label = type === 'zero' ? `:${name}*` : `:${name}+`;
       const prefix = type === 'zero' ? 'zero-or-more parameter' : 'multi-parameter';
+
       throw new Error(
         `Conflict: ${prefix} '${label}' cannot reuse wildcard '${node.wildcardChild.segment}' at '${this.getPathString(segments, index)}'`,
       );
@@ -346,7 +349,7 @@ export class Builder<T> {
 
     // Note: Logic for 'segmentParts' (chain optimization) might belong here if we implement it fully.
     // For now, consistent with previous logic:
-    if (parts && parts.length > 1) {
+    if (parts?.length > 1) {
       const matched = matchStaticParts(parts, segments, index);
 
       if (matched < parts.length) {

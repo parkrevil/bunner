@@ -16,6 +16,7 @@ export function resolveDotSegments(ctx: ProcessorContext): void {
       if (stack.length > 0) {
         stack.pop();
       }
+
       continue;
     }
 

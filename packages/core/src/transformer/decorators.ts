@@ -1,7 +1,18 @@
+import type { TransformFunction } from './interfaces';
+import type { TransformerDecoratorTarget } from './types';
+
 export function Hidden() {
-  return function (_target: object, _propertyKey: string | symbol) {};
+  return function (target: TransformerDecoratorTarget, propertyKey: string | symbol) {
+    void target;
+    void propertyKey;
+  };
 }
 
-export function Transform(_transformFn: (params: { value: any; key: string; obj: any; type: any }) => any) {
-  return function (_target: object, _propertyKey: string | symbol) {};
+export function Transform(transformFn: TransformFunction) {
+  void transformFn;
+
+  return function (target: TransformerDecoratorTarget, propertyKey: string | symbol) {
+    void target;
+    void propertyKey;
+  };
 }

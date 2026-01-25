@@ -1,9 +1,9 @@
+import { Glob } from 'bun';
 import { resolve, join } from 'path';
 
-import { Glob } from 'bun';
+import type { FileAnalysis } from '../src/analyzer/graph/interfaces';
 
 import { AstParser } from '../src/analyzer/ast-parser';
-import type { FileAnalysis } from '../src/analyzer/graph/interfaces';
 import { ModuleGraph } from '../src/analyzer/graph/module-graph';
 import { ImportRegistry } from '../src/generator/import-registry';
 import { InjectorGenerator } from '../src/generator/injector';
@@ -54,7 +54,7 @@ async function run() {
         console.log('  Has dynamic bundles!');
       }
 
-      if (node.moduleDefinition && node.moduleDefinition.adapters) {
+      if (node.moduleDefinition?.adapters) {
         console.log('  Has Adapters:', JSON.stringify(node.moduleDefinition.adapters, null, 2));
       }
     });

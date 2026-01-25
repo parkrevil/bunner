@@ -1,6 +1,7 @@
 import type { OpenApiDocument } from './interfaces';
+import type { OpenApiConfig } from './types';
 
-export function createBaseDocument(config: { title: string; version: string }): OpenApiDocument {
+export function createBaseDocument(config: OpenApiConfig): OpenApiDocument {
   return {
     openapi: '3.0.0',
     info: {

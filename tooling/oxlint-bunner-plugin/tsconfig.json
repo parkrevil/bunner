@@ -10,5 +10,10 @@
     "sourceMap": false,
     "allowImportingTsExtensions": false
   },
-  "include": ["index.ts", "src/**/*.ts", "test/integration/autofix-invariants.fuzz.spec.ts", "test/integration/autofix-invariants.parser.fuzz.spec.ts"]
+  "include": [
+    "index.ts",
+    "src/**/*.ts",
+    "test/integration/autofix-invariants.fuzz.spec.ts",
+    "test/integration/autofix-invariants.parser.fuzz.spec.ts"
+  ]
 }

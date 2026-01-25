@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 
-import { noUnknownRule } from './no-unknown';
-import { createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
 import type { AstNode } from '../types';
+
+import { createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
+import { noUnknownRule } from './no-unknown';
 
 describe('no-unknown', () => {
   it('should report unknown type when TSUnknownKeyword is encountered', () => {

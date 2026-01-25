@@ -2,10 +2,10 @@ import { BunnerContextError } from '@bunner/common';
 
 import type { BunnerRequest } from '../bunner-request';
 import type { BunnerResponse } from '../bunner-response';
-import { HTTP_CONTEXT_TYPE } from '../constants';
-
 import type { HttpAdapter } from './http-adapter';
 import type { HttpContext } from './interfaces';
+
+import { HTTP_CONTEXT_TYPE } from '../constants';
 
 export class BunnerHttpContext implements HttpContext {
   constructor(private adapter: HttpAdapter) {}

@@ -1,7 +1,7 @@
-import { NodeKind } from '../schema';
-
-import { StaticChildMap } from './static-child-map';
 import type { RouteMethods } from './types';
+
+import { NodeKind } from '../schema';
+import { StaticChildMap } from './static-child-map';
 
 export class Node {
   kind: NodeKind;

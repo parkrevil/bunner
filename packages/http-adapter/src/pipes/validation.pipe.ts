@@ -2,9 +2,10 @@ import { ValidatorCompiler, TransformerCompiler } from '@bunner/core';
 import { StatusCodes } from 'http-status-codes';
 
 import type { ArgumentMetadata, PipeTransform } from '../interfaces';
+import type { RouteParamValue } from '../types';
 
 export class ValidationPipe implements PipeTransform {
-  transform(value: any, metadata: ArgumentMetadata) {
+  transform(value: RouteParamValue, metadata: ArgumentMetadata): RouteParamValue {
     if (!metadata.metatype || !this.toValidate(metadata.metatype)) {
       return value;
     }
@@ -15,10 +16,13 @@ export class ValidationPipe implements PipeTransform {
     const errors = validateFn(object);
 
     if (errors.length > 0) {
-      const error: any = new Error('Validation failed');
+      const error = new Error('Validation failed');
 
-      error.status = StatusCodes.BAD_REQUEST;
-      error.details = errors;
+      Object.assign(error, {
+        status: StatusCodes.BAD_REQUEST,
+        details: errors,
+      });
+
       throw error;
     }
 

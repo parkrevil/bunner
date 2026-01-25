@@ -1,0 +1,22 @@
+{
+  "name": "@bunner/firebat",
+  "bin": {
+    "firebat": "./dist/firebat.js"
+  },
+  "type": "module",
+  "module": "index.ts",
+  "scripts": {
+    "build": "bun run scripts/build.ts",
+    "lint": "oxlint --config ../../.oxlintrc.jsonc --type-aware --type-check --fix .",
+    "tsc": "tsc --noEmit"
+  },
+  "dependencies": {
+    "oxc-parser": "^0.110.0",
+    "roaring": "^2.7.0",
+    "xxhash-wasm": "^1.1.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5"
+  }
+}

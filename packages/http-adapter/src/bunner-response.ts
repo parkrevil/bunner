@@ -2,8 +2,9 @@ import { CookieMap, type CookieInit } from 'bun';
 import { StatusCodes, getReasonPhrase } from 'http-status-codes';
 
 import type { BunnerRequest } from './bunner-request';
-import { ContentType, HeaderField, HttpMethod } from './enums';
 import type { HttpWorkerResponse } from './interfaces';
+
+import { ContentType, HeaderField, HttpMethod } from './enums';
 
 export class BunnerResponse {
   private readonly req: BunnerRequest;
@@ -125,7 +126,7 @@ export class BunnerResponse {
     return this._workerResponse;
   }
 
-  build(): BunnerResponse {
+  build(): this {
     if (this.isSent()) {
       return this;
     }
@@ -156,7 +157,7 @@ export class BunnerResponse {
       return this.setBody(undefined).buildWorkerResponse();
     }
 
-    if (!this._status && (this._body === null || this._body === undefined)) {
+    if (!this._status && this._body === undefined) {
       return this.setStatus(StatusCodes.NO_CONTENT).setBody(undefined).buildWorkerResponse();
     }
 
@@ -171,7 +172,7 @@ export class BunnerResponse {
     return this.buildWorkerResponse();
   }
 
-  private buildWorkerResponse(): BunnerResponse {
+  private buildWorkerResponse(): this {
     if (this._cookies.size > 0) {
       this.setHeader(HeaderField.SetCookie, this._cookies.toSetCookieHeaders().join(', '));
     }

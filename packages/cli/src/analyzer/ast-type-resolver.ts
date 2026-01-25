@@ -22,9 +22,9 @@ export class AstTypeResolver {
     }
 
     if (node.type === 'TSTypeReference') {
-      const typeName = this.extractEntityName(node['typeName']);
+      const typeName = this.extractEntityName(node.typeName);
       const typeArgs: string[] = [];
-      const typeArguments = this.asNode(node['typeArguments']);
+      const typeArguments = this.asNode(node.typeArguments);
       const params = typeArguments ? this.getArray(typeArguments, 'params') : [];
 
       for (const param of params) {
@@ -37,7 +37,7 @@ export class AstTypeResolver {
     }
 
     if (node.type === 'TSArrayType') {
-      const elementType = this.resolve(node['elementType']);
+      const elementType = this.resolve(node.elementType);
 
       return {
         typeName: 'Array',
@@ -68,8 +68,8 @@ export class AstTypeResolver {
     }
 
     if (node.type === 'TSLiteralType') {
-      const literal = this.getRecord(node['literal']);
-      const value = literal ? literal['value'] : undefined;
+      const literal = this.getRecord(node.literal);
+      const value = literal ? literal.value : undefined;
 
       if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') {
         return { typeName: 'any' };
@@ -84,13 +84,13 @@ export class AstTypeResolver {
     if (node.type === 'TSUnionType') {
       const typeNodes = this.getArray(node, 'types');
       const types = typeNodes.map(t => this.resolve(t));
-      const allLiterals = types.length > 0 && types.every(t => t.literals && t.literals.length > 0);
+      const allLiterals = types.length > 0 && types.every(t => t.literals?.length > 0);
 
       if (allLiterals) {
         return {
           typeName: types[0]!.typeName,
           isUnion: true,
-          literals: types.flatMap((t: TypeInfo) => t.literals || []),
+          literals: types.flatMap((t: TypeInfo) => t.literals ?? []),
         };
       }
 
@@ -114,12 +114,12 @@ export class AstTypeResolver {
     }
 
     if (node.type === 'Identifier') {
-      return this.getString(node, 'name') || 'unknown';
+      return this.getString(node, 'name') ?? 'unknown';
     }
 
     if (node.type === 'TSQualifiedName') {
-      const left = this.extractEntityName(node['left']);
-      const rightNode = this.asNode(node['right']);
+      const left = this.extractEntityName(node.left);
+      const rightNode = this.asNode(node.right);
       const right = rightNode ? this.getString(rightNode, 'name') : null;
 
       if (!right) {

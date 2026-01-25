@@ -1,7 +1,9 @@
 import type { AdapterCollection } from '@bunner/common';
+
 import { describe, expect, it } from 'bun:test';
 
 import type { ScalarSetupOptions } from './interfaces';
+
 import { setupScalar } from './setup';
 
 const BUNNER_HTTP_INTERNAL = Symbol.for('bunner:http:internal');
@@ -43,55 +45,57 @@ describe('setupScalar', () => {
   it('should throw when options are missing', () => {
     const adapters = { http: new Map() } as unknown as AdapterCollection;
 
-    expect(() => setupScalar(adapters, undefined as unknown as ScalarSetupOptions)).toThrow(/documentTargets/i);
+    expect(() => {
+      setupScalar(adapters, undefined as unknown as ScalarSetupOptions);
+    }).toThrow(/documentTargets/i);
   });
 
   it('should throw when documentTargets is neither "all" nor an array', () => {
     const adapters = { http: new Map() } as unknown as AdapterCollection;
 
-    expect(() =>
+    expect(() => {
       setupScalar(adapters, {
         documentTargets: 'invalid',
         httpTargets: [],
         metadataRegistry: new Map(),
-      } as unknown as ScalarSetupOptions),
-    ).toThrow(/documentTargets must be/i);
+      } as unknown as ScalarSetupOptions);
+    }).toThrow(/documentTargets must be/i);
   });
 
   it('should throw when httpTargets is undefined', () => {
     const adapters = { http: new Map() } as unknown as AdapterCollection;
 
-    expect(() =>
+    expect(() => {
       setupScalar(adapters, {
         documentTargets: 'all',
         httpTargets: undefined,
         metadataRegistry: new Map(),
-      } as unknown as ScalarSetupOptions),
-    ).toThrow(/httpTargets must be/i);
+      } as unknown as ScalarSetupOptions);
+    }).toThrow(/options \{ documentTargets, httpTargets \} is required/i);
   });
 
   it('should throw when httpTargets is neither "all" nor an array', () => {
     const adapters = { http: new Map() } as unknown as AdapterCollection;
 
-    expect(() =>
+    expect(() => {
       setupScalar(adapters, {
         documentTargets: 'all',
         httpTargets: 'invalid',
         metadataRegistry: new Map(),
-      } as unknown as ScalarSetupOptions),
-    ).toThrow(/httpTargets must be/i);
+      } as unknown as ScalarSetupOptions);
+    }).toThrow(/httpTargets must be/i);
   });
 
   it('should throw when no HTTP adapter is selected for hosting', () => {
     const adapters = { http: new Map() } as unknown as AdapterCollection;
 
-    expect(() =>
+    expect(() => {
       setupScalar(adapters, {
         documentTargets: 'all',
         httpTargets: [],
         metadataRegistry: new Map(),
-      }),
-    ).toThrow(/no HTTP adapter selected/i);
+      });
+    }).toThrow(/no HTTP adapter selected/i);
   });
 
   it('should throw when the http adapter group does not support lookup', () => {
@@ -102,13 +106,13 @@ describe('setupScalar', () => {
     };
     const adapters = { http: httpGroup } as unknown as AdapterCollection;
 
-    expect(() =>
+    expect(() => {
       setupScalar(adapters, {
         documentTargets: 'all',
         httpTargets: ['http-server'],
         metadataRegistry: new Map(),
-      }),
-    ).toThrow(/does not support lookup/i);
+      });
+    }).toThrow(/does not support lookup/i);
   });
 
   it('should throw when selected httpTargets do not exist', () => {
@@ -116,13 +120,13 @@ describe('setupScalar', () => {
     const http = new Map<string, unknown>([['http-server', adapter]]);
     const adapters = { http } as unknown as AdapterCollection;
 
-    expect(() =>
+    expect(() => {
       setupScalar(adapters, {
         documentTargets: 'all',
         httpTargets: ['missing'],
         metadataRegistry: new Map(),
-      }),
-    ).toThrow(/httpTargets not found/i);
+      });
+    }).toThrow(/httpTargets not found/i);
   });
 
   it('should register exactly the two internal routes when an adapter supports internal binding', () => {

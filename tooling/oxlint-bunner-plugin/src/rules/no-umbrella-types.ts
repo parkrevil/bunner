@@ -53,7 +53,7 @@ const noUmbrellaTypesRule = {
     const forbiddenAliases = new Set(options.forbiddenAliases ?? DEFAULT_FORBIDDEN_ALIASES);
     const forbiddenGlobals = new Set(options.forbiddenGlobals ?? DEFAULT_FORBIDDEN_GLOBALS);
 
-    const getIdentifierName = (node: NodeOrNull): string | null => (node?.type === 'Identifier' ? node.name ?? null : null);
+    const getIdentifierName = (node: NodeOrNull): string | null => (node?.type === 'Identifier' ? (node.name ?? null) : null);
 
     const reportIdentifier = (node: AstNode, messageId: string): void => {
       context.report({

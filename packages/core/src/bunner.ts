@@ -60,7 +60,9 @@ export class Bunner {
           Bunner.logger.error('app stop failed', e);
         }
       }),
-    ).catch(e => Bunner.logger.error('Shutdown Error', e));
+    ).catch(e => {
+      Bunner.logger.error('Shutdown Error', e);
+    });
   }
 
   private static generateApplicationDefaultName() {
@@ -89,7 +91,11 @@ export class Bunner {
         Bunner.logger.info('🛑 Shutting down...');
         await Promise.race([
           this.shutdown(),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('shutdown timeout')), 10000)),
+          new Promise((_, reject) =>
+            setTimeout(() => {
+              reject(new Error('shutdown timeout'));
+            }, 10000),
+          ),
         ]);
       } catch (e) {
         Bunner.logger.error(`graceful shutdown failed on ${signal}`, e);

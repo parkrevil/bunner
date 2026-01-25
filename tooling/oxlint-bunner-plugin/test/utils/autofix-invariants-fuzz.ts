@@ -1,10 +1,11 @@
+import type { AstNode, Variable } from '../../src/types';
+
 import { blankLinesBetweenStatementGroupsRule } from '../../src/rules/blank-lines-between-statement-groups';
 import { noBracketNotationRule } from '../../src/rules/no-bracket-notation';
 import { paddingLineBetweenStatementsRule } from '../../src/rules/padding-line-between-statements';
 import { unusedImportsRule } from '../../src/rules/unused-imports';
 import { applyFixes, createRuleContext, createSourceCode } from './rule-test-kit';
 import { buildCommaTokens } from './token-utils';
-import type { AstNode, Variable } from '../../src/types';
 
 interface Rng {
   nextU32(): number;

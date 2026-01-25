@@ -27,6 +27,7 @@ const scopeNoMulti: Rule = (parsed, when) => {
 
   return [true];
 };
+
 const commitlintPlugin = {
   rules: {
     'scope-no-multi': scopeNoMulti,

@@ -43,6 +43,7 @@ export class ModuleDiscovery {
           this.moduleMap.get(modPath)?.add(file);
 
           assigned = true;
+
           break;
         }
       }

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 
-import { noDoubleAssertionRule } from './no-double-assertion';
-import { createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
 import type { AstNode } from '../types';
+
+import { createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
+import { noDoubleAssertionRule } from './no-double-assertion';
 
 describe('no-double-assertion', () => {
   it('should report double assertions when inner is any or unknown', () => {

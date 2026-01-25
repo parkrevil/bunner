@@ -11,6 +11,7 @@ import type {
   AdapterConfig,
   AdapterInstanceConfig,
 } from '@bunner/common';
+
 import { Logger } from '@bunner/logger';
 
 import { Container } from '../injector/container';
@@ -36,8 +37,8 @@ export class BunnerApplication {
   }
 
   public addAdapter(adapter: BunnerAdapter, options: { name?: string; protocol?: string } = {}): this {
-    const protocol = options.protocol || 'http';
-    const name = options.name || `adapter_${Math.random().toString(36).substr(2, 9)}`;
+    const protocol = options.protocol ?? 'http';
+    const name = options.name ?? `adapter_${Math.random().toString(36).substr(2, 9)}`;
 
     if (!this.adapters.has(protocol)) {
       this.adapters.set(protocol, new Map());
@@ -112,7 +113,7 @@ export class BunnerApplication {
     } as any;
     const allAdapters = this.getAllAdapters();
 
-    await Promise.all(allAdapters.map(adapter => adapter.start(context)));
+    await Promise.all(allAdapters.map(async adapter => adapter.start(context)));
     // Lifecycle: Post-Start
     await this.callLifecycleHook('onStart');
   }
@@ -123,7 +124,7 @@ export class BunnerApplication {
 
     const allAdapters = this.getAllAdapters();
 
-    await Promise.all(allAdapters.map(adapter => adapter.stop()));
+    await Promise.all(allAdapters.map(async adapter => adapter.stop()));
     // Lifecycle: Destruction
     await this.callLifecycleHook('onDestroy');
   }
@@ -153,8 +154,8 @@ export class BunnerApplication {
       return;
     }
 
-    const wildcard = protocolConfig['*'] as AdapterInstanceConfig | undefined;
-    const specific = protocolConfig[instanceName] as AdapterInstanceConfig | undefined;
+    const wildcard = protocolConfig['*'];
+    const specific = protocolConfig[instanceName];
     const middlewares = this.mergeMiddlewares(wildcard?.middlewares, specific?.middlewares);
     const errorFilters = [...(wildcard?.errorFilters ?? []), ...(specific?.errorFilters ?? [])];
     const adapterAny = adapter as any;
@@ -216,7 +217,9 @@ export class BunnerApplication {
       collection[protocol] = {
         get: (name: string) => groupApi.get(name),
         all: () => Array.from(groupApi.values()),
-        forEach: cb => groupApi.forEach(cb),
+        forEach: cb => {
+          groupApi.forEach(cb);
+        },
       };
     });
 

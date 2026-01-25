@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 
-import { noAnyRule } from './no-any';
-import { createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
 import type { AstNode } from '../types';
+
+import { createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
+import { noAnyRule } from './no-any';
 
 describe('no-any', () => {
   it('should report any type when TSAnyKeyword is encountered', () => {

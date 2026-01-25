@@ -561,8 +561,7 @@ const validateMustEvidenceOneToOne = (filePath: string, contents: string): strin
   return errors;
 };
 
-const isFinalPlanStatus = (status: string): boolean =>
-  ['accepted', 'in-progress', 'implemented'].includes(status);
+const isFinalPlanStatus = (status: string): boolean => ['accepted', 'in-progress', 'implemented'].includes(status);
 
 const validatePlan = (filePath: string, contents: string): string[] => {
   const errors: string[] = [];
@@ -712,19 +711,25 @@ const validateTask = (filePath: string, contents: string): string[] => {
         if (normalizedPlanAllowedPaths.length === 0) {
           errors.push(`[plan-task-verify] ${filePath}: referenced plan missing frontmatter allowed_paths: ${planPath}`);
         } else if (normalizedTaskAllowedPaths.join('\n') !== normalizedPlanAllowedPaths.join('\n')) {
-          errors.push(`[plan-task-verify] ${filePath}: Allowed paths must match Plan frontmatter allowed_paths exactly (copy from Plan)`);
+          errors.push(
+            `[plan-task-verify] ${filePath}: Allowed paths must match Plan frontmatter allowed_paths exactly (copy from Plan)`,
+          );
         }
 
         const anchor = `<a id="Step-${stepNumber}"></a>`;
 
         if (!planContents.includes(anchor)) {
-          errors.push(`[plan-task-verify] ${filePath}: referenced plan is missing required Step anchor: ${planPath}#Step-${stepNumber}`);
+          errors.push(
+            `[plan-task-verify] ${filePath}: referenced plan is missing required Step anchor: ${planPath}#Step-${stepNumber}`,
+          );
         }
 
         const planStepMap = extractPlanStepFileMustMap(planContents, stepNumber);
 
         if (planStepMap.size === 0) {
-          errors.push(`[plan-task-verify] ${filePath}: referenced Plan Step is missing File → MUST IDs mapping: ${planPath}#Step-${stepNumber}`);
+          errors.push(
+            `[plan-task-verify] ${filePath}: referenced Plan Step is missing File → MUST IDs mapping: ${planPath}#Step-${stepNumber}`,
+          );
         } else {
           for (const [mappedFile, mappedMustIds] of fileMustMap.entries()) {
             const planMustIds = planStepMap.get(mappedFile);
@@ -782,7 +787,9 @@ const validateTask = (filePath: string, contents: string): string[] => {
 
     for (const mappedFile of fileMustMap.keys()) {
       if (!filesToChange.includes(mappedFile)) {
-        errors.push(`[plan-task-verify] ${filePath}: File → MUST IDs 매핑 includes file not listed in Files to change (expected): ${mappedFile}`);
+        errors.push(
+          `[plan-task-verify] ${filePath}: File → MUST IDs 매핑 includes file not listed in Files to change (expected): ${mappedFile}`,
+        );
       }
     }
 
@@ -890,7 +897,9 @@ const runPlanTaskVerify = (files: readonly string[]): boolean => {
       const covered = doneTaskMustByPlan.get(planPath);
 
       if (covered === undefined || covered.size === 0) {
-        errors.push(`[plan-task-verify] ${planPath}: status=implemented with code changes requires at least one Status=done task covering MUST IDs`);
+        errors.push(
+          `[plan-task-verify] ${planPath}: status=implemented with code changes requires at least one Status=done task covering MUST IDs`,
+        );
 
         continue;
       }

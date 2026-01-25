@@ -1,15 +1,14 @@
+import { Glob } from 'bun';
 import { mkdir, rm } from 'fs/promises';
 import { join, resolve, relative } from 'path';
 
-import { Glob } from 'bun';
+import type { CommandOptions } from './types';
 
 import { AdapterSpecResolver, AstParser, ModuleGraph, type FileAnalysis } from '../analyzer';
 import { ConfigLoader, ConfigLoadError, scanGlobSorted, writeIfChanged } from '../common';
 import { buildDiagnostic, reportDiagnostics } from '../diagnostics';
 import { ManifestGenerator } from '../generator';
 import { ProjectWatcher } from '../watcher';
-
-import type { CommandOptions } from './types';
 
 export async function dev(commandOptions?: CommandOptions) {
   console.info('🚀 Starting Bunner Dev...');
@@ -25,6 +24,7 @@ export async function dev(commandOptions?: CommandOptions) {
     const parser = new AstParser();
     const adapterSpecResolver = new AdapterSpecResolver();
     const fileCache = new Map<string, FileAnalysis>();
+
     const toProjectRelativePath = (filePath: string): string => {
       return relative(projectRoot, filePath) || '.';
     };
@@ -219,6 +219,7 @@ export async function dev(commandOptions?: CommandOptions) {
     });
 
     reportDiagnostics({ diagnostics: [diagnostic] });
+
     throw error;
   }
 }

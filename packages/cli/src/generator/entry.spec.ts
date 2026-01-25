@@ -9,7 +9,7 @@ describe('EntryGenerator.generate', () => {
 
     expect(code).toContain('if (workersCount <= 1)');
     expect(code).toContain('await bootstrap();');
-    expect(code).toContain('const runtimeFileName = \'./runtime.js\'');
+    expect(code).toContain("const runtimeFileName = './runtime.js'");
     expect(code).toContain('await import(runtimeFileName)');
     expect(code).toContain('new ClusterManager');
   });

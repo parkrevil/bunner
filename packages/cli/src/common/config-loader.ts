@@ -1,7 +1,8 @@
 import { basename, join, relative } from 'path';
 
-import { ConfigLoadError } from './errors';
 import type { ConfigLoadResult, ConfigModule, ResolvedBunnerConfig } from './interfaces';
+
+import { ConfigLoadError } from './errors';
 
 export class ConfigLoader {
   static async load(cwd: string = process.cwd()): Promise<ConfigLoadResult> {

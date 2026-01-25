@@ -1,118 +1,232 @@
+import type { Class, PrimitiveValue } from '@bunner/common';
+
+import type { MetadataDecorator, MetadataProperty } from '../metadata/interfaces';
+import type { MetadataArgument } from '../metadata/types';
+import type { ValidatorClassRefs, ValidatorFunction, ValidatorHelpers } from './interfaces';
+import type { ValidationErrors, ValidatorTarget, ValidatorValue, ValidatorValueArray, ValidatorValueRecord } from './types';
+
 import { MetadataConsumer } from '../metadata/metadata-consumer';
 
-export class ValidatorCompiler {
-  private static cache = new Map<Function, Function>();
+const INVALID_OBJECT_MESSAGE = 'Invalid object';
 
-  static compile(target: Function): (obj: any) => string[] {
-    if (this.cache.has(target)) {
-      return this.cache.get(target) as (obj: any) => string[];
+function isValidatorRecord(value: ValidatorValue): value is ValidatorValueRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isValidatorArray(value: ValidatorValue): value is ValidatorValueArray {
+  return Array.isArray(value);
+}
+
+function isPrimitiveValue(value: ValidatorValue): value is PrimitiveValue {
+  return (
+    value === null ||
+    value === undefined ||
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean' ||
+    typeof value === 'bigint' ||
+    typeof value === 'symbol'
+  );
+}
+
+function normalizeDecorators(decorators: readonly MetadataDecorator[] | undefined): readonly MetadataDecorator[] {
+  return decorators ?? [];
+}
+
+function getDecoratorMessage(propertyName: string, decorator: MetadataDecorator): string {
+  const options = decorator.options;
+  const message = options && typeof options.message === 'string' ? options.message : undefined;
+
+  if (message !== undefined && message !== '') {
+    return message;
+  }
+
+  return `${propertyName} check failed for ${decorator.name}`;
+}
+
+function getFirstArgument(decorator: MetadataDecorator): MetadataArgument | undefined {
+  if (!decorator.arguments) {
+    return undefined;
+  }
+
+  return decorator.arguments[0];
+}
+
+function getValidatorTarget(classRefs: ValidatorClassRefs, propertyName: string, property: MetadataProperty): Class | null {
+  if (property.metatype) {
+    return property.metatype;
+  }
+
+  return classRefs[propertyName] ?? null;
+}
+
+function validateNestedValue(
+  helpers: ValidatorHelpers,
+  value: ValidatorValue,
+  target: Class | null,
+  propertyName: string,
+): ValidationErrors {
+  if (!target) {
+    return [];
+  }
+
+  const nestedErrors = helpers.getValidator(value, target);
+
+  if (nestedErrors.length === 0) {
+    return [];
+  }
+
+  return nestedErrors.map(errorItem => `${propertyName}.${errorItem}`);
+}
+
+export class ValidatorCompiler {
+  private static cache = new Map<ValidatorTarget, ValidatorFunction>();
+
+  static compile(target: ValidatorTarget): ValidatorFunction {
+    const cached = this.cache.get(target);
+
+    if (cached) {
+      return cached;
     }
 
     const metadata = MetadataConsumer.getCombinedMetadata(target);
-    const lines: string[] = [];
+    const classRefs: ValidatorClassRefs = {};
 
-    lines.push('const errors = [];');
-    lines.push('if (!obj || typeof obj !== \'object\') return [\'Invalid object\'];');
-
-    for (const [propName, prop] of Object.entries(metadata.properties)) {
-      const p = prop;
-      const access = `obj['${propName}']`;
-
-      if (p.isOptional) {
-        lines.push(`if (${access} !== undefined && ${access} !== null) {`);
-      } else {
-        lines.push('{');
+    for (const [propertyName, property] of Object.entries(metadata.properties)) {
+      if (property.metatype) {
+        classRefs[propertyName] = property.metatype;
       }
-
-      if (p.isArray) {
-        lines.push(`  if (!Array.isArray(${access})) {`);
-        lines.push(`    errors.push('${propName} must be an array');`);
-        lines.push('  } else {');
-        lines.push(`    for (let i = 0; i < ${access}.length; i++) {`);
-        lines.push(`      const val = ${access}[i];`);
-        lines.push('    }');
-        lines.push('  }');
-      }
-
-      p.decorators.forEach((dec: any) => {
-        const { name, arguments: args, options } = dec;
-        const msg = options?.message || `${propName} check failed for ${name}`;
-
-        if (name === 'IsString') {
-          lines.push(`  if (typeof ${access} !== 'string') errors.push('${msg}');`);
-        } else if (name === 'IsNumber') {
-          lines.push(`  if (typeof ${access} !== 'number' || Number.isNaN(${access})) errors.push('${msg}');`);
-        } else if (name === 'IsInt') {
-          lines.push(`  if (!Number.isInteger(${access})) errors.push('${msg}');`);
-        } else if (name === 'IsBoolean') {
-          lines.push(`  if (typeof ${access} !== 'boolean') errors.push('${msg}');`);
-        } else if (name === 'Min') {
-          lines.push(`  if (${access} < ${args[0]}) errors.push('${msg}');`);
-        } else if (name === 'Max') {
-          lines.push(`  if (${access} > ${args[0]}) errors.push('${msg}');`);
-        } else if (name === 'IsIn') {
-          const validValues = JSON.stringify(args[0]);
-
-          lines.push(`  if (!${validValues}.includes(${access})) errors.push('${msg}');`);
-        } else if (name === 'ValidateNested') {
-          if (p.metatype) {
-            lines.push(`  const nestedErrors = validators.getValidator(${access}, classRefs['${propName}']);`);
-            lines.push(`  if (nestedErrors.length > 0) errors.push(...nestedErrors.map(e => \`${propName}.\${e}\`));`);
-          }
-        }
-      });
-      lines.push('}');
     }
 
-    lines.push('return errors;');
+    const helpers: ValidatorHelpers = {
+      getValidator: (value, validatorTarget) => {
+        if (!validatorTarget) {
+          return [];
+        }
 
-    const fnBody = lines.join('\n');
+        if (isValidatorArray(value)) {
+          const errors: ValidationErrors = [];
 
-    try {
-      const classRefs: Record<string, Function> = {};
+          value.forEach((itemValue, index) => {
+            if (!isValidatorRecord(itemValue)) {
+              errors.push(`[${index}].${INVALID_OBJECT_MESSAGE}`);
 
-      for (const [propName, prop] of Object.entries(metadata.properties)) {
-        if (prop.metatype) {
-          classRefs[propName] = prop.metatype;
+              return;
+            }
+
+            const validator = ValidatorCompiler.compile(validatorTarget);
+            const itemErrors = validator(itemValue);
+
+            errors.push(...itemErrors.map(errorItem => `[${index}].${errorItem}`));
+          });
+
+          return errors;
+        }
+
+        if (!isValidatorRecord(value)) {
+          return [INVALID_OBJECT_MESSAGE];
+        }
+
+        return ValidatorCompiler.compile(validatorTarget)(value);
+      },
+    };
+
+    const validator: ValidatorFunction = input => {
+      if (!isValidatorRecord(input)) {
+        return [INVALID_OBJECT_MESSAGE];
+      }
+
+      const errors: ValidationErrors = [];
+
+      for (const [propertyName, property] of Object.entries(metadata.properties)) {
+        const value = input[propertyName];
+        const isOptional = property.isOptional === true;
+        const decorators = normalizeDecorators(property.decorators);
+
+        if (isOptional && (value === undefined || value === null)) {
+          continue;
+        }
+
+        if (property.isArray === true) {
+          if (!Array.isArray(value)) {
+            errors.push(`${propertyName} must be an array`);
+          }
+        }
+
+        for (const decorator of decorators) {
+          const message = getDecoratorMessage(propertyName, decorator);
+          const argument = getFirstArgument(decorator);
+
+          if (decorator.name === 'IsString') {
+            if (typeof value !== 'string') {
+              errors.push(message);
+            }
+
+            continue;
+          }
+
+          if (decorator.name === 'IsNumber') {
+            if (typeof value !== 'number' || Number.isNaN(value)) {
+              errors.push(message);
+            }
+
+            continue;
+          }
+
+          if (decorator.name === 'IsInt') {
+            if (typeof value !== 'number' || !Number.isInteger(value)) {
+              errors.push(message);
+            }
+
+            continue;
+          }
+
+          if (decorator.name === 'IsBoolean') {
+            if (typeof value !== 'boolean') {
+              errors.push(message);
+            }
+
+            continue;
+          }
+
+          if (decorator.name === 'Min') {
+            if (typeof argument === 'number' && typeof value === 'number' && value < argument) {
+              errors.push(message);
+            }
+
+            continue;
+          }
+
+          if (decorator.name === 'Max') {
+            if (typeof argument === 'number' && typeof value === 'number' && value > argument) {
+              errors.push(message);
+            }
+
+            continue;
+          }
+
+          if (decorator.name === 'IsIn') {
+            if (Array.isArray(argument) && value !== undefined && isPrimitiveValue(value) && !argument.includes(value)) {
+              errors.push(message);
+            }
+
+            continue;
+          }
+
+          if (decorator.name === 'ValidateNested') {
+            const targetValue = getValidatorTarget(classRefs, propertyName, property);
+            const nestedErrors = validateNestedValue(helpers, value, targetValue, propertyName);
+
+            errors.push(...nestedErrors);
+          }
         }
       }
 
-      const validators = {
-        getValidator: (val: any, Target: any) => {
-          if (!val || !Target) {
-            return [];
-          }
+      return errors;
+    };
 
-          if (Array.isArray(val)) {
-            const allErrors: string[] = [];
+    this.cache.set(target, validator);
 
-            val.forEach((item, i) => {
-              const errors = ValidatorCompiler.compile(Target)(item);
-
-              allErrors.push(...errors.map(e => `[${i}].${e}`));
-            });
-
-            return allErrors;
-          }
-
-          return ValidatorCompiler.compile(Target)(val);
-        },
-      };
-      // eslint-disable-next-line @typescript-eslint/no-implied-eval
-      const fn = new Function('obj', 'validators', 'classRefs', fnBody) as (
-        obj: any,
-        validators: any,
-        classRefs: any,
-      ) => string[];
-      const wrappedFn = (obj: any) => fn(obj, validators, classRefs);
-
-      this.cache.set(target, wrappedFn);
-
-      return wrappedFn;
-    } catch (e) {
-      console.error('Failed to compile validator', fnBody);
-
-      throw e;
-    }
+    return validator;
   }
 }

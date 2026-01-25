@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 
-import { noUmbrellaTypesRule } from './no-umbrella-types';
-import { createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
 import type { AstNode } from '../types';
+
+import { createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
+import { noUmbrellaTypesRule } from './no-umbrella-types';
 
 describe('no-umbrella-types', () => {
   it('should report forbidden aliases when encountering umbrella types', () => {

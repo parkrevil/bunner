@@ -9,6 +9,6 @@ export class CommentsService {
   constructor(private readonly commentsRepo: CommentRepository) {}
 
   create(id: number, body: any) {
-    return this.commentsRepo.create(id, body);
+    this.commentsRepo.create(id, body);
   }
 }

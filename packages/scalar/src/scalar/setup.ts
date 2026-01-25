@@ -1,11 +1,11 @@
-import { hasFunctionProperty, isObjectLike, isRecord } from '../common';
+import type { Doc, InternalRouter, ScalarOptionsWithRegistry, ScalarRequest, ScalarSetupOptions } from './interfaces';
+import type { AdapterCollectionLike, ScalarKeyedRecord, ScalarMetadataRegistry } from './types';
 
+import { hasFunctionProperty, isObjectLike } from '../common';
 import { resolveHttpNamesForDocuments, resolveHttpNamesForHosting } from './adapter-names';
 import { buildDocsForHttpAdapters } from './docs';
 import { indexResponse } from './index-html';
-import type { Doc, InternalRouter, ScalarSetupOptions } from './interfaces';
 import { resolveDocFromPath } from './routing';
-import type { AdapterCollectionLike } from './types';
 import { uiResponse } from './ui';
 
 const BUNNER_HTTP_INTERNAL = Symbol.for('bunner:http:internal');
@@ -29,9 +29,8 @@ function registerInternalRoutes(internal: InternalRouter, docs: Doc[], docsById:
 
     return indexResponse(docs);
   });
-  internal.get('/api-docs/*', (req: unknown) => {
-    const reqPath = isRecord(req) ? req['path'] : undefined;
-    const path = typeof reqPath === 'string' ? reqPath : '';
+  internal.get('/api-docs/*', (req: ScalarRequest) => {
+    const path = typeof req.path === 'string' ? req.path : '';
     const resolved = resolveDocFromPath(path);
 
     if (!resolved) {
@@ -48,11 +47,8 @@ function registerInternalRoutes(internal: InternalRouter, docs: Doc[], docsById:
   });
 }
 
-export function setupScalar(
-  adapters: AdapterCollectionLike,
-  options: ScalarSetupOptions & { metadataRegistry?: Map<any, any> },
-): void {
-  if (!options || !('documentTargets' in options) || !('httpTargets' in options)) {
+export function setupScalar(adapters: AdapterCollectionLike, options: ScalarSetupOptions & ScalarOptionsWithRegistry): void {
+  if (options.documentTargets === undefined || options.httpTargets === undefined) {
     throw new Error('Scalar: options { documentTargets, httpTargets } is required.');
   }
 
@@ -64,12 +60,13 @@ export function setupScalar(
     throw new Error('Scalar: httpTargets must be "all" or an array of names.');
   }
 
-  if (options.httpTargets === undefined || options.httpTargets === null) {
+  if (options.httpTargets === null) {
     throw new Error('Scalar: httpTargets must be specified.');
   }
 
   const httpDocNames = resolveHttpNamesForDocuments(adapters, options.documentTargets);
-  const docs = buildDocsForHttpAdapters(httpDocNames, options.metadataRegistry);
+  const registry = options.metadataRegistry;
+  const docs = buildDocsForHttpAdapters(httpDocNames, registry);
   const docsById = new Map(docs.map(d => [d.docId, d] as const));
   const httpHostNames = resolveHttpNamesForHosting(adapters, options.httpTargets);
 
@@ -77,8 +74,7 @@ export function setupScalar(
     throw new Error('Scalar: no HTTP adapter selected/found. Install/add @bunner/http-adapter and register an http adapter.');
   }
 
-  const adaptersRecord = adapters as unknown as Record<string, unknown>;
-  const httpGroup = adaptersRecord['http'];
+  const httpGroup = adapters.http;
 
   if (!hasFunctionProperty(httpGroup, 'get')) {
     throw new Error('Scalar: selected http adapter group does not support lookup (missing .get).');
@@ -99,14 +95,18 @@ export function setupScalar(
       continue;
     }
 
-    const adapterRecord = adapter as unknown as Record<PropertyKey, unknown>;
+    const adapterRecord = adapter as ScalarKeyedRecord;
     const internalValue = adapterRecord[BUNNER_HTTP_INTERNAL];
 
     if (!internalValue || !hasFunctionProperty(internalValue, 'get')) {
       throw new Error('Scalar: selected http adapter does not support internal route binding (upgrade http-adapter).');
     }
 
-    registerInternalRoutes(internalValue as unknown as InternalRouter, docs, docsById);
+    if (!hasFunctionProperty(internalValue, 'get')) {
+      throw new Error('Scalar: selected http adapter does not support internal route binding (upgrade http-adapter).');
+    }
+
+    registerInternalRoutes(internalValue, docs, docsById);
     boundAdapters.add(adapter);
   }
 }

@@ -1,19 +1,19 @@
 {
   "name": "@bunner/cli",
-  "module": "index.ts",
-  "type": "module",
   "private": true,
   "bin": {
     "bunner": "./src/bin/bunner.ts"
   },
+  "type": "module",
+  "module": "index.ts",
   "scripts": {
     "build": "bun build ./src/bin/bunner.ts --compile --outfile dist/bunner"
+  },
+  "dependencies": {
+    "oxc-parser": "^0.104.0"
   },
   "devDependencies": {
     "@types/bun": "^1.3.0",
     "typescript": "^5"
-  },
-  "dependencies": {
-    "oxc-parser": "^0.104.0"
   }
 }

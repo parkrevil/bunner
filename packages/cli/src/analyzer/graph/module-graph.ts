@@ -1,10 +1,10 @@
 import { basename, dirname } from 'path';
 
-import { compareCodePoint } from '../../common';
 import type { ClassMetadata } from '../interfaces';
-import { ModuleDiscovery } from '../module-discovery';
-
 import type { CyclePath, ProviderRef, FileAnalysis } from './interfaces';
+
+import { compareCodePoint } from '../../common';
+import { ModuleDiscovery } from '../module-discovery';
 import { ModuleNode } from './module-node';
 
 type InjectableOptions = {
@@ -58,7 +58,7 @@ export class ModuleGraph {
         constructorParams: [],
         methods: [],
         properties: [],
-        imports: moduleFile.imports || {},
+        imports: moduleFile.imports ?? {},
       };
       const node = new ModuleNode(syntheticMeta);
 
@@ -81,7 +81,7 @@ export class ModuleGraph {
           this.classMap.set(cls.className, node);
           this.classDefinitions.set(cls.className, { metadata: cls, filePath });
 
-          const isController = cls.decorators.some(d => d.name === 'Controller' || d.name === 'RestController');
+          const isController = cls.decorators.some(d => d.name === 'RestController');
           const isInjectable = cls.decorators.some(d => d.name === 'Injectable');
 
           if (isController) {
@@ -92,8 +92,8 @@ export class ModuleGraph {
             const token = cls.className;
             const injectableDec = cls.decorators.find(d => d.name === 'Injectable');
             const options = this.parseInjectableOptions(injectableDec?.arguments?.[0]);
-            const visibility = options.visibility || 'internal';
-            const lifetime = options.lifetime || 'singleton';
+            const visibility = options.visibility ?? 'internal';
+            const lifetime = options.lifetime ?? 'singleton';
 
             node.providers.set(token, {
               token,
@@ -106,7 +106,7 @@ export class ModuleGraph {
         });
       });
 
-      if (rawDef && rawDef.providers) {
+      if (rawDef?.providers) {
         rawDef.providers.forEach((p: unknown) => {
           const record = this.asRecord(p);
 
@@ -134,9 +134,7 @@ export class ModuleGraph {
                 ref.metadata = prev?.metadata;
                 ref.filePath = prev?.filePath;
 
-                if (!ref.scope) {
-                  ref.scope = prev?.scope;
-                }
+                ref.scope ??= prev?.scope;
 
                 if (prev?.isExported) {
                   ref.isExported = true;
@@ -206,6 +204,7 @@ export class ModuleGraph {
     const visited = new Set<ModuleNode>();
     const inStack = new Set<ModuleNode>();
     const stack: ModuleNode[] = [];
+
     const recordCycle = (cycle: ModuleNode[]): void => {
       const names = cycle.map(n => n.name);
       const normalized = this.normalizeCycle(names);
@@ -218,6 +217,7 @@ export class ModuleGraph {
       cycleKeys.add(key);
       cycles.push({ path: normalized });
     };
+
     const dfs = (node: ModuleNode): void => {
       if (inStack.has(node)) {
         const startIndex = stack.indexOf(node);
@@ -237,7 +237,7 @@ export class ModuleGraph {
       inStack.add(node);
       stack.push(node);
 
-      const next = adjacency.get(node) || [];
+      const next = adjacency.get(node) ?? [];
 
       next.forEach(n => {
         dfs(n);
@@ -293,8 +293,8 @@ export class ModuleGraph {
             );
           }
 
-          const sourceScope = provider.scope || 'singleton';
-          const targetScope = targetProvider.scope || 'singleton';
+          const sourceScope = provider.scope ?? 'singleton';
+          const targetScope = targetProvider.scope ?? 'singleton';
 
           if (sourceScope === 'singleton' && targetScope === 'request-context') {
             throw new Error(
@@ -350,7 +350,7 @@ export class ModuleGraph {
     const scope = 'singleton';
     const record = this.asRecord(p);
 
-    if (record && record.provide !== undefined) {
+    if (record?.provide !== undefined) {
       token = this.extractTokenName(record.provide);
     } else if (typeof p === 'function') {
       token = p.name;
@@ -371,7 +371,7 @@ export class ModuleGraph {
     }
 
     if (typeof t === 'symbol') {
-      return t.description || t.toString();
+      return t.description ?? t.toString();
     }
 
     const record = this.asRecord(t);

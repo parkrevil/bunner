@@ -1,5 +1,5 @@
-import { basename } from 'node:path';
 import { existsSync } from 'node:fs';
+import { basename } from 'node:path';
 
 import type { AstNode, AstNodeValue, RuleContext } from '../types';
 
@@ -44,9 +44,7 @@ function isE2ETestFile(filePath: string): boolean {
 }
 
 function isTypeDeclaration(node: AstNode): boolean {
-  return (
-    node.type === 'TSTypeAliasDeclaration'
-  );
+  return node.type === 'TSTypeAliasDeclaration';
 }
 
 function isAstNodeValue(value: AstNodeValue | null | undefined): value is AstNode {

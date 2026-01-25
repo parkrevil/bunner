@@ -7,8 +7,8 @@
   "scripts": {},
   "dependencies": {},
   "peerDependencies": {
-    "bun": "*",
     "@bunner/common": "workspace:*",
-    "@bunner/core": "workspace:*"
+    "@bunner/core": "workspace:*",
+    "bun": "*"
   }
 }

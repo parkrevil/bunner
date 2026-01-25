@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 import { StatusCodes } from 'http-status-codes';
 
-import { createHttpTestHarness, handleRequest, withGlobalMiddlewares } from '../http-test-kit';
 import type { BunnerResponse } from '../index';
+
+import { createHttpTestHarness, handleRequest, withGlobalMiddlewares } from '../http-test-kit';
 import { HttpMethod } from '../index';
 
 class RoutingController {
@@ -29,7 +30,7 @@ function createRoutingRegistry(): Map<any, any> {
   const registry = new Map<any, any>();
   const controllerMeta: RoutingControllerMeta = {
     className: 'RoutingController',
-    decorators: [{ name: 'Controller', arguments: ['test'] }],
+    decorators: [{ name: 'RestController', arguments: ['test'] }],
     methods: [
       {
         name: 'ok',

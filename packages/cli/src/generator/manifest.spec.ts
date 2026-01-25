@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'bun:test';
 
 import type { FileAnalysis } from '../analyzer/graph/interfaces';
-import { ModuleGraph } from '../analyzer/graph/module-graph';
 
+import { ModuleGraph } from '../analyzer/graph/module-graph';
 import { ManifestGenerator } from './manifest';
 
 async function importDataModule<TModule extends Record<string, unknown>>(jsCode: string): Promise<TModule> {
@@ -82,7 +82,9 @@ describe('ManifestGenerator.generate', () => {
     expect(Object.isFrozen(registry)).toBe(true);
     expect(() => registry.set('k', 'v')).toThrow(/immutable/i);
     expect(() => registry.delete('k')).toThrow(/immutable/i);
-    expect(() => registry.clear()).toThrow(/immutable/i);
+    expect(() => {
+      registry.clear();
+    }).toThrow(/immutable/i);
   });
 
   it('should export a scoped keys map that throws on mutation', async () => {
@@ -112,7 +114,9 @@ describe('ManifestGenerator.generate', () => {
     expect(Object.isFrozen(map)).toBe(true);
     expect(() => map.set('k', 'v')).toThrow(/immutable/i);
     expect(() => map.delete('k')).toThrow(/immutable/i);
-    expect(() => map.clear()).toThrow(/immutable/i);
+    expect(() => {
+      map.clear();
+    }).toThrow(/immutable/i);
   });
 
   it('should deep-freeze nested metadata-like objects', async () => {

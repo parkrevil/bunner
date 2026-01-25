@@ -1,34 +1,38 @@
 import type { ForwardRef } from './interfaces';
-import type { Class } from './types';
+import type { Callable, Constructor, ForwardRefFactory, PrimitiveArray, PrimitiveRecord, ValueLike } from './types';
 
-export function isClass(target: any): target is Class {
-  return typeof target === 'function' && target.prototype;
+export function isClass(target: ValueLike): target is Constructor {
+  return typeof target === 'function' && 'prototype' in target;
 }
 
-export function forwardRef(fn: () => any): ForwardRef {
+export function forwardRef(fn: ForwardRefFactory): ForwardRef {
   return { forwardRef: fn };
 }
 
-export function isUndefined(obj: any): obj is undefined {
+export function isUndefined(obj: ValueLike): obj is undefined {
   return typeof obj === 'undefined';
 }
 
-export function isNil(obj: any): obj is null | undefined {
+export function isNil(obj: ValueLike): obj is null | undefined {
   return isUndefined(obj) || obj === null;
 }
 
-export function isEmpty(array: any): boolean {
-  return !(array && array.length > 0);
+export function isEmpty(array: PrimitiveArray | PrimitiveRecord): boolean {
+  if (Array.isArray(array)) {
+    return array.length === 0;
+  }
+
+  return Object.keys(array).length === 0;
 }
 
-export function isSymbol(fn: any): fn is symbol {
+export function isSymbol(fn: ValueLike): fn is symbol {
   return typeof fn === 'symbol';
 }
 
-export function isString(fn: any): fn is string {
+export function isString(fn: ValueLike): fn is string {
   return typeof fn === 'string';
 }
 
-export function isFunction(fn: any): boolean {
+export function isFunction(fn: ValueLike): fn is Callable {
   return typeof fn === 'function';
 }

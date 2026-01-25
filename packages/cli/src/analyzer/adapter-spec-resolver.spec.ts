@@ -1,12 +1,10 @@
+import { describe, expect, it } from 'bun:test';
 import { mkdir, rm, writeFile } from 'fs/promises';
 import { dirname, join } from 'path';
 
-import { describe, expect, it } from 'bun:test';
-
-import { PathResolver } from '../common';
-
 import type { FileAnalysis } from './graph/interfaces';
 
+import { PathResolver } from '../common';
 import { AdapterSpecResolver, AstParser } from './index';
 
 async function createTempDir(): Promise<string> {
@@ -44,8 +42,8 @@ describe('AdapterSpecResolver', () => {
         'function dispatchHandler() {}',
         '',
         'export class TestAdapter {',
-        '  static adapterId = \'test\';',
-        '  static middlewarePhaseOrder = [\'Before\'];',
+        "  static adapterId = 'test';",
+        "  static middlewarePhaseOrder = ['Before'];",
         '  static supportedMiddlewarePhases = { Before: true };',
         '  static entryDecorators = { controller: Controller, handler: [Get] };',
         '  static runtime = { start: startAdapter, stop: stopAdapter };',
@@ -67,7 +65,7 @@ describe('AdapterSpecResolver', () => {
         '@Controller()',
         'class SampleController {',
         '  @Get()',
-        '  @Middlewares(\'Before\', [mwOne])',
+        "  @Middlewares('Before', [mwOne])",
         '  handle() {}',
         '}',
       ].join('\n'),
@@ -147,6 +145,7 @@ describe('AdapterSpecResolver', () => {
 
     try {
       await resolver.resolve({ fileMap, projectRoot });
+
       throw new Error('Expected resolver.resolve to throw');
     } catch (error) {
       expect(String(error)).toContain('No adapterSpec exports found');

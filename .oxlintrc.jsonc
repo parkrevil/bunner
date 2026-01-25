@@ -257,9 +257,9 @@
         "bunner/test-aaa-comments": "error",
         "bunner/test-bdd-title": "error",
         "bunner/test-describe-sut-name": "error",
-        "bunner/test-unit-file-mapping": "error"
-      }
-    }
+        "bunner/test-unit-file-mapping": "error",
+      },
+    },
   ],
   "settings": {
     "jsx-a11y": {

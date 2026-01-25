@@ -1,6 +1,6 @@
-import { NodeKind } from '../schema';
-
 import type { Node } from './node';
+
+import { NodeKind } from '../schema';
 import { acquireNode } from './node-pool';
 import { StaticChildMap } from './static-child-map';
 
@@ -49,6 +49,7 @@ export function sortParamChildren(node: Node): void {
 
   node.paramChildren.sort((a, b) => {
     const weight = (child: Node) => (child.pattern ? 0 : 1);
+
     const diff = weight(a) - weight(b);
 
     if (diff !== 0) {

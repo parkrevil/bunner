@@ -2,9 +2,10 @@ import { LogLevel } from '@bunner/common';
 import { bootstrapApplication } from '@bunner/core';
 import { bunnerHttpAdapter } from '@bunner/http-adapter';
 
+import type { SomeConfig } from './core/config/some-config';
+
 import { rootModule } from './__module__';
 import { ConfigNamespace } from './core/config/config-namespace';
-import type { SomeConfig } from './core/config/some-config';
 import { SomeConfig as SomeConfigImpl } from './core/config/some-config';
 
 await bootstrapApplication(rootModule, {

@@ -1,8 +1,8 @@
 import { Middleware, BunnerMiddleware, type Context } from '@bunner/common';
 
-import { BunnerHttpContext } from '../../adapter';
-
 import type { QueryParserOptions } from './interfaces';
+
+import { BunnerHttpContext } from '../../adapter';
 import { QueryParser } from './query-parser';
 
 @Middleware()

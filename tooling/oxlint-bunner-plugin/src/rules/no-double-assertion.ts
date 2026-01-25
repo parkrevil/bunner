@@ -24,7 +24,8 @@ const noDoubleAssertionRule = {
       return current;
     };
 
-    const isAssertionExpression = (node: NodeOrNull): boolean => node?.type === 'TSAsExpression' || node?.type === 'TSTypeAssertion';
+    const isAssertionExpression = (node: NodeOrNull): boolean =>
+      node?.type === 'TSAsExpression' || node?.type === 'TSTypeAssertion';
 
     const getTypeAnnotationNode = (assertion: NodeOrNull): NodeOrNull => {
       if (!assertion) {

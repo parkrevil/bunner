@@ -1,8 +1,8 @@
 import type { Server } from 'bun';
 
-import { HeaderField } from '../enums';
-
 import type { ClientIpsResult } from './interfaces';
+
+import { HeaderField } from '../enums';
 
 export function getIps(request: Request, server: Server<unknown>, trustProxy?: boolean): ClientIpsResult {
   const shouldTrustProxy = trustProxy ?? false;
@@ -164,12 +164,14 @@ function stripOptionalQuotes(value: string): string {
     const first = result[0];
     const last = result[result.length - 1];
 
-    if ((first === '"' && last === '"') || (first === '\'' && last === '\'')) {
+    if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
       result = result.slice(1, -1);
       result = result.replace(/\\([\\"'])/g, '$1');
       result = result.trim();
+
       continue;
     }
+
     break;
   }
 
@@ -212,7 +214,7 @@ function isIpv4(value: string): boolean {
   }
 
   return parts.every(part => {
-    if (part.length === 0 || part.length > 3) {
+    if (part.length > 3) {
       return false;
     }
 
@@ -256,6 +258,7 @@ function isIpv6(value: string): boolean {
   for (const segment of segments) {
     if (segment.length === 0) {
       emptyBlocks += 1;
+
       continue;
     }
 

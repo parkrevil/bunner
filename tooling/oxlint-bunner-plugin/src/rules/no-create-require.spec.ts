@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 
-import { noCreateRequireRule } from './no-create-require';
-import { createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
 import type { AstNode } from '../types';
+
+import { createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
+import { noCreateRequireRule } from './no-create-require';
 
 describe('no-create-require', () => {
   it('should report createRequire when imported from module', () => {

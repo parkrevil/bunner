@@ -1,11 +1,11 @@
 {
   "name": "bunner-examples",
-  "module": "src/main.ts",
-  "type": "module",
   "private": true,
+  "type": "module",
+  "module": "src/main.ts",
   "scripts": {
-    "dev": "bunner dev",
     "build": "bunner build",
+    "dev": "bunner dev",
     "start": "bun dist/entry.js"
   },
   "dependencies": {

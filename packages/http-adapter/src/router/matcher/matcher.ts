@@ -1,6 +1,8 @@
 import type { HttpMethod } from '../../types';
-import { decodeURIComponentSafe } from '../processor';
 import type { BinaryRouterLayout } from '../schema';
+import type { EncodedSlashBehavior, PatternTesterFn, RouteParams } from '../types';
+
+import { decodeURIComponentSafe } from '../processor';
 import {
   NODE_OFFSET_META,
   NODE_OFFSET_METHOD_MASK,
@@ -20,8 +22,6 @@ import {
   PARAM_ENTRY_STRIDE,
   METHOD_OFFSET,
 } from '../schema';
-import type { EncodedSlashBehavior, PatternTesterFn, RouteParams } from '../types';
-
 import {
   STAGE_ENTER,
   STAGE_STATIC,
@@ -269,10 +269,12 @@ export class Matcher {
           }
 
           this.stack[framePtr + FRAME_OFFSET_STAGE] = STAGE_WILDCARD;
+
           continue;
         }
 
         this.stack[framePtr + FRAME_OFFSET_STAGE] = STAGE_STATIC;
+
         continue;
       } else if (stage === STAGE_STATIC) {
         const base = nodeIdx * NODE_STRIDE;
@@ -281,6 +283,7 @@ export class Matcher {
         if (stateIter > 0) {
           this.stack[framePtr + FRAME_OFFSET_STAGE] = STAGE_PARAM;
           this.stack[framePtr + FRAME_OFFSET_ITERATOR] = 0;
+
           continue;
         }
 
@@ -301,12 +304,14 @@ export class Matcher {
             this.stack[sp + FRAME_OFFSET_ITERATOR] = 0;
 
             sp += FRAME_SIZE;
+
             continue;
           }
         }
 
         this.stack[framePtr + FRAME_OFFSET_STAGE] = STAGE_PARAM;
         this.stack[framePtr + FRAME_OFFSET_ITERATOR] = 0;
+
         continue;
       } else if (stage === STAGE_PARAM) {
         const base = nodeIdx * NODE_STRIDE;
@@ -316,6 +321,7 @@ export class Matcher {
 
         if (iter >= paramCount) {
           this.stack[framePtr + FRAME_OFFSET_STAGE] = STAGE_WILDCARD;
+
           continue;
         }
 
@@ -355,6 +361,7 @@ export class Matcher {
         this.stack[sp + FRAME_OFFSET_ITERATOR] = 0;
 
         sp += FRAME_SIZE;
+
         continue;
       } else if (stage === STAGE_WILDCARD) {
         const base = nodeIdx * NODE_STRIDE;
@@ -386,6 +393,7 @@ export class Matcher {
                 if (sp > 0) {
                   this.paramCount = this.stack[sp - FRAME_SIZE + FRAME_OFFSET_PARAM_BASE]!;
                 }
+
                 continue;
               }
 

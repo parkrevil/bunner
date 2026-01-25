@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'bun:test';
 
-import { testAaaCommentsRule } from './test-aaa-comments';
-import { createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
 import type { AstNode } from '../types';
 
-function makeTestCall(text: string, callee: 'it' | 'test' = 'it', callbackType: 'ArrowFunctionExpression' | 'FunctionExpression' = 'ArrowFunctionExpression') {
+import { createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
+import { testAaaCommentsRule } from './test-aaa-comments';
+
+function makeTestCall(
+  text: string,
+  callee: 'it' | 'test' = 'it',
+  callbackType: 'ArrowFunctionExpression' | 'FunctionExpression' = 'ArrowFunctionExpression',
+) {
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}') + 1;
   const blockNode: AstNode = { type: 'BlockStatement', range: [start, end] };
@@ -21,7 +26,8 @@ function makeTestCall(text: string, callee: 'it' | 'test' = 'it', callbackType: 
 describe('test-aaa-comments', () => {
   it('should accept AAA markers when order is correct', () => {
     // Arrange
-    const text = "it('should do x when y', () => {\n  // Arrange\n  const value = 1;\n\n  // Act\n  const result = value + 1;\n\n  // Assert\n  expect(result).toBe(2);\n});\n";
+    const text =
+      "it('should do x when y', () => {\n  // Arrange\n  const value = 1;\n\n  // Act\n  const result = value + 1;\n\n  // Assert\n  expect(result).toBe(2);\n});\n";
     const { callNode } = makeTestCall(text);
     const sourceCode = createSourceCode(text, null, null, []);
     const { context, reports } = createRuleContext(sourceCode, []);
@@ -34,18 +40,17 @@ describe('test-aaa-comments', () => {
     expect(reports.length).toBe(0);
   });
 
-
   it('should report only failing test when multi-test file is mixed', () => {
     // Arrange
     const text =
       "it('should do x when y', () => {\n  // Arrange\n  const value = 1;\n\n  // Act\n  const result = value + 1;\n\n  // Assert\n  expect(result).toBe(2);\n});\n\n" +
       "it('should do x when y', () => {\n  // Arrange\n  const value = 1;\n\n  // Assert\n  expect(value).toBe(1);\n});\n";
-    const okStart = text.indexOf("() => {");
+    const okStart = text.indexOf('() => {');
     const okBodyStart = text.indexOf('{', okStart);
-    const okBodyEnd = text.indexOf("});", okBodyStart) + 1;
-    const badStart = text.indexOf("() => {", okBodyEnd);
+    const okBodyEnd = text.indexOf('});', okBodyStart) + 1;
+    const badStart = text.indexOf('() => {', okBodyEnd);
     const badBodyStart = text.indexOf('{', badStart);
-    const badBodyEnd = text.lastIndexOf("});") + 1;
+    const badBodyEnd = text.lastIndexOf('});') + 1;
     const okCall: AstNode = {
       type: 'CallExpression',
       callee: { type: 'Identifier', name: 'it' },
@@ -110,7 +115,8 @@ describe('test-aaa-comments', () => {
 
   it('should accept AAA markers when using test(...)', () => {
     // Arrange
-    const text = "test('should do x when y', () => {\n  // Arrange\n  const value = 1;\n\n  // Act\n  const result = value + 1;\n\n  // Assert\n  expect(result).toBe(2);\n});\n";
+    const text =
+      "test('should do x when y', () => {\n  // Arrange\n  const value = 1;\n\n  // Act\n  const result = value + 1;\n\n  // Assert\n  expect(result).toBe(2);\n});\n";
     const { callNode } = makeTestCall(text, 'test');
     const sourceCode = createSourceCode(text, null, null, []);
     const { context, reports } = createRuleContext(sourceCode, []);
@@ -125,7 +131,8 @@ describe('test-aaa-comments', () => {
 
   it('should accept AAA markers when callback is FunctionExpression', () => {
     // Arrange
-    const text = "it('should do x when y', function () {\n  // Arrange\n  const value = 1;\n\n  // Act\n  const result = value + 1;\n\n  // Assert\n  expect(result).toBe(2);\n});\n";
+    const text =
+      "it('should do x when y', function () {\n  // Arrange\n  const value = 1;\n\n  // Act\n  const result = value + 1;\n\n  // Assert\n  expect(result).toBe(2);\n});\n";
     const { callNode } = makeTestCall(text, 'it', 'FunctionExpression');
     const sourceCode = createSourceCode(text, null, null, []);
     const { context, reports } = createRuleContext(sourceCode, []);
@@ -140,7 +147,8 @@ describe('test-aaa-comments', () => {
 
   it('should report when any marker is missing', () => {
     // Arrange
-    const text = "it('should do x when y', () => {\n  // Setup\n  const value = 1;\n\n  // Verify\n  expect(value).toBe(1);\n});\n";
+    const text =
+      "it('should do x when y', () => {\n  // Setup\n  const value = 1;\n\n  // Verify\n  expect(value).toBe(1);\n});\n";
     const { callNode } = makeTestCall(text);
     const sourceCode = createSourceCode(text, null, null, []);
     const { context, reports } = createRuleContext(sourceCode, []);
@@ -176,7 +184,8 @@ describe('test-aaa-comments', () => {
 
   it('should report when markers are out of order', () => {
     // Arrange
-    const text = "it('should do x when y', () => {\n  // Act\n  const value = 1;\n\n  // Arrange\n  const result = value + 1;\n\n  // Assert\n  expect(result).toBe(2);\n});\n";
+    const text =
+      "it('should do x when y', () => {\n  // Act\n  const value = 1;\n\n  // Arrange\n  const result = value + 1;\n\n  // Assert\n  expect(result).toBe(2);\n});\n";
     const { callNode } = makeTestCall(text);
     const sourceCode = createSourceCode(text, null, null, []);
     const { context, reports } = createRuleContext(sourceCode, []);

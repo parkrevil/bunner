@@ -1,13 +1,7 @@
-import { INLINE_THRESHOLD, FNV_OFFSET, FNV_PRIME } from './constants';
 import type { Node } from './node';
+import type { SortedChildArrays, StaticChildEntry, StaticChildEntryFingerprint } from './types';
 
-type Entry = [string, Node];
-
-interface SortedArrays {
-  segments: string[];
-  nodes: Node[];
-  fingerprints: number[];
-}
+import { INLINE_THRESHOLD, FNV_OFFSET, FNV_PRIME } from './constants';
 
 function fingerprintSegment(segment: string): number {
   let hash = FNV_OFFSET;
@@ -33,13 +27,13 @@ function compareFingerprintAndSegment(fpA: number, segA: string, fpB: number, se
   return segA < segB ? -1 : 1;
 }
 
-export class StaticChildMap implements Iterable<Entry> {
+export class StaticChildMap implements Iterable<StaticChildEntry> {
   private inlineKeys: string[] | null = null;
   private inlineValues: Node[] | null = null;
   private inlineCount = 0;
-  private sorted?: SortedArrays;
+  private sorted?: SortedChildArrays;
 
-  static fromEntries(entries: Iterable<Entry>): StaticChildMap {
+  static fromEntries(entries: Iterable<StaticChildEntry>): StaticChildMap {
     const store = new StaticChildMap();
 
     for (const [segment, node] of entries) {
@@ -137,7 +131,7 @@ export class StaticChildMap implements Iterable<Entry> {
     return this.iterateInlineKeys();
   }
 
-  entries(): IterableIterator<Entry> {
+  entries(): IterableIterator<StaticChildEntry> {
     if (this.sorted) {
       return this.iterateSortedEntries();
     }
@@ -145,7 +139,7 @@ export class StaticChildMap implements Iterable<Entry> {
     return this.iterateInlineEntries();
   }
 
-  [Symbol.iterator](): IterableIterator<Entry> {
+  [Symbol.iterator](): IterableIterator<StaticChildEntry> {
     return this.entries();
   }
 
@@ -154,13 +148,27 @@ export class StaticChildMap implements Iterable<Entry> {
       return;
     }
 
-    const entries: Array<{ segment: string; node: Node; fingerprint: number }> = new Array(this.inlineCount);
+    const keys = this.inlineKeys;
+    const values = this.inlineValues;
+
+    if (!keys || !values) {
+      return;
+    }
+
+    const entries: StaticChildEntryFingerprint[] = new Array(this.inlineCount);
 
     for (let i = 0; i < this.inlineCount; i++) {
+      const segment = keys[i];
+      const node = values[i];
+
+      if (segment === undefined || node === undefined) {
+        continue;
+      }
+
       entries[i] = {
-        segment: this.inlineKeys[i]!,
-        node: this.inlineValues[i]!,
-        fingerprint: fingerprintSegment(this.inlineKeys[i]!),
+        segment,
+        node,
+        fingerprint: fingerprintSegment(segment),
       };
     }
 
@@ -171,9 +179,15 @@ export class StaticChildMap implements Iterable<Entry> {
     const fingerprints = new Array<number>(entries.length);
 
     for (let i = 0; i < entries.length; i++) {
-      segments[i] = entries[i]!.segment;
-      nodes[i] = entries[i]!.node;
-      fingerprints[i] = entries[i]!.fingerprint;
+      const entry = entries[i];
+
+      if (!entry) {
+        continue;
+      }
+
+      segments[i] = entry.segment;
+      nodes[i] = entry.node;
+      fingerprints[i] = entry.fingerprint;
     }
 
     this.sorted = { segments, nodes, fingerprints };
@@ -182,7 +196,12 @@ export class StaticChildMap implements Iterable<Entry> {
   }
 
   private setInSorted(segment: string, node: Node): void {
-    const arrays = this.sorted!;
+    const arrays = this.sorted;
+
+    if (!arrays) {
+      return;
+    }
+
     const fp = fingerprintSegment(segment);
     const index = this.findSortedIndex(segment, fp);
 
@@ -202,7 +221,12 @@ export class StaticChildMap implements Iterable<Entry> {
   }
 
   private getFromSorted(segment: string): Node | undefined {
-    const arrays = this.sorted!;
+    const arrays = this.sorted;
+
+    if (!arrays) {
+      return undefined;
+    }
+
     const index = this.findSortedIndex(segment, fingerprintSegment(segment));
 
     if (index >= 0) {
@@ -213,13 +237,25 @@ export class StaticChildMap implements Iterable<Entry> {
   }
 
   private findSortedIndex(segment: string, fp: number): number {
-    const arrays = this.sorted!;
+    const arrays = this.sorted;
+
+    if (!arrays) {
+      return -1;
+    }
+
     let low = 0;
     let high = arrays.segments.length - 1;
 
     while (low <= high) {
       const mid = (low + high) >>> 1;
-      const cmp = compareFingerprintAndSegment(fp, segment, arrays.fingerprints[mid]!, arrays.segments[mid]!);
+      const fingerprint = arrays.fingerprints[mid];
+      const currentSegment = arrays.segments[mid];
+
+      if (fingerprint === undefined || currentSegment === undefined) {
+        return ~low;
+      }
+
+      const cmp = compareFingerprintAndSegment(fp, segment, fingerprint, currentSegment);
 
       if (cmp === 0) {
         return mid;
@@ -235,13 +271,18 @@ export class StaticChildMap implements Iterable<Entry> {
     return ~low;
   }
 
-  private *iterateInlineEntries(): IterableIterator<Entry> {
+  private *iterateInlineEntries(): IterableIterator<StaticChildEntry> {
     if (!this.inlineKeys || !this.inlineValues) {
       return;
     }
 
     for (let i = 0; i < this.inlineCount; i++) {
-      yield [this.inlineKeys[i]!, this.inlineValues[i]!] as Entry;
+      const key = this.inlineKeys[i];
+      const value = this.inlineValues[i];
+
+      if (key !== undefined && value !== undefined) {
+        yield [key, value];
+      }
     }
   }
   private *iterateInlineKeys(): IterableIterator<string> {
@@ -250,7 +291,11 @@ export class StaticChildMap implements Iterable<Entry> {
     }
 
     for (let i = 0; i < this.inlineCount; i++) {
-      yield this.inlineKeys[i]!;
+      const key = this.inlineKeys[i];
+
+      if (key !== undefined) {
+        yield key;
+      }
     }
   }
   private *iterateInlineValues(): IterableIterator<Node> {
@@ -259,10 +304,14 @@ export class StaticChildMap implements Iterable<Entry> {
     }
 
     for (let i = 0; i < this.inlineCount; i++) {
-      yield this.inlineValues[i]!;
+      const value = this.inlineValues[i];
+
+      if (value !== undefined) {
+        yield value;
+      }
     }
   }
-  private *iterateSortedEntries(): IterableIterator<Entry> {
+  private *iterateSortedEntries(): IterableIterator<StaticChildEntry> {
     const arrays = this.sorted;
 
     if (!arrays) {
@@ -270,7 +319,12 @@ export class StaticChildMap implements Iterable<Entry> {
     }
 
     for (let i = 0; i < arrays.segments.length; i++) {
-      yield [arrays.segments[i]!, arrays.nodes[i]!] as Entry;
+      const key = arrays.segments[i];
+      const value = arrays.nodes[i];
+
+      if (key !== undefined && value !== undefined) {
+        yield [key, value];
+      }
     }
   }
   private *iterateSortedKeys(): IterableIterator<string> {
@@ -281,7 +335,11 @@ export class StaticChildMap implements Iterable<Entry> {
     }
 
     for (let i = 0; i < arrays.segments.length; i++) {
-      yield arrays.segments[i]!;
+      const key = arrays.segments[i];
+
+      if (key !== undefined) {
+        yield key;
+      }
     }
   }
   private *iterateSortedValues(): IterableIterator<Node> {
@@ -292,7 +350,11 @@ export class StaticChildMap implements Iterable<Entry> {
     }
 
     for (let i = 0; i < arrays.nodes.length; i++) {
-      yield arrays.nodes[i]!;
+      const value = arrays.nodes[i];
+
+      if (value !== undefined) {
+        yield value;
+      }
     }
   }
 }

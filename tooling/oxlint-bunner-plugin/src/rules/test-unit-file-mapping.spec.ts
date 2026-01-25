@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'bun:test';
 
-import { testUnitFileMappingRule } from './test-unit-file-mapping';
+import type { AstNode } from '../types';
+
 import { createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
 import { createVirtualFs } from '../../test/utils/virtual-fs';
-import type { AstNode } from '../types';
+import { testUnitFileMappingRule } from './test-unit-file-mapping';
 
 function createProgram(body: AstNode[]): AstNode {
   return { type: 'Program', body };
@@ -19,8 +20,8 @@ describe('test-unit-file-mapping', () => {
     const sourceCode = createSourceCode('', null, null, []);
     const { context, reports } = createRuleContext(sourceCode, [], undefined, {
       filename: implFile,
-      fileExists: (filePath) => virtualFs.fileExists(filePath),
-      readFile: (filePath) => virtualFs.readFile(filePath),
+      fileExists: filePath => virtualFs.fileExists(filePath),
+      readFile: filePath => virtualFs.readFile(filePath),
     });
     const visitor = testUnitFileMappingRule.create(context);
 
@@ -45,8 +46,8 @@ describe('test-unit-file-mapping', () => {
     const sourceCode = createSourceCode('', null, null, []);
     const { context, reports } = createRuleContext(sourceCode, [], undefined, {
       filename: implFile,
-      fileExists: (filePath) => virtualFs.fileExists(filePath),
-      readFile: (filePath) => virtualFs.readFile(filePath),
+      fileExists: filePath => virtualFs.fileExists(filePath),
+      readFile: filePath => virtualFs.readFile(filePath),
     });
     const visitor = testUnitFileMappingRule.create(context);
 
@@ -217,8 +218,8 @@ describe('test-unit-file-mapping', () => {
     const sourceCode = createSourceCode('', null, null, []);
     const { context, reports } = createRuleContext(sourceCode, [], undefined, {
       filename: specFile,
-      fileExists: (filePath) => virtualFs.fileExists(filePath),
-      readFile: (filePath) => virtualFs.readFile(filePath),
+      fileExists: filePath => virtualFs.fileExists(filePath),
+      readFile: filePath => virtualFs.readFile(filePath),
     });
     const visitor = testUnitFileMappingRule.create(context);
 
@@ -243,8 +244,8 @@ describe('test-unit-file-mapping', () => {
     const sourceCode = createSourceCode('', null, null, []);
     const { context, reports } = createRuleContext(sourceCode, [], undefined, {
       filename: specFile,
-      fileExists: (filePath) => virtualFs.fileExists(filePath),
-      readFile: (filePath) => virtualFs.readFile(filePath),
+      fileExists: filePath => virtualFs.fileExists(filePath),
+      readFile: filePath => virtualFs.readFile(filePath),
     });
     const visitor = testUnitFileMappingRule.create(context);
 

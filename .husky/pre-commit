@@ -1,5 +1,27 @@
 #!/usr/bin/env sh
 set -eu
 
-#bun tsc
 #bunx lint-staged
+
+staged_files="$(git diff --cached --name-only --diff-filter=ACMR || true)"
+
+if [ -z "$staged_files" ]; then
+	exit 0
+fi
+
+should_run_tests=0
+
+for file in $staged_files; do
+	case "$file" in
+		package.json|tsconfig.json|*.ts|*.js)
+			should_run_tests=1
+			break
+			;;
+		*)
+			;;
+	esac
+done
+
+#if [ "$should_run_tests" -eq 1 ]; then
+#	bun test
+#fi

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 
-import { testBddTitleRule } from './test-bdd-title';
-import { createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
 import type { AstNode } from '../types';
+
+import { createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
+import { testBddTitleRule } from './test-bdd-title';
 
 describe('test-bdd-title', () => {
   it('should accept titles when they follow BDD format', () => {
@@ -30,7 +31,11 @@ describe('test-bdd-title', () => {
     const visitor = testBddTitleRule.create(context);
     const callNode: AstNode = {
       type: 'CallExpression',
-      callee: { type: 'MemberExpression', object: { type: 'Identifier', name: 'it' }, property: { type: 'Identifier', name: 'only' } },
+      callee: {
+        type: 'MemberExpression',
+        object: { type: 'Identifier', name: 'it' },
+        property: { type: 'Identifier', name: 'only' },
+      },
       arguments: [{ type: 'Literal', value: 'should work when condition is met' }],
     };
 

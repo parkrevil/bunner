@@ -17,7 +17,7 @@ export class HttpErrorHandler {
 
     return {
       statusCode: 500,
-      message: error.message || 'Internal Server Error',
+      message: error.message ?? 'Internal Server Error',
       path: req.url,
     };
   }

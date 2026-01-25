@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'bun:test';
 
-import { unusedImportsRule } from './unused-imports';
+import type { AstNode, Variable } from '../types';
+
 import { applyFixes, createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
 import { buildCommaTokens } from '../../test/utils/token-utils';
-import type { AstNode, Variable } from '../types';
+import { unusedImportsRule } from './unused-imports';
 
 describe('unused-imports', () => {
   it('should report unused import declarations when references are missing', () => {

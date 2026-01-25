@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 
-import { memberOrderingRule } from './member-ordering';
-import { createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
 import type { AstNode } from '../types';
+
+import { createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
+import { memberOrderingRule } from './member-ordering';
 
 describe('member-ordering', () => {
   it('should report members when ordering is invalid', () => {

@@ -1,11 +1,4 @@
-export interface ProcessorConfig {
-  collapseSlashes?: boolean;
-  ignoreTrailingSlash?: boolean;
-  blockTraversal?: boolean;
-  caseSensitive?: boolean;
-  maxSegmentLength?: number;
-  failFastOnBadEncoding?: boolean;
-}
+import type { ProcessorConfig } from './types';
 
 export class ProcessorContext {
   public path: string;
@@ -18,5 +11,3 @@ export class ProcessorContext {
     this.config = config;
   }
 }
-
-export type PipelineStep = (ctx: ProcessorContext) => void;

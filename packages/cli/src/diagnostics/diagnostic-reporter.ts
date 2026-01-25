@@ -1,13 +1,15 @@
-import { compareCodePoint } from '../common';
-
 import type { Diagnostic, DiagnosticSeverity, ReportDiagnosticsParams } from './types';
 
+import { compareCodePoint } from '../common';
+
 const severityOrder: DiagnosticSeverity[] = ['trace', 'debug', 'info', 'warning', 'error', 'fatal'];
+
 const getSeverityIndex = (severity: DiagnosticSeverity): number => {
   const index = severityOrder.indexOf(severity);
 
   return index >= 0 ? index : severityOrder.length;
 };
+
 const sortDiagnostics = (diagnostics: Diagnostic[]): Diagnostic[] => {
   return diagnostics.slice().sort((left, right) => {
     const severityDiff = getSeverityIndex(left.severity) - getSeverityIndex(right.severity);

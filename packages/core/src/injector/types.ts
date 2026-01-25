@@ -1,14 +1,76 @@
-import type { ProviderToken, ForwardRef } from '@bunner/common';
+import type {
+  Callable,
+  Class,
+  ForwardRef,
+  PrimitiveArray,
+  PrimitiveRecord,
+  PrimitiveValue,
+  Provider,
+  ProviderToken,
+} from '@bunner/common';
+
+import type { Container } from './container';
 
 export type DependencyProvider = ProviderToken | ForwardRef;
 
-export type ControllerWrapper<Options> = Options & {
-  instance: InstanceType<any>;
-};
+export interface TokenRecord {
+  readonly __bunner_ref?: string;
+  readonly __bunner_forward_ref?: string;
+  readonly name?: string;
+}
+
+export type DecoratorArgument =
+  | ProviderToken
+  | TokenRecord
+  | ModuleMetadata
+  | string
+  | number
+  | boolean
+  | bigint
+  | symbol
+  | null
+  | undefined;
+
+export type ContainerValue = PrimitiveValue | PrimitiveArray | PrimitiveRecord | Callable | InstanceType<Class>;
+
+export type ProviderFactory = (container: Container) => ContainerValue;
+
+export interface DecoratorMetadata {
+  readonly name: string;
+  readonly arguments?: readonly DecoratorArgument[];
+}
+
+export interface ConstructorParamMetadata {
+  readonly type?: ProviderToken | TokenRecord;
+  readonly decorators?: readonly DecoratorMetadata[];
+}
+
+export interface ClassMetadata {
+  readonly decorators?: readonly DecoratorMetadata[];
+  readonly constructorParams?: readonly ConstructorParamMetadata[];
+}
+
+export interface ControllerWrapperBase<TController extends Class = Class> {
+  instance: InstanceType<TController>;
+}
+
+export type ControllerWrapper<
+  Options extends PrimitiveRecord,
+  TController extends Class = Class,
+> = ControllerWrapperBase<TController> & Options;
+
+export interface ModuleObject {
+  readonly imports?: ReadonlyArray<ModuleImport>;
+  readonly controllers?: ReadonlyArray<Class>;
+  readonly providers?: ReadonlyArray<Provider>;
+  readonly exports?: ReadonlyArray<ProviderToken>;
+}
+
+export type ModuleImport = Class | ModuleObject;
 
 export interface ModuleMetadata {
-  imports?: any[];
-  controllers?: any[];
-  providers?: any[];
-  exports?: any[];
+  readonly imports?: ReadonlyArray<ModuleImport>;
+  readonly controllers?: ReadonlyArray<Class>;
+  readonly providers?: ReadonlyArray<Provider>;
+  readonly exports?: ReadonlyArray<ProviderToken>;
 }

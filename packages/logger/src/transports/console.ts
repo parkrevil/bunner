@@ -25,7 +25,7 @@ export class ConsoleTransport implements Transport {
   constructor(private options: LoggerOptions = {}) {}
 
   log<T>(message: LogMessage<T>): void {
-    const format = this.options.format || (process.env.NODE_ENV === 'production' ? 'json' : 'pretty');
+    const format = this.options.format ?? (process.env.NODE_ENV === 'production' ? 'json' : 'pretty');
 
     if (format === 'json') {
       this.logJson(message);
@@ -53,6 +53,7 @@ export class ConsoleTransport implements Transport {
 
       return value;
     };
+
     const str = JSON.stringify(message, replacer);
 
     process.stdout.write(str + '\n');
@@ -63,7 +64,7 @@ export class ConsoleTransport implements Transport {
     const date = new Date(time);
     const timeStr = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}:${date.getSeconds().toString().padStart(2, '0')}`;
     const timeColored = `${COLORS.gray}${timeStr}${RESET}`;
-    const color = this.options.prettyOptions?.colors?.[level] || DEFAULT_COLORS[level];
+    const color = this.options.prettyOptions?.colors?.[level] ?? DEFAULT_COLORS[level];
     const levelCode = COLORS[color] || COLORS.white;
     const levelStr = `${levelCode}${level.toUpperCase().padEnd(5)}${RESET}`;
     let metaStr = '';

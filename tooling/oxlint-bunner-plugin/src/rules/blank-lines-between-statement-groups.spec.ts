@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 
-import { blankLinesBetweenStatementGroupsRule } from './blank-lines-between-statement-groups';
-import { applyFixes, createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
 import type { AstNode } from '../types';
+
+import { applyFixes, createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
+import { blankLinesBetweenStatementGroupsRule } from './blank-lines-between-statement-groups';
 
 describe('blank-lines-between-statement-groups', () => {
   it('should report when groups change without a blank line', () => {

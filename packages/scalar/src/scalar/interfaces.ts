@@ -1,4 +1,4 @@
-import type { DocumentTargets, HttpTargets } from './types';
+import type { DocumentTargets, HttpTargets, ScalarMetadataRegistry, ScalarRecord } from './types';
 
 export interface ScalarSetupOptions {
   documentTargets: DocumentTargets;
@@ -7,9 +7,19 @@ export interface ScalarSetupOptions {
 
 export interface Doc {
   docId: string;
-  spec: unknown;
+  spec: ScalarRecord;
 }
 
+export interface ScalarRequest {
+  path?: string;
+}
+
+export type InternalRouteHandler = (req: ScalarRequest) => Response;
+
 export interface InternalRouter {
-  get: (path: string, handler: (req: unknown) => Response) => void;
+  get: (path: string, handler: InternalRouteHandler) => void;
+}
+
+export interface ScalarOptionsWithRegistry {
+  metadataRegistry?: ScalarMetadataRegistry;
 }

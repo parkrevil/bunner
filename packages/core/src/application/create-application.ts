@@ -1,8 +1,8 @@
 import type { BunnerApplicationOptions, Provider } from '@bunner/common';
 
-import { Bunner } from '../bunner';
-
 import type { BunnerApplication } from './bunner-application';
+
+import { Bunner } from '../bunner';
 
 /**
  * Creates a Bunner application instance without starting adapters.

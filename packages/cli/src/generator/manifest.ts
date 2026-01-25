@@ -1,11 +1,11 @@
 import { dirname, relative } from 'path';
 
+import type { ManifestJsonParams } from './interfaces';
+
 import { type AdapterStaticSpec, type ClassMetadata, ModuleGraph, type ModuleNode } from '../analyzer';
 import { compareCodePoint, PathResolver } from '../common';
-
 import { ImportRegistry } from './import-registry';
 import { InjectorGenerator } from './injector';
-import type { ManifestJsonParams } from './interfaces';
 import { MetadataGenerator } from './metadata';
 
 export class ManifestGenerator {
@@ -163,6 +163,7 @@ export const scopedKeysMap = createScopedKeysMap();
     });
     const sortedModuleDescriptors = moduleDescriptors.sort((left, right) => compareCodePoint(left.id, right.id));
     const diNodes: Array<Record<string, unknown>> = [];
+
     const extractTokenName = (token: unknown): string | undefined => {
       if (typeof token === 'string') {
         return token;
@@ -173,7 +174,7 @@ export const scopedKeysMap = createScopedKeysMap();
       }
 
       if (typeof token === 'symbol') {
-        return token.description || token.toString();
+        return token.description ?? token.toString();
       }
 
       if (!token || typeof token !== 'object') {
@@ -192,6 +193,7 @@ export const scopedKeysMap = createScopedKeysMap();
 
       return undefined;
     };
+
     const isClassMetadata = (value: unknown): value is ClassMetadata => {
       const record = value as Record<string, unknown> | null;
 
@@ -203,6 +205,7 @@ export const scopedKeysMap = createScopedKeysMap();
 
       return Array.isArray(constructorParams);
     };
+
     const extractDeps = (metadata: unknown): string[] => {
       if (!metadata) {
         return [];
@@ -213,7 +216,7 @@ export const scopedKeysMap = createScopedKeysMap();
           .map(param => {
             const injectDec = param.decorators.find(d => d.name === 'Inject');
 
-            if (injectDec && injectDec.arguments.length > 0) {
+            if (injectDec?.arguments.length > 0) {
               return extractTokenName(injectDec.arguments[0]);
             }
 
@@ -230,6 +233,7 @@ export const scopedKeysMap = createScopedKeysMap();
 
       return [];
     };
+
     const normalizeScope = (scope: string | undefined): string => {
       if (scope === 'request-context' || scope === 'request') {
         return 'request';

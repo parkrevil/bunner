@@ -1,7 +1,7 @@
 import type { NormalizedPathSegments } from '../types';
+import type { ProcessorConfig, PipelineStep } from './types';
 
 import { ProcessorContext } from './context';
-import type { ProcessorConfig, PipelineStep } from './context';
 import { toLowerCase } from './steps/case-sensitivity';
 import { resolveDotSegments } from './steps/dot-segments';
 import { removeLeadingSlash } from './steps/remove-leading-slash';

@@ -1,0 +1,169 @@
+import { describe, expect, it } from 'bun:test';
+
+import type { DuplicateGroup } from './types';
+
+import { detectDuplicates } from './duplicate-detector';
+import { parseSource, type ParsedFile } from './engine/oxc-wrapper';
+
+describe('detectDuplicates', () => {
+  it('should report at least one duplicate group when identical functions exist', () => {
+    // Arrange
+    let sources = new Map<string, string>();
+
+    sources.set(
+      '/virtual/dup.ts',
+      [
+        'export const alpha = () => {',
+        '  const value = 1;',
+        '  return value + 1;',
+        '};',
+        'export const beta = () => {',
+        '  const value = 1;',
+        '  return value + 1;',
+        '};',
+      ].join('\n'),
+    );
+
+    let program = createProgram(sources);
+    // Act
+    let groups = detectDuplicates(program, 10);
+    let functionGroup = findGroupByKind(groups, 'function');
+
+    // Assert
+    expect(groups.length).toBeGreaterThan(0);
+    expect(functionGroup).not.toBeNull();
+    expect(functionGroup?.items.length ?? 0).toBeGreaterThanOrEqual(2);
+  });
+
+  it('should report a duplicate group spanning files when the same structure appears across files', () => {
+    // Arrange
+    let sources = new Map<string, string>();
+
+    sources.set('/virtual/a.ts', ['export function alpha() {', '  const value = 1;', '  return value + 1;', '}'].join('\n'));
+
+    sources.set('/virtual/b.ts', ['export function beta() {', '  const other = 1;', '  return other + 1;', '}'].join('\n'));
+
+    let program = createProgram(sources);
+    // Act
+    let groups = detectDuplicates(program, 10);
+    let functionGroup = findGroupByKind(groups, 'function');
+    let files = functionGroup ? functionGroup.items.map(item => item.filePath) : [];
+
+    // Assert
+    expect(functionGroup).not.toBeNull();
+    expect(files.includes('/virtual/a.ts')).toBe(true);
+    expect(files.includes('/virtual/b.ts')).toBe(true);
+  });
+
+  it('should report block-level duplicates when blocks are identical', () => {
+    // Arrange
+    let sources = new Map<string, string>();
+
+    sources.set(
+      '/virtual/blocks.ts',
+      [
+        'export function first() {',
+        '  if (true) {',
+        '    const value = 1;',
+        '    console.log(value);',
+        '  }',
+        '}',
+        'export function second() {',
+        '  if (true) {',
+        '    const value = 1;',
+        '    console.log(value);',
+        '  }',
+        '}',
+      ].join('\n'),
+    );
+
+    let program = createProgram(sources);
+    // Act
+    let groups = detectDuplicates(program, 10);
+    let blockGroup = findGroupByKind(groups, 'node');
+
+    // Assert
+    expect(blockGroup).not.toBeNull();
+    expect(blockGroup?.items.length ?? 0).toBeGreaterThanOrEqual(2);
+  });
+
+  it('should report duplicate groups for type shapes when identical type aliases and interfaces exist', () => {
+    // Arrange
+    let sources = new Map<string, string>();
+
+    sources.set(
+      '/virtual/types.ts',
+      [
+        'export type Alpha = { value: string };',
+        'export type Beta = { value: string };',
+        'export interface Gamma { value: string; }',
+        'export interface Delta { value: string; }',
+      ].join('\n'),
+    );
+
+    let program = createProgram(sources);
+    // Act
+    let groups = detectDuplicates(program, 5);
+    let typeGroup = findGroupByKind(groups, 'type');
+    let interfaceGroup = findGroupByKind(groups, 'interface');
+
+    // Assert
+    expect(typeGroup).not.toBeNull();
+    expect(interfaceGroup).not.toBeNull();
+  });
+
+  it('should not report duplicates when literal values differ even if structure matches', () => {
+    // Arrange
+    let sources = new Map<string, string>();
+
+    sources.set(
+      '/virtual/literals.ts',
+      [
+        'export function one() {',
+        '  const value = 1;',
+        '  return value + 1;',
+        '}',
+        'export function two() {',
+        '  const value = 2;',
+        '  return value + 2;',
+        '}',
+      ].join('\n'),
+    );
+
+    let program = createProgram(sources);
+    // Act
+    let groups = detectDuplicates(program, 10);
+    let functionGroup = findGroupByKind(groups, 'function');
+
+    // Assert
+    expect(functionGroup).toBeNull();
+  });
+
+  it('should not report duplicates when tokens are below the threshold', () => {
+    // Arrange
+    let sources = new Map<string, string>();
+
+    sources.set('/virtual/small.ts', ['export function a() { return 1; }', 'export function b() { return 1; }'].join('\n'));
+
+    let program = createProgram(sources);
+    // Act
+    let groups = detectDuplicates(program, 200);
+
+    // Assert
+    expect(groups.length).toBe(0);
+  });
+});
+
+const createProgram = (sources: Map<string, string>): ParsedFile[] => {
+  const files: ParsedFile[] = [];
+
+  for (const [filePath, sourceText] of sources.entries()) {
+    files.push(parseSource(filePath, sourceText));
+  }
+
+  return files;
+};
+
+const findGroupByKind = (groups: ReadonlyArray<DuplicateGroup>, kind: string) => {
+  return groups.find(group => group.items.some(item => item.kind === kind)) ?? null;
+};

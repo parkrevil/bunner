@@ -1,3 +1,6 @@
+import type { BinaryRouterLayout, SerializedPattern } from '../schema';
+import type { Node } from './node';
+
 import {
   NodeKind,
   NODE_MASK_KIND,
@@ -19,9 +22,6 @@ import {
   METHOD_OFFSET,
   PARAM_ENTRY_STRIDE,
 } from '../schema';
-import type { BinaryRouterLayout, SerializedPattern } from '../schema';
-
-import type { Node } from './node';
 
 export class Flattener {
   static flatten(root: Node): BinaryRouterLayout {
@@ -65,6 +65,7 @@ export class Flattener {
     const stringMap = new Map<string, number>();
     const patterns: SerializedPattern[] = [];
     const patternMap = new Map<string, number>();
+
     const getStringId = (str: string): number => {
       let id = stringMap.get(str);
 
@@ -77,6 +78,7 @@ export class Flattener {
 
       return id;
     };
+
     const getPatternId = (source: string, flags: string): number => {
       const key = `${flags}|${source}`;
       let id = patternMap.get(key);

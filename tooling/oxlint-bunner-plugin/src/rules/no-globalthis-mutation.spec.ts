@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 
-import { noGlobalThisMutationRule } from './no-globalthis-mutation';
-import { createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
 import type { AstNode } from '../types';
+
+import { createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
+import { noGlobalThisMutationRule } from './no-globalthis-mutation';
 
 describe('no-globalthis-mutation', () => {
   it('should report assignments when globalThis members are mutated', () => {

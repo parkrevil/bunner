@@ -91,17 +91,16 @@ const memberOrderingRule = {
 
     const isDecorated = (node: NodeOrNull): boolean => Array.isArray(node?.decorators) && node.decorators.length > 0;
 
-    const isField = (node: NodeOrNull): boolean =>
-      node?.type === 'PropertyDefinition' || node?.type === 'TSPropertySignature';
+    const isField = (node: NodeOrNull): boolean => node?.type === 'PropertyDefinition' || node?.type === 'TSPropertySignature';
 
-    const isMethod = (node: NodeOrNull): boolean =>
-      node?.type === 'MethodDefinition' || node?.type === 'TSMethodSignature';
+    const isMethod = (node: NodeOrNull): boolean => node?.type === 'MethodDefinition' || node?.type === 'TSMethodSignature';
 
     const isConstructor = (node: NodeOrNull): boolean => node?.type === 'MethodDefinition' && node.kind === 'constructor';
 
     const isAccessor = (node: NodeOrNull): boolean => node?.type === 'MethodDefinition' && node.kind === 'set';
 
-    const isSignature = (node: NodeOrNull): boolean => node?.type === 'TSIndexSignature' || node?.type === 'TSCallSignatureDeclaration';
+    const isSignature = (node: NodeOrNull): boolean =>
+      node?.type === 'TSIndexSignature' || node?.type === 'TSCallSignatureDeclaration';
 
     const groupKeyForMember = (node: NodeOrNull): string | null => {
       if (isSignature(node)) {

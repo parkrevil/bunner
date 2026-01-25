@@ -1,5 +1,6 @@
-import { isFunctionVariableDeclaration } from '../utils/is-function-variable-declaration';
 import type { AstNode, Fix, Fixer, NodeOrNull, Range, RuleContext, SourceCode } from '../types';
+
+import { isFunctionVariableDeclaration } from '../utils/is-function-variable-declaration';
 
 const insertBlankLine = (sourceCode: SourceCode, prev: AstNode, next: AstNode, fixer: Fixer): Fix | null => {
   const prevEnd = prev.range?.[1];
@@ -319,8 +320,7 @@ const blankLinesBetweenStatementGroupsRule = {
 
     const isClassDeclaration = (node: NodeOrNull): boolean => node?.type === 'ClassDeclaration';
 
-    const isStatementThatStartsNewGroup = (node: NodeOrNull): boolean =>
-      node?.type === 'TryStatement';
+    const isStatementThatStartsNewGroup = (node: NodeOrNull): boolean => node?.type === 'TryStatement';
 
     const statementGroupId = (node: NodeOrNull): string => {
       if (!node) {

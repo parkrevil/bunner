@@ -19,7 +19,7 @@ export class HttpErrorFilter extends BunnerErrorFilter {
     res.setStatus(status as any);
     res.setBody({
       statusCode: status,
-      message: (error as any)?.message || 'Internal Server Error',
+      message: (error as any)?.message ?? 'Internal Server Error',
       path: req.url,
     });
   }

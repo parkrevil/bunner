@@ -1,6 +1,5 @@
 import type { BunnerRequest } from '../bunner-request';
 import type { BunnerResponse } from '../bunner-response';
-
 import type { HttpAdapter } from './http-adapter';
 
 export class BunnerHttpContextAdapter implements HttpAdapter {

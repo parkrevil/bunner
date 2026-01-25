@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 
-import { noDynamicImportRule } from './no-dynamic-import';
-import { createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
 import type { AstNode } from '../types';
+
+import { createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
+import { noDynamicImportRule } from './no-dynamic-import';
 
 describe('no-dynamic-import', () => {
   it('should report when import expression is non-literal', () => {

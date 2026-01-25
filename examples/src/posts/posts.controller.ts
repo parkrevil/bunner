@@ -35,6 +35,6 @@ export class PostsController {
 
   @Post(':id/comments')
   createComment(@Param('id') id: string, @Body() body: any) {
-    return this.postsService.createComment(Number(id), body);
+    this.postsService.createComment(Number(id), body);
   }
 }

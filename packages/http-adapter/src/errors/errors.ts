@@ -119,7 +119,7 @@ export class ExpectationFailedError extends HttpError {
 }
 
 export class ImATeapotError extends HttpError {
-  constructor(message = 'I\'m a teapot') {
+  constructor(message = "I'm a teapot") {
     super(StatusCodes.IM_A_TEAPOT, message);
   }
 }

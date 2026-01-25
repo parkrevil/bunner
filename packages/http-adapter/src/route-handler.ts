@@ -1,31 +1,51 @@
-import { type BunnerContainer, type BunnerMiddleware, type BunnerErrorFilter } from '@bunner/common';
+import type { BunnerContainer, ProviderToken } from '@bunner/common';
+
+import { BunnerErrorFilter, BunnerMiddleware } from '@bunner/common';
 import { Logger } from '@bunner/logger';
 
 import type { BunnerRequest } from './bunner-request';
 import type { BunnerResponse } from './bunner-response';
-import type { RouteHandlerEntry } from './interfaces';
+import type { RouteHandlerParamType } from './decorators';
+import type { ArgumentMetadata, RouteHandlerEntry } from './interfaces';
+import type { RouterOptions } from './router/types';
+import type {
+  ClassMetadata,
+  ContainerInstance,
+  ControllerInstance,
+  ControllerConstructor,
+  DecoratorArgument,
+  DecoratorMetadata,
+  HttpMethod,
+  InternalRouteDefinition,
+  LazyParamTypeFactory,
+  MatchResult,
+  MethodMetadata,
+  ParamTypeReference,
+  RouteHandlerArgument,
+  RouteHandlerFunction,
+  RouteHandlerResult,
+  RouteParamKind,
+  RouteParamType,
+  RouteParamValue,
+  TokenCarrier,
+  TokenRecord,
+} from './types';
+
 import { ValidationPipe } from './pipes/validation.pipe';
 import { Router } from './router';
-import type { RouterOptions } from './router/types';
-import type { HttpMethod } from './types';
-
-export interface MatchResult {
-  entry: RouteHandlerEntry;
-  params: Record<string, string>;
-}
 
 export class RouteHandler {
   private container: BunnerContainer;
-  private metadataRegistry: Map<any, any>;
-  private scopedKeys: Map<any, string>;
+  private metadataRegistry: Map<ControllerConstructor, ClassMetadata>;
+  private scopedKeys: Map<ProviderToken, string>;
   private router: Router<MatchResult>;
   private readonly logger = new Logger(RouteHandler.name);
   private validationPipe = new ValidationPipe();
 
   constructor(
     container: BunnerContainer,
-    metadataRegistry: Map<any, any>,
-    scopedKeys: Map<any, string> = new Map(),
+    metadataRegistry: Map<ControllerConstructor, ClassMetadata>,
+    scopedKeys: Map<ProviderToken, string> = new Map(),
     routerOptions?: RouterOptions,
   ) {
     this.container = container;
@@ -39,14 +59,20 @@ export class RouteHandler {
   }
 
   match(method: string, path: string): MatchResult | undefined {
-    return this.router.match(method.toUpperCase() as HttpMethod, path) || undefined;
+    const normalized = method.toUpperCase();
+
+    if (!this.isHttpMethod(normalized)) {
+      return undefined;
+    }
+
+    return this.router.match(normalized, path) ?? undefined;
   }
 
   register() {
     this.logger.debug('🔍 Registering routes from metadata...');
 
     for (const [targetClass, meta] of this.metadataRegistry.entries()) {
-      const controllerDec = (meta.decorators || []).find((d: any) => d.name === 'Controller' || d.name === 'RestController');
+      const controllerDec = (meta.decorators ?? []).find(d => d.name === 'RestController');
 
       if (controllerDec) {
         this.logger.debug(`FOUND Controller: ${meta.className}`);
@@ -60,11 +86,13 @@ export class RouteHandler {
    * Undocumented/internal route registration channel.
    * This is intentionally untyped at the package boundary.
    */
-  registerInternalRoutes(
-    routes: ReadonlyArray<{ readonly method: string; readonly path: string; readonly handler: (...args: unknown[]) => unknown }>,
-  ): void {
+  registerInternalRoutes(routes: ReadonlyArray<InternalRouteDefinition>): void {
     for (const route of routes) {
       const method = String(route.method || '').toUpperCase();
+
+      if (!this.isHttpMethod(method)) {
+        continue;
+      }
 
       if (method !== 'GET') {
         continue;
@@ -79,30 +107,31 @@ export class RouteHandler {
         methodName: '__internal__',
         middlewares: [],
         errorFilters: [],
-        paramFactory: (req: BunnerRequest, res: BunnerResponse) => {
+        paramFactory: async (req: BunnerRequest, res: BunnerResponse) => {
           const arity = typeof route.handler === 'function' ? route.handler.length : 0;
-          const args = arity >= 2 ? [req, res] : [req];
+          const args: readonly RouteParamValue[] = arity >= 2 ? [req, res] : [req];
 
-          return Promise.resolve(args as unknown as any[]);
+          return Promise.resolve([...args]);
         },
       };
 
-      this.router.add(method as HttpMethod, fullPath, params => ({
+      this.router.add(method, fullPath, params => ({
         entry,
-        params: params as Record<string, string>,
+        params,
       }));
 
       this.logger.info(`🛣️  Internal Route Registered: [${method}] ${fullPath}`);
     }
   }
 
-  private registerController(targetClass: any, meta: any, controllerDec: any) {
-    const prefix = controllerDec.arguments[0] || '';
+  private registerController(targetClass: ControllerConstructor, meta: ClassMetadata, controllerDec: DecoratorMetadata): void {
+    const rawPrefix = controllerDec.arguments?.[0];
+    const prefix = typeof rawPrefix === 'string' ? rawPrefix : '';
     const scopedKey = this.scopedKeys.get(targetClass);
-    let instance;
+    let instance: ContainerInstance = undefined;
 
     try {
-      if (scopedKey) {
+      if (typeof scopedKey === 'string' && scopedKey.length > 0) {
         instance = this.container.get(scopedKey);
       } else {
         instance = this.container.get(targetClass);
@@ -111,134 +140,137 @@ export class RouteHandler {
       instance = undefined;
     }
 
-    if (!instance) {
-      instance = this.tryCreateControllerInstance(targetClass);
-    }
+    instance ??= this.tryCreateControllerInstance(targetClass);
 
-    if (!instance) {
-      this.logger.warn(`⚠️  Cannot resolve controller instance: ${meta.className} (Key: ${scopedKey || targetClass.name})`);
+    if (instance === undefined || instance === null) {
+      const keyLabel = typeof scopedKey === 'string' && scopedKey.length > 0 ? scopedKey : targetClass.name;
+
+      this.logger.warn(`⚠️  Cannot resolve controller instance: ${meta.className} (Key: ${keyLabel})`);
 
       return;
     }
 
-    (meta.methods || []).forEach((method: any) => {
-      const routeDec = (method.decorators || []).find((d: any) =>
+    (meta.methods ?? []).forEach(method => {
+      const routeDec = (method.decorators ?? []).find(d =>
         ['Get', 'Post', 'Put', 'Delete', 'Patch', 'Options', 'Head'].includes(d.name),
       );
 
       if (routeDec) {
-        const httpMethod = routeDec.name.toUpperCase();
-        const subPath = routeDec.arguments[0] || '';
-        const fullPath = '/' + [prefix, subPath].filter(Boolean).join('/').replace(/\/+/g, '/');
-        const paramTypes = (method.parameters || []).map((p: any) => {
-          const d = (p.decorators || [])[0];
+        const httpMethodCandidate = routeDec.name.toUpperCase();
 
-          return d ? d.name.toLowerCase() : 'unknown';
+        if (!this.isHttpMethod(httpMethodCandidate)) {
+          return;
+        }
+
+        const httpMethod = httpMethodCandidate;
+        const rawSubPath = routeDec.arguments?.[0];
+        const subPath = typeof rawSubPath === 'string' ? rawSubPath : '';
+        const fullPath = '/' + [prefix, subPath].filter(Boolean).join('/').replace(/\/+/g, '/');
+        const paramTypes = (method.parameters ?? []).map(parameter => {
+          const normalized = this.normalizeParamKind(parameter.decorators?.[0]?.name);
+
+          return this.toRouteHandlerParamType(normalized);
         });
-        const paramRefs = (method.parameters || []).map((p: any) => this.resolveParamType(p.type));
+        const paramRefs = (method.parameters ?? []).map(parameter => this.resolveParamType(parameter.type) ?? 'unknown');
         // Detect parameters early (moved into paramFactory closure)
-        const paramsConfig = (method.parameters || []).map((p: any, i: number) => {
-          const d = (p.decorators || [])[0];
+        const paramsConfig = (method.parameters ?? []).map((parameter, index) => {
+          const decorator = parameter.decorators?.[0];
+          const normalized = this.normalizeParamKind(decorator?.name);
 
           return {
-            type: d ? d.name.toLowerCase() : undefined,
-            name: p.name,
-            metatype: this.resolveParamType(p.type),
-            index: i,
+            type: normalized,
+            name: parameter.name,
+            metatype: this.resolveParamType(parameter.type),
+            index,
           };
         });
-        const paramFactory = async (req: BunnerRequest, res: BunnerResponse): Promise<any[]> => {
-          const params = [];
+
+        const paramFactory = async (req: BunnerRequest, res: BunnerResponse): Promise<readonly RouteParamValue[]> => {
+          const params: RouteParamValue[] = [];
 
           for (const config of paramsConfig) {
-            let paramValue = undefined;
+            let paramValue: RouteParamValue = undefined;
             const { type, metatype } = config;
-            let typeToUse = type;
+            let typeToUse: RouteParamKind | undefined = type;
 
             // Fallback to name-based detection if no decorator
-            if (!typeToUse && config.name) {
-              const nameLower = config.name.toLowerCase();
+            if (typeToUse === undefined && typeof config.name === 'string' && config.name.length > 0) {
+              typeToUse = this.normalizeParamKind(config.name);
+            }
 
-              if (nameLower === 'params' || nameLower === 'param') {
-                typeToUse = 'param';
-              } else if (nameLower === 'body') {
-                typeToUse = 'body';
-              } else if (nameLower === 'query' || nameLower === 'queries') {
-                typeToUse = 'query';
-              } else if (nameLower === 'headers' || nameLower === 'header') {
-                typeToUse = 'header';
-              } else if (nameLower === 'req' || nameLower === 'request') {
-                typeToUse = 'req';
-              } else if (nameLower === 'res' || nameLower === 'response') {
-                typeToUse = 'res';
+            if (typeToUse) {
+              switch (typeToUse) {
+                case 'body':
+                  paramValue = req.body;
+                  break;
+                case 'param':
+                case 'params':
+                  paramValue = req.params;
+                  break;
+                case 'query':
+                case 'queries':
+                  paramValue = req.query;
+                  break;
+                case 'header':
+                case 'headers':
+                  paramValue = req.headers;
+                  break;
+                case 'cookie':
+                case 'cookies':
+                  paramValue = req.cookies;
+                  break;
+                case 'request':
+                case 'req':
+                  paramValue = req;
+                  break;
+                case 'response':
+                case 'res':
+                  paramValue = res;
+                  break;
+                case 'ip':
+                  paramValue = req.ip;
+                  break;
+                default:
+                  paramValue = undefined;
+                  break;
               }
             }
 
-            switch (typeToUse) {
-              case 'body':
-                paramValue = req.body;
-                break;
-              case 'param':
-              case 'params':
-                paramValue = req.params;
-                break;
-              case 'query':
-              case 'queries':
-                paramValue = req.query;
-                break;
-              case 'header':
-              case 'headers':
-                paramValue = req.headers;
-                break;
-              case 'cookie':
-              case 'cookies':
-                paramValue = req.cookies;
-                break;
-              case 'request':
-              case 'req':
-                paramValue = req;
-                break;
-              case 'response':
-              case 'res':
-                paramValue = res;
-                break;
-              case 'ip':
-                paramValue = req.ip;
-                break;
-              default:
-                paramValue = undefined;
-                break;
-            }
-
-            if (metatype && (typeToUse === 'body' || typeToUse === 'query')) {
-              paramValue = await this.validationPipe.transform(paramValue, {
-                type: typeToUse as 'body' | 'query' | 'param' | 'custom',
+            if (metatype !== undefined && (typeToUse === 'body' || typeToUse === 'query')) {
+              const validationType: 'body' | 'query' | 'param' | 'custom' = typeToUse === 'body' ? 'body' : 'query';
+              const metadata: ArgumentMetadata = {
+                type: validationType,
                 metatype,
-                data: undefined,
-              });
+              };
+
+              paramValue = this.validationPipe.transform(paramValue, metadata);
             }
 
             params.push(paramValue);
           }
 
-          return params;
+          const resolvedParams = await Promise.resolve(params);
+
+          return resolvedParams;
         };
+
         const middlewares = this.resolveMiddlewares(targetClass, method, meta);
         const errorFilters = this.resolveErrorFilters(targetClass, method, meta);
+        const handler = this.resolveHandler(instance, method.name);
         const entry: RouteHandlerEntry = {
-          handler: instance[method.name].bind(instance),
+          handler,
           paramType: paramTypes,
           paramRefs,
-          controllerClass: targetClass,
+          controllerClass: this.isControllerConstructor(targetClass) ? targetClass : null,
           methodName: method.name,
           middlewares,
           errorFilters,
           paramFactory,
         };
 
-        this.router.add(httpMethod as HttpMethod, fullPath, params => ({
+        this.router.add(httpMethod, fullPath, params => ({
           entry,
-          params: params as Record<string, string>,
+          params,
         }));
 
         this.logger.info(`🛣️  Route Registered: [${httpMethod}] ${fullPath} -> ${targetClass.name}.${method.name}`);
@@ -246,35 +278,133 @@ export class RouteHandler {
     });
   }
 
-  private tryCreateControllerInstance(targetClass: any): unknown {
-    const meta = this.metadataRegistry.get(targetClass);
+  private isControllerInstance(value: ContainerInstance): value is ControllerInstance {
+    return typeof value === 'object' && value !== null;
+  }
 
-    if (!meta || !Array.isArray(meta.constructorParams)) {
+  private isControllerConstructor(value: ProviderToken): value is ControllerConstructor {
+    return typeof value === 'function';
+  }
+
+  private resolveHandler(instance: ContainerInstance, methodName: string): RouteHandlerFunction {
+    if (!this.isControllerInstance(instance)) {
+      throw new Error(`[RouteHandler] Invalid controller instance for method ${methodName}`);
+    }
+
+    const candidate = instance[methodName];
+
+    if (typeof candidate !== 'function') {
+      throw new Error(`[RouteHandler] Controller method not found: ${methodName}`);
+    }
+
+    return (...args: readonly RouteHandlerArgument[]): RouteHandlerResult | Promise<RouteHandlerResult> =>
+      candidate.call(instance, ...args);
+  }
+
+  private isTokenCarrier(value: DecoratorArgument): value is TokenCarrier {
+    return typeof value === 'object' && value !== null && 'token' in value;
+  }
+
+  private isTokenRecord(value: DecoratorArgument): value is TokenRecord {
+    return (
+      typeof value === 'object' &&
+      value !== null &&
+      ('__bunner_ref' in value || '__bunner_forward_ref' in value || 'name' in value)
+    );
+  }
+
+  private extractBunnerTokenRef(token: DecoratorArgument): string | undefined {
+    if (!this.isTokenRecord(token)) {
       return undefined;
     }
 
-    const deps = meta.constructorParams.map((param: any) => {
-      let token = param?.type;
+    const ref = token.__bunner_ref;
 
-      if (token && typeof token === 'object') {
-        if (token.__bunner_ref) {
-          token = token.__bunner_ref;
-        } else if (token.__bunner_forward_ref) {
-          token = token.__bunner_forward_ref;
-        }
+    if (typeof ref === 'string' && ref.length > 0) {
+      return ref;
+    }
+
+    const forward = token.__bunner_forward_ref;
+
+    if (typeof forward === 'string' && forward.length > 0) {
+      return forward;
+    }
+
+    return undefined;
+  }
+
+  private resolveProviderToken(token: DecoratorArgument): ProviderToken | undefined {
+    if (token === null || token === undefined) {
+      return undefined;
+    }
+
+    if (this.isTokenCarrier(token)) {
+      return token.token;
+    }
+
+    if (typeof token === 'string' || typeof token === 'symbol' || typeof token === 'function') {
+      return token;
+    }
+
+    const extracted = this.extractBunnerTokenRef(token);
+
+    if (typeof extracted === 'string' && extracted.length > 0) {
+      return extracted;
+    }
+
+    if (this.isTokenRecord(token) && typeof token.name === 'string' && token.name.length > 0) {
+      return token.name;
+    }
+
+    return undefined;
+  }
+
+  private resolveControllerConstructor(token: DecoratorArgument): ControllerConstructor | undefined {
+    if (typeof token === 'function' && this.isControllerConstructor(token)) {
+      return token;
+    }
+
+    const resolved = this.resolveProviderToken(token);
+
+    if (resolved !== undefined && typeof resolved === 'function' && this.isControllerConstructor(resolved)) {
+      return resolved;
+    }
+
+    return undefined;
+  }
+
+  private tryCreateControllerInstance(targetClass: DecoratorArgument): ContainerInstance {
+    const constructor = this.resolveControllerConstructor(targetClass);
+
+    if (!constructor) {
+      return undefined;
+    }
+
+    const meta = this.metadataRegistry.get(constructor);
+
+    if (!meta) {
+      return undefined;
+    }
+
+    const constructorParams = meta.constructorParams ?? [];
+    const deps = constructorParams.map(param => {
+      let token: DecoratorArgument = param.type;
+      const extracted = this.extractBunnerTokenRef(token);
+
+      if (typeof extracted === 'string' && extracted.length > 0) {
+        token = extracted;
       }
 
-      const injectDec = (param?.decorators || []).find((d: any) => d.name === 'Inject');
+      const decorators = param.decorators ?? [];
+      const injectDec = decorators.find((decorator: DecoratorMetadata) => decorator.name === 'Inject');
+      const injected = injectDec?.arguments?.[0];
+      const injectedRef = this.extractBunnerTokenRef(injected);
 
-      if (injectDec && Array.isArray(injectDec.arguments) && injectDec.arguments.length > 0) {
-        token = injectDec.arguments[0];
+      if (typeof injected !== 'undefined') {
+        token = injected;
 
-        if (token && typeof token === 'object') {
-          if (token.__bunner_forward_ref) {
-            token = token.__bunner_forward_ref;
-          } else if (token.__bunner_ref) {
-            token = token.__bunner_ref;
-          }
+        if (typeof injectedRef === 'string' && injectedRef.length > 0) {
+          token = injectedRef;
         }
       }
 
@@ -282,20 +412,22 @@ export class RouteHandler {
     });
 
     try {
-      return new targetClass(...deps);
+      return new constructor(...deps);
     } catch {
       return undefined;
     }
   }
 
-  private tryGetFromContainer(token: any): unknown {
-    if (!token) {
+  private tryGetFromContainer(token: DecoratorArgument): ContainerInstance {
+    const resolvedToken = this.resolveProviderToken(token);
+
+    if (resolvedToken === undefined) {
       return undefined;
     }
 
-    const scopedKey = this.scopedKeys.get(token);
+    const scopedKey = this.scopedKeys.get(resolvedToken);
 
-    if (scopedKey) {
+    if (typeof scopedKey === 'string' && scopedKey.length > 0) {
       try {
         return this.container.get(scopedKey);
       } catch {
@@ -304,16 +436,16 @@ export class RouteHandler {
     }
 
     try {
-      return this.container.get(token);
+      return this.container.get(resolvedToken);
     } catch {
-      return this.tryGetFromContainerBySuffix(token);
+      return this.tryGetFromContainerBySuffix(resolvedToken);
     }
   }
 
-  private tryGetFromContainerBySuffix(token: any): unknown {
+  private tryGetFromContainerBySuffix(token: ProviderToken): ContainerInstance {
     const tokenName = this.normalizeToken(token);
 
-    if (!tokenName) {
+    if (tokenName === undefined || tokenName.length === 0) {
       return undefined;
     }
 
@@ -338,9 +470,25 @@ export class RouteHandler {
     return undefined;
   }
 
-  private normalizeToken(token: any): string | undefined {
-    if (!token) {
-      return undefined;
+  private normalizeToken(token: ProviderToken): string | undefined {
+    if (typeof token === 'string') {
+      return token;
+    }
+
+    if (typeof token === 'symbol') {
+      return token.description ?? token.toString();
+    }
+
+    if (typeof token === 'function' && token.name) {
+      return token.name;
+    }
+
+    return undefined;
+  }
+
+  private formatTokenLabel(token: DecoratorArgument): string {
+    if (token === null || token === undefined) {
+      return 'undefined';
     }
 
     if (typeof token === 'string') {
@@ -348,71 +496,157 @@ export class RouteHandler {
     }
 
     if (typeof token === 'symbol') {
-      return token.description || token.toString();
+      return token.description ?? 'symbol';
     }
 
-    if (typeof token === 'function' && token.name) {
+    if (typeof token === 'function') {
+      return token.name || 'anonymous';
+    }
+
+    if (this.isTokenCarrier(token)) {
+      return this.formatTokenLabel(token.token);
+    }
+
+    const ref = this.extractBunnerTokenRef(token);
+
+    if (typeof ref === 'string' && ref.length > 0) {
+      return ref;
+    }
+
+    if (this.isTokenRecord(token) && typeof token.name === 'string' && token.name.length > 0) {
       return token.name;
     }
 
-    if (typeof token === 'object') {
-      if (token.__bunner_ref) {
-        return token.__bunner_ref;
-      }
-
-      if (token.__bunner_forward_ref) {
-        return token.__bunner_forward_ref;
-      }
-
-      if (typeof token.name === 'string') {
-        return token.name;
-      }
-    }
-
-    return undefined;
+    return 'unknown-token';
   }
 
-  private resolveMiddlewares(_targetClass: any, method: any, classMeta: any): BunnerMiddleware[] {
+  private isBunnerMiddleware(value: ContainerInstance): value is BunnerMiddleware {
+    return value instanceof BunnerMiddleware;
+  }
+
+  private isBunnerErrorFilter(value: ContainerInstance): value is BunnerErrorFilter {
+    return value instanceof BunnerErrorFilter;
+  }
+
+  private isHttpMethod(value: string): value is HttpMethod {
+    return (
+      value === 'GET' ||
+      value === 'POST' ||
+      value === 'PUT' ||
+      value === 'PATCH' ||
+      value === 'DELETE' ||
+      value === 'OPTIONS' ||
+      value === 'HEAD'
+    );
+  }
+
+  private normalizeParamKind(value: string | undefined): RouteParamKind | undefined {
+    if (typeof value !== 'string' || value.length === 0) {
+      return undefined;
+    }
+
+    const lower = value.toLowerCase();
+
+    switch (lower) {
+      case 'body':
+      case 'param':
+      case 'params':
+      case 'query':
+      case 'queries':
+      case 'header':
+      case 'headers':
+      case 'cookie':
+      case 'cookies':
+      case 'request':
+      case 'req':
+      case 'response':
+      case 'res':
+      case 'ip':
+        return lower;
+      default:
+        return undefined;
+    }
+  }
+
+  private toRouteHandlerParamType(kind: RouteParamKind | undefined): RouteHandlerParamType {
+    if (kind === undefined) {
+      return 'param';
+    }
+
+    if (kind === 'params') {
+      return 'param';
+    }
+
+    if (kind === 'queries') {
+      return 'query';
+    }
+
+    if (kind === 'headers') {
+      return 'header';
+    }
+
+    if (kind === 'cookies') {
+      return 'cookie';
+    }
+
+    if (kind === 'req') {
+      return 'request';
+    }
+
+    if (kind === 'res') {
+      return 'response';
+    }
+
+    return kind;
+  }
+
+  private resolveMiddlewares(
+    _targetClass: ControllerConstructor,
+    method: MethodMetadata,
+    classMeta: ClassMetadata,
+  ): BunnerMiddleware[] {
     const middlewares: BunnerMiddleware[] = [];
     // Method Level
-    const decs = (method.decorators || []).filter((d: any) => d.name === 'UseMiddlewares');
+    const decs = (method.decorators ?? []).filter((decorator: DecoratorMetadata) => decorator.name === 'UseMiddlewares');
 
-    decs.forEach((d: any) => {
-      (d.arguments || []).forEach((arg: any) => {
-        const mw = this.tryGetFromContainer(arg);
+    decs.forEach(decorator => {
+      (decorator.arguments ?? []).forEach(arg => {
+        const resolved = this.tryGetFromContainer(arg);
 
-        if (mw) {
-          middlewares.push(mw as BunnerMiddleware);
+        if (resolved !== undefined && resolved !== null && this.isBunnerMiddleware(resolved)) {
+          middlewares.push(resolved);
 
           return;
         }
 
         const created = this.tryCreateControllerInstance(arg);
 
-        if (created) {
-          middlewares.push(created as BunnerMiddleware);
+        if (created !== undefined && created !== null && this.isBunnerMiddleware(created)) {
+          middlewares.push(created);
         }
       });
     });
 
     // Controller Level
-    if (classMeta) {
-      const decs = classMeta.decorators.filter((d: any) => d.name === 'UseMiddlewares');
+    if (classMeta !== undefined) {
+      const controllerDecs = (classMeta.decorators ?? []).filter(
+        (decorator: DecoratorMetadata) => decorator.name === 'UseMiddlewares',
+      );
 
-      decs.forEach((d: any) => {
-        (d.arguments || []).forEach((arg: any) => {
-          const mw = this.tryGetFromContainer(arg);
+      controllerDecs.forEach(decorator => {
+        (decorator.arguments ?? []).forEach(arg => {
+          const resolved = this.tryGetFromContainer(arg);
 
-          if (mw) {
-            middlewares.push(mw as BunnerMiddleware);
+          if (resolved !== undefined && resolved !== null && this.isBunnerMiddleware(resolved)) {
+            middlewares.push(resolved);
 
             return;
           }
 
           const created = this.tryCreateControllerInstance(arg);
 
-          if (created) {
-            middlewares.push(created as BunnerMiddleware);
+          if (created !== undefined && created !== null && this.isBunnerMiddleware(created)) {
+            middlewares.push(created);
           }
         });
       });
@@ -421,73 +655,81 @@ export class RouteHandler {
     return middlewares;
   }
 
-  private resolveErrorFilters(targetClass: any, method: any, classMeta: any): BunnerErrorFilter[] {
-    const tokens: any[] = [];
-    const methodDecs = (method.decorators || []).filter((d: any) => d.name === 'UseErrorFilters');
+  private resolveErrorFilters(
+    targetClass: ControllerConstructor,
+    method: MethodMetadata,
+    classMeta: ClassMetadata,
+  ): BunnerErrorFilter[] {
+    const tokens: DecoratorArgument[] = [];
+    const methodDecs = (method.decorators ?? []).filter((decorator: DecoratorMetadata) => decorator.name === 'UseErrorFilters');
 
-    methodDecs.forEach((d: any) => {
-      (d.arguments || []).forEach((arg: any) => {
+    methodDecs.forEach(decorator => {
+      (decorator.arguments ?? []).forEach(arg => {
         tokens.push(arg);
       });
     });
 
-    if (classMeta) {
-      const classDecs = classMeta.decorators.filter((d: any) => d.name === 'UseErrorFilters');
+    if (classMeta !== undefined) {
+      const classDecs = (classMeta.decorators ?? []).filter(
+        (decorator: DecoratorMetadata) => decorator.name === 'UseErrorFilters',
+      );
 
-      classDecs.forEach((d: any) => {
-        (d.arguments || []).forEach((arg: any) => {
+      classDecs.forEach(decorator => {
+        (decorator.arguments ?? []).forEach(arg => {
           tokens.push(arg);
         });
       });
     }
 
-    const seen = new Set<any>();
-    const dedupedTokens = tokens.filter(t => {
-      if (seen.has(t)) {
+    const seen = new Set<DecoratorArgument>();
+    const dedupedTokens = tokens.filter(token => {
+      if (seen.has(token)) {
         return false;
       }
 
-      seen.add(t);
+      seen.add(token);
 
       return true;
     });
     const resolved: BunnerErrorFilter[] = [];
 
     for (const token of dedupedTokens) {
-      if (!token) {
+      if (token === null || token === undefined) {
         continue;
       }
 
       const instance = this.tryGetFromContainer(token);
 
-      if (instance) {
-        resolved.push(instance as BunnerErrorFilter);
+      if (instance !== undefined && instance !== null && this.isBunnerErrorFilter(instance)) {
+        resolved.push(instance);
 
         continue;
       }
 
       const created = this.tryCreateControllerInstance(token);
 
-      if (!created) {
+      if (created === undefined || created === null || !this.isBunnerErrorFilter(created)) {
         throw new Error(
-          `Cannot resolve ErrorFilter token for ${targetClass?.name || 'UnknownController'}.${method?.name || 'unknown'}: ${String(
-            token?.name || token,
-          )}`,
+          `Cannot resolve ErrorFilter token for ${targetClass.name}.${method.name}: ${this.formatTokenLabel(token)}`,
         );
       }
 
-      resolved.push(created as BunnerErrorFilter);
+      resolved.push(created);
     }
 
     return resolved;
   }
 
-  private resolveParamType(type: any): any {
-    if (typeof type !== 'string') {
-      if (typeof type === 'function' && !type.prototype) {
-        const resolved = type();
+  private resolveParamType(type: ParamTypeReference | undefined): RouteParamType | undefined {
+    if (type === undefined) {
+      return undefined;
+    }
 
-        console.log(`[RouteHandler] Resolved Lazy Type: ${type.toString()} ->`, resolved);
+    if (typeof type !== 'string') {
+      if (typeof type === 'function' && !('prototype' in type)) {
+        const resolved = (type as LazyParamTypeFactory)();
+
+        console.log(`[RouteHandler] Resolved Lazy Type: ${String(type)} ->`, resolved);
 
         return resolved;
       }

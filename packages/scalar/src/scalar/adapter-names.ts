@@ -1,16 +1,46 @@
-import { hasFunctionProperty } from '../common';
+import type { AdapterCollectionLike, DocumentTargets, HttpTargets, ScalarInput } from './types';
 
-import type { AdapterCollectionLike, DocumentTargets, HttpTargets } from './types';
+import { hasFunctionProperty, isMap } from '../common';
 
-function listAdapterNames(group: unknown): string[] {
+type GroupWithForEachName = {
+  forEach: (cb: (adapter: unknown, name: unknown) => void) => void;
+};
+
+function hasForEachWithName(value: ScalarInput): value is GroupWithForEachName {
+  if (value === null || value === undefined) {
+    return false;
+  }
+
+  if (typeof value !== 'object') {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  return typeof record.forEach === 'function';
+}
+
+function listAdapterNames(group: ScalarInput): string[] {
   const names: string[] = [];
 
-  if (!group) {
+  if (group === undefined || group === null) {
     return names;
   }
 
-  if (hasFunctionProperty(group, 'forEach')) {
-    (group as Map<unknown, unknown>).forEach((_adapter: unknown, name: unknown) => {
+  if (isMap(group)) {
+    group.forEach((_adapter, name) => {
+      if (typeof name !== 'string') {
+        return;
+      }
+
+      names.push(name);
+    });
+
+    return names;
+  }
+
+  if (hasForEachWithName(group)) {
+    group.forEach((_adapter, name) => {
       if (typeof name !== 'string') {
         return;
       }
@@ -29,15 +59,14 @@ function listAdapterNames(group: unknown): string[] {
 }
 
 export function resolveHttpNamesForDocuments(adapters: AdapterCollectionLike, documentTargets: DocumentTargets): string[] {
-  const adaptersRecord = adapters as unknown as Record<string, unknown>;
-  const httpGroup = adaptersRecord['http'];
+  const httpGroup = adapters.http;
   const allHttpNames = listAdapterNames(httpGroup);
 
   if (documentTargets === 'all') {
     return allHttpNames;
   }
 
-  const rules = documentTargets.filter(target => target && typeof target.protocol === 'string' && target.protocol === 'http');
+  const rules = documentTargets.filter(target => target.protocol === 'http');
 
   if (rules.length === 0) {
     return [];
@@ -57,8 +86,7 @@ export function resolveHttpNamesForDocuments(adapters: AdapterCollectionLike, do
 }
 
 export function resolveHttpNamesForHosting(adapters: AdapterCollectionLike, httpTargets: HttpTargets): string[] {
-  const adaptersRecord = adapters as unknown as Record<string, unknown>;
-  const httpGroup = adaptersRecord['http'];
+  const httpGroup = adapters.http;
   const allHttpNames = listAdapterNames(httpGroup);
 
   if (httpTargets === 'all') {

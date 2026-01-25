@@ -1,4 +1,5 @@
 import type { BunnerModule } from '@bunner/common';
+
 import { CorsMiddleware, HttpMethod, HttpMiddlewareLifecycle, QueryParserMiddleware } from '@bunner/http-adapter';
 import { Logger } from '@bunner/logger';
 import { provideScalar } from '@bunner/scalar';

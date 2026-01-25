@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 
-import { noUnmodifiedLoopConditionRule } from './no-unmodified-loop-condition';
-import { createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
 import type { AstNode } from '../types';
+
+import { createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
+import { noUnmodifiedLoopConditionRule } from './no-unmodified-loop-condition';
 
 describe('no-unmodified-loop-condition', () => {
   it('should report when loop condition identifiers are never mutated', () => {
@@ -68,13 +69,13 @@ describe('no-unmodified-loop-condition', () => {
     const sourceCode = createSourceCode('', null, null, []);
     const { context, reports } = createRuleContext(sourceCode, []);
     const visitor = noUnmodifiedLoopConditionRule.create(context);
-    const testNode: AstNode = { 
-      type: 'BinaryExpression', 
-      left: { 
-        type: 'MemberExpression', 
+    const testNode: AstNode = {
+      type: 'BinaryExpression',
+      left: {
+        type: 'MemberExpression',
         object: { type: 'Identifier', name: 'list' },
-        property: { type: 'Identifier', name: 'length' } 
-      }
+        property: { type: 'Identifier', name: 'length' },
+      },
     };
     const bodyNode: AstNode = { type: 'BlockStatement', body: [] };
     const whileNode: AstNode = { type: 'WhileStatement', test: testNode, body: bodyNode };
@@ -93,9 +94,9 @@ describe('no-unmodified-loop-condition', () => {
     const { context, reports } = createRuleContext(sourceCode, []);
     const visitor = noUnmodifiedLoopConditionRule.create(context);
     const testNode: AstNode = { type: 'Identifier', name: 'flag' };
-    const updateNode: AstNode = { 
-        type: 'UpdateExpression', 
-        argument: { type: 'Identifier', name: 'flag' } 
+    const updateNode: AstNode = {
+      type: 'UpdateExpression',
+      argument: { type: 'Identifier', name: 'flag' },
     };
     const bodyNode: AstNode = { type: 'BlockStatement', body: [{ type: 'ExpressionStatement', expression: updateNode }] };
     const doWhileNode: AstNode = { type: 'DoWhileStatement', test: testNode, body: bodyNode };

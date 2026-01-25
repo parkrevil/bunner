@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'bun:test';
 
-import { testDescribeSutNameRule } from './test-describe-sut-name';
+import type { AstNode } from '../types';
+
 import { createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
 import { createVirtualFs } from '../../test/utils/virtual-fs';
-import type { AstNode } from '../types';
+import { testDescribeSutNameRule } from './test-describe-sut-name';
 
 function createTopLevelDescribeCall(title: string): [AstNode, AstNode] {
   const program: AstNode = { type: 'Program', body: [] };
@@ -11,7 +12,10 @@ function createTopLevelDescribeCall(title: string): [AstNode, AstNode] {
   const call: AstNode = {
     type: 'CallExpression',
     callee: { type: 'Identifier', name: 'describe' },
-    arguments: [{ type: 'Literal', value: title }, { type: 'ArrowFunctionExpression', body: { type: 'BlockStatement' } }],
+    arguments: [
+      { type: 'Literal', value: title },
+      { type: 'ArrowFunctionExpression', body: { type: 'BlockStatement' } },
+    ],
     parent: expressionStatement,
   };
 
@@ -31,8 +35,8 @@ describe('test-describe-sut-name', () => {
     const sourceCode = createSourceCode('', null, null, []);
     const { context, reports } = createRuleContext(sourceCode, [], undefined, {
       filename: testFile,
-      fileExists: (filePath) => virtualFs.fileExists(filePath),
-      readFile: (filePath) => virtualFs.readFile(filePath),
+      fileExists: filePath => virtualFs.fileExists(filePath),
+      readFile: filePath => virtualFs.readFile(filePath),
     });
     const visitor = testDescribeSutNameRule.create(context);
     const [, call] = createTopLevelDescribeCall('UserService');
@@ -71,8 +75,8 @@ describe('test-describe-sut-name', () => {
     const sourceCode = createSourceCode('', null, null, []);
     const { context, reports } = createRuleContext(sourceCode, [], undefined, {
       filename: testFile,
-      fileExists: (filePath) => virtualFs.fileExists(filePath),
-      readFile: (filePath) => virtualFs.readFile(filePath),
+      fileExists: filePath => virtualFs.fileExists(filePath),
+      readFile: filePath => virtualFs.readFile(filePath),
     });
     const visitor = testDescribeSutNameRule.create(context);
     const [, call] = createTopLevelDescribeCall('user-service');
@@ -92,8 +96,8 @@ describe('test-describe-sut-name', () => {
     const sourceCode = createSourceCode('', null, null, []);
     const { context, reports } = createRuleContext(sourceCode, [], undefined, {
       filename: testFile,
-      fileExists: (filePath) => virtualFs.fileExists(filePath),
-      readFile: (filePath) => virtualFs.readFile(filePath),
+      fileExists: filePath => virtualFs.fileExists(filePath),
+      readFile: filePath => virtualFs.readFile(filePath),
     });
     const visitor = testDescribeSutNameRule.create(context);
     const [, call] = createTopLevelDescribeCall('user-service');
@@ -113,8 +117,8 @@ describe('test-describe-sut-name', () => {
     const sourceCode = createSourceCode('', null, null, []);
     const { context, reports } = createRuleContext(sourceCode, [], undefined, {
       filename: testFile,
-      fileExists: (filePath) => virtualFs.fileExists(filePath),
-      readFile: (filePath) => virtualFs.readFile(filePath),
+      fileExists: filePath => virtualFs.fileExists(filePath),
+      readFile: filePath => virtualFs.readFile(filePath),
     });
     const visitor = testDescribeSutNameRule.create(context);
     const [, call] = createTopLevelDescribeCall('user-service');
@@ -157,8 +161,8 @@ describe('test-describe-sut-name', () => {
     const sourceCode = createSourceCode('', null, null, []);
     const { context, reports } = createRuleContext(sourceCode, [], undefined, {
       filename: testFile,
-      fileExists: (filePath) => virtualFs.fileExists(filePath),
-      readFile: (filePath) => virtualFs.readFile(filePath),
+      fileExists: filePath => virtualFs.fileExists(filePath),
+      readFile: filePath => virtualFs.readFile(filePath),
     });
     const visitor = testDescribeSutNameRule.create(context);
     const first = createTopLevelDescribeCall('UserService')[1];
@@ -182,15 +186,18 @@ describe('test-describe-sut-name', () => {
     const sourceCode = createSourceCode('', null, null, []);
     const { context, reports } = createRuleContext(sourceCode, [], undefined, {
       filename: testFile,
-      fileExists: (filePath) => virtualFs.fileExists(filePath),
-      readFile: (filePath) => virtualFs.readFile(filePath),
+      fileExists: filePath => virtualFs.fileExists(filePath),
+      readFile: filePath => virtualFs.readFile(filePath),
     });
     const visitor = testDescribeSutNameRule.create(context);
     // Describe call whose parent is not Program → should be ignored.
     const call: AstNode = {
       type: 'CallExpression',
       callee: { type: 'Identifier', name: 'describe' },
-      arguments: [{ type: 'Literal', value: 'UserService' }, { type: 'ArrowFunctionExpression', body: { type: 'BlockStatement' } }],
+      arguments: [
+        { type: 'Literal', value: 'UserService' },
+        { type: 'ArrowFunctionExpression', body: { type: 'BlockStatement' } },
+      ],
       parent: { type: 'CallExpression' },
     };
 

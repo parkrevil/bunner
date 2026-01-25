@@ -1,7 +1,7 @@
+import type { ImportRegistry } from './import-registry';
+
 import { type ClassMetadata } from '../analyzer';
 import { compareCodePoint } from '../common';
-
-import type { ImportRegistry } from './import-registry';
 
 export class MetadataGenerator {
   generate(classes: { metadata: ClassMetadata; filePath: string }[], registry: ImportRegistry): string {
@@ -41,12 +41,14 @@ export class MetadataGenerator {
 
       return null;
     };
+
     const cloneProps = (props: ClassMetadata['properties']): ClassMetadata['properties'] =>
       props.map(p => ({
         ...p,
         decorators: [...p.decorators],
         items: p.items ? { ...p.items } : undefined,
       }));
+
     const resolveMetadata = (className: string, visited = new Set<string>()): ClassMetadata['properties'] => {
       if (visited.has(className)) {
         return [];
@@ -67,8 +69,8 @@ export class MetadataGenerator {
         const parentProps = resolveMetadata(h.typeName, new Set(visited));
 
         if (h.typeName) {
-          if (['Partial', 'Pick', 'Omit', 'Required'].includes(h.typeName) && h.typeArgs && h.typeArgs.length > 0) {
-            const baseDtoName = h.typeArgs[0] as string;
+          if (['Partial', 'Pick', 'Omit', 'Required'].includes(h.typeName) && h.typeArgs?.length > 0) {
+            const baseDtoName = h.typeArgs[0]!;
             const baseProps = resolveMetadata(baseDtoName, new Set(visited));
 
             if (h.typeName === 'Partial') {
@@ -98,6 +100,7 @@ export class MetadataGenerator {
 
       return properties;
     };
+
     const serializeValue = (value: unknown): string => {
       if (value === null) {
         return 'null';
@@ -223,6 +226,7 @@ export class MetadataGenerator {
           literals: ${JSON.stringify(prop.literals)}
         }`;
       });
+
       const serializeMethods = (methods: ClassMetadata['methods']): string => {
         if (!methods || methods.length === 0) {
           return '[]';
@@ -263,6 +267,7 @@ export class MetadataGenerator {
           })
           .join(',')}]`;
       };
+
       const metaFactoryCall = `_meta(
         '${metadata.className}',
         ${serializeValue(metadata.decorators)},

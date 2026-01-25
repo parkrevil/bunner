@@ -1,14 +1,16 @@
+import type { AnalyzerValueArray, AnalyzerValueRecord, ReExportName } from './types';
+
 export interface ReExport {
   module: string;
   exportAll: boolean;
-  names?: { local: string; exported: string }[];
+  names?: ReExportName[] | undefined;
 }
 
 export interface ModuleDefinition {
-  name?: string;
-  nameDeclared?: boolean;
-  providers: unknown[];
-  adapters?: unknown;
+  name?: string | undefined;
+  nameDeclared?: boolean | undefined;
+  providers: AnalyzerValueArray;
+  adapters?: import('./types').AnalyzerValue | undefined;
   imports: Record<string, string>;
 }
 
@@ -16,9 +18,9 @@ export interface ParseResult {
   classes: import('./interfaces').ClassMetadata[];
   reExports: ReExport[];
   exports: string[];
-  imports?: Record<string, string>;
-  importEntries?: import('./interfaces').ImportEntry[];
-  exportedValues?: Record<string, unknown>;
-  localValues?: Record<string, unknown>;
-  moduleDefinition?: ModuleDefinition;
+  imports?: Record<string, string> | undefined;
+  importEntries?: import('./interfaces').ImportEntry[] | undefined;
+  exportedValues?: AnalyzerValueRecord | undefined;
+  localValues?: AnalyzerValueRecord | undefined;
+  moduleDefinition?: ModuleDefinition | undefined;
 }

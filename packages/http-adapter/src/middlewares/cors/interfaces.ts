@@ -1,5 +1,4 @@
 import { HttpMethod } from '../../enums';
-
 import { OriginOptions } from './types';
 
 /**

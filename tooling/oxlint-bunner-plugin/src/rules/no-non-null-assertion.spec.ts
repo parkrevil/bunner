@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 
-import { noNonNullAssertionRule } from './no-non-null-assertion';
-import { createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
 import type { AstNode } from '../types';
+
+import { createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
+import { noNonNullAssertionRule } from './no-non-null-assertion';
 
 describe('no-non-null-assertion', () => {
   it('should report non-null assertions when encountered', () => {

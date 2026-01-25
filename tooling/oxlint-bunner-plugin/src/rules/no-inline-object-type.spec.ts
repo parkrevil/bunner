@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 
-import { noInlineObjectTypeRule } from './no-inline-object-type';
-import { createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
 import type { AstNode } from '../types';
+
+import { createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
+import { noInlineObjectTypeRule } from './no-inline-object-type';
 
 describe('no-inline-object-type', () => {
   it('should report inline object types when encountered', () => {

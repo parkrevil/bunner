@@ -27,7 +27,7 @@ export class BunnerHttpWorker extends ClusterBaseWorker {
 
       const manifest = await import(entryModule.manifestPath);
       const container = manifest.createContainer();
-      const metadataRegistry = manifest.createMetadataRegistry() || new Map();
+      const metadataRegistry = manifest.createMetadataRegistry() ?? new Map();
       const scopedKeysMap = typeof manifest.createScopedKeysMap === 'function' ? manifest.createScopedKeysMap() : new Map();
 
       if (typeof manifest.registerDynamicModules === 'function') {

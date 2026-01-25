@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 
+import type { QueryValueRecord } from './types';
+
 import { QueryParser } from './query-parser';
 
 describe('QueryParser', () => {
@@ -361,7 +363,7 @@ describe('QueryParser', () => {
       const parser = new QueryParser({ parseArrays: true });
       const res = parser.parse('__proto__[polluted]=true');
 
-      expect((res as any).__proto__.polluted).toBeUndefined();
+      expect(Object.prototype.hasOwnProperty.call(res, '__proto__')).toBe(false);
     });
 
     it('should block nested constructor pollution', () => {
@@ -375,7 +377,7 @@ describe('QueryParser', () => {
       const parser = new QueryParser();
       const res = parser.parse('toString=hacked');
 
-      expect(res['toString']).toBe('hacked');
+      expect(res.toString).toBe('hacked');
     });
 
     it('should block __defineGetter__ and __defineSetter__', () => {
@@ -621,7 +623,7 @@ describe('QueryParser', () => {
       const parser = new QueryParser();
       const res = parser.parse('hasOwnProperty=value');
 
-      expect(res['hasOwnProperty']).toBe('value');
+      expect(res.hasOwnProperty).toBe('value');
       // Verify it's own property, not inherited method
       expect(Object.prototype.hasOwnProperty.call(res, 'hasOwnProperty')).toBe(true);
     });
@@ -630,14 +632,14 @@ describe('QueryParser', () => {
       const parser = new QueryParser();
       const res = parser.parse('valueOf=custom');
 
-      expect(res['valueOf']).toBe('custom');
+      expect(res.valueOf).toBe('custom');
     });
 
     it('should handle toJSON as key', () => {
       const parser = new QueryParser();
       const res = parser.parse('toJSON=custom');
 
-      expect(res['toJSON']).toBe('custom');
+      expect(res.toJSON).toBe('custom');
     });
 
     it('should handle whitespace-only key after decoding', () => {

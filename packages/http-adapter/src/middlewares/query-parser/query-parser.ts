@@ -1,7 +1,8 @@
-import { BadRequestError } from '../../errors';
-
-import { DEFAULT_QUERY_PARSER_OPTIONS } from './constants';
 import type { QueryParserOptions } from './interfaces';
+import type { QueryArray, QueryArrayRecord, QueryContainer, QueryValue, QueryValueRecord } from './types';
+
+import { BadRequestError } from '../../errors';
+import { DEFAULT_QUERY_PARSER_OPTIONS } from './constants';
 
 /**
  * High-performance, Strict Query String Parser
@@ -14,12 +15,12 @@ export class QueryParser {
     this.options = { ...DEFAULT_QUERY_PARSER_OPTIONS, ...options };
   }
 
-  public parse(qs: string): Record<string, any> {
+  public parse(qs: string): QueryValueRecord {
     if (!qs || qs.length === 0) {
       return {};
     }
 
-    const res: Record<string, any> = {};
+    const res: QueryValueRecord = {};
     const len = qs.length;
     let i = 0;
 
@@ -85,11 +86,11 @@ export class QueryParser {
     return res;
   }
 
-  private processPair(res: any, qs: string, keyStart: number, keyEnd: number, valStart: number, valEnd: number) {
+  private processPair(res: QueryValueRecord, qs: string, keyStart: number, keyEnd: number, valStart: number, valEnd: number) {
     // Decode Key
     const keyRaw = qs.slice(keyStart, keyEnd);
     // Fast check for encoded
-    const key = keyRaw.indexOf('%') !== -1 ? decodeURIComponent(keyRaw) : keyRaw;
+    const key = keyRaw.includes('%') ? decodeURIComponent(keyRaw) : keyRaw;
 
     if (!key) {
       return;
@@ -101,7 +102,7 @@ export class QueryParser {
     if (valStart < valEnd) {
       const valRaw = qs.slice(valStart, valEnd);
 
-      val = valRaw.indexOf('%') !== -1 ? decodeURIComponent(valRaw) : valRaw;
+      val = valRaw.includes('%') ? decodeURIComponent(valRaw) : valRaw;
     }
 
     // Check for Nesting
@@ -109,7 +110,7 @@ export class QueryParser {
 
     if (braceIdx === -1) {
       // Strict Mode: Check for unbalanced closing brackets even in flat keys
-      if (this.options.strictMode && key.indexOf(']') !== -1) {
+      if (this.options.strictMode && key.includes(']')) {
         throw new BadRequestError(`Malformed query string: unbalanced brackets in key "${key}"`);
       }
 
@@ -158,8 +159,8 @@ export class QueryParser {
     this.parseComplexKey(res, key, braceIdx, val);
   }
 
-  private parseComplexKey(root: any, key: string, firstBrace: number, value: string) {
-    let current = root;
+  private parseComplexKey(root: QueryValueRecord, key: string, firstBrace: number, value: string) {
+    let current: QueryContainer = root;
     let depth = 0;
     const maxDepth = this.options.depth;
     // Root key part "user" from "user[name]"
@@ -232,7 +233,7 @@ export class QueryParser {
 
     // Initialize/Validate root container
     if (!Object.prototype.hasOwnProperty.call(root, rootKey)) {
-      const nextKey = keys[1]!;
+      const nextKey = keys[1] ?? '';
 
       if (this.shouldCreateArray(nextKey)) {
         root[rootKey] = [];
@@ -247,20 +248,25 @@ export class QueryParser {
         }
 
         // Non-strict: overwrite scalar with container
-        const nextKey = keys[1]!;
+        const nextKey = keys[1] ?? '';
 
         root[rootKey] = this.shouldCreateArray(nextKey) ? [] : {};
       }
     }
 
-    let parent = root;
+    let parent: QueryContainer = root;
     let parentKey: string | number = rootKey;
+    const rootContainer = root[rootKey];
 
-    current = root[rootKey]; // Move to first container
+    if (this.isRecordValue(rootContainer) || Array.isArray(rootContainer)) {
+      current = rootContainer;
+    } else {
+      return;
+    }
 
     // Now traverse and build from 2nd key match
     for (let k = 1; k < keys.length; k++) {
-      const prop = keys[k]!;
+      const prop = keys[k] ?? '';
       const isLast = k === keys.length - 1;
 
       if (depth >= maxDepth) {
@@ -281,15 +287,15 @@ export class QueryParser {
         this.assignLeaf(current, prop, value);
       } else {
         // Create Next Container
-        if (!Object.prototype.hasOwnProperty.call(current, prop)) {
-          const nextKey = keys[k + 1]!;
+        if (this.isRecordValue(current) && !Object.prototype.hasOwnProperty.call(current, prop)) {
+          const nextKey = keys[k + 1] ?? '';
 
           if (this.shouldCreateArray(nextKey)) {
             current[prop] = [];
           } else {
             current[prop] = {};
           }
-        } else {
+        } else if (this.isRecordValue(current)) {
           // Conflict Detection
           const target = current[prop];
 
@@ -299,7 +305,7 @@ export class QueryParser {
               throw new BadRequestError(`Conflict: key "${prop}" is both a scalar and a nested structure`);
             }
 
-            const nextKey = keys[k + 1]!;
+            const nextKey = keys[k + 1] ?? '';
 
             current[prop] = this.shouldCreateArray(nextKey) ? [] : {};
           }
@@ -308,7 +314,14 @@ export class QueryParser {
         // Advance
         parent = current;
         parentKey = prop;
-        current = current[prop];
+
+        const nextValue = this.isRecordValue(current) ? current[prop] : undefined;
+
+        if (this.isRecordValue(nextValue) || Array.isArray(nextValue)) {
+          current = nextValue;
+        } else {
+          return;
+        }
 
         // Pollution Check
         if (
@@ -342,7 +355,7 @@ export class QueryParser {
     return false;
   }
 
-  private assignLeaf(obj: any, key: string, value: string) {
+  private assignLeaf(obj: QueryContainer, key: string, value: string) {
     // Anti-Pollution for leaf
     if (
       key === '__proto__' ||
@@ -377,13 +390,19 @@ export class QueryParser {
           throw new BadRequestError(`Conflict: non-numeric key "${key}" used on an array structure`);
         }
 
-        (obj as any)[key] = value;
+        const arrayRecord = obj as QueryArrayRecord;
+
+        arrayRecord[key] = value;
       }
 
       return;
     }
 
     // Object context
+    if (!this.isRecordValue(obj)) {
+      return;
+    }
+
     if (Object.prototype.hasOwnProperty.call(obj, key)) {
       const existing = obj[key];
 
@@ -425,7 +444,7 @@ export class QueryParser {
    * Rejects: negative numbers, floats, empty strings, non-numeric strings.
    */
   private isValidArrayIndex(str: string): boolean {
-    if (str === '' || str.length > 10) {
+    if (str.length > 10) {
       return false;
     } // Max int length guard
 
@@ -451,8 +470,8 @@ export class QueryParser {
   /**
    * Converts an array to an object where indices become keys.
    */
-  private arrayToMaybeObject(arr: any[]): Record<string, any> {
-    const obj: Record<string, any> = {};
+  private arrayToMaybeObject(arr: QueryArray): QueryValueRecord {
+    const obj: QueryValueRecord = {};
 
     for (let i = 0; i < arr.length; i++) {
       if (arr[i] !== undefined) {
@@ -461,5 +480,9 @@ export class QueryParser {
     }
 
     return obj;
+  }
+
+  private isRecordValue(value: QueryValue | undefined): value is QueryValueRecord {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
   }
 }

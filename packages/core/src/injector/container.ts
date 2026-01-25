@@ -1,13 +1,32 @@
-import type { BunnerContainer } from '@bunner/common';
+import type {
+  BunnerContainer,
+  Class,
+  Provider,
+  ProviderToken,
+  ProviderUseClass,
+  ProviderUseExisting,
+  ProviderUseFactory,
+  ProviderUseValue,
+} from '@bunner/common';
+
+import type {
+  ContainerValue,
+  ConstructorParamMetadata,
+  DecoratorArgument,
+  DecoratorMetadata,
+  ModuleObject,
+  TokenRecord,
+} from './types';
 
 import { getRuntimeContext } from '../runtime/runtime-context';
 
-export type FactoryFn<T = any> = (container: Container) => T;
-export type Token = any;
+export type FactoryFn<T = ContainerValue> = (container: Container) => T;
+
+export type Token = ProviderToken;
 
 export class Container implements BunnerContainer {
   private factories = new Map<Token, FactoryFn>();
-  private instances = new Map<Token, any>();
+  private instances = new Map<Token, ContainerValue>();
 
   constructor(initialFactories?: Map<Token, FactoryFn>) {
     if (initialFactories) {
@@ -15,20 +34,21 @@ export class Container implements BunnerContainer {
     }
   }
 
-  set(token: Token, factory: FactoryFn) {
+  set(token: Token, factory: FactoryFn): void {
     this.factories.set(token, factory);
   }
 
-  get<T = any>(token: Token): T {
+  get(token: Token): ContainerValue {
+    const existing = this.instances.get(token);
+
     if (this.instances.has(token)) {
-      return this.instances.get(token);
+      return existing;
     }
 
     const factory = this.factories.get(token);
 
     if (!factory) {
-      const tokenLabel =
-        token && typeof token === 'object' && 'name' in token && typeof token.name === 'string' ? token.name : String(token);
+      const tokenLabel = this.formatToken(token);
 
       throw new Error(`No provider for token: ${tokenLabel}`);
     }
@@ -40,7 +60,7 @@ export class Container implements BunnerContainer {
     return instance;
   }
 
-  keys() {
+  keys(): IterableIterator<Token> {
     return this.factories.keys();
   }
 
@@ -48,67 +68,68 @@ export class Container implements BunnerContainer {
     return this.factories.has(token);
   }
 
-  getInstances(): IterableIterator<any> {
+  getInstances(): IterableIterator<ContainerValue> {
     return this.instances.values();
   }
 
-  async loadDynamicModule(scope: string, dynamicModule: any) {
-    if (!dynamicModule) {
+  async loadDynamicModule(scope: string, dynamicModule: ModuleObject | null | undefined): Promise<void> {
+    if (dynamicModule === null || dynamicModule === undefined) {
       return;
     }
 
     await Promise.resolve();
 
-    const providers = dynamicModule.providers || [];
+    const providers = dynamicModule.providers ?? [];
 
-    for (const p of providers) {
-      let token: any;
+    for (const provider of providers) {
+      let token: Token | undefined;
       let factory: FactoryFn | undefined;
 
-      if (typeof p === 'function') {
-        token = p;
-        factory = c => new p(...this.resolveDepsFor(p, scope, c));
-      } else if (p.provide) {
-        token = p.provide;
+      if (this.isClassProvider(provider)) {
+        token = provider;
+        factory = c => new provider(...this.resolveDepsFor(provider, scope, c));
+      } else if (this.isProviderRecord(provider)) {
+        token = provider.provide;
 
-        if (Object.prototype.hasOwnProperty.call(p, 'useValue')) {
-          factory = () => p.useValue;
-        } else if (p.useClass) {
-          factory = c => new p.useClass(...this.resolveDepsFor(p.useClass, scope, c));
-        } else if (p.useExisting) {
+        if (this.isProviderUseValue(provider)) {
+          factory = () => provider.useValue;
+        } else if (this.isProviderUseClass(provider)) {
+          factory = c => new provider.useClass(...this.resolveDepsFor(provider.useClass, scope, c));
+        } else if (this.isProviderUseExisting(provider)) {
           factory = c => {
-            const existingKey = this.normalizeToken(p.useExisting);
-            const scopedKey = existingKey ? `${scope}::${existingKey}` : '';
+            const existingKey = this.normalizeToken(provider.useExisting);
+            const hasExistingKey = typeof existingKey === 'string' && existingKey.length > 0;
+            const scopedKey = hasExistingKey ? `${scope}::${existingKey}` : '';
 
-            if (scopedKey && c.has(scopedKey)) {
+            if (scopedKey.length > 0 && c.has(scopedKey)) {
               return c.get(scopedKey);
             }
 
-            if (existingKey) {
+            if (hasExistingKey) {
               return c.get(existingKey);
             }
 
-            throw new Error(`No existing provider found for alias token: ${String(p.useExisting)}`);
+            throw new Error(`No existing provider found for alias token: ${this.formatToken(provider.useExisting)}`);
           };
-        } else if (p.useFactory) {
+        } else if (this.isProviderUseFactory(provider)) {
           factory = c => {
-            const args = (p.inject || []).map((t: any) => c.get(t));
+            const args = Array.isArray(provider.inject) ? provider.inject.map((dep: ProviderToken) => c.get(dep)) : [];
 
-            return p.useFactory(...args);
+            return provider.useFactory(...args);
           };
         }
       }
 
       const normalizedToken = this.normalizeToken(token);
-      const keyStr = normalizedToken ? `${scope}::${normalizedToken}` : '';
+      const keyStr = normalizedToken !== undefined ? `${scope}::${normalizedToken}` : '';
 
-      if (keyStr && factory) {
+      if (keyStr.length > 0 && factory !== undefined) {
         this.set(keyStr, factory);
       }
     }
   }
 
-  private resolveDepsFor(ctor: any, scope: string, _c: Container): any[] {
+  private resolveDepsFor(ctor: Class, scope: string, _c: Container): ContainerValue[] {
     const registry = getRuntimeContext().metadataRegistry;
 
     if (!registry || !registry.has(ctor)) {
@@ -117,43 +138,38 @@ export class Container implements BunnerContainer {
 
     const meta = registry.get(ctor);
 
+    if (!meta) {
+      return [];
+    }
+
     if (!meta.constructorParams) {
       return [];
     }
 
-    return meta.constructorParams.map((param: any) => {
+    return meta.constructorParams.map((param: ConstructorParamMetadata) => {
       let token = param.type;
 
-      if (token && typeof token === 'object') {
-        if (token.__bunner_ref) {
-          token = token.__bunner_ref;
-        } else if (token.__bunner_forward_ref) {
-          token = token.__bunner_forward_ref;
-        }
-      }
+      token = this.resolveTokenRecord(token);
 
-      const injectDec = param.decorators?.find((d: any) => d.name === 'Inject');
+      const injectDec = param.decorators?.find((decorator: DecoratorMetadata) => decorator.name === 'Inject');
+      const injectArgs = injectDec?.arguments ?? [];
 
-      if (injectDec && injectDec.arguments?.length > 0) {
-        token = injectDec.arguments[0];
+      if (injectArgs.length > 0) {
+        const injectedToken = this.coerceToken(injectArgs[0]);
 
-        if (token && typeof token === 'object') {
-          if (token.__bunner_forward_ref) {
-            token = token.__bunner_forward_ref;
-          } else if (token.__bunner_ref) {
-            token = token.__bunner_ref;
-          }
+        if (injectedToken !== undefined) {
+          token = this.resolveTokenRecord(injectedToken);
         }
       }
 
       const tokenName = this.normalizeToken(token);
-      const key = tokenName ? `${scope}::${tokenName}` : '';
+      const key = tokenName !== undefined ? `${scope}::${tokenName}` : '';
 
-      if (key && this.has(key)) {
+      if (key.length > 0 && this.has(key)) {
         return this.get(key);
       }
 
-      if (!tokenName) {
+      if (tokenName === undefined) {
         return undefined;
       }
 
@@ -165,8 +181,8 @@ export class Container implements BunnerContainer {
     });
   }
 
-  private normalizeToken(token: any): string | undefined {
-    if (!token) {
+  private normalizeToken(token: Token | TokenRecord | undefined): string | undefined {
+    if (token === null || token === undefined) {
       return undefined;
     }
 
@@ -175,27 +191,136 @@ export class Container implements BunnerContainer {
     }
 
     if (typeof token === 'symbol') {
-      return token.description || token.toString();
+      return token.description ?? token.toString();
     }
 
-    if (typeof token === 'function' && token.name) {
-      return token.name;
+    if (typeof token === 'function') {
+      const tokenName = token.name;
+
+      if (tokenName.length > 0) {
+        return tokenName;
+      }
     }
 
-    if (typeof token === 'object') {
-      if (token.__bunner_ref) {
-        return token.__bunner_ref;
+    if (this.isTokenRecord(token)) {
+      const ref = token.__bunner_ref;
+      const forwardRef = token.__bunner_forward_ref;
+
+      if (typeof ref === 'string') {
+        return ref;
       }
 
-      if (token.__bunner_forward_ref) {
-        return token.__bunner_forward_ref;
+      if (typeof forwardRef === 'string') {
+        return forwardRef;
       }
 
-      if (typeof token.name === 'string') {
-        return token.name;
+      const tokenName = token.name;
+
+      if (typeof tokenName === 'string' && tokenName.length > 0) {
+        return tokenName;
       }
     }
 
     return undefined;
+  }
+
+  private formatToken(token: Token | TokenRecord | undefined, normalized?: string): string {
+    if (typeof normalized === 'string' && normalized.length > 0) {
+      return normalized;
+    }
+
+    if (typeof token === 'string') {
+      return token;
+    }
+
+    if (typeof token === 'symbol') {
+      return token.description ?? token.toString();
+    }
+
+    if (typeof token === 'function') {
+      return token.name.length > 0 ? token.name : 'AnonymousToken';
+    }
+
+    if (this.isTokenRecord(token)) {
+      const tokenName = token.name;
+
+      return typeof tokenName === 'string' && tokenName.length > 0 ? tokenName : 'TokenRecord';
+    }
+
+    return 'UnknownToken';
+  }
+
+  private coerceToken(value: DecoratorArgument | undefined): Token | TokenRecord | undefined {
+    if (this.isProviderToken(value) || this.isTokenRecord(value)) {
+      return value;
+    }
+
+    return undefined;
+  }
+
+  private isProviderToken(value: DecoratorArgument | Token | TokenRecord | undefined): value is Token {
+    return typeof value === 'string' || typeof value === 'symbol' || typeof value === 'function';
+  }
+
+  private isTokenRecord(value: DecoratorArgument | Token | TokenRecord | undefined): value is TokenRecord {
+    if (typeof value !== 'object' || value === null) {
+      return false;
+    }
+
+    if ('__bunner_ref' in value && typeof value.__bunner_ref === 'string') {
+      return true;
+    }
+
+    if ('__bunner_forward_ref' in value && typeof value.__bunner_forward_ref === 'string') {
+      return true;
+    }
+
+    if ('name' in value && typeof value.name === 'string') {
+      return true;
+    }
+
+    return false;
+  }
+
+  private resolveTokenRecord(token: Token | TokenRecord | undefined): Token | TokenRecord | undefined {
+    if (!this.isTokenRecord(token)) {
+      return token;
+    }
+
+    if (typeof token.__bunner_ref === 'string') {
+      return token.__bunner_ref;
+    }
+
+    if (typeof token.__bunner_forward_ref === 'string') {
+      return token.__bunner_forward_ref;
+    }
+
+    return token;
+  }
+
+  private isClassProvider(provider: Provider): provider is Class {
+    return typeof provider === 'function';
+  }
+
+  private isProviderRecord(
+    provider: Provider,
+  ): provider is ProviderUseValue | ProviderUseClass | ProviderUseExisting | ProviderUseFactory {
+    return typeof provider === 'object' && provider !== null && 'provide' in provider;
+  }
+
+  private isProviderUseValue(provider: Provider): provider is ProviderUseValue {
+    return this.isProviderRecord(provider) && Object.prototype.hasOwnProperty.call(provider, 'useValue');
+  }
+
+  private isProviderUseClass(provider: Provider): provider is ProviderUseClass {
+    return this.isProviderRecord(provider) && Object.prototype.hasOwnProperty.call(provider, 'useClass');
+  }
+
+  private isProviderUseExisting(provider: Provider): provider is ProviderUseExisting {
+    return this.isProviderRecord(provider) && Object.prototype.hasOwnProperty.call(provider, 'useExisting');
+  }
+
+  private isProviderUseFactory(provider: Provider): provider is ProviderUseFactory {
+    return this.isProviderRecord(provider) && Object.prototype.hasOwnProperty.call(provider, 'useFactory');
   }
 }

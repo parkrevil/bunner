@@ -1,11 +1,12 @@
-import { CONFIG_SERVICE, ENV_SERVICE } from '@bunner/common';
 import type { BunnerApplicationOptions, ConfigService, EnvService, EnvSource, Provider } from '@bunner/common';
+
+import { CONFIG_SERVICE, ENV_SERVICE } from '@bunner/common';
 import { config as dotenvConfig } from 'dotenv';
+
+import type { BunnerApplication } from './bunner-application';
 
 import { BunnerScanner } from '../injector/scanner';
 import { getRuntimeContext } from '../runtime/runtime-context';
-
-import type { BunnerApplication } from './bunner-application';
 import { createApplication } from './create-application';
 
 export interface BootstrapAdapter {
@@ -122,7 +123,7 @@ async function loadEnvSnapshot(options: BootstrapEnvOptions | undefined): Promis
   }
 
   const result: Record<string, string> = {};
-  const dotenvFile = options.dotenvFile === undefined ? '.env' : options.dotenvFile;
+  const dotenvFile = options.dotenvFile ?? '.env';
   const includeProcessEnv = options.includeProcessEnv !== false;
 
   if (dotenvFile) {
@@ -163,9 +164,7 @@ async function loadEnvSnapshot(options: BootstrapEnvOptions | undefined): Promis
 
   if (options.mutateProcessEnv) {
     for (const [k, v] of Object.entries(result)) {
-      if (process.env[k] === undefined) {
-        process.env[k] = v;
-      }
+      process.env[k] ??= v;
     }
   }
 
@@ -239,7 +238,7 @@ export async function bootstrapApplication(entry: unknown, options?: BootstrapAp
   const aotContainer = getRuntimeContext().container;
   const providedContainer = (options as any)?.container;
   const app = await createApplication(entry, {
-    ...(options ?? {}),
+    ...options,
     container: providedContainer ?? aotContainer,
     providers: mergedProviders,
   });

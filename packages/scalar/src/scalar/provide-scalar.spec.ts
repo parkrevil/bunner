@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'bun:test';
 
 import type { ScalarSetupOptions } from './interfaces';
+
 import { provideScalar } from './provide-scalar';
 import { ScalarConfigurer } from './scalar-configurer';
 import { ScalarSetupOptionsToken } from './tokens';

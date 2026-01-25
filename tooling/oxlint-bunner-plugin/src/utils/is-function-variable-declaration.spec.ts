@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'bun:test';
 
-import { isFunctionVariableDeclaration } from './is-function-variable-declaration.js';
 import type { AstNode } from '../types';
+
+import { isFunctionVariableDeclaration } from './is-function-variable-declaration.js';
 
 const VariableDeclarationType = 'VariableDeclaration';
 const VariableDeclaratorType = 'VariableDeclarator';
@@ -67,10 +68,7 @@ describe('is-function-variable-declaration', () => {
 
   it('should return false when any declarator has no initializer', () => {
     // Arrange
-    const node = createVariableDeclaration([
-      createVariableDeclarator(ArrowFunctionExpressionType),
-      createVariableDeclarator(),
-    ]);
+    const node = createVariableDeclaration([createVariableDeclarator(ArrowFunctionExpressionType), createVariableDeclarator()]);
     // Act
     const result = isFunctionVariableDeclaration(node);
 

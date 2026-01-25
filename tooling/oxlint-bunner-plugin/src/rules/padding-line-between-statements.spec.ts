@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 
-import { paddingLineBetweenStatementsRule } from './padding-line-between-statements';
-import { applyFixes, createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
 import type { AstNode } from '../types';
+
+import { applyFixes, createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
+import { paddingLineBetweenStatementsRule } from './padding-line-between-statements';
 
 describe('padding-line-between-statements', () => {
   it('should report unexpected blank lines when const declarations are separated', () => {

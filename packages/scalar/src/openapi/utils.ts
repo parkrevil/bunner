@@ -1,8 +1,9 @@
+import type { ScalarInput, ScalarNode } from '../scalar/types';
+import type { DecoratorMeta, OpenApiDocument, OpenApiPathItem } from './interfaces';
+
 import { isRecord } from '../common';
 
-import type { DecoratorMeta, OpenApiDocument } from './interfaces';
-
-export function getDecorator(decorators: DecoratorMeta[] | undefined, names: string[]): DecoratorMeta | undefined {
+function getDecorator(decorators: DecoratorMeta[] | undefined, names: string[]): DecoratorMeta | undefined {
   if (!decorators || decorators.length === 0) {
     return undefined;
   }
@@ -10,44 +11,78 @@ export function getDecorator(decorators: DecoratorMeta[] | undefined, names: str
   return decorators.find(d => names.includes(d.name));
 }
 
-export function getControllerBasePath(meta: unknown): string {
-  const metaDecoratorsValue = isRecord(meta) ? meta['decorators'] : undefined;
-  const metaDecorators = Array.isArray(metaDecoratorsValue) ? (metaDecoratorsValue as DecoratorMeta[]) : undefined;
-  const controller = getDecorator(metaDecorators, ['Controller', 'RestController']);
+function extractDecorators(value: ScalarInput): DecoratorMeta[] {
+  if (!isRecord(value)) {
+    return [];
+  }
+
+  const decoratorsValue = value.decorators;
+
+  if (!Array.isArray(decoratorsValue)) {
+    return [];
+  }
+
+  const result: DecoratorMeta[] = [];
+
+  for (const candidate of decoratorsValue) {
+    if (!isRecord(candidate)) {
+      continue;
+    }
+
+    const nameValue = candidate.name;
+    const argsValue = candidate.arguments;
+
+    if (typeof nameValue !== 'string' || !Array.isArray(argsValue)) {
+      continue;
+    }
+
+    const args: ScalarNode[] = argsValue.filter(valueItem => typeof valueItem !== 'function');
+
+    result.push({ name: nameValue, arguments: args });
+  }
+
+  return result;
+}
+
+function getControllerBasePath(meta: ScalarInput): string {
+  const controller = getDecorator(extractDecorators(meta), ['Controller', 'RestController']);
   const raw = controller?.arguments?.[0];
 
   return typeof raw === 'string' && raw.length > 0 ? raw : '/';
 }
 
-export function getControllerTag(meta: unknown): string {
-  const metaDecoratorsValue = isRecord(meta) ? meta['decorators'] : undefined;
-  const metaDecorators = Array.isArray(metaDecoratorsValue) ? (metaDecoratorsValue as DecoratorMeta[]) : undefined;
-  const tags = getDecorator(metaDecorators, ['ApiTags']);
+function getControllerTag(meta: ScalarInput): string {
+  const tags = getDecorator(extractDecorators(meta), ['ApiTags']);
   const raw = tags?.arguments?.[0];
-  const classNameValue = isRecord(meta) ? meta['className'] : undefined;
+  const classNameValue = isRecord(meta) ? meta.className : undefined;
   const fallback = typeof classNameValue === 'string' ? classNameValue : 'Controller';
 
   return typeof raw === 'string' && raw.length > 0 ? raw : fallback;
 }
 
-export function normalizeFullPath(basePath: string, methodPath: string): string {
+function normalizeFullPath(basePath: string, methodPath: string): string {
   const merged = `${basePath}/${methodPath}`.replace(/\/+/g, '/');
   const noTrailing = merged.length > 1 && merged.endsWith('/') ? merged.slice(0, -1) : merged;
 
   return noTrailing.replace(/:([a-zA-Z0-9_]+)/g, '{$1}');
 }
 
-export function ensurePath(doc: OpenApiDocument, fullPath: string): Record<string, unknown> {
-  if (!doc.paths[fullPath]) {
-    doc.paths[fullPath] = {};
-  }
+function ensurePath(doc: OpenApiDocument, fullPath: string): OpenApiPathItem {
+  doc.paths[fullPath] ??= {};
 
   return doc.paths[fullPath];
 }
 
-export function getHttpMethodDecorator(method: unknown): DecoratorMeta | undefined {
-  const methodDecoratorsValue = isRecord(method) ? method['decorators'] : undefined;
-  const methodDecorators = Array.isArray(methodDecoratorsValue) ? (methodDecoratorsValue as DecoratorMeta[]) : undefined;
-
-  return getDecorator(methodDecorators, ['Get', 'Post', 'Put', 'Delete', 'Patch', 'Options', 'Head']);
+function getHttpMethodDecorator(method: ScalarInput): DecoratorMeta | undefined {
+  return getDecorator(extractDecorators(method), ['Get', 'Post', 'Put', 'Delete', 'Patch', 'Options', 'Head']);
 }
+
+export {
+  ensurePath,
+  extractDecorators,
+  getControllerBasePath,
+  getControllerTag,
+  getDecorator,
+  getHttpMethodDecorator,
+  normalizeFullPath,
+};

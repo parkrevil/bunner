@@ -1,7 +1,7 @@
+import type { ImportRegistry } from './import-registry';
+
 import { type ClassMetadata, ModuleGraph, type ModuleNode } from '../analyzer';
 import { compareCodePoint } from '../common';
-
-import type { ImportRegistry } from './import-registry';
 
 type RecordUnknown = Record<string, unknown>;
 
@@ -52,6 +52,7 @@ const stableKey = (value: unknown, visited = new WeakSet<object>()): string => {
 
   return `{${parts.join(',')}}`;
 };
+
 const asString = (value: unknown): string | undefined => {
   if (typeof value !== 'string') {
     return undefined;
@@ -59,6 +60,7 @@ const asString = (value: unknown): string | undefined => {
 
   return value;
 };
+
 const asRecord = (value: unknown): RecordUnknown | null => {
   if (!value || typeof value !== 'object') {
     return null;
@@ -66,6 +68,7 @@ const asRecord = (value: unknown): RecordUnknown | null => {
 
   return value as RecordUnknown;
 };
+
 const getRefName = (value: unknown): string | null => {
   if (typeof value === 'string') {
     return value;
@@ -83,6 +86,7 @@ const getRefName = (value: unknown): string | null => {
 
   return null;
 };
+
 const getForwardRefName = (value: unknown): string | null => {
   const record = asRecord(value);
 
@@ -96,6 +100,7 @@ const getForwardRefName = (value: unknown): string | null => {
 
   return null;
 };
+
 const isClassMetadata = (value: unknown): value is ClassMetadata => {
   const record = asRecord(value);
 
@@ -134,6 +139,7 @@ export class InjectorGenerator {
   generate(graph: ModuleGraph, registry: ImportRegistry): string {
     const factoryEntries: string[] = [];
     const adapterConfigs: string[] = [];
+
     const getAlias = (name: string, path?: string): string => {
       if (!path) {
         return name;
@@ -141,6 +147,7 @@ export class InjectorGenerator {
 
       return registry.getAlias(name, path);
     };
+
     const sortedNodes = Array.from(graph.modules.values()).sort((a, b) => compareCodePoint(a.filePath, b.filePath));
 
     sortedNodes.forEach((node: ModuleNode) => {
@@ -279,7 +286,7 @@ export class InjectorGenerator {
                 return 'undefined';
               }
 
-              const resolved = graph.resolveToken(node.name, tokenName) || tokenName;
+              const resolved = graph.resolveToken(node.name, tokenName) ?? tokenName;
 
               return `c.get('${resolved}')`;
             });
@@ -309,10 +316,10 @@ export class InjectorGenerator {
 
         factoryEntries.push(`  (${stable} || []).forEach(p => {`);
         factoryEntries.push('    let token = p.provide;');
-        factoryEntries.push('    if (typeof p === \'function\') token = p.name;');
+        factoryEntries.push("    if (typeof p === 'function') token = p.name;");
         factoryEntries.push('');
         factoryEntries.push('    let factory;');
-        factoryEntries.push('    if (Object.prototype.hasOwnProperty.call(p, \'useValue\')) factory = () => p.useValue;');
+        factoryEntries.push("    if (Object.prototype.hasOwnProperty.call(p, 'useValue')) factory = () => p.useValue;");
         factoryEntries.push('    else if (p.useClass) factory = () => new p.useClass();');
         factoryEntries.push('    else if (p.useFactory) {');
         factoryEntries.push('      factory = (c) => {');
@@ -328,7 +335,7 @@ export class InjectorGenerator {
         factoryEntries.push('  });');
       });
 
-      if (node.moduleDefinition && node.moduleDefinition.adapters) {
+      if (node.moduleDefinition?.adapters) {
         const config = this.serializeValue(node.moduleDefinition.adapters, registry);
 
         adapterConfigs.push(`  '${node.name}': ${config},`);
@@ -487,7 +494,7 @@ ${dynamicEntries.join('\n')}
 
       const injectDec = param.decorators.find(d => d.name === 'Inject');
 
-      if (injectDec && injectDec.arguments.length > 0) {
+      if (injectDec?.arguments.length > 0) {
         const arg = injectDec.arguments[0];
 
         if (typeof arg === 'string') {

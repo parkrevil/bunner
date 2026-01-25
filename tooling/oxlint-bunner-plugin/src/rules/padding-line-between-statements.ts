@@ -1,5 +1,6 @@
-import { isFunctionVariableDeclaration } from '../utils/is-function-variable-declaration.js';
 import type { AstNode, Fix, Fixer, JsonObject, JsonValue, NodeOrNull, PaddingRule, RuleContext } from '../types';
+
+import { isFunctionVariableDeclaration } from '../utils/is-function-variable-declaration.js';
 
 const paddingLineBetweenStatementsRule = {
   create(context: RuleContext) {
@@ -65,7 +66,6 @@ const paddingLineBetweenStatementsRule = {
 
       return fixer.replaceTextRange([prevEnd, nextStart], [first, ...middle, safeLast].join(newline));
     };
-
 
     const defaultRules: PaddingRule[] = [
       { blankLine: 'always', prev: ['const', 'let', 'var'], next: 'function' },

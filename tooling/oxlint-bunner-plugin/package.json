@@ -1,11 +1,11 @@
 {
   "name": "oxlint-bunner-plugin",
-  "module": "index.ts",
   "type": "module",
+  "module": "index.ts",
   "scripts": {
     "build": "bun build index.ts --outfile dist/index.js --production --sourcemap=inline",
-    "tsc": "tsc --noEmit",
-    "lint": "oxlint --config ../../.oxlintrc.jsonc --type-aware --type-check --fix ."
+    "lint": "oxlint --config ../../.oxlintrc.jsonc --type-aware --type-check --fix .",
+    "tsc": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/bun": "latest"

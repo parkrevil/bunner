@@ -1,6 +1,5 @@
 import type { ClassMetadata } from '../interfaces';
 import type { ModuleDefinition } from '../parser-models';
-
 import type { ProviderRef } from './interfaces';
 
 export class ModuleNode {

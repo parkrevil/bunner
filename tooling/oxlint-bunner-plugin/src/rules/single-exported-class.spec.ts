@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 
-import { singleExportedClassRule } from './single-exported-class';
-import { createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
 import type { AstNode } from '../types';
+
+import { createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
+import { singleExportedClassRule } from './single-exported-class';
 
 function createProgram(body: AstNode[]): AstNode {
   return { type: 'Program', body };

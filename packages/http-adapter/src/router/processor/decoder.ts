@@ -1,7 +1,7 @@
 import type { EncodedSlashBehavior } from '../types';
 
 export function decodeURIComponentSafe(value: string, behavior: EncodedSlashBehavior | undefined, failFast: boolean): string {
-  if (value.indexOf('%') === -1) {
+  if (!value.includes('%')) {
     return value;
   }
 

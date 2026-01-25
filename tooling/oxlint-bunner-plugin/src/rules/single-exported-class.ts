@@ -17,7 +17,7 @@ function isIdentifier(node: AstNode | null | undefined): node is AstNode {
 }
 
 function getIdentifierName(node: AstNode | null | undefined): string | null {
-  return isIdentifier(node) ? node.name ?? null : null;
+  return isIdentifier(node) ? (node.name ?? null) : null;
 }
 
 function getExportedNameFromSpecifier(specifier: AstNode): string | null {
@@ -53,9 +53,7 @@ function getProgramBody(program: AstNode): AstNode[] {
 }
 
 function isTypeOnlyDeclaration(node: AstNode): boolean {
-  return (
-    node.type === 'TSEnumDeclaration'
-  );
+  return node.type === 'TSEnumDeclaration';
 }
 
 function getClassDeclarationName(node: AstNode): string | null {

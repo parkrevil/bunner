@@ -1,10 +1,6 @@
-export const ROUTE_REGEX_TIMEOUT = Symbol('bunner.route-regex-timeout');
-export type RouteRegexTimeoutError = Error & { [ROUTE_REGEX_TIMEOUT]?: true };
+import type { PatternTesterOptions, RouteRegexTimeoutError } from './types';
 
-export interface PatternTesterOptions {
-  maxExecutionMs?: number;
-  onTimeout?: (pattern: string, durationMs: number) => boolean | void;
-}
+import { ROUTE_REGEX_TIMEOUT } from './constants';
 
 const DIGIT_PATTERNS = new Set(['\\d+', '\\d{1,}', '[0-9]+', '[0-9]{1,}']);
 const ALPHA_PATTERNS = new Set(['[a-zA-Z]+', '[A-Za-z]+']);
@@ -21,12 +17,13 @@ const now: () => number = (() => {
   };
 })();
 
-export function buildPatternTester(
+function buildPatternTester(
   source: string | undefined,
   compiled: RegExp,
   options?: PatternTesterOptions,
 ): (value: string) => boolean {
   const raw = source ?? '<anonymous>';
+
   const wrap = (tester: (value: string) => boolean): ((value: string) => boolean) => {
     if (!options?.maxExecutionMs || options.maxExecutionMs <= 0) {
       return tester;
@@ -51,6 +48,7 @@ export function buildPatternTester(
         );
 
         timeoutError[ROUTE_REGEX_TIMEOUT] = true;
+
         throw timeoutError;
       }
 
@@ -75,7 +73,7 @@ export function buildPatternTester(
   }
 
   if (source === '[^/]+') {
-    return value => value.length > 0 && value.indexOf('/') === -1;
+    return value => value.length > 0 && !value.includes('/');
   }
 
   return wrap(value => compiled.test(value));
@@ -96,6 +94,9 @@ function isAllDigits(value: string): boolean {
 
   return true;
 }
+
+export { buildPatternTester, ROUTE_REGEX_TIMEOUT };
+export type { PatternTesterOptions, RouteRegexTimeoutError };
 
 function isAlpha(value: string): boolean {
   if (!value.length) {

@@ -3,8 +3,9 @@ import { backOff } from 'exponential-backoff'; // Consider removing if complex r
 
 import type { ClusterBaseWorker } from './cluster-base-worker';
 import type { ClusterWorker, ClusterOptions } from './interfaces';
-import { wrap } from './ipc';
 import type { ClusterBootstrapParams, ClusterInitParams } from './types';
+
+import { wrap } from './ipc';
 
 export class ClusterManager<T extends ClusterBaseWorker> {
   private readonly script: URL;
@@ -25,7 +26,7 @@ export class ClusterManager<T extends ClusterBaseWorker> {
   async destroy() {
     this.destroying = true;
 
-    await Promise.all(this.workers.map((_, id) => this.destroyWorker(id)));
+    await Promise.all(this.workers.map(async (_, id) => this.destroyWorker(id)));
   }
 
   // 'call' method removed - no longer needed for native cluster
@@ -33,7 +34,7 @@ export class ClusterManager<T extends ClusterBaseWorker> {
   async init(params?: ClusterInitParams<T>) {
     this.initParams = params;
 
-    const tasks: Array<Promise<any>> = this.workers.map((worker, id) =>
+    const tasks: Array<Promise<any>> = this.workers.map(async (worker, id) =>
       worker ? worker.remote.init(id, params) : Promise.resolve(),
     );
 
@@ -43,7 +44,7 @@ export class ClusterManager<T extends ClusterBaseWorker> {
   async bootstrap(params?: ClusterBootstrapParams<T>) {
     this.bootstrapParams = params;
 
-    const tasks: Array<Promise<any>> = this.workers.map(worker =>
+    const tasks: Array<Promise<any>> = this.workers.map(async worker =>
       worker ? (worker.remote.bootstrap(params) as Promise<any>) : Promise.resolve(),
     );
 

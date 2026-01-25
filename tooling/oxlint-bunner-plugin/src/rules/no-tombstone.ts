@@ -30,7 +30,8 @@ const noTombstoneRule = {
   },
   meta: {
     messages: {
-      tombstone: 'Tombstone files are forbidden: remove the file or implement real code (no empty/comment-only/export{} placeholders).',
+      tombstone:
+        'Tombstone files are forbidden: remove the file or implement real code (no empty/comment-only/export{} placeholders).',
     },
     schema: [],
     type: 'problem',

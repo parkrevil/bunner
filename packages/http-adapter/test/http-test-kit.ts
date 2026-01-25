@@ -1,4 +1,5 @@
 import type { BunnerContainer, BunnerErrorFilter, BunnerMiddleware } from '@bunner/common';
+
 import { Container, registerRuntimeContext } from '@bunner/core';
 
 import {
@@ -94,7 +95,7 @@ export function withGlobalMiddlewares(params: {
   readonly beforeRequest?: ReadonlyArray<BunnerMiddleware>;
   readonly beforeResponse?: ReadonlyArray<BunnerMiddleware>;
   readonly afterResponse?: ReadonlyArray<BunnerMiddleware>;
-  readonly errorFilters?: ReadonlyArray<BunnerErrorFilter>;
+  readonly errorFilters?: ReadonlyArray<BunnerErrorFilter | null>;
   readonly systemErrorHandler?: unknown;
 }): ReadonlyArray<{ readonly token: any; readonly value: unknown }> {
   const providers: Array<{ token: any; value: unknown }> = [];

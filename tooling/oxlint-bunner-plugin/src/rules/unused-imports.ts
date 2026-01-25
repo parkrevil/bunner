@@ -21,11 +21,15 @@ const unusedImportsRule = {
       }
 
       return (
-        variables.find(variable =>
-          Array.isArray(variable.identifiers) &&
-          variable.identifiers.some(
-            identifier => Array.isArray(identifier?.range) && identifier.range[0] === local.range?.[0] && identifier.range[1] === local.range?.[1],
-          ),
+        variables.find(
+          variable =>
+            Array.isArray(variable.identifiers) &&
+            variable.identifiers.some(
+              identifier =>
+                Array.isArray(identifier?.range) &&
+                identifier.range[0] === local.range?.[0] &&
+                identifier.range[1] === local.range?.[1],
+            ),
         ) ?? null
       );
     };

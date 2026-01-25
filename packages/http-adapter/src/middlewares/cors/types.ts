@@ -7,4 +7,5 @@
  * - CustomOriginFn: Custom validation function
  */
 export type CustomOriginFn = (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => void;
+
 export type OriginOptions = boolean | string | RegExp | (string | RegExp)[] | CustomOriginFn;

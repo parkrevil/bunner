@@ -1,8 +1,5 @@
 import { parseSync } from 'oxc-parser';
 
-import { PathResolver } from '../common';
-
-import { AstParser } from './ast-parser';
 import type { FileAnalysis } from './graph/interfaces';
 import type {
   AdapterSpecExtraction,
@@ -13,6 +10,9 @@ import type {
   PipelineSpec,
   HandlerIndexEntry,
 } from './interfaces';
+
+import { PathResolver } from '../common';
+import { AstParser } from './ast-parser';
 
 export class AdapterSpecResolver {
   private parser = new AstParser();
@@ -31,7 +31,7 @@ export class AdapterSpecResolver {
 
       const defineCall = this.asRecord(resolvedExport.value);
 
-      if (!defineCall || defineCall.__bunner_call !== 'defineAdapter') {
+      if (defineCall?.__bunner_call !== 'defineAdapter') {
         throw new Error(`[Bunner AOT] adapterSpec must be defineAdapter(<AdapterClassRef>) in ${resolvedExport.sourceFile}.`);
       }
 
@@ -48,7 +48,8 @@ export class AdapterSpecResolver {
       }
 
       const adapterClassName = arg.__bunner_ref;
-      const adapterClassSource = typeof arg.__bunner_import_source === 'string' ? arg.__bunner_import_source : resolvedExport.sourceFile;
+      const adapterClassSource =
+        typeof arg.__bunner_import_source === 'string' ? arg.__bunner_import_source : resolvedExport.sourceFile;
       const staticSpec = await this.extractAdapterStaticSpec(adapterClassSource, adapterClassName, fileMap);
 
       adapterSpecs.push({ adapterId: staticSpec.adapterId, staticSpec: staticSpec.staticSpec });
@@ -358,9 +359,7 @@ export class AdapterSpecResolver {
 
       combinedPhaseIds.forEach(phaseId => {
         if (!supportedKeys.includes(phaseId)) {
-          throw new Error(
-            `[Bunner AOT] Unsupported middleware phase '${phaseId}' for adapter '${extraction.adapterId}'.`,
-          );
+          throw new Error(`[Bunner AOT] Unsupported middleware phase '${phaseId}' for adapter '${extraction.adapterId}'.`);
         }
       });
     }
@@ -372,7 +371,7 @@ export class AdapterSpecResolver {
     for (const analysis of fileMap.values()) {
       const moduleDefinition = analysis.moduleDefinition;
 
-      if (!moduleDefinition || !moduleDefinition.adapters) {
+      if (!moduleDefinition?.adapters) {
         continue;
       }
 
@@ -533,11 +532,9 @@ export class AdapterSpecResolver {
         continue;
       }
 
-      const exportedDeclaration =
-        stmt.type === 'ExportNamedDeclaration' || stmt.type === 'ExportDefaultDeclaration'
-          ? this.asRecord(stmt.declaration)
-          : null;
-      const candidate = exportedDeclaration ?? stmt;
+      const defaultExport = stmt.type === 'ExportDefaultDeclaration' ? this.asRecord(stmt.declaration) : null;
+      const namedExport = stmt.type === 'ExportNamedDeclaration' ? this.asRecord(stmt.declaration) : null;
+      const candidate = defaultExport ?? namedExport ?? stmt;
 
       if (candidate.type === 'ClassDeclaration') {
         const id = this.asRecord(candidate.id);
@@ -603,7 +600,7 @@ export class AdapterSpecResolver {
       return null;
     }
 
-    if (node.type === 'StringLiteral' || node.type === 'Literal') {
+    if (node.type === 'Literal') {
       const value = node.value;
 
       if (typeof value === 'string') {
@@ -631,7 +628,7 @@ export class AdapterSpecResolver {
   private parseStringArray(nodeValue: unknown, field: string, className: string): string[] {
     const node = this.asRecord(nodeValue);
 
-    if (!node || node.type !== 'ArrayExpression') {
+    if (node?.type !== 'ArrayExpression') {
       throw new Error(`[Bunner AOT] AdapterClass.${field} must be an array literal (${className}).`);
     }
 
@@ -661,7 +658,7 @@ export class AdapterSpecResolver {
   private parseSupportedPhaseSet(nodeValue: unknown, field: string, className: string): Record<string, true> {
     const node = this.asRecord(nodeValue);
 
-    if (!node || node.type !== 'ObjectExpression') {
+    if (node?.type !== 'ObjectExpression') {
       throw new Error(`[Bunner AOT] AdapterClass.${field} must be an object literal (${className}).`);
     }
 
@@ -699,7 +696,7 @@ export class AdapterSpecResolver {
   private parseEntryDecorators(nodeValue: unknown, className: string): AdapterEntryDecoratorsSpec {
     const node = this.asRecord(nodeValue);
 
-    if (!node || node.type !== 'ObjectExpression') {
+    if (node?.type !== 'ObjectExpression') {
       throw new Error(`[Bunner AOT] AdapterClass.entryDecorators must be an object literal (${className}).`);
     }
 
@@ -723,7 +720,7 @@ export class AdapterSpecResolver {
   private parseRuntimeSpec(nodeValue: unknown, className: string): AdapterRuntimeSpec {
     const node = this.asRecord(nodeValue);
 
-    if (!node || node.type !== 'ObjectExpression') {
+    if (node?.type !== 'ObjectExpression') {
       throw new Error(`[Bunner AOT] AdapterClass.runtime must be an object literal (${className}).`);
     }
 
@@ -768,13 +765,13 @@ export class AdapterSpecResolver {
 
     const stmt = this.asRecord(statements[0]);
 
-    if (!stmt || stmt.type !== 'ReturnStatement') {
+    if (stmt?.type !== 'ReturnStatement') {
       throw new Error(`[Bunner AOT] AdapterClass.pipeline must return a single object literal (${className}).`);
     }
 
     const argument = this.asRecord(stmt.argument);
 
-    if (!argument || argument.type !== 'ObjectExpression') {
+    if (argument?.type !== 'ObjectExpression') {
       throw new Error(`[Bunner AOT] AdapterClass.pipeline must return a single object literal (${className}).`);
     }
 
@@ -782,7 +779,11 @@ export class AdapterSpecResolver {
   }
 
   private parsePipelineFromObject(node: Record<string, unknown>, className: string): PipelineSpec {
-    const middlewares = this.parseIdentifierArray(this.getObjectPropertyValue(node, 'middlewares'), 'pipeline.middlewares', className);
+    const middlewares = this.parseIdentifierArray(
+      this.getObjectPropertyValue(node, 'middlewares'),
+      'pipeline.middlewares',
+      className,
+    );
     const guards = this.parseIdentifierArray(this.getObjectPropertyValue(node, 'guards'), 'pipeline.guards', className);
     const pipes = this.parseIdentifierArray(this.getObjectPropertyValue(node, 'pipes'), 'pipeline.pipes', className);
     const handler = this.parseIdentifier(this.getObjectPropertyValue(node, 'handler'));
@@ -797,7 +798,7 @@ export class AdapterSpecResolver {
   private parseIdentifierArray(nodeValue: unknown, field: string, className: string): string[] {
     const node = this.asRecord(nodeValue);
 
-    if (!node || node.type !== 'ArrayExpression') {
+    if (node?.type !== 'ArrayExpression') {
       throw new Error(`[Bunner AOT] AdapterClass.${field} must be an array literal (${className}).`);
     }
 
@@ -893,7 +894,7 @@ export class AdapterSpecResolver {
       return this.getString(node, 'name');
     }
 
-    if (node.type === 'StringLiteral' || node.type === 'Literal') {
+    if (node.type === 'Literal') {
       const value = node.value;
 
       if (typeof value === 'string') {

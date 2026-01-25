@@ -1,4 +1,5 @@
 import type { HttpMethod } from '../types';
+import type { DynamicMatchResult, Handler, MatchResultMeta, RouterOptions } from './types';
 
 import { Builder, OptionalParamDefaults } from './builder';
 import { RouterCache } from './cache';
@@ -6,7 +7,6 @@ import { Matcher } from './matcher';
 import { buildPatternTester } from './matcher/pattern-tester';
 import { Processor, type ProcessorConfig } from './processor';
 import { METHOD_OFFSET } from './schema';
-import type { DynamicMatchResult, Handler, MatchResultMeta, RouterOptions } from './types';
 
 export class Router<R = any> {
   private readonly options: RouterOptions;
@@ -63,7 +63,9 @@ export class Router<R = any> {
     }
 
     if (Array.isArray(method)) {
-      method.forEach(m => this.addOne(m, path, handler));
+      method.forEach(m => {
+        this.addOne(m, path, handler);
+      });
 
       return;
     }
@@ -71,7 +73,9 @@ export class Router<R = any> {
     if (method === '*') {
       const allMethods: HttpMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'];
 
-      allMethods.forEach(m => this.addOne(m, path, handler));
+      allMethods.forEach(m => {
+        this.addOne(m, path, handler);
+      });
 
       return;
     }
@@ -91,7 +95,7 @@ export class Router<R = any> {
   /**
    * Finalizes the router and prepares for matching.
    */
-  build(): Router<R> {
+  build(): this {
     if (this.matcher) {
       return this;
     }
@@ -274,6 +278,7 @@ export class Router<R = any> {
       if (firstChar === 42 || firstChar === 58) {
         // '*' or ':'
         isDynamic = true;
+
         break;
       }
     }

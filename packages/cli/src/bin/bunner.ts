@@ -1,9 +1,10 @@
 #!/usr/bin/env bun
 import { parseArgs } from 'util';
-import { dev, build } from '../commands';
-import { buildDiagnostic, reportDiagnostics } from '../diagnostics';
 
 import type { CommandOptions } from '../commands/types';
+
+import { dev, build } from '../commands';
+import { buildDiagnostic, reportDiagnostics } from '../diagnostics';
 
 const { positionals, values } = parseArgs({
   args: Bun.argv.slice(2),
@@ -15,7 +16,6 @@ const { positionals, values } = parseArgs({
     },
   },
 });
-
 const command = positionals[0];
 
 const printUsage = (): void => {

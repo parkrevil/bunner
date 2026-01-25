@@ -3,14 +3,20 @@ import { describe, expect, it } from 'bun:test';
 import { createApplication } from './create-application';
 
 describe('createApplication', () => {
-  it('should create isolated containers per application', async () => {
+  it('should create isolated containers when multiple apps are created', async () => {
+    // Arrange
     const app1 = await createApplication({ providers: [] }, { name: 'app1', logLevel: 10 });
     const app2 = await createApplication({ providers: [] }, { name: 'app2', logLevel: 10 });
+    // Act
+    const firstContainer = app1.getContainer();
+    const secondContainer = app2.getContainer();
 
-    expect(app1.getContainer()).not.toBe(app2.getContainer());
+    // Assert
+    expect(firstContainer).not.toBe(secondContainer);
   });
 
-  it('should scan module objects and register providers', async () => {
+  it('should scan module objects and register providers when initialized', async () => {
+    // Arrange
     const app = await createApplication(
       {
         providers: [{ provide: 'BACKEND_URL', useValue: 'https://example.test/api' }],
@@ -18,7 +24,10 @@ describe('createApplication', () => {
       { name: 'app3', logLevel: 10 },
     );
 
+    // Act
     await app.init();
+
+    // Assert
     expect(app.getContainer().get<string>('BACKEND_URL')).toBe('https://example.test/api');
   });
 });

@@ -61,7 +61,9 @@ describe('ApiProperty', () => {
   it('should not throw when invoked', () => {
     const decorator = ApiProperty() as unknown as PropertyDecorator;
 
-    expect(() => decorator(TestDecoratorTarget.prototype, 'method')).not.toThrow();
+    expect(() => {
+      decorator(TestDecoratorTarget.prototype, 'method');
+    }).not.toThrow();
   });
 });
 
@@ -73,7 +75,9 @@ describe('ApiPropertyOptional', () => {
   it('should not throw when invoked', () => {
     const decorator = ApiPropertyOptional() as unknown as PropertyDecorator;
 
-    expect(() => decorator(TestDecoratorTarget.prototype, 'method')).not.toThrow();
+    expect(() => {
+      decorator(TestDecoratorTarget.prototype, 'method');
+    }).not.toThrow();
   });
 });
 

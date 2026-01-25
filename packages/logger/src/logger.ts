@@ -1,5 +1,6 @@
-import { RequestContext } from './async-storage';
 import type { LoggerOptions, LogLevel, LogMessage, Transport, Loggable } from './interfaces';
+
+import { RequestContext } from './async-storage';
 import { ConsoleTransport } from './transports/console';
 
 declare global {
@@ -83,7 +84,7 @@ export class Logger {
 
   private isLevelEnabled(level: LogLevel): boolean {
     const levels: LogLevel[] = ['trace', 'debug', 'info', 'warn', 'error', 'fatal'];
-    const configuredLevel = Logger.globalOptions.level || 'info';
+    const configuredLevel = Logger.globalOptions.level ?? 'info';
 
     return levels.indexOf(level) >= levels.indexOf(configuredLevel);
   }

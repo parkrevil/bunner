@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 
-import { noBracketNotationRule } from './no-bracket-notation';
-import { applyFixes, createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
 import type { AstNode, TemplateElementValue } from '../types';
+
+import { applyFixes, createRuleContext, createSourceCode } from '../../test/utils/rule-test-kit';
+import { noBracketNotationRule } from './no-bracket-notation';
 
 describe('no-bracket-notation', () => {
   it('should report when string literal key is not allowed', () => {
@@ -74,10 +75,10 @@ describe('no-bracket-notation', () => {
     const sourceCode = createSourceCode('', null, null, []);
     const { context, reports } = createRuleContext(sourceCode, []);
     const visitor = noBracketNotationRule.create(context);
-    const templateNode: AstNode = { 
-      type: 'TemplateLiteral', 
-      expressions: [{ type: 'Identifier', name: 'expr' }], 
-      quasis: [] // Simplified structure
+    const templateNode: AstNode = {
+      type: 'TemplateLiteral',
+      expressions: [{ type: 'Identifier', name: 'expr' }],
+      quasis: [], // Simplified structure
     };
     const memberNode: AstNode = { type: 'MemberExpression', computed: true, property: templateNode };
 

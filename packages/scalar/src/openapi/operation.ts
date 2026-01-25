@@ -1,38 +1,33 @@
+import type { ScalarInput, ScalarMetadataRegistry, ScalarRecord } from '../scalar/types';
+import type { DecoratorMeta, OpenApiDocument, OpenApiOperation, OpenApiParameter, OpenApiRecord } from './interfaces';
+
 import { isRecord } from '../common';
-
-import type { DecoratorMeta, OpenApiDocument, OpenApiOperation } from './interfaces';
 import { getSchemaForType } from './schema';
-import { getDecorator } from './utils';
+import { extractDecorators, getDecorator } from './utils';
 
-function getDecorators(value: unknown): DecoratorMeta[] {
+function getParameters(value: ScalarInput): ScalarRecord[] {
   if (!isRecord(value)) {
     return [];
   }
 
-  const decoratorsValue = value['decorators'];
-
-  if (!Array.isArray(decoratorsValue)) {
-    return [];
-  }
-
-  return decoratorsValue as DecoratorMeta[];
-}
-
-function getParameters(value: unknown): unknown[] {
-  if (!isRecord(value)) {
-    return [];
-  }
-
-  const parametersValue = value['parameters'];
+  const parametersValue = value.parameters;
 
   if (!Array.isArray(parametersValue)) {
     return [];
   }
 
-  return parametersValue;
+  const params: ScalarRecord[] = [];
+
+  for (const param of parametersValue) {
+    if (isRecord(param)) {
+      params.push(param);
+    }
+  }
+
+  return params;
 }
 
-function getStringProperty(value: unknown, name: string): string | undefined {
+function getStringProperty(value: ScalarInput, name: string): string | undefined {
   if (!isRecord(value)) {
     return undefined;
   }
@@ -46,7 +41,7 @@ function getStringProperty(value: unknown, name: string): string | undefined {
   return raw;
 }
 
-function getDecoratorOptions(dec: DecoratorMeta | undefined): Record<string, unknown> | undefined {
+function getDecoratorOptions(dec: DecoratorMeta | undefined): OpenApiRecord | undefined {
   const raw = dec?.arguments?.[0];
 
   if (!isRecord(raw)) {
@@ -56,28 +51,28 @@ function getDecoratorOptions(dec: DecoratorMeta | undefined): Record<string, unk
   return raw;
 }
 
-export function addOperationMetadata(operation: OpenApiOperation, method: unknown): void {
-  const op = getDecorator(getDecorators(method), ['ApiOperation']);
+export function addOperationMetadata(operation: OpenApiOperation, method: ScalarInput): void {
+  const op = getDecorator(extractDecorators(method), ['ApiOperation']);
   const opts = getDecoratorOptions(op);
 
-  if (!opts) {
+  if (opts === undefined) {
     return;
   }
 
-  if (typeof opts['summary'] === 'string' && opts['summary'].length > 0) {
-    operation['summary'] = opts['summary'];
+  if (typeof opts.summary === 'string' && opts.summary.length > 0) {
+    operation.summary = opts.summary;
   }
 
-  if (typeof opts['description'] === 'string' && opts['description'].length > 0) {
-    operation['description'] = opts['description'];
+  if (typeof opts.description === 'string' && opts.description.length > 0) {
+    operation.description = opts.description;
   }
 }
 
-export function addOperationParameters(operation: OpenApiOperation, method: unknown): void {
+export function addOperationParameters(operation: OpenApiOperation, method: ScalarInput): void {
   const params = getParameters(method);
 
   for (const param of params) {
-    const dec = getDecorator(getDecorators(param), ['Param', 'Params', 'Query']);
+    const dec = getDecorator(extractDecorators(param), ['Param', 'Params', 'Query']);
 
     if (!dec) {
       continue;
@@ -88,35 +83,36 @@ export function addOperationParameters(operation: OpenApiOperation, method: unkn
     const paramName = getStringProperty(param, 'name');
     const argName =
       typeof argNameCandidate === 'string' && argNameCandidate.length > 0 ? argNameCandidate : (paramName ?? 'param');
-
-    operation.parameters.push({
+    const parameter: OpenApiParameter = {
       name: argName,
       in: inType,
       required: inType === 'path',
       schema: { type: 'string' },
-    });
+    };
+
+    operation.parameters.push(parameter);
   }
 }
 
 export function addOperationRequestBody(
   operation: OpenApiOperation,
-  method: unknown,
-  registry: Map<unknown, unknown>,
+  method: ScalarInput,
+  registry: ScalarMetadataRegistry,
   doc: OpenApiDocument,
 ): void {
   const params = getParameters(method);
 
   for (const param of params) {
-    const dec = getDecorator(getDecorators(param), ['Body']);
+    const dec = getDecorator(extractDecorators(param), ['Body']);
 
     if (!dec) {
       continue;
     }
 
-    const typeValue = isRecord(param) ? param['type'] : undefined;
+    const typeValue = isRecord(param) ? param.type : undefined;
     const schema = getSchemaForType(registry, doc, typeValue);
 
-    operation['requestBody'] = {
+    operation.requestBody = {
       content: {
         'application/json': { schema },
       },
@@ -128,30 +124,30 @@ export function addOperationRequestBody(
 
 export function addOperationResponses(
   operation: OpenApiOperation,
-  method: unknown,
-  registry: Map<unknown, unknown>,
+  method: ScalarInput,
+  registry: ScalarMetadataRegistry,
   doc: OpenApiDocument,
 ): void {
-  const decorators = getDecorators(method);
+  const decorators = extractDecorators(method);
   const responseDecs: DecoratorMeta[] = decorators.filter(
     (d: DecoratorMeta) => d.name === 'ApiResponse' || d.name.endsWith('Response'),
   );
 
   if (responseDecs.length === 0) {
-    operation['responses'] = { '200': { description: 'Success' } };
+    operation.responses = { '200': { description: 'Success' } };
 
     return;
   }
 
-  operation['responses'] = {};
+  operation.responses = {};
 
   for (const d of responseDecs) {
     const optsRaw = d.arguments?.[0] ?? {};
     const opts = isRecord(optsRaw) ? optsRaw : {};
     let status: number | undefined;
 
-    if (d.name === 'ApiResponse' && typeof opts['status'] === 'number') {
-      status = opts['status'];
+    if (d.name === 'ApiResponse' && typeof opts.status === 'number') {
+      status = opts.status;
     }
 
     if (d.name === 'ApiOkResponse') {
@@ -166,32 +162,32 @@ export function addOperationResponses(
       status = 404;
     }
 
-    if (!status) {
+    if (status === undefined) {
       continue;
     }
 
-    const entry: Record<string, unknown> = {
-      description: typeof opts['description'] === 'string' ? opts['description'] : 'Success',
+    const entry: OpenApiRecord = {
+      description: typeof opts.description === 'string' ? opts.description : 'Success',
     };
 
-    if (opts['type']) {
+    if (opts.type !== undefined) {
       entry.content = {
         'application/json': {
-          schema: getSchemaForType(registry, doc, opts['type']),
+          schema: getSchemaForType(registry, doc, opts.type),
         },
       };
     }
 
-    const responses = operation['responses'];
+    const responses = operation.responses;
 
-    if (isRecord(responses)) {
+    if (responses !== undefined) {
       responses[String(status)] = entry;
     }
   }
 
-  const finalResponses = operation['responses'];
+  const finalResponses = operation.responses;
 
-  if (isRecord(finalResponses) && Object.keys(finalResponses).length === 0) {
-    operation['responses'] = { '200': { description: 'Success' } };
+  if (finalResponses !== undefined && Object.keys(finalResponses).length === 0) {
+    operation.responses = { '200': { description: 'Success' } };
   }
 }

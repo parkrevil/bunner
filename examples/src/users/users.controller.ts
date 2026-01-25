@@ -37,20 +37,20 @@ export class UsersController {
 
   @Post()
   create(body: any) {
-    return this.usersService.create(body);
+    this.usersService.create(body);
   }
 
   @Put(':id')
   update(params: any, body: any) {
     const { id } = params;
 
-    return this.usersService.update(id, body);
+    this.usersService.update(id, body);
   }
 
   @Delete(':id')
   delete(params: any) {
     const { id } = params;
 
-    return this.usersService.delete(id);
+    this.usersService.delete(id);
   }
 }

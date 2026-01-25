@@ -1,13 +1,17 @@
+import type { AnalyzerValue } from './types';
+
 /**
  * Serializable metadata about a type extracted by the CLI analyzer.
  */
+export interface TypeMetadataProperty {
+  name: string;
+  type: string;
+  optional: boolean;
+}
+
 export interface TypeMetadata {
   name: string;
-  properties: {
-    name: string;
-    type: string;
-    optional: boolean;
-  }[];
+  properties: TypeMetadataProperty[];
 }
 
 export interface MiddlewareUsage {
@@ -23,48 +27,58 @@ export interface ErrorFilterUsage {
 
 export interface DecoratorMetadata {
   name: string;
-  arguments: unknown[];
+  arguments: AnalyzerValue[];
+}
+
+export interface HeritageMetadata {
+  clause: 'extends' | 'implements';
+  typeName: string;
+  typeArgs?: string[] | undefined;
+}
+
+export interface ConstructorParamMetadata {
+  name: string;
+  type: AnalyzerValue;
+  typeArgs?: string[] | undefined;
+  decorators: DecoratorMetadata[];
+}
+
+export interface MethodParameterMetadata {
+  name: string;
+  type: AnalyzerValue;
+  typeArgs?: string[] | undefined;
+  decorators: DecoratorMetadata[];
+  index: number;
+}
+
+export interface MethodMetadata {
+  name: string;
+  decorators: DecoratorMetadata[];
+  parameters: MethodParameterMetadata[];
+}
+
+export interface PropertyMetadata {
+  name: string;
+  type: AnalyzerValue;
+  typeArgs?: string[] | undefined;
+  decorators: DecoratorMetadata[];
+  items?: AnalyzerValue | undefined;
+  isOptional?: boolean | undefined;
+  isArray?: boolean | undefined;
+  isEnum?: boolean | undefined;
+  literals?: (string | number | boolean)[] | undefined;
 }
 
 export interface ClassMetadata {
   className: string;
-  heritage?: {
-    clause: 'extends' | 'implements';
-    typeName: string;
-    typeArgs?: string[];
-  };
+  heritage?: HeritageMetadata | undefined;
   decorators: DecoratorMetadata[];
-  constructorParams: {
-    name: string;
-    type: unknown;
-    typeArgs?: string[];
-    decorators: DecoratorMetadata[];
-  }[];
-  methods: {
-    name: string;
-    decorators: DecoratorMetadata[];
-    parameters: {
-      name: string;
-      type: unknown;
-      typeArgs?: string[];
-      decorators: DecoratorMetadata[];
-      index: number;
-    }[];
-  }[];
-  properties: {
-    name: string;
-    type: unknown;
-    typeArgs?: string[];
-    decorators: DecoratorMetadata[];
-    items?: unknown;
-    isOptional?: boolean;
-    isArray?: boolean;
-    isEnum?: boolean;
-    literals?: (string | number | boolean)[];
-  }[];
+  constructorParams: ConstructorParamMetadata[];
+  methods: MethodMetadata[];
+  properties: PropertyMetadata[];
   imports: Record<string, string>;
-  middlewares?: MiddlewareUsage[];
-  errorFilters?: ErrorFilterUsage[];
+  middlewares?: MiddlewareUsage[] | undefined;
+  errorFilters?: ErrorFilterUsage[] | undefined;
 }
 
 export interface ImportEntry {

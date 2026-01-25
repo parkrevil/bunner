@@ -52,7 +52,7 @@ async function bootstrap() {
   try {
     console.log("${isDev ? '🌟 Bunner Server Starting (AOT)...' : '[Entry] Server Initializing...'}");
 
-    const runtimeFileName = ${isDev ? '\'./runtime.ts\'' : '\'./runtime.js\''};
+    const runtimeFileName = ${isDev ? "'./runtime.ts'" : "'./runtime.js'"};
     await import(runtimeFileName);
 
     console.log("[Entry] Loading Application Module...");

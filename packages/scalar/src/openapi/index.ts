@@ -11,4 +11,4 @@ export {
   normalizeFullPath,
 } from './utils';
 
-export type { DecoratorMeta, OpenApiDocument, OpenApiOperation } from './interfaces';
+export type { DecoratorMeta, OpenApiConfig, OpenApiDocument, OpenApiOperation } from './interfaces';

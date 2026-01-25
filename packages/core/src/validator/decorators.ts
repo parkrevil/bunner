@@ -1,7 +1,24 @@
-import type { ValidatorOptions } from './interfaces';
+import type { PrimitiveArray } from '@bunner/common';
 
-function createDecorator(_name: string, _args: any[] = [], _options: any = {}) {
-  return function (_target: object, _propertyKey: string | symbol) {};
+import type { ValidatorOptions } from './interfaces';
+import type { ValidatorDecoratorArgs, ValidatorDecoratorTarget, ValidatorPropertyDecorator } from './types';
+
+function createDecorator(
+  decoratorName: string,
+  decoratorArgs: ValidatorDecoratorArgs = [],
+  decoratorOptions?: ValidatorOptions,
+): ValidatorPropertyDecorator {
+  void decoratorName;
+  void decoratorArgs;
+
+  const options = decoratorOptions ?? {};
+
+  void options;
+
+  return function (target: ValidatorDecoratorTarget, propertyKey: string | symbol) {
+    void target;
+    void propertyKey;
+  };
 }
 
 export function IsString(options?: ValidatorOptions) {
@@ -28,7 +45,7 @@ export function IsOptional(options?: ValidatorOptions) {
   return createDecorator('IsOptional', [], options);
 }
 
-export function IsIn(values: any[], options?: ValidatorOptions) {
+export function IsIn(values: PrimitiveArray, options?: ValidatorOptions) {
   return createDecorator('IsIn', [values], options);
 }
 
