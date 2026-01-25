@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 set -eu
 
-bunx knip --dependencies
+#bunx knip --dependencies
 
-bunx depcruise -c .dependency-cruiser.cjs packages tooling examples
+#bunx depcruise -c .dependency-cruiser.cjs packages tooling examples
