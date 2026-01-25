@@ -1,10 +1,21 @@
 ---
 status: implemented
+allowed_paths:
+  - docs/**
+  - packages/**
+  - tooling/**
 ---
 
 # Run Plan
 
-## 0) Persona / Handshake (필수)
+## 0) Metadata (필수)
+
+- Plan ID: `260121_01_adapter-contract-dx`
+- Created at (UTC): unknown
+- Owner: unknown
+- Target branch: `main`
+
+### Persona / Handshake
 
 - Persona:
   - `@Architect`
@@ -12,7 +23,7 @@ status: implemented
 - Handshake (AGENTS.md 형식 그대로):
   - "페르소나 **@Architect**로서 작업을 시작합니다. **AGENTS.md (E0)**에 명시된 행동 제한 규약을 숙지하였으며, 작업 도중 불확실성 발생 시 즉시 중단(STOP IF UNCERTAIN)할 것을 서약합니다."
 
-## 0) 원문(사용자 입력)
+## 1) 원문(사용자 입력) (필수)
 
 - 원문:
   - "어댑터 제작자를 위한 수단…defineAdapter…최소 사양"
@@ -37,9 +48,26 @@ status: implemented
     - 문서 규율(DOCS_WRITING.md)의 decidable 규칙만 사용한다.
     - 새 용어는 GLOSSARY 또는 문서 Definitions에 정합되게 반영되어야 한다.
 
-- SSOT 충돌 여부:
-  - [ ] 없음
-  - [ ] 있음 → 충돌 지점 식별 후 즉시 중단
+- SSOT 충돌 여부: none
+
+---
+
+## 2) Spec Binding (필수)
+
+- Primary specs/refs (planned):
+  - docs/30_SPEC/adapter.spec.md
+  - docs/30_SPEC/manifest.spec.md
+  - docs/30_SPEC/module-system.spec.md
+  - docs/30_SPEC/common.spec.md
+  - docs/10_FOUNDATION/GLOSSARY.md
+
+## 3) Open Questions (STOP 후보)
+
+- none
+
+## 4) SPEC MUST SNAPSHOT (필수, 원문 복사)
+
+- none
 
 ---
 
@@ -51,7 +79,7 @@ status: implemented
 
 ---
 
-## 2) 범위(Scope) / 비범위(Non-Goals)
+## 6) 범위(Scope) / 비범위(Non-Goals) (필수)
 
 ### Scope
 
@@ -116,7 +144,7 @@ status: implemented
 
 ---
 
-## 5) 실행 계획
+## 9) 실행 계획 (Step Gates, 필수)
 
 ### Step 1) SSOT 용어/형상 정렬
 
@@ -127,7 +155,7 @@ status: implemented
   - 문서 규율 위반(DW-TERM-001 등) 발생 여부 점검
 
 - 중간 검증:
-  - docs/** 전체에서 금지 용어("MiddlewareLifecycleId", "supportedMiddlewareLifecycles", "lifecycleId" 등) 잔존 0건
+  - docs/\*\* 전체에서 금지 용어("MiddlewareLifecycleId", "supportedMiddlewareLifecycles", "lifecycleId" 등) 잔존 0건
   - docs/30_SPEC/adapter.spec.md 및 docs/30_SPEC/manifest.spec.md에서 `middlewarePhaseOrder` 스키마 정합 확인
   - docs/30_SPEC/adapter.spec.md 및 docs/30_SPEC/manifest.spec.md에서 `supportedMiddlewarePhases`의 key가 MiddlewarePhaseId로 정의되어 있음 확인
   - `pipeline.middlewares.length`와 `middlewarePhaseOrder.length` 불일치가 위반 조건으로 존재함 확인
@@ -139,6 +167,12 @@ status: implemented
   - [x] `pipeline.middlewares.length` 제약 조건 명시 확인
 
 ### Step 2) (후속) 구현 착수 준비
+
+---
+
+## 10) 검증 매트릭스 (MUST → Evidence, 필수)
+
+- none
 
 - 작업 내용:
   - Step 2는 문서/체크리스트 정리 단계로서 코드 변경을 수행하지 않는다.
@@ -177,7 +211,7 @@ status: implemented
 
 ### Step 3) (구현) CLI가 adapterSpec/handlerIndex를 생성
 
-> Step 3는 packages/** 코드 변경을 포함한다.
+> Step 3는 packages/\*\* 코드 변경을 포함한다.
 > 실제 구현 착수는 사용자 승인 아티팩트(토큰) 후에만 수행한다.
 
 - 목표(검증 가능):
@@ -217,7 +251,7 @@ status: implemented
   - 빌드 실패가 관측되어야 한다(진단 출력은 diagnostics.spec.md를 따른다).
 
 - 변경 대상(예상):
-  - packages/cli/src/analyzer/**
+  - packages/cli/src/analyzer/\*\*
     - `adapterSpec`(defineAdapter 호출) 수집을 위한 분석 루틴 추가
   - packages/cli/src/generator/manifest.ts
     - `adapterStaticSpecs`, `handlerIndex`를 비어있지 않게 생성하도록 구현
@@ -226,14 +260,14 @@ status: implemented
       generator가 analyzer를 호출할 수 있는 입력을 추가
 
 - 구현 작업 내용(기계적 단계):
-  1) AdapterSpec discovery
+  1. AdapterSpec discovery
      - 입력: 빌드 타임에 분석 가능한 “어댑터 패키지 루트 entry file” 집합
      - 처리:
        - entry file에서 named export `adapterSpec`을 찾는다.
        - `adapterSpec`의 initializer가 `defineAdapter(<AdapterClassRef>)` 호출인지 확인한다.
        - `<AdapterClassRef>`가 클래스 선언을 참조하는 Identifier인지 확인한다.
 
-  2) AdapterClass static field extraction
+  2. AdapterClass static field extraction
      - 대상 클래스에서 아래 정적 필드를 AST-level로 판정해 Adapter Static Spec을 구성한다.
        - `adapterId`
        - `pipeline`
@@ -242,13 +276,13 @@ status: implemented
        - `middlewarePhaseOrder`
      - 위 필드 중 하나라도 “스펙이 요구하는 방식으로 판정 불가”면 빌드 실패로 관측되어야 한다.
 
-  3) Handler 판정 및 `handlerIndex` 생성
+  3. Handler 판정 및 `handlerIndex` 생성
      - `entryDecorators.controller`(DecoratorRef)로 Controller class 후보를 결정한다.
      - `entryDecorators.handler`(DecoratorRef[])로 Handler method 후보를 결정한다.
      - `handlerIndex`는 diagnostics.spec.md의 `HandlerId` 규칙으로 정규화된 id 리스트로 생성한다.
        - 정렬 규칙은 manifest.spec.md 정렬/결정성 규칙을 따른다.
 
-  4) Middleware phase 기반 합성(빌드 타임) 및 `pipeline` wiring 입력 생성
+  4. Middleware phase 기반 합성(빌드 타임) 및 `pipeline` wiring 입력 생성
      - module-system 입력 + controller decorator 입력 + handler decorator 입력을 합성한다.
      - phase 순서는 `middlewarePhaseOrder`를 따른다.
      - `pipeline.middlewares`는 phase dispatcher 리스트로써 `middlewarePhaseOrder` 길이와 1:1 대응해야 한다.

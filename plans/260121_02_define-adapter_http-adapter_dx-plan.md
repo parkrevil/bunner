@@ -1,5 +1,10 @@
 ---
 status: draft
+allowed_paths:
+  - docs/**
+  - packages/**
+  - examples/**
+  - tooling/**
 ---
 
 # Run Plan
@@ -23,7 +28,7 @@ status: draft
 
 ---
 
-## 0) 원문(사용자 입력) (필수)
+## 1) 원문(사용자 입력) (필수)
 
 - 원문:
   - "아니 defineAdapter 와 Adapter 구현 인터페이스, HTTP Adapter 에 적용까지 계획을 시작한다. 논의해야하며 DX를 최우선으로 한다. 어댑터 제작자에게 명확하고 직관적인 틀을 제공해야한다"
@@ -46,6 +51,23 @@ status: draft
 
 ---
 
+## 2) Spec Binding (필수)
+
+- Primary specs/refs (planned):
+  - docs/30_SPEC/adapter.spec.md
+  - docs/30_SPEC/manifest.spec.md
+  - docs/30_SPEC/module-system.spec.md
+  - docs/30_SPEC/common.spec.md
+  - docs/10_FOUNDATION/GLOSSARY.md
+
+## 3) Open Questions (STOP 후보)
+
+- none
+
+## 4) SPEC MUST SNAPSHOT (필수, 원문 복사)
+
+- none
+
 ## 1) 목적 / 기대효과 (필수)
 
 - One-liner goal:
@@ -63,7 +85,7 @@ status: draft
 
 ---
 
-## 2) 범위(Scope) / 비범위(Non-Goals) (필수)
+## 6) 범위(Scope) / 비범위(Non-Goals) (필수)
 
 ### Scope
 
@@ -97,9 +119,9 @@ status: draft
 
 ### Hard Constraints (승인 없이는 절대 수행 금지)
 
-- [ ] SSOT(docs/10..50/**) 의미 변경 없음
+- [ ] SSOT(docs/10..50/\*\*) 의미 변경 없음
   - 본 Plan은 필요 시 L3/L1 문서 수정 가능성을 포함하므로, 의미 변경이 필요해지면 승인 요청 후 STOP.
-- [ ] Public Facade(packages/*/index.ts export) 변경 없음
+- [ ] Public Facade(packages/\*/index.ts export) 변경 없음
   - 본 Plan은 `defineAdapter` 공개 Facade 제공을 포함하므로, Public Facade 변경은 승인 필요.
 - [ ] deps(package.json deps) 변경 없음
   - `<not specified in original plan>`
@@ -334,7 +356,13 @@ status: draft
 
 ---
 
-## 8) 실행 계획 (Step Gates, 필수)
+## 9) 실행 계획 (Step Gates, 필수)
+
+---
+
+## 10) 검증 매트릭스 (MUST → Evidence, 필수)
+
+- none
 
 ### Step 1) 계약 확정(DX 우선) — 논의/합의
 
@@ -547,13 +575,13 @@ status: draft
 
 ## 9) 검증 매트릭스 (Requirement → Evidence)
 
-| Acceptance Criteria | Evidence (test/log/snapshot) | Step | Notes |
-| --- | --- | --- | --- |
-| AC1 | 합의된 DX 템플릿 1개 존재 | Step 1 | 문서/결정 고정(4.8 기반) |
-| AC2 | analyzer 테스트 + http-adapter entry에서 수집 가능 | Step 3 | 결정적 수집(추측 금지) |
-| AC3 | `dispatch(handlerId, ctx, input)` 실행 경로 고정 | Step 4 | 런타임 조립/추론 금지 |
-| AC-E1 | `adapterIds` 없음=all / 있음=subset 정규화 | Step 3/4 | 빌드 타임 결과에 반영 |
-| AC-C1 | `bunnerHttpAdapter(...)` 접합 | Step 4 | 유지/이행 |
+| Acceptance Criteria | Evidence (test/log/snapshot)                       | Step     | Notes                    |
+| ------------------- | -------------------------------------------------- | -------- | ------------------------ |
+| AC1                 | 합의된 DX 템플릿 1개 존재                          | Step 1   | 문서/결정 고정(4.8 기반) |
+| AC2                 | analyzer 테스트 + http-adapter entry에서 수집 가능 | Step 3   | 결정적 수집(추측 금지)   |
+| AC3                 | `dispatch(handlerId, ctx, input)` 실행 경로 고정   | Step 4   | 런타임 조립/추론 금지    |
+| AC-E1               | `adapterIds` 없음=all / 있음=subset 정규화         | Step 3/4 | 빌드 타임 결과에 반영    |
+| AC-C1               | `bunnerHttpAdapter(...)` 접합                      | Step 4   | 유지/이행                |
 
 ---
 
