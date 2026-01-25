@@ -2,8 +2,9 @@
 
 이 파일은 "전체 문서 품질"과 "규칙 준수"를 자주 점검하는 워크플로우를 원샷으로 수행하기 위한 템플릿입니다.
 
-## 0) 공통 Preflight 8줄
-[README.md](README.md)의 Preflight 8줄을 먼저 출력하게 하세요.
+## 0) 공통 Preflight 8줄 + Handshake
+
+[README.md](README.md)의 Preflight 8줄 + Handshake를 먼저 출력하게 하세요.
 
 ---
 
@@ -28,6 +29,10 @@ Hard rules:
 - 해결책은 "문제 목록" 이후에만.
 - 각 항목은 근거(문서 경로 + 섹션 제목 또는 문장 인용)를 포함.
 - 의미 변경(SSOT 변화)이 필요하다고 판단되면 승인 요청 포맷(5필드)으로 요청하고 STOP.
+
+Required reads (MUST):
+- docs/10_FOUNDATION/SSOT_HIERARCHY.md
+- (문서 감사 시) docs/50_GOVERNANCE/DOCS_WRITING.md
 
 Output (고정):
 1) Duplicates
@@ -56,6 +61,12 @@ Rule sources (choose applicable):
 - docs/40_ENGINEERING/TESTING.md
 - docs/40_ENGINEERING/VERIFY.md
 - 관련 docs/30_SPEC/*.spec.md
+
+Required reads (MUST):
+- docs/40_ENGINEERING/STYLEGUIDE.md
+- docs/40_ENGINEERING/TESTING.md
+- docs/40_ENGINEERING/VERIFY.md
+- (해당 시) docs/30_SPEC/SPEC.md + 관련 *.spec.md
 
 Hard rules:
 - 추정 금지. 위반 후보는 근거(규칙 문장 + 코드 위치 + 왜 위반인지)를 포함.
@@ -87,6 +98,12 @@ Process:
 1) 적용 규칙 목록 확정(관련 spec + STYLEGUIDE + TESTING + VERIFY)
 2) 변경된 코드가 각 규칙에 대해 위반이 있는지 후보를 나열
 3) bun run verify가 통과하는지 확인(또는 통과시킬 수정안을 제시)
+
+Required reads (MUST):
+- docs/40_ENGINEERING/STYLEGUIDE.md
+- docs/40_ENGINEERING/TESTING.md
+- docs/40_ENGINEERING/VERIFY.md
+- 관련 docs/30_SPEC/*.spec.md
 
 Output:
 - Compliance checklist

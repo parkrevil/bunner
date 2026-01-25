@@ -28,6 +28,8 @@
 - [ ] 함수 파라미터가 4개 이하인가? (STYLE-015)
 - [ ] 반복 리터럴이 결정 트리에 따라 처리되었는가? (STYLE-022)
 - [ ] 스프레드 연산자가 허용 조건을 충족하는가? (STYLE-023)
+- [ ] 우산 타입(alias) 추가/확산이 없는가? (STYLE-024)
+- [ ] Public/Shared 타입에서 object/Function 타입이 도입되지 않았는가? (STYLE-025)
 - [ ] null/undefined가 의미에 맞게 사용되었는가? (STYLE-020)
 - [ ] unknown이 경계 레이어에서만 사용되었는가? (STYLE-006)
 
@@ -73,6 +75,23 @@ null 반환이 "의도적 비어있음"을 의미하는지 확인. 불확실하�
 
 unknown 사용이 경계 레이어(외부 입력)인지 확인. 아니면 구체 타입으로 대체.
 
+### 검증 6: 우산 타입(alias) 확산 방지
+
+아래 문자열이 diff(추가 라인)에 포함되면 위반으로 판정:
+
+```bash
+git diff --unified=0 | grep -nE "^\\+.*\\b(AnyValue|AnyFunction|UnsafeValue|UnsafeRecord)\\b"  # 0이어야 함
+```
+
+### 검증 7: object/Function 도입 차단
+
+shared/public 타입에 object/Function을 도입하면 타입 정밀도가 붕괴하므로 금지한다.
+아래 문자열이 diff(추가 라인)에 포함되면 위반으로 판정:
+
+```bash
+git diff --unified=0 | grep -nE "^\\+.*\\b(object|Function)\\b"  # 0이어야 함
+```
+
 ## 예제 코드 규칙
 
 - 예제 코드는 해당 규칙을 **100% 준수**해야 한다(MUST).
@@ -114,6 +133,8 @@ unknown 사용이 경계 레이어(외부 입력)인지 확인. 아니면 구체
 | STYLE-021 | Enum 항목 `PascalCase`                               | `MODULE` ❌ → `Module` ✅ |
 | STYLE-022 | 상수/enum/헬퍼 **결정 트리** 준수                    | 무분별한 상수화 ❌        |
 | STYLE-023 | 스프레드 연산자 **엄격 제한**                        | 불필요한 `{...}` ❌       |
+| STYLE-024 | 우산 타입(alias) 도입/확산 금지                      | AnyValue/AnyFunction ❌   |
+| STYLE-025 | Public/Shared 타입에서 object/Function 금지          | object/Function ❌        |
 
 상세 규칙은 아래 각 섹션 참조.
 
@@ -893,4 +914,38 @@ return { ...this.currentImports };
 // ✅ 허용: 스냅샷 (원본이 이후 초기화됨)
 const snapshot = { ...this.state };
 this.state = {};
+```
+
+### 12.11 우산 타입(alias) 도입/확산 금지 (STYLE-024)
+
+목표: 타입을 “정확하게” 만들기 위해, 타입 시스템의 최상위(또는 준-최상위) 표현을 우산(alias)로 감싸는 방식을 금지한다.
+
+- AnyValue, AnyFunction, UnsafeValue, UnsafeRecord 같은 "포괄 alias"를 추가하거나 확산하는 행위는 금지한다(MUST NOT).
+- 위반 판정은 diff 기반으로 수행한다(MUST).
+
+#### 위반 판정 (Decidable)
+
+아래 중 하나라도 true이면 위반:
+
+- git diff의 추가 라인에 AnyValue 또는 AnyFunction 또는 UnsafeValue 또는 UnsafeRecord가 등장한다.
+
+```bash
+git diff --unified=0 | grep -nE "^\\+.*\\b(AnyValue|AnyFunction|UnsafeValue|UnsafeRecord)\\b"  # 0이어야 함
+```
+
+### 12.12 Public/Shared 타입에서 object/Function 금지 (STYLE-025)
+
+목표: object/Function 타입은 정보량이 낮아 정적 타입 안정성을 붕괴시키므로, 공용 타입 정의에서의 도입을 금지한다.
+
+- 공용 타입 정의(예: packages/_/src/types.ts, packages/_/src/interfaces.ts)에서 object/Function 타입 도입은 금지한다(MUST NOT).
+- 위반 판정은 diff 기반으로 수행한다(MUST).
+
+#### 위반 판정 (Decidable)
+
+아래 중 하나라도 true이면 위반:
+
+- git diff의 추가 라인에 object 또는 Function 토큰이 등장한다.
+
+```bash
+git diff --unified=0 | grep -nE "^\\+.*\\b(object|Function)\\b"  # 0이어야 함
 ```

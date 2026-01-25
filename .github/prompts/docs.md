@@ -1,7 +1,8 @@
 # Docs Prompt Templates
 
-## 0) 공통 Preflight 8줄
-[README.md](README.md)의 Preflight 8줄을 먼저 출력하게 하세요.
+## 0) 공통 Preflight 8줄 + Handshake
+
+[README.md](README.md)의 Preflight 8줄 + Handshake를 먼저 출력하게 하세요.
 
 ---
 
@@ -16,6 +17,10 @@
 
 Task:
 - docs/** 전체를 대상으로 일관성/중복/흐름/자연스러움/모순/모호 문제를 최대한 많이 찾아라.
+
+Required reads (MUST):
+- docs/10_FOUNDATION/SSOT_HIERARCHY.md
+- docs/50_GOVERNANCE/DOCS_WRITING.md
 
 Hard rules:
 - 해결책/수정안 제시는 "문제 목록" 제출 이후에만 가능.
@@ -56,6 +61,7 @@ Scope:
 
 Rules:
 - docs/50_GOVERNANCE/DOCS_WRITING.md를 따른다.
+- docs/10_FOUNDATION/SSOT_HIERARCHY.md를 기준으로 문서 권위/충돌을 해석한다.
 - MUST/MAY/MUST NOT 근처에 모호 표현(예: 적절히/충분히/권장 등)을 남기지 않는다.
 - 새 용어를 도입하면 정의 위치를 명시한다(문서 내 Definitions 또는 glossary 등).
 
@@ -75,6 +81,10 @@ Deliver:
 
 ```text
 # Preflight 8줄 먼저 출력
+
+Required reads (MUST):
+- docs/10_FOUNDATION/SSOT_HIERARCHY.md
+- docs/50_GOVERNANCE/OVERVIEW.md
 
 Situation:
 - SSOT 의미 변경이 필요하다고 판단했다. (예: 규칙 충돌/비판정/운영 불가능)

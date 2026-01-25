@@ -5,61 +5,51 @@
   "bunner.read": {
     "tools": ["changes", "codebase", "problems", "usages"],
     "description": "Read-only repo understanding (diffs, search, diagnostics, references)",
-    "icon": "book"
+    "icon": "book",
   },
   "bunner.docs": {
     "tools": ["codebase", "usages", "changes", "fetch"],
     "description": "Docs/spec authoring with optional web lookups",
-    "icon": "book"
+    "icon": "book",
   },
   "bunner.spec": {
     "tools": ["codebase", "usages", "changes"],
     "description": "Spec drafting/alignment without execution",
-    "icon": "book"
+    "icon": "book",
   },
   "bunner.plan": {
     "tools": ["codebase", "usages", "changes"],
     "description": "Planning artifacts (plans/*) without execution",
-    "icon": "book"
+    "icon": "book",
   },
   "bunner.audit.docs": {
     "tools": ["codebase", "usages", "problems", "changes"],
     "description": "Audit docs for duplication/contradiction/ambiguity/flow",
-    "icon": "check"
+    "icon": "check",
   },
   "bunner.audit.rules": {
     "tools": ["codebase", "usages", "problems", "changes"],
     "description": "Audit codebase against docs/spec rules (read-first)",
-    "icon": "check"
+    "icon": "check",
   },
   "bunner.align": {
     "tools": ["codebase", "usages", "problems", "changes"],
     "description": "Resolve spec/docs/code conflicts mechanically",
-    "icon": "check"
+    "icon": "check",
   },
   "bunner.implement": {
-    "tools": [
-      "changes",
-      "codebase",
-      "problems",
-      "usages",
-      "runInTerminal",
-      "terminalLastCommand",
-      "terminalSelection"
-    ],
+    "tools": ["changes", "codebase", "problems", "usages", "runInTerminal", "terminalLastCommand", "terminalSelection"],
     "description": "Implement + run local verification (bun run verify)",
-    "icon": "tools"
+    "icon": "tools",
+  },
+  "bunner.triage": {
+    "tools": ["changes", "codebase", "problems", "usages", "runInTerminal", "terminalLastCommand", "terminalSelection"],
+    "description": "Triage verify failures (read-first, minimal fix, bun run verify)",
+    "icon": "tools",
   },
   "bunner.refactor.gate": {
-    "tools": [
-      "changes",
-      "codebase",
-      "problems",
-      "usages",
-      "runInTerminal",
-      "terminalLastCommand"
-    ],
+    "tools": ["changes", "codebase", "problems", "usages", "runInTerminal", "terminalLastCommand"],
     "description": "Refactor with stepwise verification gates",
-    "icon": "tools"
-  }
+    "icon": "tools",
+  },
 }

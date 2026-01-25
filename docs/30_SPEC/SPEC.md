@@ -12,22 +12,54 @@
 
 ## Contract Specs
 
-- [aot-ast.spec.md](aot-ast.spec.md)
-- [app.spec.md](app.spec.md)
-- [manifest.spec.md](manifest.spec.md)
-- [module-system.spec.md](module-system.spec.md)
-- [di.spec.md](di.spec.md)
-- [provider.spec.md](provider.spec.md)
-- [common.spec.md](common.spec.md)
-- [diagnostics.spec.md](diagnostics.spec.md)
-- [execution.spec.md](execution.spec.md)
-- [error-handling.spec.md](error-handling.spec.md)
-- [adapter.spec.md](adapter.spec.md)
-- [dto.spec.md](dto.spec.md)
-- [cluster.spec.md](cluster.spec.md)
-- [mcp-server.spec.md](mcp-server.spec.md)
-- [devtools.spec.md](devtools.spec.md)
-- [logger.spec.md](logger.spec.md)
-- [docs.spec.md](docs.spec.md)
-- [drizzle-orm.spec.md](drizzle-orm.spec.md)
-- [ffi.spec.md](ffi.spec.md)
+- Adapter
+  - [adapter/adapter.spec.md](adapter/adapter.spec.md)
+  - [adapter/registration.spec.md](adapter/registration.spec.md)
+  - [adapter/entry-decorators.spec.md](adapter/entry-decorators.spec.md)
+  - [adapter/middleware-phase.spec.md](adapter/middleware-phase.spec.md)
+  - [adapter/pipeline-shape.spec.md](adapter/pipeline-shape.spec.md)
+- App
+  - [app/app.spec.md](app/app.spec.md)
+- CLI
+  - [cli/diagnostics.spec.md](cli/diagnostics.spec.md)
+  - [cli/handler-id.spec.md](cli/handler-id.spec.md)
+- Common
+  - [common/common.spec.md](common/common.spec.md)
+  - [common/diagnostics.spec.md](common/diagnostics.spec.md)
+  - [common/declarations.spec.md](common/declarations.spec.md)
+  - [common/identity.spec.md](common/identity.spec.md)
+  - [common/references.spec.md](common/references.spec.md)
+  - [common/result.spec.md](common/result.spec.md)
+- Compiler
+  - [compiler/aot-ast.spec.md](compiler/aot-ast.spec.md)
+  - [compiler/config.spec.md](compiler/config.spec.md)
+  - [compiler/manifest.spec.md](compiler/manifest.spec.md)
+- Data
+  - [data/dto.spec.md](data/dto.spec.md)
+  - [data/dto-schema.spec.md](data/dto-schema.spec.md)
+  - [data/dto-transform.spec.md](data/dto-transform.spec.md)
+  - [data/dto-validate.spec.md](data/dto-validate.spec.md)
+- DI
+  - [di/di.spec.md](di/di.spec.md)
+  - [di/wiring.spec.md](di/wiring.spec.md)
+- Error Handling
+  - [error-handling/error-handling.spec.md](error-handling/error-handling.spec.md)
+  - [error-handling/exception-filter-chain.spec.md](error-handling/exception-filter-chain.spec.md)
+- Execution
+  - [execution/execution.spec.md](execution/execution.spec.md)
+  - [execution/metadata-volatility.spec.md](execution/metadata-volatility.spec.md)
+  - [execution/normal-flow.spec.md](execution/normal-flow.spec.md)
+- Module System
+  - [module-system/module-system.spec.md](module-system/module-system.spec.md)
+  - [module-system/boundary.spec.md](module-system/boundary.spec.md)
+  - [module-system/adapter-config.spec.md](module-system/adapter-config.spec.md)
+  - [module-system/manifest.spec.md](module-system/manifest.spec.md)
+- Pipeline
+  - [pipeline/middleware.spec.md](pipeline/middleware.spec.md)
+  - [pipeline/guards.spec.md](pipeline/guards.spec.md)
+  - [pipeline/pipes.spec.md](pipeline/pipes.spec.md)
+  - [pipeline/exception-filters.spec.md](pipeline/exception-filters.spec.md)
+- Provider
+  - [provider/provider.spec.md](provider/provider.spec.md)
+  - [provider/lifecycle.spec.md](provider/lifecycle.spec.md)
+  - [provider/scope.spec.md](provider/scope.spec.md)

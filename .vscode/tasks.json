@@ -1,53 +1,53 @@
 {
-	"version": "2.0.0",
-	"tasks": [
-		{
-			"label": "bunner: verify",
-			"type": "shell",
-			"command": "bun",
-			"args": ["run", "verify"],
-			"group": "build",
-			"problemMatcher": []
-		},
-		{
-			"label": "bunner: tsc (noEmit)",
-			"type": "shell",
-			"command": "bun",
-			"args": ["run", "tsc"],
-			"group": "build",
-			"problemMatcher": ["$tsc"]
-		},
-		{
-			"label": "bunner: lint (fix)",
-			"type": "shell",
-			"command": "bun",
-			"args": ["run", "lint"],
-			"group": "build",
-			"problemMatcher": []
-		},
-		{
-			"label": "bunner: test",
-			"type": "shell",
-			"command": "bun",
-			"args": ["run", "test"],
-			"group": "test",
-			"problemMatcher": []
-		},
-		{
-			"label": "bunner: test (coverage)",
-			"type": "shell",
-			"command": "bun",
-			"args": ["run", "test:coverage"],
-			"group": "test",
-			"problemMatcher": []
-		},
-		{
-			"label": "bunner: format (write)",
-			"type": "shell",
-			"command": "bun",
-			"args": ["run", "format"],
-			"group": "build",
-			"problemMatcher": []
-		}
-	]
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "bunner: verify",
+      "type": "shell",
+      "command": "bun",
+      "args": ["run", "verify"],
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "bunner: tsc (noEmit)",
+      "type": "shell",
+      "command": "bun",
+      "args": ["run", "tsc"],
+      "group": "build",
+      "problemMatcher": ["$tsc"]
+    },
+    {
+      "label": "bunner: lint (fix)",
+      "type": "shell",
+      "command": "bun",
+      "args": ["run", "lint"],
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "bunner: test",
+      "type": "shell",
+      "command": "bun",
+      "args": ["run", "test"],
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "bunner: test (coverage)",
+      "type": "shell",
+      "command": "bun",
+      "args": ["run", "test:coverage"],
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "bunner: format (write)",
+      "type": "shell",
+      "command": "bun",
+      "args": ["run", "format"],
+      "group": "build",
+      "problemMatcher": []
+    }
+  ]
 }

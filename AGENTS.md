@@ -77,8 +77,12 @@ Prime Directives는 실행 게이트 조건이며, 절차 가이드가 아니다
 
 고정 포맷:
 
-1) `Prompt: <적용 중인 템플릿 경로 | none>`
-2) `Toolset: <bunner.* | manual-limited>`
+1. `Prompt: {적용 중인 템플릿 경로 | none}`
+2. `Toolset: {bunner.* | manual-limited}`
+
+표기 규칙:
+
+- NOTE: 위 `{...}` 표기는 “형식 정의/예시”이며, 실제 응답에서는 `{...}`를 남기지 않고 구체 값을 채워 출력한다.
 
 규칙:
 
@@ -98,17 +102,26 @@ Prime Directives는 실행 게이트 조건이며, 절차 가이드가 아니다
 
 - 승인 토큰(대화 기반, 정확히 일치): `Y`, `OK`, `승인`, `진행해`, `ㅇㅇ`
 - 승인 필요 변경 유형(요약):
+  - 범위 확장(Scope Override): 사용자가 명시하지 않은 패키지/영역 변경
   - SSOT: `docs/10..50/**`
   - Public Facade: `packages/*/index.ts`의 export
   - deps: `package.json`(루트 및 `packages/*/package.json`)의 deps
+  - 아키텍처 변경: 패키지 경계/의존 방향 변경
 
 정본: [docs/50_GOVERNANCE/OVERVIEW.md](docs/50_GOVERNANCE/OVERVIEW.md)
+
+- 승인 요청이 필요한 경우, 아래 5개 필드를 포함한 요청을 출력한다(MUST):
+  - 유형
+  - 현재 상황(1~2줄)
+  - 요청 범위(파일/패키지 목록)
+  - 대안(없으면 `none`)
+  - 리스크(영향 범위)
 
 ### 5.4 매 턴 재확인 프로토콜 (MUST)
 
 규칙을 “알고도 어긴 것처럼” 만들지 않기 위해, 아래 항목을 매 턴 기계적으로 재확인한다.
 
-- 작업 분류를 `spec | docs | plan | implement | audit` 중 하나로 고정하고, 해당 템플릿 경로를 `Prompt:`에 보고한다.
+- 작업 분류를 `read | docs | spec | plan | implement | align | triage | refactor | audit | task-run` 중 하나로 고정하고, 해당 템플릿 경로를 `Prompt:`에 보고한다.
 - 변경/실행 직전 L4/L5 금지 정책 및 게이트를 재확인하고, 필요 시 즉시 STOP한다.
   - 예: “deprecated” 관련 표현/잔재 허용 여부는 항상 `docs/40_ENGINEERING/STYLEGUIDE.md` + `docs/50_GOVERNANCE/DEAD_CODE_POLICY.md`로 재확인한다.
 
@@ -117,7 +130,7 @@ Prime Directives는 실행 게이트 조건이며, 절차 가이드가 아니다
 사용자가 명시적으로 “계획(Plan) 작성”을 요청한 경우에만 `.agent` 워크플로우/템플릿을 적용한다.
 
 - Workflow 정본: [.agent/workflow.md](.agent/workflow.md)
-- Plan 템플릿 정본: [.agent/template.md](.agent/template.md)
+- Plan 템플릿 정본: [.agent/plan-template.md](.agent/plan-template.md)
 
 ---
 

@@ -9,7 +9,7 @@ description: 단일 포괄 워크플로우 (정본)
 - 정본(문서 지도): [docs/00_INDEX.md](../../docs/00_INDEX.md)
 - 권한/행동 제한 정본: [AGENTS.md](../../AGENTS.md)
 - 승인 아티팩트(토큰) 정본: [OVERVIEW.md](../../docs/50_GOVERNANCE/OVERVIEW.md)
-- 실행 입력 템플릿: [template.md](template.md)
+- 실행 입력 템플릿: [plan-template.md](plan-template.md)
 
 ---
 
@@ -134,3 +134,5 @@ exploration → draft → negotiation → proposed → accepted → in-progress 
 - SSOT 문서 변경 없음
 
 예외 적용 여부는 **사용자가 승인**한다.
+
+- 승인 방식은 [OVERVIEW.md](../../docs/50_GOVERNANCE/OVERVIEW.md)의 승인 아티팩트(토큰/PR 승인)로만 판정한다.

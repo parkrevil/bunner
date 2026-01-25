@@ -104,16 +104,33 @@ Happy Path만 검증하는 테스트는
 
 #### Unit Test Structure Rules (MUST)
 
-- `describe` 1-depth는 **테스트 대상의 식별자**여야 한다.
+- describe 1-depth는 **테스트 대상(SUT)의 식별자**여야 한다(MUST).
+  - 함수/모듈 테스트: 함수명 또는 모듈명
   - 클래스 테스트: 클래스명
-  - 함수 테스트: 함수명
-- `describe` 2-depth는 **조건 / 상황 / 맥락**을 표현한다.
-  - 예: `when input is valid`, `when dependency fails`
-- `it`은 **단 하나의 케이스만** 검증해야 한다.
-  - 하나의 성공, 하나의 실패, 하나의 엣지 → 각각 별도의 `it`
-- 논리적으로 묶을 수 있는 케이스만 `describe`로 그룹핑한다.
-- **Private 함수도 테스트 대상이 될 수 있다.**
+- Unit Test에서 depth 구성은 아래 2가지 형태만 허용한다(MUST).
+  - 형태 A (단일 함수/단일 모듈):
+    - 1-depth: SUT 식별자
+    - 2-depth(선택): SUT의 하위 기능 단위(메서드명 또는 논리적 하위 구역)
+    - it: 단일 케이스
+  - 형태 B (클래스 + 메서드 단위):
+    - 1-depth: 클래스명
+    - 2-depth: 메서드명
+    - 3-depth(선택): SUT의 하위 기능 단위(메서드명 또는 논리적 하위 구역)
+    - it: 단일 케이스
+- it은 **단 하나의 케이스만** 검증해야 한다(MUST).
+  - 하나의 성공, 하나의 실패, 하나의 엣지 케이스는 각각 별도의 it로 분리한다.
+- 논리적으로 묶을 수 있는 케이스만 describe로 그룹핑한다(MUST).
+- Private 함수도 테스트 대상이 될 수 있다(MAY).
   - 단, 해당 테스트는 내부 로직의 안정성을 검증하기 위한 목적이어야 한다.
+
+- 조건/상황/맥락은 it 제목(BDD 문장)에 포함하는 것을 기본값으로 한다(5.1).
+- describe는 SUT 식별 및 (필요한 경우에 한해) 메서드 단위 그룹핑까지만 사용한다.
+
+#### Context Grouping Rules (MUST)
+
+- Unit Test에서 describe 제목이 "when "으로 시작하는 것을 금지한다(MUST NOT).
+  - 위반 판정: 동일 테스트 파일에서 describe 제목(인자 문자열)이 "when "으로 시작하면 위반
+  - 대체: it 제목을 BDD 문장으로 작성하고, "when ..."은 it 제목에 포함한다(5.1).
 
 #### External Call Isolation Rule (Unit Test MUST)
 
@@ -202,7 +219,7 @@ E2E Test는 사용자 관점의 Black-box 검증이다.
 
 ### 5.1 네이밍 컨벤션 (Naming - BDD Style)
 
-- **describe**: 테스트 대상(Class, Module) 또는 기능(Method)의 이름을 명확히 기술한다. 중첩 구조를 활용한다.
+- **describe**: 테스트 대상(Class, Module) 또는 기능(Method)의 이름을 명확히 기술한다. 중첩은 4.1에서 허용한 형태 내에서만 사용한다.
 - **it**: 반드시 **BDD 스타일**(`should ... when ...`)을 따른다. "테스트가 무엇을 검증하는지"가 아니라 "시스템이 어떻게 행동해야 하는지"를 서술한다.
   - ✅ `it("should return 200 OK when the payload is valid", ...)`
   - ✅ `it("should throw ValidationError when email is missing", ...)`
@@ -302,3 +319,27 @@ Internal/private 구현 상세에 직접 결합하는 테스트는 리팩터링 
 - [ ] 통합 테스트에서 Public API만을 사용했는가?
 - [ ] 반복되는 데이터나 로직을 Fixture/Helper로 분리했는가?
 - [ ] `bun test` 실행 시 경고나 에러 없이 통과하는가?
+
+---
+
+## 8. Mechanical Enforcement (Rule Blocks)
+
+이 섹션은 **기계 판정(Decidable)** 가능한 규칙만을 포함한다.
+아래 Rule Block은 문서 내 다른 서술(설명/예시)보다 우선하여 집행 기준으로 사용된다.
+
+```text
+Rule: TST-UNIT-MAP-001
+Target: **/*.spec.ts
+Violation: `**/<dir>/<name>.spec.ts`가 존재하지만, 동시에 `**/<dir>/<name>.ts`가 존재하지 않음
+Enforcement: block
+```
+
+```text
+Rule: TST-UNIT-MAP-002
+Target: **/*
+Violation: 아래 조건 중 하나라도 true
+  - (디렉토리-완결성) 어떤 디렉토리 `<dir>`에 `*.spec.ts`가 1개 이상 존재하고, 동시에 아래 조건을 만족하는 파일 `**/<dir>/<name>.ts`가 존재함
+      - `**/<dir>/<name>.ts`는 `*.d.ts` / `*.spec.ts` / `*.test.ts`가 아님
+      - 동시에 `**/<dir>/<name>.spec.ts`가 존재하지 않음
+Enforcement: block
+```
