@@ -1,4 +1,4 @@
-import type { AstNode, Fix, Fixer, JsonObject, JsonValue, NodeOrNull, PaddingRule, RuleContext } from '../types';
+import type { AstNode, Fix, Fixer, JsonObject, JsonValue, NodeOrNull, PaddingRule, RuleContext } from '../types.js';
 
 import { isFunctionVariableDeclaration } from '../utils/is-function-variable-declaration.js';
 

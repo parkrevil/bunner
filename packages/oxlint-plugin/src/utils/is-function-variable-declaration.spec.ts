@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import type { AstNode } from '../types';
+import type { AstNode } from '../types.js';
 
 import { isFunctionVariableDeclaration } from './is-function-variable-declaration.js';
 

@@ -1,10 +1,9 @@
 {
   "name": "@bunner/firebat",
+  "type": "module",
   "bin": {
     "firebat": "./dist/firebat.js"
   },
-  "type": "module",
-  "module": "index.ts",
   "scripts": {
     "build": "bun run scripts/build.ts",
     "lint": "oxlint --config ../../.oxlintrc.jsonc --type-aware --type-check --fix .",
