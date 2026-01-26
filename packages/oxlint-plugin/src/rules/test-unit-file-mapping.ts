@@ -1,4 +1,3 @@
-import { existsSync } from 'node:fs';
 import { basename } from 'node:path';
 
 import type { AstNode, AstNodeValue, RuleContext } from '../types';
@@ -22,10 +21,6 @@ function getContextFilename(context: RuleContext): string | null {
 function fileExists(context: RuleContext, filePath: string): boolean | null {
   if (typeof context.fileExists === 'function') {
     return context.fileExists(filePath);
-  }
-
-  if (typeof existsSync === 'function') {
-    return existsSync(filePath);
   }
 
   return null;

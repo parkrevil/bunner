@@ -31,9 +31,9 @@ const printHelp = (): void => {
 
 const resolveDefaultTsconfig = (): string => path.resolve(process.cwd(), 'tsconfig.json');
 
-const buildReport = (options: FirebatCliOptions): FirebatReport => {
+const buildReport = async (options: FirebatCliOptions): Promise<FirebatReport> => {
   const tsconfigPath = options.tsconfigPath ?? resolveDefaultTsconfig();
-  const program = createFirebatProgram({
+  const program = await createFirebatProgram({
     tsconfigPath,
     targets: options.targets,
   });
@@ -58,7 +58,7 @@ const runFirebat = async (): Promise<void> => {
   let options: FirebatCliOptions;
 
   try {
-    options = parseArgs(process.argv.slice(2));
+    options = parseArgs(Bun.argv.slice(2));
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
 
@@ -78,7 +78,7 @@ const runFirebat = async (): Promise<void> => {
   let report: FirebatReport;
 
   try {
-    report = buildReport(options);
+    report = await buildReport(options);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
 

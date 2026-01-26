@@ -1,17 +1,16 @@
-import fs from 'node:fs';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 type ParseSyncFn = (filePath: string, sourceText: string) => unknown;
 
-const resolveOxcParserNativeBinding = (): string | null => {
+const resolveOxcParserNativeBinding = async (): Promise<string | null> => {
   const candidates = [
     path.resolve(process.cwd(), 'node_modules/@oxc-parser/binding-linux-x64-gnu/parser.linux-x64-gnu.node'),
     path.resolve(process.cwd(), 'tooling/firebat/node_modules/@oxc-parser/binding-linux-x64-gnu/parser.linux-x64-gnu.node'),
   ];
 
   for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) {
+    if (await Bun.file(candidate).exists()) {
       return candidate;
     }
   }
@@ -19,28 +18,28 @@ const resolveOxcParserNativeBinding = (): string | null => {
   return null;
 };
 
-const ensureOxcParserNativeBinding = (): void => {
-  if (process.env.NAPI_RS_NATIVE_LIBRARY_PATH) {
+const ensureOxcParserNativeBinding = async (): Promise<void> => {
+  if (Bun.env.NAPI_RS_NATIVE_LIBRARY_PATH) {
     return;
   }
 
-  const bindingPath = resolveOxcParserNativeBinding();
+  const bindingPath = await resolveOxcParserNativeBinding();
 
   if (bindingPath) {
-    process.env.NAPI_RS_NATIVE_LIBRARY_PATH = bindingPath;
+    Bun.env.NAPI_RS_NATIVE_LIBRARY_PATH = bindingPath;
   }
 };
 
-ensureOxcParserNativeBinding();
+await ensureOxcParserNativeBinding();
 
-const resolveOxcParserEntry = (): string | null => {
+const resolveOxcParserEntry = async (): Promise<string | null> => {
   const candidates = [
     path.resolve(process.cwd(), 'node_modules/oxc-parser/src-js/index.js'),
     path.resolve(process.cwd(), 'tooling/firebat/node_modules/oxc-parser/src-js/index.js'),
   ];
 
   for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) {
+    if (await Bun.file(candidate).exists()) {
       return candidate;
     }
   }
@@ -59,7 +58,7 @@ const loadParseSync = async (): Promise<ParseSyncFn> => {
     // Ignore and try loading from disk.
   }
 
-  const entry = resolveOxcParserEntry();
+  const entry = await resolveOxcParserEntry();
 
   if (!entry) {
     throw new Error('[firebat] Failed to resolve oxc-parser from disk. Run from the repo root or tooling/firebat.');

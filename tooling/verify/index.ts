@@ -1,3 +1,3 @@
 import { runVerify } from './verify';
 
-runVerify();
+await runVerify();

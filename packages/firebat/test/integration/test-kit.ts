@@ -24,11 +24,11 @@ const parseSeed = (seedText: string | undefined): number => {
 };
 
 export const getFuzzSeed = (): number => {
-  return parseSeed(process.env.FIREBAT_FUZZ_SEED);
+  return parseSeed(Bun.env.FIREBAT_FUZZ_SEED);
 };
 
 export const getFuzzIterations = (fallback: number): number => {
-  const raw = process.env.FIREBAT_FUZZ_ITERS;
+  const raw = Bun.env.FIREBAT_FUZZ_ITERS;
 
   if (!raw) {
     return fallback;

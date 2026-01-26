@@ -1,4 +1,3 @@
-import fs from 'node:fs';
 import path from 'node:path';
 
 import type { RunOptions } from './types';
@@ -18,7 +17,7 @@ const listExtensions = (): string => [...CODE_EXTENSIONS].sort().join(', ');
 const run = (cmd: string, args: readonly string[], options: RunOptions = {}): void => {
   const child = Bun.spawnSync([cmd, ...args], {
     cwd: options.cwd ?? repoRoot,
-    env: options.env ?? process.env,
+    env: options.env ?? Bun.env,
     stdin: 'inherit',
     stdout: 'inherit',
     stderr: 'inherit',
@@ -126,7 +125,7 @@ const extractAllowedPathsFromTask = (contents: string): string[] => {
   return patterns;
 };
 
-const assertAllowedPaths = (files: readonly string[], taskFiles: readonly string[]): void => {
+const assertAllowedPaths = async (files: readonly string[], taskFiles: readonly string[]): Promise<void> => {
   const changedCodeFiles = listChangedCodeFiles(files).map(normalizePath);
 
   if (changedCodeFiles.length === 0) {
@@ -136,11 +135,11 @@ const assertAllowedPaths = (files: readonly string[], taskFiles: readonly string
   const patterns: string[] = [];
 
   for (const taskFile of taskFiles) {
-    if (!fs.existsSync(taskFile)) {
+    if (!(await Bun.file(taskFile).exists())) {
       continue;
     }
 
-    patterns.push(...extractAllowedPathsFromTask(fs.readFileSync(taskFile, 'utf8')));
+    patterns.push(...extractAllowedPathsFromTask(await Bun.file(taskFile).text()));
   }
 
   const uniquePatterns = [...new Set(patterns.map(p => p.trim()).filter(p => p.length > 0))];
@@ -180,10 +179,10 @@ const listChangedCodeFiles = (files: readonly string[]): string[] =>
     return !VERIFY_OXLINT_EXCLUDE.has(normalized);
   });
 
-const runVerify = (): void => {
+const runVerify = async (): Promise<void> => {
   const files = getChangedFiles();
-  const didRunDocVerify = hasMarkdownChanges(files) ? runDocVerify(files) : false;
-  const didRunPlanTaskVerify = hasMarkdownChanges(files) ? runPlanTaskVerify(files) : false;
+  const didRunDocVerify = hasMarkdownChanges(files) ? await runDocVerify(files) : false;
+  const didRunPlanTaskVerify = hasMarkdownChanges(files) ? await runPlanTaskVerify(files) : false;
   const hasCode = hasCodeChanges(files);
   const didRunAnyDocs = didRunDocVerify ?? didRunPlanTaskVerify;
   const changedTaskFiles = listChangedTaskFiles(files);
@@ -209,7 +208,7 @@ const runVerify = (): void => {
     process.exit(1);
   }
 
-  assertAllowedPaths(files, changedTaskFiles);
+  await assertAllowedPaths(files, changedTaskFiles);
 
   console.log(`[verify] ✅ ${listExtensions()} changes detected. Running quality gate...`);
 

@@ -1,4 +1,3 @@
-import { existsSync, readFileSync } from 'node:fs';
 import { basename } from 'node:path';
 
 import type { AstNode, RuleContext } from '../types';
@@ -24,10 +23,6 @@ function fileExists(context: RuleContext, filePath: string): boolean | null {
     return context.fileExists(filePath);
   }
 
-  if (typeof existsSync === 'function') {
-    return existsSync(filePath);
-  }
-
   return null;
 }
 
@@ -36,15 +31,7 @@ function readText(context: RuleContext, filePath: string): string | null {
     return context.readFile(filePath);
   }
 
-  if (typeof readFileSync !== 'function') {
-    return null;
-  }
-
-  try {
-    return readFileSync(filePath, 'utf8');
-  } catch {
-    return null;
-  }
+  return null;
 }
 
 function isTopLevel(node: AstNode): boolean {

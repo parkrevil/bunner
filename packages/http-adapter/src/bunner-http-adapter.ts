@@ -141,6 +141,6 @@ export class BunnerHttpAdapter implements BunnerAdapter {
       return new URL('./bunner-http-worker.ts', import.meta.url);
     }
 
-    return new URL(process.argv[1] ?? '', 'file://');
+    return new URL(Bun.argv[1] ?? '', 'file://');
   }
 }

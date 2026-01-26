@@ -1,5 +1,3 @@
-import fs from 'node:fs';
-
 import type { DocTemplateRule } from './types';
 
 const DOC_TEMPLATE_RULES: ReadonlyArray<DocTemplateRule> = [
@@ -62,7 +60,7 @@ const validateTemplate = (rule: DocTemplateRule, contents: string): string[] => 
   return errors;
 };
 
-const runDocVerify = (files: readonly string[]): boolean => {
+const runDocVerify = async (files: readonly string[]): Promise<boolean> => {
   const targets = listDocTemplateChanges(files);
 
   if (targets.length === 0) {
@@ -72,13 +70,16 @@ const runDocVerify = (files: readonly string[]): boolean => {
   const errors: string[] = [];
 
   for (const rule of targets) {
-    if (!fs.existsSync(rule.path)) {
+    const file = Bun.file(rule.path);
+    const exists = await file.exists();
+
+    if (!exists) {
       errors.push(`[doc-verify] ${rule.path}: file not found`);
 
       continue;
     }
 
-    const contents = fs.readFileSync(rule.path, 'utf8');
+    const contents = await file.text();
     const ruleErrors = validateTemplate(rule, contents);
 
     errors.push(...ruleErrors);

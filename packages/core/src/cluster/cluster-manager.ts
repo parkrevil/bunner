@@ -54,7 +54,7 @@ export class ClusterManager<T extends ClusterBaseWorker> {
   private spawnWorker(id: number): ClusterWorker<T> {
     const native = new Worker(this.script.href, {
       env: {
-        ...process.env,
+        ...Bun.env,
         BUNNER_WORKER_ID: id.toString(),
       },
       smol: true, // Optional: memory optimization

@@ -1,4 +1,3 @@
-import fs from 'node:fs';
 import * as path from 'node:path';
 import ts from 'typescript';
 
@@ -10,8 +9,15 @@ import { parseSource, type ParsedFile } from './engine/oxc-wrapper';
 const normalizePath = (filePath: string): string => filePath.replaceAll('\\', '/');
 
 // Keep config reading via TS for robustness
-const readTsconfig = (tsconfigPath: string): TsconfigLoadResult => {
-  const configText = fs.readFileSync(tsconfigPath, 'utf8');
+const readTsconfig = async (tsconfigPath: string): Promise<TsconfigLoadResult> => {
+  let configText: string;
+
+  try {
+    configText = await Bun.file(tsconfigPath).text();
+  } catch {
+    throw new Error(`[firebat] Failed to read tsconfig: ${tsconfigPath}`);
+  }
+
   const parsed = ts.parseConfigFileTextToJson(tsconfigPath, configText);
 
   if (parsed.error) {
@@ -54,7 +60,7 @@ const shouldIncludeFile = (filePath: string): boolean => {
 };
 
 // Replaces createFirebatProgram to return ParsedFile[]
-export const createFirebatProgram = (config: FirebatProgramConfig): ParsedFile[] => {
+export const createFirebatProgram = async (config: FirebatProgramConfig): Promise<ParsedFile[]> => {
   let fileNames: readonly string[];
 
   // 1. Resolve files
@@ -66,7 +72,7 @@ export const createFirebatProgram = (config: FirebatProgramConfig): ParsedFile[]
     fileNames = config.targets;
   } else {
     // 2. Or load from tsconfig
-    const loaded = readTsconfig(config.tsconfigPath);
+    const loaded = await readTsconfig(config.tsconfigPath);
 
     fileNames = loaded.fileNames;
   }
@@ -79,26 +85,13 @@ export const createFirebatProgram = (config: FirebatProgramConfig): ParsedFile[]
       continue;
     }
 
-    if (!fs.existsSync(filePath)) {
+    if (!(await Bun.file(filePath).exists())) {
       // Warning?
       continue;
     }
 
-    // Check if directory
-    const stat = fs.statSync(filePath);
-
-    if (stat.isDirectory()) {
-      // Recursive walk needed?
-      // For simplicity/perf, let's assume we rely on tsconfig for expansion or shell glob.
-      // If target is dir, TS handles it. Here we might need `glob`.
-      // But Firebat 1.0 logic relied on `program.getSourceFiles()`, which meant TS did the expansion.
-      // If we want to replace TS, `readTsconfig` did the expansion for us!
-      // If `config.targets` are explicit, we process them.
-      continue;
-    }
-
     try {
-      const sourceText = fs.readFileSync(filePath, 'utf8');
+      const sourceText = await Bun.file(filePath).text();
       const parsed = parseSource(filePath, sourceText);
 
       results.push(parsed);
