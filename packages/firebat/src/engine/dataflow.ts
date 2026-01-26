@@ -1,11 +1,12 @@
-type RoaringBitmap32Ctor = new (...args: any[]) => any;
+import type { RoaringBitmap32Ctor, RoaringBitmap32Instance } from './types';
 
 let RoaringBitmap32: RoaringBitmap32Ctor | null = null;
 
 try {
   const roaringNative = await import('../../node_modules/roaring/native/roaring-node-v137-linux-x64-glibc/roaring.node');
+  const candidate = (roaringNative as { RoaringBitmap32?: RoaringBitmap32Ctor }).RoaringBitmap32;
 
-  RoaringBitmap32 = (roaringNative?.RoaringBitmap32 as RoaringBitmap32Ctor | undefined) ?? null;
+  RoaringBitmap32 = candidate ?? null;
 } catch {
   RoaringBitmap32 = null;
 }
@@ -107,9 +108,9 @@ export class BigIntBitSet implements IBitSet {
 }
 
 export class RoaringBitSet implements IBitSet {
-  private bitmap: any;
+  private bitmap: RoaringBitmap32Instance;
 
-  constructor(bitmap?: any) {
+  constructor(bitmap?: RoaringBitmap32Instance) {
     if (!RoaringBitmap32) {
       throw new Error('roaring is not available');
     }

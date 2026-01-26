@@ -1,4 +1,6 @@
 import { basename, join, relative } from 'path';
+import { runInNewContext } from 'node:vm';
+import { ModuleKind, ScriptTarget, transpileModule } from 'typescript';
 
 import type { ConfigLoadResult, ConfigModule, ResolvedBunnerConfig } from './interfaces';
 
@@ -19,17 +21,14 @@ export class ConfigLoader {
       try {
         console.info(`🔧 Loading config from ${candidate.path}`);
 
-        const config =
+        const resolved =
           candidate.format === 'ts'
-            ? ((await import(candidate.path)) as ConfigModule)
-            : (JSON.parse(await Bun.file(candidate.path).text()) as ResolvedBunnerConfig);
-        const resolved = (
-          candidate.format === 'ts' ? ((config as ConfigModule).default ?? (config as unknown)) : config
-        ) as ResolvedBunnerConfig;
-        const moduleConfig = resolved?.module;
+            ? await ConfigLoader.loadTsConfig(candidate.path, cwd)
+            : await Bun.file(candidate.path).json<ResolvedBunnerConfig>();
+        const moduleConfig = resolved.module;
         const fileName = moduleConfig?.fileName;
 
-        if (!moduleConfig || typeof moduleConfig !== 'object') {
+        if (moduleConfig === undefined || moduleConfig === null || Array.isArray(moduleConfig)) {
           throw new ConfigLoadError('Invalid bunner config: module is required.', relative(cwd, candidate.path));
         }
 
@@ -61,5 +60,25 @@ export class ConfigLoader {
     }
 
     throw new ConfigLoadError('Missing bunner config: bunner.config.ts or bunner.config.json is required.');
+  }
+
+  private static async loadTsConfig(path: string, cwd: string): Promise<ResolvedBunnerConfig> {
+    const source = await Bun.file(path).text();
+    const output = transpileModule(source, {
+      compilerOptions: {
+        module: ModuleKind.CommonJS,
+        target: ScriptTarget.ES2020,
+      },
+    }).outputText;
+    const moduleContainer = { exports: {} as ConfigModule };
+    const context = { module: moduleContainer, exports: moduleContainer.exports };
+
+    runInNewContext(output, context);
+
+    if (!moduleContainer.exports.bunnerConfig) {
+      throw new ConfigLoadError('Invalid bunner config: bunnerConfig export is required.', relative(cwd, path));
+    }
+
+    return moduleContainer.exports.bunnerConfig;
   }
 }

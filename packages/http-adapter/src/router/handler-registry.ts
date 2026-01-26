@@ -1,6 +1,6 @@
-import type { Handler } from './types';
+import type { Handler, MatchResult } from './types';
 
-export class HandlerRegistry<R = any> {
+export class HandlerRegistry<R = MatchResult> {
   private handlers: Map<string, Handler<R>>;
 
   constructor() {

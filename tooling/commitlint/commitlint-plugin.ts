@@ -28,10 +28,8 @@ const scopeNoMulti: Rule = (parsed, when) => {
   return [true];
 };
 
-const commitlintPlugin = {
+export const commitlintPlugin = {
   rules: {
     'scope-no-multi': scopeNoMulti,
   },
 };
-
-export default commitlintPlugin;

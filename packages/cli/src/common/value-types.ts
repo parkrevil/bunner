@@ -1,3 +1,8 @@
-export type UnsafeValue = any;
-
-export type UnsafeRecord = Record<string, UnsafeValue>;
+export type {
+	BunnerConfigSource,
+	BunnerConfigSourceFormat,
+	ConfigLoadResult,
+	ConfigModule,
+	ResolvedBunnerConfig,
+	ResolvedBunnerConfigModule,
+} from './interfaces';

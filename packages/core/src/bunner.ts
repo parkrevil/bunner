@@ -3,6 +3,8 @@ import { Logger } from '@bunner/logger';
 
 import { type BunnerApplicationBaseOptions } from './application';
 import { BunnerApplication } from './application/bunner-application';
+import type { BunnerApplicationRuntimeOptions } from './application/interfaces';
+import type { EntryModule } from './application/types';
 
 export class Bunner {
   static apps: Map<string, BunnerApplication> = new Map();
@@ -10,7 +12,7 @@ export class Bunner {
   private static isShuttingDown = false;
   private static signalsInitialized = false;
 
-  static async create(entry: unknown, options?: BunnerApplicationOptions): Promise<BunnerApplication> {
+  static async create(entry: EntryModule, options?: BunnerApplicationRuntimeOptions): Promise<BunnerApplication> {
     this.setupSignalHandlers();
 
     // In the new architecture, we treat AOT/JIT unify within the Scanner/Application.

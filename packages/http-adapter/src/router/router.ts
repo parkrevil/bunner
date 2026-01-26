@@ -1,4 +1,4 @@
-import type { HttpMethod } from '../types';
+import type { HttpMethod, MatchResult } from '../types';
 import type { DynamicMatchResult, Handler, MatchResultMeta, RouterOptions } from './types';
 
 import { Builder, OptionalParamDefaults } from './builder';
@@ -8,7 +8,7 @@ import { buildPatternTester } from './matcher/pattern-tester';
 import { Processor, type ProcessorConfig } from './processor';
 import { METHOD_OFFSET } from './schema';
 
-export class Router<R = any> {
+export class Router<R = MatchResult> {
   private readonly options: RouterOptions;
   private readonly processor: Processor;
   private readonly builder: Builder<Handler<R>>;
@@ -195,6 +195,12 @@ export class Router<R = any> {
       this.build();
     }
 
+    const matcher = this.matcher;
+
+    if (!matcher) {
+      return null;
+    }
+
     // Process Segments
     // "segments" are needed for Matcher.
     // `processor.process(searchPath)` returns string[].
@@ -215,7 +221,7 @@ export class Router<R = any> {
     }
 
     // Dynamic Match
-    const matched = this.matcher!.match(
+    const matched = matcher.match(
       method,
       segments,
       normalized,
@@ -225,8 +231,8 @@ export class Router<R = any> {
     );
 
     if (matched) {
-      const handlerIndex = this.matcher!.getHandlerIndex();
-      const params = this.matcher!.getParams();
+      const handlerIndex = matcher.getHandlerIndex();
+      const params = matcher.getParams();
       const defaults = this.builder.config.optionalParamDefaults;
 
       if (defaults) {

@@ -92,8 +92,10 @@ export class ValidatorCompiler {
     const metadata = MetadataConsumer.getCombinedMetadata(target);
     const classRefs: ValidatorClassRefs = {};
 
-    for (const [propertyName, property] of Object.entries(metadata.properties)) {
-      if (property.metatype) {
+    for (const propertyName of Object.keys(metadata.properties)) {
+      const property = metadata.properties[propertyName];
+
+      if (property?.metatype) {
         classRefs[propertyName] = property.metatype;
       }
     }
@@ -138,7 +140,13 @@ export class ValidatorCompiler {
 
       const errors: ValidationErrors = [];
 
-      for (const [propertyName, property] of Object.entries(metadata.properties)) {
+      for (const propertyName of Object.keys(metadata.properties)) {
+        const property = metadata.properties[propertyName];
+
+        if (!property) {
+          continue;
+        }
+
         const value = input[propertyName];
         const isOptional = property.isOptional === true;
         const decorators = normalizeDecorators(property.decorators);

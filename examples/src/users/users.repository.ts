@@ -1,8 +1,10 @@
 import { Injectable } from '@bunner/common';
 
+import type { User } from './interfaces';
+
 @Injectable()
 export class UserRepository {
-  private users: any[] = [
+  private users: User[] = [
     { id: 1, name: 'John Doe' },
     { id: 2, name: 'Jane Doe' },
     { id: 3, name: 'John Smith' },
@@ -21,23 +23,23 @@ export class UserRepository {
     { id: 16, name: 'Jane Smith' },
   ];
 
-  findAll() {
+  findAll(): ReadonlyArray<User> {
     return this.users;
   }
 
-  findOneById(id: number) {
+  findOneById(id: number): User | undefined {
     return this.users.find(user => user.id === id);
   }
 
-  create(data: any) {
+  create(data: User): void {
     this.users.push(data);
   }
 
-  updateById(id: number, data: any) {
+  updateById(id: number, data: User): void {
     this.users[this.users.findIndex(user => user.id === id)] = data;
   }
 
-  deleteById(id: number) {
+  deleteById(id: number): void {
     this.users.splice(
       this.users.findIndex(user => user.id === id),
       1,

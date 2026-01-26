@@ -1,6 +1,6 @@
-export type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
+import type { Color, LogArgument, LogLevel, LogMessage, LogMetadataRecord, LogMetadataValue } from './types';
 
-export type Color = 'black' | 'red' | 'green' | 'yellow' | 'blue' | 'magenta' | 'cyan' | 'white' | 'gray';
+export type { Color, LogArgument, LogLevel, LogMessage, LogMetadataRecord, LogMetadataValue } from './types';
 
 export interface BaseLogMessage {
   level: LogLevel;
@@ -12,20 +12,29 @@ export interface BaseLogMessage {
   err?: Error | Loggable;
 }
 
-export type LogMessage<T = Record<string, any>> = BaseLogMessage & T;
-
 export interface Loggable {
-  toLog(): Record<string, any>;
+  toLog(): LogMetadataRecord;
 }
 
-export interface LoggerOptions<T = Record<string, any>> {
+export interface LogContextConstructor {
+  name?: string;
+}
+
+export interface LogContextTarget {
+  name?: string;
+  constructor?: LogContextConstructor;
+}
+
+export interface LoggerPrettyOptions<T extends LogMetadataRecord = LogMetadataRecord> {
+  colors?: Record<LogLevel, Color>;
+  columns?: Array<keyof LogMessage<T>>;
+}
+
+export interface LoggerOptions<T extends LogMetadataRecord = LogMetadataRecord> {
   level?: LogLevel;
 
   format?: 'pretty' | 'json';
-  prettyOptions?: {
-    colors?: Record<LogLevel, Color>;
-    columns?: Array<keyof LogMessage<T>>;
-  };
+  prettyOptions?: LoggerPrettyOptions<T>;
 }
 
 export interface Transport {

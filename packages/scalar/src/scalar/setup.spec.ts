@@ -2,32 +2,35 @@ import type { AdapterCollection } from '@bunner/common';
 
 import { describe, expect, it } from 'bun:test';
 
-import type { ScalarSetupOptions } from './interfaces';
+import type { ScalarOptionsWithRegistry, ScalarSetupOptions } from './interfaces';
+import type {
+  HttpAdapter,
+  HttpAdapterInternal,
+  HttpAdapterSpy,
+  InternalRouteCall,
+  InternalRouteHandler,
+  InternalRouteHandlerParams,
+} from './setup.spec.types';
 
 import { setupScalar } from './setup';
 
 const BUNNER_HTTP_INTERNAL = Symbol.for('bunner:http:internal');
 
-function createHttpAdapterSpy(): {
-  adapter: Record<PropertyKey, unknown>;
-  calls: Array<{ path: string; handler: (req?: unknown) => Response }>;
-} {
-  const calls: Array<{ path: string; handler: (req?: unknown) => Response }> = [];
-  const adapter: Record<PropertyKey, unknown> = {
-    [BUNNER_HTTP_INTERNAL]: {
-      get: (path: string, handler: (req?: unknown) => Response) => {
-        calls.push({ path, handler });
-      },
+function createHttpAdapterSpy(): HttpAdapterSpy {
+  const calls: InternalRouteCall[] = [];
+  const internalAdapter: HttpAdapterInternal = {
+    get: (path: string, handler: InternalRouteHandler) => {
+      calls.push({ path, handler });
     },
+  };
+  const adapter: HttpAdapter = {
+    [BUNNER_HTTP_INTERNAL]: internalAdapter,
   };
 
   return { adapter, calls };
 }
 
-function getInternalRouteHandler(params: {
-  calls: Array<{ path: string; handler: (req?: unknown) => Response }>;
-  path: string;
-}): (req?: unknown) => Response {
+function getInternalRouteHandler(params: InternalRouteHandlerParams): InternalRouteHandler {
   const { calls, path } = params;
   const match = calls.find(call => call.path === path);
 
@@ -38,126 +41,194 @@ function getInternalRouteHandler(params: {
   return match.handler;
 }
 
+function createHttpAdapters(entries: Array<[string, HttpAdapter]>): AdapterCollection {
+  const map = new Map(entries);
+  const http = {
+    get: (name: string): HttpAdapter | undefined => map.get(name),
+    all: (): HttpAdapter[] => Array.from(map.values()),
+    forEach: (callback: (adapter: HttpAdapter, name: string) => void): void => {
+      map.forEach((adapter, name) => {
+        callback(adapter, name);
+      });
+    },
+  };
+
+  return { http };
+}
+
 describe('setupScalar', () => {
   // Removed global beforeEach/afterEach for AOT/Strict-Immutable compliance.
   // Instead, we inject a mock registry to each setupScalar call where needed.
 
   it('should throw when options are missing', () => {
-    const adapters = { http: new Map() } as unknown as AdapterCollection;
+    // Arrange
+    const adapters = createHttpAdapters([]);
 
-    expect(() => {
-      setupScalar(adapters, undefined as unknown as ScalarSetupOptions);
-    }).toThrow(/documentTargets/i);
+    // Act
+    const act = () => {
+      setupScalar(adapters, undefined);
+    };
+
+    // Assert
+    expect(act).toThrow(/documentTargets/i);
   });
 
   it('should throw when documentTargets is neither "all" nor an array', () => {
-    const adapters = { http: new Map() } as unknown as AdapterCollection;
+    // Arrange
+    const adapters = createHttpAdapters([]);
 
-    expect(() => {
-      setupScalar(adapters, {
+    // Act
+    const act = () => {
+      const options = {
         documentTargets: 'invalid',
         httpTargets: [],
         metadataRegistry: new Map(),
-      } as unknown as ScalarSetupOptions);
-    }).toThrow(/documentTargets must be/i);
+      } satisfies ScalarSetupOptions & ScalarOptionsWithRegistry;
+
+      setupScalar(adapters, options);
+    };
+
+    // Assert
+    expect(act).toThrow(/documentTargets must be/i);
   });
 
   it('should throw when httpTargets is undefined', () => {
-    const adapters = { http: new Map() } as unknown as AdapterCollection;
+    // Arrange
+    const adapters = createHttpAdapters([]);
 
-    expect(() => {
-      setupScalar(adapters, {
+    // Act
+    const act = () => {
+      const options = {
         documentTargets: 'all',
         httpTargets: undefined,
         metadataRegistry: new Map(),
-      } as unknown as ScalarSetupOptions);
-    }).toThrow(/options \{ documentTargets, httpTargets \} is required/i);
+      } satisfies ScalarSetupOptions & ScalarOptionsWithRegistry;
+
+      setupScalar(adapters, options);
+    };
+
+    // Assert
+    expect(act).toThrow(/options \{ documentTargets, httpTargets \} is required/i);
   });
 
   it('should throw when httpTargets is neither "all" nor an array', () => {
-    const adapters = { http: new Map() } as unknown as AdapterCollection;
+    // Arrange
+    const adapters = createHttpAdapters([]);
 
-    expect(() => {
-      setupScalar(adapters, {
+    // Act
+    const act = () => {
+      const options = {
         documentTargets: 'all',
         httpTargets: 'invalid',
         metadataRegistry: new Map(),
-      } as unknown as ScalarSetupOptions);
-    }).toThrow(/httpTargets must be/i);
+      } satisfies ScalarSetupOptions & ScalarOptionsWithRegistry;
+
+      setupScalar(adapters, options);
+    };
+
+    // Assert
+    expect(act).toThrow(/httpTargets must be/i);
   });
 
   it('should throw when no HTTP adapter is selected for hosting', () => {
-    const adapters = { http: new Map() } as unknown as AdapterCollection;
+    // Arrange
+    const adapters = createHttpAdapters([]);
 
-    expect(() => {
+    // Act
+    const act = () => {
       setupScalar(adapters, {
         documentTargets: 'all',
         httpTargets: [],
         metadataRegistry: new Map(),
       });
-    }).toThrow(/no HTTP adapter selected/i);
+    };
+
+    // Assert
+    expect(act).toThrow(/no HTTP adapter selected/i);
   });
 
   it('should throw when the http adapter group does not support lookup', () => {
-    const httpGroup = {
-      forEach(callback: (adapter: unknown, name: unknown) => void): void {
-        callback({}, 'http-server');
+    // Arrange
+    const adapters: AdapterCollection = {
+      http: {
+        get: () => undefined,
+        all: () => [],
+        forEach: callback => {
+          const adapter: HttpAdapter = {};
+
+          callback(adapter, 'http-server');
+        },
       },
     };
-    const adapters = { http: httpGroup } as unknown as AdapterCollection;
 
-    expect(() => {
+    // Act
+    const act = () => {
       setupScalar(adapters, {
         documentTargets: 'all',
         httpTargets: ['http-server'],
         metadataRegistry: new Map(),
       });
-    }).toThrow(/does not support lookup/i);
+    };
+
+    // Assert
+    expect(act).toThrow(/does not support lookup/i);
   });
 
   it('should throw when selected httpTargets do not exist', () => {
+    // Arrange
     const { adapter } = createHttpAdapterSpy();
-    const http = new Map<string, unknown>([['http-server', adapter]]);
-    const adapters = { http } as unknown as AdapterCollection;
+    const adapters = createHttpAdapters([['http-server', adapter]]);
 
-    expect(() => {
+    // Act
+    const act = () => {
       setupScalar(adapters, {
         documentTargets: 'all',
         httpTargets: ['missing'],
         metadataRegistry: new Map(),
       });
-    }).toThrow(/httpTargets not found/i);
+    };
+
+    // Assert
+    expect(act).toThrow(/httpTargets not found/i);
   });
 
   it('should register exactly the two internal routes when an adapter supports internal binding', () => {
+    // Arrange
     const { adapter, calls } = createHttpAdapterSpy();
-    const http = new Map<string, unknown>([['http-server', adapter]]);
-    const adapters = { http } as unknown as AdapterCollection;
+    const adapters = createHttpAdapters([['http-server', adapter]]);
 
+    // Act
     setupScalar(adapters, {
       documentTargets: 'all',
       httpTargets: ['http-server'],
       metadataRegistry: new Map(),
     });
+
+    // Assert
     expect(calls).toHaveLength(2);
     expect(calls.map(call => call.path)).toEqual(['/api-docs', '/api-docs/*']);
   });
 
   it('should not register routes twice for the same adapter', () => {
+    // Arrange
     const { adapter, calls } = createHttpAdapterSpy();
-    const http = new Map<string, unknown>([['http-server', adapter]]);
-    const adapters = { http } as unknown as AdapterCollection;
+    const adapters = createHttpAdapters([['http-server', adapter]]);
 
+    // Act
     setupScalar(adapters, { documentTargets: 'all', httpTargets: ['http-server'], metadataRegistry: new Map() });
     setupScalar(adapters, { documentTargets: 'all', httpTargets: ['http-server'], metadataRegistry: new Map() });
+
+    // Assert
     expect(calls).toHaveLength(2);
   });
 
   it('should serve Scalar UI at /api-docs when exactly one document exists', async () => {
+    // Arrange
     const { adapter, calls } = createHttpAdapterSpy();
-    const http = new Map<string, unknown>([['http-server', adapter]]);
-    const adapters = { http } as unknown as AdapterCollection;
+    const http = new Map<string, HttpAdapter>([['http-server', adapter]]);
+    const adapters: AdapterCollection = { http };
 
+    // Act
     setupScalar(adapters, {
       documentTargets: 'all',
       httpTargets: ['http-server'],
@@ -168,19 +239,21 @@ describe('setupScalar', () => {
     const response = handler();
     const text = await response.text();
 
+    // Assert
     expect(response.headers.get('Content-Type')).toContain('text/html');
     expect(text).toContain('api-reference');
   });
 
   it('should serve an index at /api-docs when multiple documents exist', async () => {
+    // Arrange
     const adapterSpyA = createHttpAdapterSpy();
     const adapterSpyB = createHttpAdapterSpy();
-    const http = new Map<string, unknown>([
+    const adapters = createHttpAdapters([
       ['http-a', adapterSpyA.adapter],
       ['http-b', adapterSpyB.adapter],
     ]);
-    const adapters = { http } as unknown as AdapterCollection;
 
+    // Act
     setupScalar(adapters, {
       documentTargets: 'all',
       httpTargets: ['http-a'],
@@ -191,6 +264,7 @@ describe('setupScalar', () => {
     const response = handler();
     const text = await response.text();
 
+    // Assert
     expect(response.headers.get('Content-Type')).toContain('text/html');
     expect(text).toContain('<ul>');
     expect(text).toContain('openapi:http:http-a');
@@ -199,10 +273,11 @@ describe('setupScalar', () => {
   });
 
   it('should serve JSON from /api-docs/* when a .json document path is requested', async () => {
+    // Arrange
     const { adapter, calls } = createHttpAdapterSpy();
-    const http = new Map<string, unknown>([['http-server', adapter]]);
-    const adapters = { http } as unknown as AdapterCollection;
+    const adapters = createHttpAdapters([['http-server', adapter]]);
 
+    // Act
     setupScalar(adapters, {
       documentTargets: 'all',
       httpTargets: ['http-server'],
@@ -211,17 +286,19 @@ describe('setupScalar', () => {
 
     const handler = getInternalRouteHandler({ calls, path: '/api-docs/*' });
     const response = handler({ path: '/api-docs/openapi:http:http-server.json' });
-    const parsed = JSON.parse(await response.text());
+    const text = await response.text();
 
+    // Assert
     expect(response.headers.get('Content-Type')).toContain('application/json');
-    expect(parsed).toHaveProperty('openapi', '3.0.0');
+    expect(text).toContain('"openapi":"3.0.0"');
   });
 
   it('should serve UI from /api-docs/* when a non-.json document path is requested', async () => {
+    // Arrange
     const { adapter, calls } = createHttpAdapterSpy();
-    const http = new Map<string, unknown>([['http-server', adapter]]);
-    const adapters = { http } as unknown as AdapterCollection;
+    const adapters = createHttpAdapters([['http-server', adapter]]);
 
+    // Act
     setupScalar(adapters, {
       documentTargets: 'all',
       httpTargets: ['http-server'],
@@ -232,15 +309,17 @@ describe('setupScalar', () => {
     const response = handler({ path: '/api-docs/openapi:http:http-server' });
     const text = await response.text();
 
+    // Assert
     expect(response.headers.get('Content-Type')).toContain('text/html');
     expect(text).toContain('api-reference');
   });
 
   it('should return 404 from /api-docs/* when the request path is missing', () => {
+    // Arrange
     const { adapter, calls } = createHttpAdapterSpy();
-    const http = new Map<string, unknown>([['http-server', adapter]]);
-    const adapters = { http } as unknown as AdapterCollection;
+    const adapters = createHttpAdapters([['http-server', adapter]]);
 
+    // Act
     setupScalar(adapters, {
       documentTargets: 'all',
       httpTargets: ['http-server'],
@@ -250,14 +329,16 @@ describe('setupScalar', () => {
     const handler = getInternalRouteHandler({ calls, path: '/api-docs/*' });
     const response = handler({});
 
+    // Assert
     expect(response.status).toBe(404);
   });
 
   it('should return 404 from /api-docs/* when the document does not exist', () => {
+    // Arrange
     const { adapter, calls } = createHttpAdapterSpy();
-    const http = new Map<string, unknown>([['http-server', adapter]]);
-    const adapters = { http } as unknown as AdapterCollection;
+    const adapters = createHttpAdapters([['http-server', adapter]]);
 
+    // Act
     setupScalar(adapters, {
       documentTargets: 'all',
       httpTargets: ['http-server'],
@@ -267,6 +348,7 @@ describe('setupScalar', () => {
     const handler = getInternalRouteHandler({ calls, path: '/api-docs/*' });
     const response = handler({ path: '/api-docs/nope.json' });
 
+    // Assert
     expect(response.status).toBe(404);
   });
 });

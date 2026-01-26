@@ -1,17 +1,23 @@
-import type { Statement, Declaration, ModuleDeclaration } from 'oxc-parser';
-
 import type { DuplicateGroup, DuplicateItem } from '../types';
+import type { OxcNode, OxcNodeValue } from './types';
 
 import { createOxcFingerprint } from './oxc-fingerprint';
 import { countOxcTokens } from './oxc-token-count';
 import { getLineColumn, type ParsedFile } from './oxc-wrapper';
 
 // Types of nodes we check for duplicates
-type DuplicateTarget = Statement | Declaration | ModuleDeclaration;
+type DuplicateTarget = OxcNode;
 
-const isDuplicateTarget = (node: any): node is DuplicateTarget => {
+const isOxcNode = (value: OxcNodeValue | undefined): value is OxcNode =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const getNodeType = (node: OxcNode): string | null => {
+  return typeof node.type === 'string' ? node.type : null;
+};
+
+const isDuplicateTarget = (node: OxcNode): node is DuplicateTarget => {
   // Simplified target selection for Oxc AST
-  const type = node.type;
+  const type = getNodeType(node);
 
   return (
     type === 'FunctionDeclaration' ||
@@ -25,19 +31,10 @@ const isDuplicateTarget = (node: any): node is DuplicateTarget => {
   );
 };
 
-const collectDuplicateTargets = (program: any): DuplicateTarget[] => {
+const collectDuplicateTargets = (program: OxcNodeValue | undefined): DuplicateTarget[] => {
   const targets: DuplicateTarget[] = [];
 
-  const visit = (node: any) => {
-    if (!node || typeof node !== 'object') {
-      return;
-    }
-
-    if (isDuplicateTarget(node)) {
-      targets.push(node);
-    }
-
-    // Arrays
+  const visit = (node: OxcNodeValue | undefined) => {
     if (Array.isArray(node)) {
       for (const child of node) {
         visit(child);
@@ -46,13 +43,22 @@ const collectDuplicateTargets = (program: any): DuplicateTarget[] => {
       return;
     }
 
-    // Objects
-    for (const key in node) {
-      if (key === 'type' || key === 'loc') {
+    if (!isOxcNode(node)) {
+      return;
+    }
+
+    if (isDuplicateTarget(node)) {
+      targets.push(node);
+    }
+
+    const entries = Object.entries(node);
+
+    for (const [key, value] of entries) {
+      if (key === 'type' || key === 'loc' || key === 'start' || key === 'end') {
         continue;
       }
 
-      visit(node[key]);
+      visit(value);
     }
   };
 
@@ -61,23 +67,24 @@ const collectDuplicateTargets = (program: any): DuplicateTarget[] => {
   return targets;
 };
 
-const getNodeHeader = (node: any): string => {
-  const idName = node?.id?.name;
+const getNodeHeader = (node: OxcNode): string => {
+  const idNode = node.id;
+  const idName = isOxcNode(idNode) && typeof idNode.name === 'string' ? idNode.name : null;
 
   if (typeof idName === 'string' && idName.length > 0) {
     return idName;
   }
 
-  const key = node?.key;
+  const key = node.key;
 
   if (key) {
-    const keyName = key?.name;
+    const keyName = isOxcNode(key) && typeof key.name === 'string' ? key.name : null;
 
     if (typeof keyName === 'string' && keyName.length > 0) {
       return keyName;
     }
 
-    const keyValue = key?.value;
+    const keyValue = isOxcNode(key) ? key.value : null;
 
     if (typeof keyValue === 'string' && keyValue.length > 0) {
       return keyValue;
@@ -87,8 +94,8 @@ const getNodeHeader = (node: any): string => {
   return 'anonymous';
 };
 
-const getItemKind = (node: any): DuplicateItem['kind'] => {
-  switch (node?.type) {
+const getItemKind = (node: OxcNode): DuplicateItem['kind'] => {
+  switch (getNodeType(node)) {
     case 'FunctionDeclaration':
     case 'FunctionExpression':
     case 'ArrowFunctionExpression':
@@ -118,22 +125,22 @@ export const detectDuplicatesOxc = (files: ParsedFile[], minTokens: number): Dup
     const targets = collectDuplicateTargets(file.program);
 
     for (const node of targets) {
-      const tokens = countOxcTokens(node as any);
+      const tokens = countOxcTokens(node);
 
       if (tokens < minTokens) {
         continue;
       }
 
-      const fingerprint = createOxcFingerprint(node as any);
+      const fingerprint = createOxcFingerprint(node);
       const existing = groupsByHash.get(fingerprint) ?? [];
-      const startOffset = typeof (node as any).start === 'number' ? ((node as any).start as number) : 0;
-      const endOffset = typeof (node as any).end === 'number' ? ((node as any).end as number) : startOffset;
+      const startOffset = typeof node.start === 'number' ? node.start : 0;
+      const endOffset = typeof node.end === 'number' ? node.end : startOffset;
       const start = getLineColumn(file.sourceText, startOffset);
       const end = getLineColumn(file.sourceText, endOffset);
 
       existing.push({
-        kind: getItemKind(node as any),
-        header: getNodeHeader(node as any),
+        kind: getItemKind(node),
+        header: getNodeHeader(node),
         filePath: file.filePath,
         span: {
           start,

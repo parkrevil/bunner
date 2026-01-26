@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'bun:test';
 
+import type { Provider, ProviderToken, ProviderUseFactory, ProviderUseValue } from '@bunner/common';
+
 import type { ScalarSetupOptions } from './interfaces';
 
 import { provideScalar } from './provide-scalar';
@@ -16,18 +18,20 @@ describe('provideScalar', () => {
 
     expect(providers).toHaveLength(2);
 
-    const optionsProvider = providers.find(
-      (p: any) => p && typeof p === 'object' && 'provide' in p && p.provide === ScalarSetupOptionsToken,
-    ) as any;
+    const optionsProvider = providers.find(provider => isProviderUseValue(provider, ScalarSetupOptionsToken));
 
-    expect(optionsProvider).toBeDefined();
+    if (!optionsProvider) {
+      throw new Error('Expected Scalar setup options provider to be defined.');
+    }
+
     expect(optionsProvider.useValue).toBe(options);
 
-    const configurerProvider = providers.find(
-      (p: any) => p && typeof p === 'object' && 'provide' in p && p.provide === ScalarConfigurer,
-    ) as any;
+    const configurerProvider = providers.find(provider => isProviderUseFactory(provider, ScalarConfigurer));
 
-    expect(configurerProvider).toBeDefined();
+    if (!configurerProvider) {
+      throw new Error('Expected Scalar configurer provider to be defined.');
+    }
+
     expect(configurerProvider.useFactory).toBeDefined();
     expect(configurerProvider.inject).toEqual([ScalarSetupOptionsToken]);
 
@@ -37,3 +41,13 @@ describe('provideScalar', () => {
     expect(configurer).toBeInstanceOf(ScalarConfigurer);
   });
 });
+
+function isProviderUseValue(provider: Provider, token: ProviderToken): provider is ProviderUseValue {
+  return typeof provider === 'object' && provider !== null && 'provide' in provider && 'useValue' in provider &&
+    provider.provide === token;
+}
+
+function isProviderUseFactory(provider: Provider, token: ProviderToken): provider is ProviderUseFactory {
+  return typeof provider === 'object' && provider !== null && 'provide' in provider && 'useFactory' in provider &&
+    provider.provide === token;
+}

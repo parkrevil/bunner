@@ -10,7 +10,7 @@ import { BunnerResponse } from '../../bunner-response';
 import { BadRequestError } from '../../errors/errors';
 import { QueryParserMiddleware } from './query-parser.middleware';
 
-describe('QueryParserMiddleware', () => {
+describe('query-parser.middleware', () => {
   const createContext = (url: string): BunnerHttpContext => {
     const request = new BunnerRequest({
       url,

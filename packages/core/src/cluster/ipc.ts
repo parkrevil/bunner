@@ -1,17 +1,8 @@
-export interface RPCMessage {
-  id: string;
-  method: string;
-  args: any[];
-}
+import type { RPCMessage, RPCResponse, RpcPending } from './interfaces';
+import type { Promisified, RpcArgs, RpcCallable } from './types';
 
-export interface RPCResponse {
-  id: string;
-  result?: any;
-  error?: any;
-}
-
-export function expose(obj: any) {
-  const self = globalThis as unknown as Worker;
+export function expose<T extends Record<string, RpcCallable>>(obj: T): void {
+  const self = globalThis as Worker;
 
   self.addEventListener('message', (event: MessageEvent) => {
     void (async () => {
@@ -22,7 +13,7 @@ export function expose(obj: any) {
       }
 
       try {
-        const fn = obj[data.method];
+        const fn = obj[data.method as keyof T];
 
         if (typeof fn !== 'function') {
           throw new Error(`Method ${data.method} not found`);
@@ -31,19 +22,20 @@ export function expose(obj: any) {
         const result = await fn(...(data.args || []));
 
         self.postMessage({ id: data.id, result } as RPCResponse);
-      } catch (err: any) {
-        self.postMessage({ id: data.id, error: err.message ?? 'Unknown error' } as RPCResponse);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+
+        self.postMessage({ id: data.id, error: message } as RPCResponse);
       }
     })();
   });
 }
 
-export type Promisified<T> = {
-  [K in keyof T]: T[K] extends (...args: infer A) => any ? (...args: A) => Promise<any> : T[K];
-};
-
-export function wrap<T extends object>(worker: Worker): Promisified<T> {
-  const pending = new Map<string, { resolve: (val: any) => void; reject: (err: any) => void }>();
+export function wrap<T extends Record<string, RpcCallable>>(
+  worker: Worker,
+  methods: ReadonlyArray<keyof T>,
+): Promisified<T> {
+  const pending = new Map<string, RpcPending>();
 
   worker.addEventListener('message', (event: MessageEvent) => {
     const data = event.data as RPCResponse;
@@ -65,20 +57,18 @@ export function wrap<T extends object>(worker: Worker): Promisified<T> {
     }
   });
 
-  return new Proxy({} as any, {
-    get: (_, prop) => {
-      if (prop === 'then') {
-        return undefined;
-      } // Avoid Promise wrapping confusion
+  const api: Partial<Promisified<T>> = {};
 
-      return async (...args: any[]) => {
-        return new Promise((resolve, reject) => {
-          const id = crypto.randomUUID();
+  for (const method of methods) {
+    api[method] = (async (...args: RpcArgs) => {
+      return new Promise((resolve, reject) => {
+        const id = crypto.randomUUID();
 
-          pending.set(id, { resolve, reject });
-          worker.postMessage({ id, method: prop as string, args } as RPCMessage);
-        });
-      };
-    },
-  });
+        pending.set(id, { resolve, reject });
+        worker.postMessage({ id, method: String(method), args } as RPCMessage);
+      });
+    }) as Promisified<T>[typeof method];
+  }
+
+  return api as Promisified<T>;
 }

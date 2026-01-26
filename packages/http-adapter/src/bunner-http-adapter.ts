@@ -4,31 +4,16 @@ import { ClusterManager, getRuntimeContext, type ClusterBaseWorker, type BunnerA
 
 import { BunnerHttpServer } from './bunner-http-server';
 import {
+  BunnerHttpInternalHost,
+  HttpAdapterStartContext,
   HttpMiddlewareLifecycle,
   type BunnerHttpServerOptions,
   type HttpMiddlewareRegistry,
+  type InternalRouteEntry,
   type MiddlewareRegistrationInput,
 } from './interfaces';
 
 const BUNNER_HTTP_INTERNAL = Symbol.for('bunner:http:internal');
-
-type InternalRouteMethod = 'GET';
-
-type InternalRouteHandler = (...args: readonly unknown[]) => unknown;
-
-type InternalRouteEntry = {
-  method: InternalRouteMethod;
-  path: string;
-  handler: InternalRouteHandler;
-};
-
-type BunnerHttpInternalChannel = {
-  get(path: string, handler: InternalRouteHandler): void;
-};
-
-type BunnerHttpInternalHost = {
-  [key: symbol]: BunnerHttpInternalChannel | undefined;
-};
 
 export class BunnerHttpAdapter implements BunnerAdapter {
   private options: BunnerApplicationNormalizedOptions & BunnerHttpServerOptions;
@@ -52,7 +37,7 @@ export class BunnerHttpAdapter implements BunnerAdapter {
       logLevel: 'debug',
     } as BunnerApplicationNormalizedOptions & BunnerHttpServerOptions;
 
-    const internalHost = this as unknown as BunnerHttpInternalHost;
+    const internalHost = this as BunnerHttpInternalHost;
 
     internalHost[BUNNER_HTTP_INTERNAL] = {
       get: (path: string, handler: InternalRouteHandler) => {
@@ -77,8 +62,8 @@ export class BunnerHttpAdapter implements BunnerAdapter {
     return this;
   }
 
-  async start(context: any): Promise<void> {
-    const workers = (this.options as any).workers;
+  async start(context: HttpAdapterStartContext): Promise<void> {
+    const workers = this.options.workers;
     const isSingleProcess = !workers || workers === 1;
 
     if (isSingleProcess) {
@@ -118,7 +103,7 @@ export class BunnerHttpAdapter implements BunnerAdapter {
     };
 
     await this.clusterManager.init({
-      entryModule: sanitizedEntryModule as any,
+      entryModule: sanitizedEntryModule,
       options: {
         ...this.options,
         middlewares: this.middlewareRegistry,

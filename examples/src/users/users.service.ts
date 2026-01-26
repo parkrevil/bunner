@@ -1,6 +1,8 @@
 import { Injectable } from '@bunner/common';
 import { Logger } from '@bunner/logger';
 
+import type { User } from './interfaces';
+
 import { UserRepository } from './users.repository';
 
 @Injectable({
@@ -14,25 +16,25 @@ export class UsersService {
     this.logger.debug('UsersService initialized');
   }
 
-  findAll() {
+  findAll(): ReadonlyArray<User> {
     return this.userRepository.findAll();
   }
 
-  findOneById(id: number) {
+  findOneById(id: number): User | undefined {
     return this.userRepository.findOneById(id);
   }
 
-  create(body: any) {
+  create(body: User): void {
     this.logger.info('Creating user', body);
 
     this.userRepository.create(body);
   }
 
-  update(id: number, data: any) {
+  update(id: number, data: User): void {
     this.userRepository.updateById(id, data);
   }
 
-  delete(id: number) {
+  delete(id: number): void {
     this.userRepository.deleteById(id);
   }
 }

@@ -2,6 +2,8 @@ import { RestController, Get, Post, Put, Delete, Body } from '@bunner/http-adapt
 import { Logger } from '@bunner/logger';
 
 import { CreateUserComplexDto, AddressDto, SocialDto } from './dto/complex.dto';
+import type { ComplexCreateResponse, User } from './interfaces';
+import type { IdRouteParams } from '../interfaces';
 import { UsersService } from './users.service';
 
 @RestController('users')
@@ -10,12 +12,12 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
-  getAll() {
+  getAll(): ReadonlyArray<User> {
     return this.usersService.findAll();
   }
 
   @Post('complex')
-  complexCreate(@Body() body: CreateUserComplexDto) {
+  complexCreate(@Body() body: CreateUserComplexDto): ComplexCreateResponse<CreateUserComplexDto> {
     this.logger.info('Complex Data Received:', body);
 
     return {
@@ -29,27 +31,27 @@ export class UsersController {
   }
 
   @Get(':id')
-  getById(params: any) {
-    const { id } = params;
+  getById(params: IdRouteParams): User | undefined {
+    const id = Number(params.id);
 
     return this.usersService.findOneById(id);
   }
 
   @Post()
-  create(body: any) {
+  create(body: User): void {
     this.usersService.create(body);
   }
 
   @Put(':id')
-  update(params: any, body: any) {
-    const { id } = params;
+  update(params: IdRouteParams, body: User): void {
+    const id = Number(params.id);
 
     this.usersService.update(id, body);
   }
 
   @Delete(':id')
-  delete(params: any) {
-    const { id } = params;
+  delete(params: IdRouteParams): void {
+    const id = Number(params.id);
 
     this.usersService.delete(id);
   }

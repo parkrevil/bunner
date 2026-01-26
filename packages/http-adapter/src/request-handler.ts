@@ -16,6 +16,7 @@ import type {
   ResolveTokenOptions,
   ShouldCatchParams,
   SystemError,
+  SystemErrorHandlerLike,
 } from './types';
 
 import { BunnerHttpContext, BunnerHttpContextAdapter } from './adapter';
@@ -39,7 +40,7 @@ export class RequestHandler {
   private globalAfterResponse: BunnerMiddleware[] = [];
   private globalErrorFilters: BunnerErrorFilter[] = [];
   private errorFilterEngineHealthy = true;
-  private systemErrorHandler: SystemErrorHandler | undefined;
+  private systemErrorHandler: SystemErrorHandlerLike | undefined;
 
   constructor(
     private readonly container: BunnerContainer,
@@ -247,7 +248,7 @@ export class RequestHandler {
     return true;
   }
 
-  private isSystemErrorHandlerLike(value: unknown): value is { handle: (...args: readonly unknown[]) => unknown } {
+  private isSystemErrorHandlerLike(value: ReturnType<BunnerContainer['get']>): value is SystemErrorHandlerLike {
     if (value === null || value === undefined) {
       return false;
     }
@@ -260,7 +261,7 @@ export class RequestHandler {
       return false;
     }
 
-    return typeof (value as { handle?: unknown }).handle === 'function';
+    return typeof (value as SystemErrorHandlerLike).handle === 'function';
   }
 
   private async runErrorFilters(
@@ -445,14 +446,14 @@ export class RequestHandler {
     return this.resolveTokenValues(token, options, value => this.isErrorFilter(value));
   }
 
-  private resolveSystemErrorHandlers(token: string, options?: ResolveTokenOptions): SystemErrorHandler[] {
+  private resolveSystemErrorHandlers(token: string, options?: ResolveTokenOptions): SystemErrorHandlerLike[] {
     return this.resolveTokenValues(token, options, value => this.isSystemErrorHandler(value));
   }
 
-  private resolveTokenValues<T extends BunnerMiddleware | BunnerErrorFilter | SystemErrorHandler>(
+  private resolveTokenValues<T extends BunnerMiddleware | BunnerErrorFilter | SystemErrorHandlerLike>(
     token: string,
     options: ResolveTokenOptions | undefined,
-    predicate: (value: BunnerMiddleware | BunnerErrorFilter | SystemErrorHandler) => value is T,
+    predicate: (value: BunnerMiddleware | BunnerErrorFilter | SystemErrorHandlerLike) => value is T,
   ): T[] {
     const results: T[] = [];
     const strict = options?.strict === true;
@@ -484,10 +485,10 @@ export class RequestHandler {
     return results;
   }
 
-  private collectValues<T extends BunnerMiddleware | BunnerErrorFilter | SystemErrorHandler>(
+  private collectValues<T extends BunnerMiddleware | BunnerErrorFilter | SystemErrorHandlerLike>(
     results: T[],
     value: ReturnType<BunnerContainer['get']>,
-    predicate: (value: BunnerMiddleware | BunnerErrorFilter | SystemErrorHandler) => value is T,
+    predicate: (value: BunnerMiddleware | BunnerErrorFilter | SystemErrorHandlerLike) => value is T,
     options: { readonly strict: boolean; readonly token: string },
   ): void {
     if (this.isValueArray(value)) {
@@ -523,7 +524,7 @@ export class RequestHandler {
 
   private isTokenValue(
     value: ReturnType<BunnerContainer['get']>,
-  ): value is BunnerMiddleware | BunnerErrorFilter | SystemErrorHandler {
+  ): value is BunnerMiddleware | BunnerErrorFilter | SystemErrorHandlerLike {
     if (value instanceof BunnerMiddleware || value instanceof BunnerErrorFilter || value instanceof SystemErrorHandler) {
       return true;
     }
@@ -531,15 +532,15 @@ export class RequestHandler {
     return this.isSystemErrorHandlerLike(value);
   }
 
-  private isMiddleware(value: BunnerMiddleware | BunnerErrorFilter | SystemErrorHandler): value is BunnerMiddleware {
+  private isMiddleware(value: BunnerMiddleware | BunnerErrorFilter | SystemErrorHandlerLike): value is BunnerMiddleware {
     return value instanceof BunnerMiddleware;
   }
 
-  private isErrorFilter(value: BunnerMiddleware | BunnerErrorFilter | SystemErrorHandler): value is BunnerErrorFilter {
+  private isErrorFilter(value: BunnerMiddleware | BunnerErrorFilter | SystemErrorHandlerLike): value is BunnerErrorFilter {
     return value instanceof BunnerErrorFilter;
   }
 
-  private isSystemErrorHandler(value: BunnerMiddleware | BunnerErrorFilter | SystemErrorHandler): value is SystemErrorHandler {
+  private isSystemErrorHandler(value: BunnerMiddleware | BunnerErrorFilter | SystemErrorHandlerLike): value is SystemErrorHandlerLike {
     if (value instanceof SystemErrorHandler) {
       return true;
     }

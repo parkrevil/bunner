@@ -1,21 +1,15 @@
 import type { ClusterWorkerStats } from './interfaces';
-import type { ClusterWorkerId, ClusterInitParams } from './types';
-
-declare global {
-  var CLUSTER_WORKER_ID: number | undefined;
-}
+import type { ClusterBootstrapParams, ClusterInitParams, ClusterWorkerId } from './types';
 
 export abstract class ClusterBaseWorker {
   protected prevCpu: ReturnType<typeof process.cpuUsage>;
   protected id: ClusterWorkerId;
 
-  abstract bootstrap(params?: any): void | Promise<void>;
+  abstract bootstrap<T>(params?: ClusterBootstrapParams<T>): void | Promise<void>;
 
   abstract destroy(): void | Promise<void>;
 
   async init<T>(id: number, _params: ClusterInitParams<T>) {
-    globalThis.CLUSTER_WORKER_ID = id;
-
     this.id = id;
     this.prevCpu = process.cpuUsage();
 

@@ -1,6 +1,7 @@
 import { ValidatorCompiler, TransformerCompiler } from '@bunner/core';
 import { StatusCodes } from 'http-status-codes';
 
+import type { Class } from '@bunner/common';
 import type { ArgumentMetadata, PipeTransform } from '../interfaces';
 import type { RouteParamValue } from '../types';
 
@@ -29,12 +30,12 @@ export class ValidationPipe implements PipeTransform {
     return object;
   }
 
-  private toValidate(metatype: Function): boolean {
+  private toValidate(metatype: Class): boolean {
     if (typeof metatype !== 'function') {
       return false;
     }
 
-    const types: Function[] = [String, Boolean, Number, Array, Object];
+    const types: Array<Class> = [String, Boolean, Number, Array, Object];
 
     return !types.includes(metatype);
   }

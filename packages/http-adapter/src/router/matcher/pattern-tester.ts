@@ -86,9 +86,6 @@ function isAllDigits(value: string): boolean {
   return true;
 }
 
-export { buildPatternTester, ROUTE_REGEX_TIMEOUT };
-export type { PatternTesterOptions, RouteRegexTimeoutError };
-
 function isAlpha(value: string): boolean {
   if (!value.length) {
     return false;
@@ -125,3 +122,6 @@ function isAlphaNumericDash(value: string): boolean {
 
   return true;
 }
+
+export { buildPatternTester, ROUTE_REGEX_TIMEOUT };
+export type { PatternTesterOptions, RouteRegexTimeoutError };

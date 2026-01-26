@@ -1,6 +1,9 @@
 import { BunnerErrorFilter, type Context, Catch } from '@bunner/common';
 import { BunnerHttpContext } from '@bunner/http-adapter';
 import { Logger } from '@bunner/logger';
+import type { StatusCodes } from 'http-status-codes';
+
+import type { HttpErrorPayload } from './interfaces';
 
 @Catch()
 export class HttpErrorFilter extends BunnerErrorFilter {
@@ -10,17 +13,42 @@ export class HttpErrorFilter extends BunnerErrorFilter {
     const http = ctx.to(BunnerHttpContext);
     const res = http.response;
     const req = http.request;
-    const errorStatus = (error as any)?.status;
-    const status =
-      typeof errorStatus === 'number' && errorStatus !== 101 && errorStatus >= 200 && errorStatus <= 599 ? errorStatus : 500;
+    const errorPayload = this.getHttpErrorPayload(error);
+    const status = this.resolveStatus(errorPayload?.status);
 
     this.logger.error('Caught error:', error);
 
-    res.setStatus(status as any);
+    res.setStatus(status);
     res.setBody({
       statusCode: status,
-      message: (error as any)?.message ?? 'Internal Server Error',
+      message: errorPayload?.message ?? 'Internal Server Error',
       path: req.url,
     });
+  }
+
+  private getHttpErrorPayload(error: unknown): HttpErrorPayload | undefined {
+    if (error instanceof Error) {
+      return { message: error.message };
+    }
+
+    if (typeof error !== 'object' || error === null) {
+      return undefined;
+    }
+
+    const candidate = error as HttpErrorPayload;
+
+    if (candidate.message || candidate.status) {
+      return candidate;
+    }
+
+    return undefined;
+  }
+
+  private resolveStatus(status: HttpErrorPayload['status']): StatusCodes {
+    if (typeof status === 'number' && status !== 101 && status >= 200 && status <= 599) {
+      return status as StatusCodes;
+    }
+
+    return 500;
   }
 }

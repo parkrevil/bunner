@@ -1,7 +1,9 @@
 import * as path from 'node:path';
-import { pathToFileURL } from 'node:url';
 
-type ParseSyncFn = (filePath: string, sourceText: string) => unknown;
+import type { SourcePosition } from '../types';
+import type { OxcParseResult, ParseSyncFn, ParsedFile } from './types';
+
+import * as oxcParser from 'oxc-parser';
 
 const resolveOxcParserNativeBinding = async (): Promise<string | null> => {
   const candidates = [
@@ -32,68 +34,21 @@ const ensureOxcParserNativeBinding = async (): Promise<void> => {
 
 await ensureOxcParserNativeBinding();
 
-const resolveOxcParserEntry = async (): Promise<string | null> => {
-  const candidates = [
-    path.resolve(process.cwd(), 'node_modules/oxc-parser/src-js/index.js'),
-    path.resolve(process.cwd(), 'tooling/firebat/node_modules/oxc-parser/src-js/index.js'),
-  ];
-
-  for (const candidate of candidates) {
-    if (await Bun.file(candidate).exists()) {
-      return candidate;
-    }
+const loadParseSync = (): ParseSyncFn => {
+  if (typeof oxcParser.parseSync === 'function') {
+    return oxcParser.parseSync as unknown as ParseSyncFn;
   }
 
-  return null;
+  throw new Error('[firebat] Loaded oxc-parser but parseSync is missing');
 };
 
-const loadParseSync = async (): Promise<ParseSyncFn> => {
-  try {
-    const mod = (await import('oxc-parser')) as unknown as { parseSync?: ParseSyncFn };
-
-    if (typeof mod.parseSync === 'function') {
-      return mod.parseSync;
-    }
-  } catch {
-    // Ignore and try loading from disk.
-  }
-
-  const entry = await resolveOxcParserEntry();
-
-  if (!entry) {
-    throw new Error('[firebat] Failed to resolve oxc-parser from disk. Run from the repo root or tooling/firebat.');
-  }
-
-  const url = pathToFileURL(entry).href;
-  const mod = (await import(url)) as unknown as { parseSync?: ParseSyncFn };
-
-  if (typeof mod.parseSync !== 'function') {
-    throw new Error('[firebat] Loaded oxc-parser but parseSync is missing');
-  }
-
-  return mod.parseSync;
-};
-
-const parseSync: ParseSyncFn = await loadParseSync();
-
-export interface ParseTask {
-  filePath: string;
-  sourceText: string;
-}
-
-export interface ParsedFile {
-  filePath: string;
-  program: unknown;
-  errors: unknown[];
-  comments: unknown[];
-  sourceText: string;
-}
+const parseSync: ParseSyncFn = loadParseSync();
 
 export const parseSource = (filePath: string, sourceText: string): ParsedFile => {
   // Use oxc-parser's parseSync.
   // Note: Depending on the specific version/binding of oxc-parser, the API might vary slightly.
   // Assuming standard usage for now.
-  const ret = parseSync(filePath, sourceText) as any;
+  const ret: OxcParseResult = parseSync(filePath, sourceText);
 
   if (Array.isArray(ret.errors) && ret.errors.length > 0) {
     // We might want to handle errors or just pass them through
@@ -101,14 +56,14 @@ export const parseSource = (filePath: string, sourceText: string): ParsedFile =>
 
   return {
     filePath,
-    program: ret.program as unknown,
-    errors: Array.isArray(ret.errors) ? (ret.errors as unknown[]) : [],
+    program: ret.program,
+    errors: Array.isArray(ret.errors) ? ret.errors : [],
     comments: [],
     sourceText,
   };
 };
 
-export const getLineColumn = (source: string, offset: number): { line: number; column: number } => {
+export const getLineColumn = (source: string, offset: number): SourcePosition => {
   let line = 1;
   let lastNewline = -1;
 

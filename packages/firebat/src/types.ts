@@ -1,3 +1,17 @@
+import type {
+  ArrowFunction,
+  CompilerOptions,
+  ConstructorDeclaration,
+  FunctionDeclaration,
+  FunctionExpression,
+  GetAccessorDeclaration,
+  Identifier,
+  MethodDeclaration,
+  ProjectReference,
+  SetAccessorDeclaration,
+  Symbol as TypeScriptSymbol,
+} from 'typescript';
+
 export type OutputFormat = 'text' | 'json';
 
 export type FirebatDetector = 'duplicates' | 'waste';
@@ -58,6 +72,21 @@ export interface NodeHeader {
 
 export interface TsconfigLoadResult {
   readonly fileNames: ReadonlyArray<string>;
-  readonly options: any;
-  readonly projectReferences: ReadonlyArray<any> | undefined;
+  readonly options: CompilerOptions;
+  readonly projectReferences: ReadonlyArray<ProjectReference> | undefined;
+}
+
+export type FunctionWithBodyNode =
+  | FunctionDeclaration
+  | FunctionExpression
+  | ArrowFunction
+  | MethodDeclaration
+  | ConstructorDeclaration
+  | GetAccessorDeclaration
+  | SetAccessorDeclaration;
+
+export interface ControlFlowStateBucket {
+  readonly label: string | null;
+  readonly acceptsUnlabeled: boolean;
+  readonly states: Array<Map<TypeScriptSymbol, Map<number, Identifier>>>;
 }

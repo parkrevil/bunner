@@ -52,7 +52,12 @@ export class Builder<T> {
       return;
     }
 
-    const segment = segments[index]!;
+    const segment = segments[index];
+
+    if (segment === undefined) {
+      throw new Error(`Missing segment at index ${index}`);
+    }
+
     const charCode = segment.charCodeAt(0);
 
     if (charCode === 42) {
@@ -99,7 +104,11 @@ export class Builder<T> {
     key: number,
     segments: string[],
   ): void {
-    const segment = segments[index]!;
+    const segment = segments[index];
+
+    if (segment === undefined) {
+      throw new Error(`Missing segment at index ${index}`);
+    }
 
     if (node.staticChildren.size || node.paramChildren.length) {
       throw new Error(`Conflict: adding wildcard '*' at '${this.getPathString(segments, index)}' would shadow existing routes`);
@@ -146,7 +155,12 @@ export class Builder<T> {
     key: number,
     segments: string[],
   ): void {
-    const segment = segments[index]!;
+    const segment = segments[index];
+
+    if (segment === undefined) {
+      throw new Error(`Missing segment at index ${index}`);
+    }
+
     // Parse decorators (?, +, *)
     let core = segment;
     let isOptional = false;
@@ -314,7 +328,12 @@ export class Builder<T> {
     key: number,
     segments: string[],
   ): void {
-    const segment = segments[index]!;
+    const segment = segments[index];
+
+    if (segment === undefined) {
+      throw new Error(`Missing segment at index ${index}`);
+    }
+
     const child = node.staticChildren.get(segment);
 
     if (!child && node.wildcardChild) {

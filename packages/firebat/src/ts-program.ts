@@ -1,5 +1,5 @@
 import * as path from 'node:path';
-import ts from 'typescript';
+import * as ts from 'typescript';
 
 import type { FirebatProgramConfig } from './interfaces';
 import type { TsconfigLoadResult } from './types';

@@ -1,37 +1,48 @@
-import type { Statement, Expression, AssignmentExpression, UpdateExpression } from 'oxc-parser';
+import type { Statement, Expression } from 'oxc-parser';
 
-export interface VariableUsage {
-  name: string;
-  isWrite: boolean;
-  isRead: boolean;
-  location: number; // Node start offset
-  writeKind?: 'declaration' | 'assignment' | 'compound-assignment' | 'logical-assignment' | 'update';
-}
+import type { VariableCollectorOptions, VariableUsage, OxcNode, OxcNodeValue } from './types';
 
-export interface VariableCollectorOptions {
-  includeNestedFunctions?: boolean;
-}
+const isOxcNode = (value: OxcNodeValue | undefined): value is OxcNode =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
 
-const isFunctionNode = (node: any): boolean => {
-  if (!node || typeof node !== 'object') {
+const getNodeType = (node: OxcNode): string | null => {
+  return typeof node.type === 'string' ? node.type : null;
+};
+
+const getNodeName = (node: OxcNode): string | null => {
+  return typeof node.name === 'string' ? node.name : null;
+};
+
+const getNodeStart = (node: OxcNode): number => {
+  return typeof node.start === 'number' ? node.start : 0;
+};
+
+const isFunctionNode = (node: OxcNodeValue | undefined): boolean => {
+  if (!isOxcNode(node)) {
     return false;
   }
 
-  return node.type === 'ArrowFunctionExpression';
+  return getNodeType(node) === 'ArrowFunctionExpression';
 };
 
-const unwrapExpression = (node: any): any => {
-  let current = node;
+const unwrapExpression = (node: OxcNodeValue | undefined): OxcNode | null => {
+  let current = isOxcNode(node) ? node : null;
 
-  while (current && typeof current === 'object') {
-    if (current.type === 'ParenthesizedExpression') {
-      current = current.expression;
+  while (current) {
+    const nodeType = getNodeType(current);
+
+    if (nodeType === 'ParenthesizedExpression') {
+      const expression = current.expression;
+
+      current = isOxcNode(expression) ? expression : null;
 
       continue;
     }
 
-    if (current.type === 'ChainExpression') {
-      current = current.expression;
+    if (nodeType === 'ChainExpression') {
+      const expression = current.expression;
+
+      current = isOxcNode(expression) ? expression : null;
 
       continue;
     }
@@ -42,15 +53,15 @@ const unwrapExpression = (node: any): any => {
   return current;
 };
 
-const evalStaticTruthiness = (node: any): boolean | null => {
+const evalStaticTruthiness = (node: OxcNodeValue | undefined): boolean | null => {
   const n = unwrapExpression(node);
 
-  if (!n || typeof n !== 'object') {
+  if (n === null) {
     return null;
   }
 
-  if (n.type === 'Literal') {
-    const value = n.value as unknown;
+  if (getNodeType(n) === 'Literal') {
+    const value = n.value;
 
     if (typeof value === 'boolean') {
       return value;
@@ -75,8 +86,8 @@ const evalStaticTruthiness = (node: any): boolean | null => {
     return null;
   }
 
-  if (n.type === 'UnaryExpression') {
-    const operator = typeof n.operator === 'string' ? (n.operator as string) : '';
+  if (getNodeType(n) === 'UnaryExpression') {
+    const operator = typeof n.operator === 'string' ? n.operator : '';
     const argument = n.argument;
 
     if (operator === 'void') {
@@ -93,35 +104,43 @@ const evalStaticTruthiness = (node: any): boolean | null => {
   return null;
 };
 
-const getStaticObjectExpressionKeys = (node: any): Set<string> | null => {
+const getStaticObjectExpressionKeys = (node: OxcNodeValue | undefined): Set<string> | null => {
   const n = unwrapExpression(node);
 
-  if (!n || typeof n !== 'object' || n.type !== 'ObjectExpression') {
+  if (n === null || getNodeType(n) !== 'ObjectExpression') {
     return null;
   }
 
   const keys = new Set<string>();
-  const properties = Array.isArray(n.properties) ? (n.properties as any[]) : [];
+  const properties = Array.isArray(n.properties) ? n.properties : [];
 
   for (const prop of properties) {
-    if (!prop || typeof prop !== 'object') {
+    if (!isOxcNode(prop)) {
       continue;
     }
 
-    if (prop.type !== 'Property') {
+    if (getNodeType(prop) !== 'Property') {
       continue;
     }
 
     const key = prop.key;
 
-    if (key?.type === 'Identifier' && typeof key.name === 'string') {
-      keys.add(key.name);
+    if (isOxcNode(key) && getNodeType(key) === 'Identifier') {
+      const name = getNodeName(key);
+
+      if (name !== null) {
+        keys.add(name);
+      }
 
       continue;
     }
 
-    if (key?.type === 'Literal' && typeof key.value === 'string') {
-      keys.add(key.value);
+    if (isOxcNode(key) && getNodeType(key) === 'Literal') {
+      const value = key.value;
+
+      if (typeof value === 'string') {
+        keys.add(value);
+      }
 
       continue;
     }
@@ -130,104 +149,141 @@ const getStaticObjectExpressionKeys = (node: any): Set<string> | null => {
   return keys;
 };
 
-export const collectVariables = (node: Statement | Expression | any, options: VariableCollectorOptions = {}): VariableUsage[] => {
+export const collectVariables = (node: Statement | Expression | OxcNodeValue, options: VariableCollectorOptions = {}): VariableUsage[] => {
   const usages: VariableUsage[] = [];
   const includeNestedFunctions = options.includeNestedFunctions !== false;
 
   const visit = (
-    n: any,
+    current: OxcNodeValue | undefined,
     isWriteContext: boolean = false,
     allowNestedFunctions: boolean = includeNestedFunctions,
     writeKind?: VariableUsage['writeKind'],
   ) => {
-    if (!n || typeof n !== 'object') {
+    if (Array.isArray(current)) {
+      for (const item of current) {
+        visit(item, isWriteContext, allowNestedFunctions);
+      }
+
       return;
     }
 
-    if (!allowNestedFunctions && isFunctionNode(n)) {
+    if (!isOxcNode(current)) {
+      return;
+    }
+
+    const nodeType = getNodeType(current);
+
+    if (!allowNestedFunctions && isFunctionNode(current)) {
       return;
     }
 
     // Oxc Node Types
     // Observed in our environment: identifiers are represented as `Identifier`.
-    if (n.type === 'Identifier' && typeof n.name === 'string') {
-      const usage: VariableUsage = {
-        name: n.name,
-        isRead: !isWriteContext,
-        isWrite: isWriteContext,
-        location: typeof n.start === 'number' ? n.start : 0,
-      };
+    if (nodeType === 'Identifier') {
+      const name = getNodeName(current);
 
-      if (isWriteContext && writeKind) {
-        usage.writeKind = writeKind;
-      }
-
-      usages.push(usage);
-
-      return;
-    }
-
-    if (n.type === 'IdentifierReference') {
-      // Usage (Reference)
-      usages.push({
-        name: n.name,
-        isRead: !isWriteContext,
-        isWrite: isWriteContext,
-        location: n.start,
-      });
-    } else if (n.type === 'BindingIdentifier') {
-      // Declaration
-      usages.push({
-        name: n.name,
-        isRead: false,
-        isWrite: true,
-        location: n.start,
-        writeKind: 'declaration',
-      });
-    } else if (n.type === 'AssignmentTargetIdentifier') {
-      const usage: VariableUsage = {
-        name: n.name,
-        isRead: !isWriteContext,
-        isWrite: isWriteContext,
-        location: n.start,
-      };
-
-      if (isWriteContext && writeKind) {
-        usage.writeKind = writeKind;
-      }
-
-      usages.push(usage);
-
-      return;
-    }
-
-    {
-      const type = typeof n.type === 'string' ? n.type : '';
-
-      if (type.includes('MemberExpression')) {
-        // `obj.prop` does not read `prop` as a variable; only `obj`.
-        // `obj[prop]` reads both `obj` and `prop`.
-        if (n.object) {
-          visit(n.object, false, allowNestedFunctions);
-        }
-
-        if (n.computed && n.property) {
-          visit(n.property, false, allowNestedFunctions);
-        }
-
-        if (n.expression) {
-          visit(n.expression, false, allowNestedFunctions);
-        }
-
+      if (name === null) {
         return;
       }
+
+      const usage: VariableUsage = {
+        name,
+        isRead: !isWriteContext,
+        isWrite: isWriteContext,
+        location: getNodeStart(current),
+      };
+
+      if (isWriteContext && writeKind) {
+        usage.writeKind = writeKind;
+      }
+
+      usages.push(usage);
+
+      return;
+    }
+
+    if (nodeType === 'IdentifierReference') {
+      const name = getNodeName(current);
+
+      if (name === null) {
+        return;
+      }
+
+      // Usage (Reference)
+      usages.push({
+        name,
+        isRead: !isWriteContext,
+        isWrite: isWriteContext,
+        location: getNodeStart(current),
+      });
+    } else if (nodeType === 'BindingIdentifier') {
+      const name = getNodeName(current);
+
+      if (name === null) {
+        return;
+      }
+
+      // Declaration
+      usages.push({
+        name,
+        isRead: false,
+        isWrite: true,
+        location: getNodeStart(current),
+        writeKind: 'declaration',
+      });
+    } else if (nodeType === 'AssignmentTargetIdentifier') {
+      const name = getNodeName(current);
+
+      if (name === null) {
+        return;
+      }
+
+      const usage: VariableUsage = {
+        name,
+        isRead: !isWriteContext,
+        isWrite: isWriteContext,
+        location: getNodeStart(current),
+      };
+
+      if (isWriteContext && writeKind) {
+        usage.writeKind = writeKind;
+      }
+
+      usages.push(usage);
+
+      return;
+    }
+
+    if (nodeType !== null && nodeType.includes('MemberExpression')) {
+      // `obj.prop` does not read `prop` as a variable; only `obj`.
+      // `obj[prop]` reads both `obj` and `prop`.
+      const objectNode = current.object;
+
+      if (objectNode !== undefined && objectNode !== null) {
+        visit(objectNode, false, allowNestedFunctions);
+      }
+
+      const isComputed = current.computed;
+      const propertyNode = current.property;
+
+      if (isComputed === true && propertyNode !== undefined && propertyNode !== null) {
+        visit(propertyNode, false, allowNestedFunctions);
+      }
+
+      const expressionNode = current.expression;
+
+      if (expressionNode !== undefined && expressionNode !== null) {
+        visit(expressionNode, false, allowNestedFunctions);
+      }
+
+      return;
     }
 
     // Handle constructions
-    if (n.type === 'LogicalExpression') {
-      const operator = typeof n.operator === 'string' ? (n.operator as string) : '';
-      const left = n.left;
-      const right = n.right;
+    if (nodeType === 'LogicalExpression') {
+      const operator = typeof current.operator === 'string' ? current.operator : '';
+      const left = current.left;
+      const right = current.right;
 
       // Left is always evaluated.
       visit(left, false, allowNestedFunctions);
@@ -260,10 +316,10 @@ export const collectVariables = (node: Statement | Expression | any, options: Va
       return;
     }
 
-    if (n.type === 'ConditionalExpression') {
-      const test = n.test;
-      const consequent = n.consequent;
-      const alternate = n.alternate;
+    if (nodeType === 'ConditionalExpression') {
+      const test = current.test;
+      const consequent = current.consequent;
+      const alternate = current.alternate;
 
       // Test is always evaluated.
       visit(test, false, allowNestedFunctions);
@@ -289,75 +345,96 @@ export const collectVariables = (node: Statement | Expression | any, options: Va
       return;
     }
 
-    if (n.type === 'AssignmentExpression') {
-      const assign = n as AssignmentExpression;
-      const operator = typeof (assign as any).operator === 'string' ? ((assign as any).operator as string) : '=';
+    if (nodeType === 'AssignmentExpression') {
+      const operator = typeof current.operator === 'string' ? current.operator : '=';
+      const left = current.left;
+      const right = current.right;
 
       if (operator === '=') {
-        visit(assign.left, true, allowNestedFunctions, 'assignment'); // LHS is write
-        visit(assign.right, false, allowNestedFunctions); // RHS is read
+        visit(left, true, allowNestedFunctions, 'assignment'); // LHS is write
+        visit(right, false, allowNestedFunctions); // RHS is read
 
         return;
       }
 
       if (operator === '||=' || operator === '&&=' || operator === '??=') {
-        visit(assign.left, false, allowNestedFunctions);
-        visit(assign.left, true, allowNestedFunctions, 'logical-assignment');
-        visit(assign.right, false, allowNestedFunctions);
+        visit(left, false, allowNestedFunctions);
+        visit(left, true, allowNestedFunctions, 'logical-assignment');
+        visit(right, false, allowNestedFunctions);
 
         return;
       }
 
       // Compound assignment (+=, -=, ...)
-      visit(assign.left, false, allowNestedFunctions); // reads LHS
-      visit(assign.left, true, allowNestedFunctions, 'compound-assignment'); // writes LHS
-      visit(assign.right, false, allowNestedFunctions); // RHS is read
+      visit(left, false, allowNestedFunctions); // reads LHS
+      visit(left, true, allowNestedFunctions, 'compound-assignment'); // writes LHS
+      visit(right, false, allowNestedFunctions); // RHS is read
 
       return;
     }
 
-    if (n.type === 'UpdateExpression') {
-      const update = n as UpdateExpression;
+    if (nodeType === 'UpdateExpression') {
+      const argument = current.argument;
 
       // Treat update as both read and write.
-      visit(update.argument as any, false, allowNestedFunctions);
-      visit(update.argument as any, true, allowNestedFunctions, 'update');
+      visit(argument, false, allowNestedFunctions);
+      visit(argument, true, allowNestedFunctions, 'update');
 
       return;
     }
 
-    if (n.type === 'VariableDeclarator') {
-      const initKeys = getStaticObjectExpressionKeys(n.init);
+    if (nodeType === 'VariableDeclarator') {
+      const init = current.init;
+      const id = current.id;
+      const initKeys = getStaticObjectExpressionKeys(init);
+      const idNode = isOxcNode(id) ? id : null;
 
-      if (n.id?.type === 'ObjectPattern' && initKeys) {
+      if (idNode !== null && getNodeType(idNode) === 'ObjectPattern' && initKeys !== null) {
         // Object destructuring defaults are only evaluated if the property is missing.
-        const properties = Array.isArray(n.id.properties) ? (n.id.properties as any[]) : [];
+        const properties = Array.isArray(idNode.properties) ? idNode.properties : [];
 
         for (const prop of properties) {
-          if (!prop || typeof prop !== 'object') {
+          if (!isOxcNode(prop)) {
             continue;
           }
 
-          if (prop.type !== 'Property') {
+          if (getNodeType(prop) !== 'Property') {
             continue;
           }
 
           const keyNode = prop.key;
-          const keyName =
-            keyNode?.type === 'Identifier' && typeof keyNode.name === 'string'
-              ? keyNode.name
-              : keyNode?.type === 'Literal' && typeof keyNode.value === 'string'
-                ? keyNode.value
-                : null;
+          let keyName: string | null = null;
+
+          if (isOxcNode(keyNode)) {
+            const keyType = getNodeType(keyNode);
+
+            if (keyType === 'Identifier') {
+              const name = getNodeName(keyNode);
+
+              if (name !== null) {
+                keyName = name;
+              }
+            } else if (keyType === 'Literal') {
+              const value = keyNode.value;
+
+              if (typeof value === 'string') {
+                keyName = value;
+              }
+            }
+          }
+
           const valueNode = prop.value;
 
-          if (valueNode?.type === 'AssignmentPattern') {
-            visit(valueNode.left, true, allowNestedFunctions, 'declaration');
+          if (isOxcNode(valueNode) && getNodeType(valueNode) === 'AssignmentPattern') {
+            const leftNode = valueNode.left;
+            const rightNode = valueNode.right;
+
+            visit(leftNode, true, allowNestedFunctions, 'declaration');
 
             const shouldEvaluateDefault = keyName === null ? true : !initKeys.has(keyName);
 
             if (shouldEvaluateDefault) {
-              visit(valueNode.right, false, allowNestedFunctions);
+              visit(rightNode, false, allowNestedFunctions);
             }
 
             continue;
@@ -366,22 +443,22 @@ export const collectVariables = (node: Statement | Expression | any, options: Va
           visit(valueNode, true, allowNestedFunctions, 'declaration');
         }
       } else {
-        visit(n.id, true, allowNestedFunctions, 'declaration'); // Def
+        visit(id, true, allowNestedFunctions, 'declaration'); // Def
       }
 
-      if (n.init) {
-        visit(n.init, false, allowNestedFunctions);
+      if (init !== undefined && init !== null) {
+        visit(init, false, allowNestedFunctions);
       } // Use
 
       return;
     }
 
-    if (n.type === 'CallExpression') {
-      const callee = n.callee;
-      const args = Array.isArray(n.arguments) ? (n.arguments as any[]) : [];
+    if (nodeType === 'CallExpression') {
+      const callee = current.callee;
+      const args = Array.isArray(current.arguments) ? current.arguments : [];
       const unwrappedCallee = unwrapExpression(callee);
 
-      if (unwrappedCallee && isFunctionNode(unwrappedCallee)) {
+      if (unwrappedCallee !== null && isFunctionNode(unwrappedCallee)) {
         visit(unwrappedCallee, false, true);
       } else {
         visit(callee, false, allowNestedFunctions);
@@ -394,20 +471,14 @@ export const collectVariables = (node: Statement | Expression | any, options: Va
       return;
     }
 
-    if (Array.isArray(n)) {
-      for (const c of n) {
-        visit(c, isWriteContext, allowNestedFunctions);
-      }
+    const entries = Object.entries(current);
 
-      return;
-    }
-
-    for (const key in n) {
+    for (const [key, value] of entries) {
       if (key === 'type' || key === 'loc' || key === 'start' || key === 'end') {
         continue;
       }
 
-      visit(n[key], isWriteContext, allowNestedFunctions);
+      visit(value, isWriteContext, allowNestedFunctions);
     }
   };
 

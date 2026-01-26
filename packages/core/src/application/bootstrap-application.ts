@@ -1,48 +1,27 @@
-import type { BunnerApplicationOptions, ConfigService, EnvService, EnvSource, Provider } from '@bunner/common';
+import type {
+  ConfigService,
+  EnvService,
+  Provider,
+  ProviderToken,
+  ProviderUseValue,
+  ValueLike,
+} from '@bunner/common';
 
 import { CONFIG_SERVICE, ENV_SERVICE } from '@bunner/common';
 import { config as dotenvConfig } from 'dotenv';
 
-import type { BunnerApplication } from './bunner-application';
+import type {
+  BootstrapApplicationOptions,
+  BootstrapConfigLoadParams,
+  BootstrapEnvOptions,
+} from './interfaces';
+import type { EntryModule } from './types';
 
 import { BunnerScanner } from '../injector/scanner';
 import { getRuntimeContext } from '../runtime/runtime-context';
 import { createApplication } from './create-application';
 
-export interface BootstrapAdapter {
-  readonly install: (app: BunnerApplication) => void | Promise<void>;
-}
-
-export type BootstrapConfigLoader = (params: {
-  readonly env: EnvService;
-}) =>
-  | Promise<Readonly<Record<string, unknown>> | ReadonlyMap<string | symbol, unknown> | void>
-  | Readonly<Record<string, unknown>>
-  | ReadonlyMap<string | symbol, unknown>
-  | void;
-
-export interface BootstrapEnvOptions {
-  readonly dotenvFile?: string | false;
-  readonly dotenvStrict?: boolean;
-  readonly sources?: readonly EnvSource[];
-  readonly includeProcessEnv?: boolean;
-  readonly mutateProcessEnv?: boolean;
-}
-
-export interface BootstrapConfigOptions {
-  readonly loaders?: readonly BootstrapConfigLoader[];
-}
-
-export interface BootstrapApplicationOptions extends BunnerApplicationOptions {
-  readonly providers?: readonly Provider[];
-  readonly adapters?: readonly BootstrapAdapter[];
-  readonly env?: BootstrapEnvOptions;
-  readonly config?: BootstrapConfigOptions;
-  readonly configure?: (app: BunnerApplication) => void | Promise<void>;
-  readonly preload?: () => Promise<readonly Provider[] | void>;
-}
-
-function hasProviderToken(providers: readonly Provider[], token: unknown): boolean {
+function hasProviderToken(providers: readonly Provider[], token: ProviderToken): boolean {
   return providers.some(p => {
     if (!p) {
       return false;
@@ -52,8 +31,8 @@ function hasProviderToken(providers: readonly Provider[], token: unknown): boole
       return p === token;
     }
 
-    if (typeof p === 'object' && 'provide' in (p as any)) {
-      return (p as any).provide === token;
+    if (typeof p === 'object' && p !== null && 'provide' in p) {
+      return p.provide === token;
     }
 
     return false;
@@ -105,14 +84,16 @@ function createEnvService(snapshot: Readonly<Record<string, string>>): EnvServic
   };
 }
 
-function createConfigService(values: ReadonlyMap<string | symbol, unknown>): ConfigService {
+function createConfigService(values: ReadonlyMap<string | symbol, ValueLike>): ConfigService {
   return {
-    get<T = unknown>(namespace: string | symbol): T {
-      if (!values.has(namespace)) {
+    get(namespace: string | symbol): ValueLike {
+      const value = values.get(namespace);
+
+      if (value === undefined) {
         throw new Error(`Config namespace not found: ${String(namespace)}`);
       }
 
-      return values.get(namespace) as T;
+      return value;
     },
   };
 }
@@ -171,11 +152,8 @@ async function loadEnvSnapshot(options: BootstrapEnvOptions | undefined): Promis
   return result;
 }
 
-async function loadConfigMap(params: {
-  readonly env: EnvService;
-  readonly loaders: readonly BootstrapConfigLoader[];
-}): Promise<ReadonlyMap<string | symbol, unknown>> {
-  const result = new Map<string | symbol, unknown>();
+async function loadConfigMap(params: BootstrapConfigLoadParams): Promise<ReadonlyMap<string | symbol, ValueLike>> {
+  const result = new Map<string | symbol, ValueLike>();
 
   for (const loader of params.loaders) {
     const loaded = await Promise.resolve(loader({ env: params.env }));
@@ -207,7 +185,7 @@ async function loadConfigMap(params: {
  * @param options Bootstrap options.
  * @returns The started application instance.
  */
-export async function bootstrapApplication(entry: unknown, options?: BootstrapApplicationOptions): Promise<BunnerApplication> {
+export async function bootstrapApplication(entry: EntryModule, options?: BootstrapApplicationOptions): Promise<BunnerApplication> {
   const preloadProviders = await options?.preload?.();
   const baseProviders = [
     ...(Array.isArray(preloadProviders) ? preloadProviders : []),
@@ -226,9 +204,12 @@ export async function bootstrapApplication(entry: unknown, options?: BootstrapAp
   const hasEnvService = hasProviderToken(mergedProviders, ENV_SERVICE);
 
   if (hasConfigLoaders && hasEnvService && !hasProviderToken(mergedProviders, CONFIG_SERVICE)) {
-    const envService = (
-      mergedProviders.find((p: any) => p && typeof p === 'object' && 'provide' in p && p.provide === ENV_SERVICE) as any
-    ).useValue as EnvService;
+    const envService = getEnvService(mergedProviders);
+
+    if (!envService) {
+      throw new Error('EnvService provider is missing or invalid');
+    }
+
     const configMap = await loadConfigMap({ env: envService, loaders: options.config.loaders });
     const configService = createConfigService(configMap);
 
@@ -236,7 +217,7 @@ export async function bootstrapApplication(entry: unknown, options?: BootstrapAp
   }
 
   const aotContainer = getRuntimeContext().container;
-  const providedContainer = (options as any)?.container;
+  const providedContainer = options?.container;
   const app = await createApplication(entry, {
     ...options,
     container: providedContainer ?? aotContainer,
@@ -263,3 +244,35 @@ export async function bootstrapApplication(entry: unknown, options?: BootstrapAp
 
   return app;
 }
+
+function isProviderWithValue(provider: Provider): provider is ProviderUseValue {
+  return typeof provider === 'object' && provider !== null && 'provide' in provider && 'useValue' in provider;
+}
+
+function isEnvService(value: ProviderUseValue['useValue']): value is EnvService {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  const candidate = value as EnvService;
+
+  return typeof candidate.get === 'function' && typeof candidate.getOptional === 'function';
+}
+
+function getEnvService(providers: ReadonlyArray<Provider>): EnvService | undefined {
+  const provider = providers.find(item => isProviderWithValue(item) && item.provide === ENV_SERVICE);
+
+  if (!provider) {
+    return undefined;
+  }
+
+  if (!isEnvService(provider.useValue)) {
+    return undefined;
+  }
+
+  return provider.useValue;
+}
+
+export type { BootstrapApplicationOptions, BootstrapConfigLoadParams, BootstrapEnvOptions } from './interfaces';
+export type { BootstrapAdapter, BootstrapConfigOptions } from './interfaces';
+export type { BootstrapConfigLoader } from './types';

@@ -1,4 +1,13 @@
-import type { Transport, LogMessage, LogLevel, Color, LoggerOptions } from '../interfaces';
+import type {
+  Color,
+  LogMessage,
+  LogLevel,
+  LogMetadataRecord,
+  LogMetadataValue,
+  Loggable,
+  LoggerOptions,
+  Transport,
+} from '../interfaces';
 
 const DEFAULT_COLORS: Record<LogLevel, Color> = {
   trace: 'gray',
@@ -35,7 +44,7 @@ export class ConsoleTransport implements Transport {
   }
 
   private logJson<T>(message: LogMessage<T>): void {
-    const replacer = (_key: string, value: any) => {
+    const replacer = (_key: string, value: LogMetadataValue) => {
       if (value instanceof Error) {
         const { name, message, stack, ...rest } = value;
 
@@ -47,7 +56,7 @@ export class ConsoleTransport implements Transport {
         };
       }
 
-      if (value && typeof value === 'object' && 'toLog' in value && typeof value.toLog === 'function') {
+      if (this.isLoggable(value)) {
         return value.toLog();
       }
 
@@ -95,11 +104,11 @@ export class ConsoleTransport implements Transport {
     }
 
     if (Object.keys(rest).length > 0) {
-      const processedRest: any = {};
+      const processedRest: LogMetadataRecord = {};
 
-      for (const [key, val] of Object.entries(rest)) {
-        if (val && typeof val === 'object' && 'toLog' in val && typeof (val as any).toLog === 'function') {
-          processedRest[key] = (val as any).toLog();
+      for (const [key, val] of Object.entries(rest as LogMetadataRecord)) {
+        if (this.isLoggable(val)) {
+          processedRest[key] = val.toLog();
         } else {
           processedRest[key] = val;
         }
@@ -107,5 +116,9 @@ export class ConsoleTransport implements Transport {
 
       console.log(Bun.inspect(processedRest, { colors: true, depth: 2 }));
     }
+  }
+
+  private isLoggable(value: LogMetadataValue): value is Loggable {
+    return Boolean(value) && typeof value === 'object' && typeof (value as Loggable).toLog === 'function';
   }
 }

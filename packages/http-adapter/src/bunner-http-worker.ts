@@ -2,6 +2,7 @@ import { ClusterBaseWorker, type ClusterWorkerId, expose } from '@bunner/core';
 import { Logger } from '@bunner/logger';
 
 import { BunnerHttpServer } from './bunner-http-server';
+import type { HttpWorkerInitParams } from './interfaces';
 
 export class BunnerHttpWorker extends ClusterBaseWorker {
   private logger = new Logger(BunnerHttpWorker);
@@ -15,7 +16,7 @@ export class BunnerHttpWorker extends ClusterBaseWorker {
     return this.id;
   }
 
-  override async init(workerId: ClusterWorkerId, params: any) {
+  override async init(workerId: ClusterWorkerId, params: HttpWorkerInitParams) {
     await super.init(workerId, params);
 
     this.logger.info(`🔧 Bunner HTTP Worker #${workerId} is initializing...`);

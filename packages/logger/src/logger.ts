@@ -1,4 +1,14 @@
-import type { LoggerOptions, LogLevel, LogMessage, Transport, Loggable } from './interfaces';
+import type {
+  LogArgument,
+  LogContextTarget,
+  LogLevel,
+  LogMessage,
+  LogMetadataRecord,
+  LogMetadataValue,
+  Loggable,
+  LoggerOptions,
+  Transport,
+} from './interfaces';
 
 import { RequestContext } from './async-storage';
 import { ConsoleTransport } from './transports/console';
@@ -16,7 +26,7 @@ export class Logger {
 
   private readonly context?: string;
 
-  constructor(context?: string | Function | object) {
+  constructor(context?: string | LogContextTarget) {
     if (typeof context === 'function') {
       this.context = context.name;
     } else if (typeof context === 'object' && context !== null) {
@@ -31,31 +41,35 @@ export class Logger {
     this.transport = new ConsoleTransport(this.globalOptions);
   }
 
-  trace<T = Record<string, any>>(msg: string, ...args: (T | Error | Loggable)[]) {
+  trace<T extends LogMetadataRecord = LogMetadataRecord>(msg: string, ...args: Array<T | LogArgument>) {
     this.log('trace', msg, ...args);
   }
 
-  debug<T = Record<string, any>>(msg: string, ...args: (T | Error | Loggable)[]) {
+  debug<T extends LogMetadataRecord = LogMetadataRecord>(msg: string, ...args: Array<T | LogArgument>) {
     this.log('debug', msg, ...args);
   }
 
-  info<T = Record<string, any>>(msg: string, ...args: (T | Error | Loggable)[]) {
+  info<T extends LogMetadataRecord = LogMetadataRecord>(msg: string, ...args: Array<T | LogArgument>) {
     this.log('info', msg, ...args);
   }
 
-  warn<T = Record<string, any>>(msg: string, ...args: (T | Error | Loggable)[]) {
+  warn<T extends LogMetadataRecord = LogMetadataRecord>(msg: string, ...args: Array<T | LogArgument>) {
     this.log('warn', msg, ...args);
   }
 
-  error<T = Record<string, any>>(msg: string, ...args: (T | Error | Loggable)[]) {
+  error<T extends LogMetadataRecord = LogMetadataRecord>(msg: string, ...args: Array<T | LogArgument>) {
     this.log('error', msg, ...args);
   }
 
-  fatal<T = Record<string, any>>(msg: string, ...args: (T | Error | Loggable)[]) {
+  fatal<T extends LogMetadataRecord = LogMetadataRecord>(msg: string, ...args: Array<T | LogArgument>) {
     this.log('fatal', msg, ...args);
   }
 
-  private log<T = Record<string, any>>(level: LogLevel, msg: string, ...args: (T | Error | Loggable)[]) {
+  private log<T extends LogMetadataRecord = LogMetadataRecord>(
+    level: LogLevel,
+    msg: string,
+    ...args: Array<T | LogArgument>
+  ) {
     if (!this.isLevelEnabled(level)) {
       return;
     }
@@ -89,7 +103,7 @@ export class Logger {
     return levels.indexOf(level) >= levels.indexOf(configuredLevel);
   }
 
-  private isLoggable(arg: any): arg is Loggable {
-    return arg && typeof arg === 'object' && typeof arg.toLog === 'function';
+  private isLoggable(arg: LogMetadataValue): arg is Loggable {
+    return Boolean(arg) && typeof arg === 'object' && typeof (arg as Loggable).toLog === 'function';
   }
 }

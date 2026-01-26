@@ -30,6 +30,34 @@ export type RequestBodyValue =
   | Record<string, string | number | boolean | null>
   | Array<string | number | boolean | null>;
 
+export type ResponseBodyValue = HttpWorkerResponseBody | RequestBodyValue;
+
+export interface BunnerRequestInit {
+  readonly url: string;
+  readonly httpMethod: HttpMethod;
+  readonly headers: HeadersInit;
+  readonly requestId?: string;
+  readonly params?: RequestParamMap;
+  readonly query?: RequestQueryMap;
+  readonly body?: RequestBodyValue;
+  readonly isTrustedProxy?: boolean;
+  readonly ip?: string | null;
+  readonly ips?: string[];
+}
+
+export interface AdaptiveRequest {
+  httpMethod: HttpMethod;
+  url: string;
+  headers: HeadersInit;
+  body?: RequestBodyValue;
+  queryParams: RequestQueryMap;
+  params: RequestParamMap;
+  ip: string;
+  ips: string[];
+  isTrustedProxy: boolean;
+  query?: RequestQueryMap;
+}
+
 export type HttpWorkerResponseBody = ConstructorParameters<typeof Response>[0];
 
 export type RouteHandlerArgument =
@@ -63,6 +91,24 @@ export type ContainerInstance =
   | undefined;
 
 export type ControllerConstructor = Class<ControllerInstance>;
+
+export type HttpContextValue =
+  | BunnerRequest
+  | BunnerResponse
+  | RequestBodyValue
+  | RequestParamMap
+  | RequestQueryMap
+  | Headers
+  | CookieMap
+  | string
+  | number
+  | boolean
+  | bigint
+  | symbol
+  | null
+  | undefined;
+
+export type HttpContextConstructor<TContext> = new (...args: readonly HttpContextValue[]) => TContext;
 
 export type MetadataRegistryKey =
   | ControllerConstructor
@@ -127,6 +173,10 @@ export interface ErrorLike {
 
 export type SystemError = Error | ErrorLike | string | number | boolean;
 
+export interface SystemErrorHandlerLike {
+  handle(error: SystemError, ctx: Context): void | Promise<void>;
+}
+
 export interface ErrorHandlingStageParams {
   readonly error: SystemError;
   readonly stage: string;
@@ -163,6 +213,8 @@ export type MiddlewareOptions = Record<string, string | number | boolean | null 
 export type DecoratorTarget = Record<string, string | number | boolean | symbol | null | undefined>;
 
 export type DecoratorPropertyKey = string | symbol;
+
+export type RouteDecoratorArgument = string | MiddlewareOptions | undefined;
 
 export interface DecoratorMetadata {
   readonly name: string;
