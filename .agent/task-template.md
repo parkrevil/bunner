@@ -89,6 +89,7 @@ MUST tagging (Status=done, MUST):
 Metadata invariants (MUST):
 
 - Task ID는 파일명과 동일해야 한다.
+- Task 파일 경로는 반드시 `tasks/<plan-id>/<task-id>.md` 형태여야 한다.
 - 날짜는 UTC 기준 `YYYY-MM-DD` 고정.
 - PR이 존재하면 URL을 반드시 포함한다.
 
@@ -205,10 +206,11 @@ Scope delta rule (MUST):
 
 - <이 Task에서 하지 않는 것>
 
-### Plan Code Scope Cross-check (참고, Non-gate)
+### Plan Code Scope Cross-check (Gate, 필수)
 
-- Plan §6의 “변경 대상(예상/참고)”는 기계 게이트가 아니다.
-- 기계 게이트는 2절의 `Allowed paths (MUST, copy from Plan)`로만 판정한다.
+- Plan §6의 “변경 대상(예상/참고)”는 보조 근거다.
+- 기계 게이트는 2절의 `Allowed paths (MUST, copy from Plan)`로 판정하며,
+  Plan link가 유효할 때는 `tasks/<plan-id>/**` 경로 규칙도 함께 판정된다.
 
 STOP 조건 (MUST):
 

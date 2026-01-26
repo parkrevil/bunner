@@ -29,6 +29,34 @@ bun run verify
 
 ---
 
+## Plan/Task 게이트 (Mechanically Enforced)
+
+`verify`는 코드 변경이 발생한 경우, 변경이 최소 1개 이상의 Task 문서(`tasks/**`)와 연결되어 있어야 한다.
+
+또한 Task 파일은 Plan ID 기반 디렉토리 규칙을 따른다.
+
+```text
+Rule: VFY-TASK-001
+Target: tasks/**
+Violation: Task 문서가 `tasks/<file>.md` 형태로 `tasks/` 루트 바로 아래에 존재함
+Enforcement: block
+```
+
+```text
+Rule: VFY-TASK-002
+Target: tasks/**
+Violation: Task 문서 경로가 `tasks/<plan-id>/**`를 따르지 않음
+  - <plan-id>는 Task 내부 Plan 링크 `plans/<plan-id>.md#Step-N`에서 유도한다
+Enforcement: block
+```
+
+예시:
+
+- Plan: `plans/260126_01_firebat_pure-code-quality.md`
+- Task: `tasks/260126_01_firebat_pure-code-quality/260126_01_01_report-schema-vnext.md`
+
+---
+
 ## 통과 기준 (Pass Criteria)
 
 `verify`가 **통과**하려면 다음 조건을 **모두** 만족해야 한다:

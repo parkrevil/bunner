@@ -18,6 +18,12 @@ const isTaskFile = (filePath: string): boolean => {
   return normalized.startsWith('tasks/') && normalized.endsWith('.md');
 };
 
+const isTaskFileInTasksRoot = (filePath: string): boolean => {
+  const normalized = normalizePath(filePath);
+
+  return /^tasks\/[^/]+\.md$/.test(normalized);
+};
+
 const splitLines = (value: string): string[] => value.split(/\r?\n/g);
 
 const extractFrontmatter = (contents: string): string | null => {
@@ -657,6 +663,12 @@ const listUnmappedMustIds = (taskMustIds: readonly string[], fileMustMap: Readon
 const validateTask = async (filePath: string, contents: string): Promise<string[]> => {
   const errors: string[] = [];
 
+  if (isTaskFileInTasksRoot(filePath)) {
+    errors.push(
+      `[plan-task-verify] ${filePath}: invalid task path (must be under tasks/<plan-id>/..., not tasks/*.md)`,
+    );
+  }
+
   if (!contents.includes('# Task')) {
     errors.push(`[plan-task-verify] ${filePath}: missing heading: # Task`);
   }
@@ -698,6 +710,20 @@ const validateTask = async (filePath: string, contents: string): Promise<string[
       errors.push(`[plan-task-verify] ${filePath}: invalid plan link format: ${planLink}`);
     } else {
       const { planPath, stepNumber } = parsed;
+      const planId = path.basename(planPath, '.md');
+
+      if (planId.length === 0) {
+        errors.push(`[plan-task-verify] ${filePath}: could not derive plan id from plan link: ${planLink}`);
+      } else {
+        const normalizedTaskPath = normalizePath(filePath);
+        const expectedPrefix = `tasks/${planId}/`;
+
+        if (!normalizedTaskPath.startsWith(expectedPrefix)) {
+          errors.push(
+            `[plan-task-verify] ${filePath}: task must live under ${expectedPrefix} (derived from plan link: ${planLink})`,
+          );
+        }
+      }
 
       if (!(await Bun.file(planPath).exists())) {
         errors.push(`[plan-task-verify] ${filePath}: referenced plan file not found: ${planPath}`);

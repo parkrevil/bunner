@@ -145,7 +145,7 @@ const assertAllowedPaths = async (files: readonly string[], taskFiles: readonly 
   const uniquePatterns = [...new Set(patterns.map(p => p.trim()).filter(p => p.length > 0))];
 
   if (uniquePatterns.length === 0) {
-    console.error('[verify] ❌ Code changes detected, but no Allowed paths were found in changed tasks/*.md');
+    console.error('[verify] ❌ Code changes detected, but no Allowed paths were found in changed tasks/**/*.md');
     console.error('[verify]    Add Allowed paths (MUST) list to the task(s) for machine gating.');
 
     process.exit(1);
@@ -202,8 +202,8 @@ const runVerify = async (): Promise<void> => {
   }
 
   if (changedTaskFiles.length === 0) {
-    console.error(`[verify] ❌ ${listExtensions()} changes detected, but no tasks/*.md changes were found.`);
-    console.error('[verify]    Create/update at least one tasks/*.md to keep spec → plan → task mechanically traceable.');
+    console.error(`[verify] ❌ ${listExtensions()} changes detected, but no tasks/**/*.md changes were found.`);
+    console.error('[verify]    Create/update at least one tasks/**/*.md to keep spec → plan → task mechanically traceable.');
 
     process.exit(1);
   }
