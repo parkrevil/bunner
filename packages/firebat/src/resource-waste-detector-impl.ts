@@ -1,4 +1,4 @@
-import ts from 'typescript';
+import * as ts from 'typescript';
 
 import type { ControlFlowStateBucket, FunctionWithBodyNode, ResourceWasteFinding } from './types';
 
@@ -110,9 +110,9 @@ const isInvokedImmediately = (node: ts.Node): boolean => {
     const grandparent = parent.parent;
 
     if (ts.isCallExpression(grandparent) || ts.isNewExpression(grandparent)) {
-      const expression = parent as unknown as ts.LeftHandSideExpression;
-
-      return grandparent.expression === expression;
+      if (ts.isLeftHandSideExpression(parent)) {
+        return grandparent.expression === parent;
+      }
     }
   }
 
@@ -575,7 +575,7 @@ const recordDeadStoreFindings = (
   const tryGetStaticObjectLiteralPropertyValue = (
     objectLiteral: ts.ObjectLiteralExpression,
     propertyKey: string,
-  ): ts.Expression | null => {
+  ): ts.Expression | ts.MethodDeclaration | null => {
     for (const property of objectLiteral.properties) {
       if (ts.isSpreadAssignment(property)) {
         return null;
@@ -640,8 +640,12 @@ const recordDeadStoreFindings = (
 
       const propertyValue = tryGetStaticObjectLiteralPropertyValue(sourceUnwrapped, sourceKey.propertyKey);
 
-      if (!propertyValue) {
+      if (propertyValue === null) {
         return true;
+      }
+
+      if (ts.isMethodDeclaration(propertyValue)) {
+        return false;
       }
 
       const valueUnwrapped = unwrapExpression(propertyValue);
@@ -682,7 +686,7 @@ const recordDeadStoreFindings = (
     bindingName: ts.BindingName,
     sourceExpression: ts.Expression,
   ): void => {
-    const visitBinding = (name: ts.BindingName, source: ts.Expression, arrayIndexBase: number | null): void => {
+    const visitBinding = (name: ts.BindingName, source: ts.Expression): void => {
       if (ts.isIdentifier(name)) {
         return;
       }
@@ -720,14 +724,14 @@ const recordDeadStoreFindings = (
           if (ts.isObjectLiteralExpression(sourceUnwrapped) && propertyKey) {
             const nestedSource = tryGetStaticObjectLiteralPropertyValue(sourceUnwrapped, propertyKey);
 
-            if (nestedSource) {
-              visitBinding(element.name, nestedSource, null);
+            if (nestedSource && ts.isExpression(nestedSource)) {
+              visitBinding(element.name, nestedSource);
 
               continue;
             }
           }
 
-          visitBinding(element.name, source, null);
+          visitBinding(element.name, source);
         }
 
         return;
@@ -762,7 +766,7 @@ const recordDeadStoreFindings = (
             const nestedSource = sourceUnwrapped.elements[elementIndex];
 
             if (nestedSource && !ts.isOmittedExpression(nestedSource) && !ts.isSpreadElement(nestedSource)) {
-              visitBinding(element.name, nestedSource, null);
+              visitBinding(element.name, nestedSource);
 
               elementIndex += 1;
 
@@ -770,14 +774,14 @@ const recordDeadStoreFindings = (
             }
           }
 
-          visitBinding(element.name, source, arrayIndexBase);
+          visitBinding(element.name, source);
 
           elementIndex += 1;
         }
       }
     };
 
-    visitBinding(bindingName, sourceExpression, null);
+    visitBinding(bindingName, sourceExpression);
   };
 
   const visitDestructuringAssignmentTargetDefaultInitializers = (
@@ -834,7 +838,7 @@ const recordDeadStoreFindings = (
               if (ts.isObjectLiteralExpression(sourceUnwrapped) && propertyKey) {
                 const nestedSource = tryGetStaticObjectLiteralPropertyValue(sourceUnwrapped, propertyKey);
 
-                if (nestedSource) {
+                if (nestedSource && ts.isExpression(nestedSource)) {
                   visitTarget(valueUnwrapped.left, nestedSource);
 
                   continue;
@@ -854,7 +858,7 @@ const recordDeadStoreFindings = (
               if (ts.isObjectLiteralExpression(sourceUnwrapped) && propertyKey) {
                 const nestedSource = tryGetStaticObjectLiteralPropertyValue(sourceUnwrapped, propertyKey);
 
-                if (nestedSource) {
+                if (nestedSource && ts.isExpression(nestedSource)) {
                   visitTarget(valueUnwrapped, nestedSource);
 
                   continue;
@@ -1007,15 +1011,15 @@ const recordDeadStoreFindings = (
     if (ts.isNumericLiteral(unwrapped)) {
       const asNumber = Number(unwrapped.text);
 
-      return asNumber === 0 ? false : true;
+      return asNumber !== 0;
     }
 
     if (ts.isBigIntLiteral(unwrapped)) {
-      return unwrapped.text === '0n' ? false : true;
+      return unwrapped.text !== '0n';
     }
 
     if (ts.isStringLiteral(unwrapped) || ts.isNoSubstitutionTemplateLiteral(unwrapped)) {
-      return unwrapped.text.length === 0 ? false : true;
+      return unwrapped.text.length !== 0;
     }
 
     if (ts.isVoidExpression(unwrapped)) {

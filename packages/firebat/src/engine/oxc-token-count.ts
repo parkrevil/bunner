@@ -1,6 +1,9 @@
-import type { Statement, Expression, FunctionBody } from 'oxc-parser';
+import type { OxcNode, OxcNodeValue } from './types';
 
-export const countOxcTokens = (node: Statement | Expression | FunctionBody): number => {
+const isOxcNode = (value: OxcNodeValue | undefined): value is OxcNode =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+export const countOxcTokens = (node: OxcNodeValue | undefined): number => {
   // Oxc doesn't expose raw token count directly in AST.
   // Estimation based on AST depth or span length is possible, but raw token count requires lexer.
   // For 'physical limit' performance, re-lexing is expensive.
@@ -15,11 +18,7 @@ export const countOxcTokens = (node: Statement | Expression | FunctionBody): num
   // But strict requirement says "token count".
   // Let's implement a fast recursive node counter.
 
-  const visit = (n: any) => {
-    if (!n || typeof n !== 'object') {
-      return;
-    }
-
+  const visit = (n: OxcNodeValue | undefined) => {
     if (Array.isArray(n)) {
       for (const child of n) {
         visit(child);
@@ -28,14 +27,20 @@ export const countOxcTokens = (node: Statement | Expression | FunctionBody): num
       return;
     }
 
-    if (n.type) {
+    if (!isOxcNode(n)) {
+      return;
+    }
+
+    if (typeof n.type === 'string') {
       count++;
     }
 
     // Iterate all keys
-    for (const key in n) {
+    const entries = Object.entries(n);
+
+    for (const [key, value] of entries) {
       if (key !== 'type' && key !== 'start' && key !== 'end' && key !== 'loc' && key !== 'span') {
-        visit(n[key]);
+        visit(value);
       }
     }
   };

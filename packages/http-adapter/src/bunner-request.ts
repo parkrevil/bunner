@@ -1,6 +1,6 @@
 import { CookieMap } from 'bun';
 
-import type { RequestBodyValue, RequestParamMap, RequestQueryMap } from './types';
+import type { BunnerRequestInit, RequestBodyValue, RequestParamMap, RequestQueryMap } from './types';
 
 import { HttpMethod } from './enums';
 
@@ -20,18 +20,14 @@ export class BunnerRequest {
   public readonly contentLength: number | null;
   public readonly charset: string | null;
   public params: RequestParamMap;
-  public readonly body: RequestBodyValue;
+  public body: RequestBodyValue;
   public readonly ip: string | null;
   public readonly ips: string[];
   public readonly isTrustedProxy: boolean;
   public readonly subdomains: string[];
   public query: RequestQueryMap;
 
-  get method(): string {
-    return this.httpMethod;
-  }
-
-  constructor(req: any) {
+  constructor(req: BunnerRequestInit) {
     const urlObj = new URL(req.url);
 
     this.requestId = req.requestId ?? Math.random().toString(36).substring(7);
@@ -46,7 +42,10 @@ export class BunnerRequest {
     this.port = urlObj.port ? parseInt(urlObj.port) : null;
     this.queryString = urlObj.search || null;
     this.contentType = this.headers.get('content-type') ?? null;
-    this.contentLength = this.headers.get('content-length') ? parseInt(this.headers.get('content-length')!) : null;
+
+    const contentLengthValue = this.headers.get('content-length');
+
+    this.contentLength = contentLengthValue ? parseInt(contentLengthValue) : null;
     this.charset = null;
     this.params = req.params ?? {};
     this.query = req.query ?? {};
@@ -55,5 +54,9 @@ export class BunnerRequest {
     this.subdomains = [];
     this.ip = req.ip ?? null;
     this.ips = req.ips ?? [];
+  }
+
+  get method(): string {
+    return this.httpMethod;
   }
 }

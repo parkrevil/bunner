@@ -1,11 +1,4 @@
-export type NodeId = number;
-
-export enum EdgeType {
-  Normal = 0,
-  True = 1,
-  False = 2,
-  Exception = 3,
-}
+import type { EdgeType, NodeId } from './types';
 
 const INITIAL_CAPACITY = 1024;
 
@@ -13,14 +6,14 @@ const INITIAL_CAPACITY = 1024;
  * Ad-hoc Integer Graph (Zero Dependency, GC-friendly)
  * Stores graph topology in flat TypedArrays.
  */
-export class IntegerCFG {
+class IntegerCFG {
   // Edge storage: [source, target, type] flattened
   // We use a simple flat push approach.
-  private edges: Int32Array;
-  private edgeCursor: number = 0;
+  public nodeCount: number = 0;
 
   // Basic Block / Node info could be stored here if needed
-  public nodeCount: number = 0;
+  private edges: Int32Array;
+  private edgeCursor: number = 0;
 
   constructor(capacity: number = INITIAL_CAPACITY) {
     this.edges = new Int32Array(capacity * 3);
@@ -65,8 +58,8 @@ export class IntegerCFG {
 
     for (let i = 0; i < count; i++) {
       const offset = i * 3;
-      const from = this.edges[offset]!;
-      const to = this.edges[offset + 1]!;
+      const from = this.edges[offset];
+      const to = this.edges[offset + 1];
 
       if (from < 0 || from >= this.nodeCount) {
         continue;
@@ -97,3 +90,5 @@ export class IntegerCFG {
     return adj.map(arr => new Int32Array(arr));
   }
 }
+
+export { IntegerCFG };

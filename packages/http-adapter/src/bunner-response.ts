@@ -3,20 +3,29 @@ import { StatusCodes, getReasonPhrase } from 'http-status-codes';
 
 import type { BunnerRequest } from './bunner-request';
 import type { HttpWorkerResponse } from './interfaces';
+import type { ResponseBodyValue } from './types';
 
 import { ContentType, HeaderField, HttpMethod } from './enums';
 
 export class BunnerResponse {
   private readonly req: BunnerRequest;
-  private _body: any;
+  private _body: ResponseBodyValue | undefined;
   private _cookies: CookieMap;
   private _headers: Headers;
   private _status: StatusCodes | 0 = 0;
   private _statusText: string | undefined;
   private _workerResponse: HttpWorkerResponse;
 
-  constructor(req: BunnerRequest, res: Response) {
+  constructor(req: BunnerRequest, res: Response | Headers) {
     this.req = req;
+
+    if (res instanceof Headers) {
+      this._headers = new Headers(res);
+      this._cookies = new CookieMap(res.get(HeaderField.SetCookie) ?? {});
+
+      return;
+    }
+
     this._headers = new Headers(res.headers);
     this._cookies = new CookieMap(res.headers.get(HeaderField.SetCookie) ?? {});
 
@@ -100,11 +109,11 @@ export class BunnerResponse {
     return this;
   }
 
-  getBody() {
+  getBody(): ResponseBodyValue | undefined {
     return this._body;
   }
 
-  setBody(data: any) {
+  setBody(data: ResponseBodyValue | undefined) {
     this._body = data ?? '';
 
     return this;

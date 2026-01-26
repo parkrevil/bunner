@@ -47,8 +47,8 @@ function registerInternalRoutes(internal: InternalRouter, docs: Doc[], docsById:
   });
 }
 
-export function setupScalar(adapters: AdapterCollectionLike, options: ScalarSetupOptions & ScalarOptionsWithRegistry): void {
-  if (options.documentTargets === undefined || options.httpTargets === undefined) {
+export function setupScalar(adapters: AdapterCollectionLike, options?: ScalarSetupOptions & ScalarOptionsWithRegistry): void {
+  if (options?.documentTargets === undefined || options.httpTargets === undefined) {
     throw new Error('Scalar: options { documentTargets, httpTargets } is required.');
   }
 

@@ -1,76 +1,46 @@
 import type { ResourceWasteFinding } from '../types';
 import type { ParsedFile } from './oxc-wrapper';
+import type { DefMeta, FunctionBodyAnalysis, OxcNode, OxcNodeValue } from './types';
 
 import { OxcCFGBuilder } from './cfg-builder';
 import { createBitSet, type IBitSet } from './dataflow';
 import { getLineColumn } from './oxc-wrapper';
 import { collectVariables } from './variable-collector';
 
-interface DefMeta {
-  readonly name: string;
-  readonly varIndex: number;
-  readonly location: number;
-  readonly writeKind?: 'declaration' | 'assignment' | 'compound-assignment' | 'logical-assignment' | 'update';
-}
+const isOxcNode = (value: OxcNodeValue | undefined): value is OxcNode =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
 
-const isFunctionNode = (node: any): boolean => {
-  if (!node || typeof node !== 'object') {
+const getNodeType = (node: OxcNode): string | null => {
+  return typeof node.type === 'string' ? node.type : null;
+};
+
+const isFunctionNode = (node: OxcNodeValue | undefined): boolean => {
+  if (!isOxcNode(node)) {
     return false;
   }
 
   // OXC AST node types we want to treat as "function boundaries" for analysis.
-  return node.type === 'ArrowFunctionExpression';
+  return getNodeType(node) === 'ArrowFunctionExpression';
 };
 
-const collectLocalVarIndexes = (functionNode: any): Map<string, number> => {
+const collectLocalVarIndexes = (functionNode: OxcNode): Map<string, number> => {
   const names = new Set<string>();
+  const params = Array.isArray(functionNode.params) ? functionNode.params : [];
 
-  const visitParams = (paramsNode: any): void => {
-    const params = Array.isArray(paramsNode) ? paramsNode : paramsNode ? [paramsNode] : [];
-
-    for (const param of params) {
-      if (param?.type === 'Identifier' && typeof param.name === 'string') {
-        names.add(param.name);
-      }
+  for (const param of params) {
+    if (isOxcNode(param) && getNodeType(param) === 'Identifier' && typeof param.name === 'string') {
+      names.add(param.name);
     }
-  };
+  }
 
-  const visitBody = (node: any): void => {
-    if (!node || typeof node !== 'object') {
-      return;
+  const bodyNode = functionNode.body;
+  const bodyUsages = collectVariables(bodyNode, { includeNestedFunctions: false });
+
+  for (const usage of bodyUsages) {
+    if (usage.isWrite && usage.writeKind === 'declaration') {
+      names.add(usage.name);
     }
-
-    if (node !== functionNode && isFunctionNode(node)) {
-      return;
-    }
-
-    if (Array.isArray(node)) {
-      for (const entry of node) {
-        visitBody(entry);
-      }
-
-      return;
-    }
-
-    if (node.type === 'VariableDeclarator') {
-      const id = node.id;
-
-      if (id?.type === 'Identifier' && typeof id.name === 'string') {
-        names.add(id.name);
-      }
-    }
-
-    for (const key in node) {
-      if (key === 'type' || key === 'loc') {
-        continue;
-      }
-
-      visitBody(node[key]);
-    }
-  };
-
-  visitParams(functionNode.params);
-  visitBody(functionNode.body);
+  }
 
   const out = new Map<string, number>();
   let index = 0;
@@ -95,13 +65,9 @@ const unionAll = (sets: readonly IBitSet[], empty: IBitSet): IBitSet => {
 };
 
 const analyzeFunctionBody = (
-  bodyNode: any,
+  bodyNode: OxcNodeValue | undefined,
   localIndexByName: Map<string, number>,
-): {
-  readonly usedDefs: IBitSet;
-  readonly overwrittenDefIds: ReadonlyArray<boolean>;
-  readonly defs: ReadonlyArray<DefMeta>;
-} => {
+): FunctionBodyAnalysis => {
   const cfgBuilder = new OxcCFGBuilder();
   const built = cfgBuilder.buildFunctionBody(bodyNode);
   const nodeCount = built.cfg.nodeCount;
@@ -294,8 +260,8 @@ export const detectResourceWasteOxc = (files: ParsedFile[]): ResourceWasteFindin
       continue;
     }
 
-    const visit = (node: any): void => {
-      if (!node || typeof node !== 'object') {
+    const visit = (node: OxcNodeValue | undefined): void => {
+      if (!isOxcNode(node)) {
         return;
       }
 
@@ -360,20 +326,14 @@ export const detectResourceWasteOxc = (files: ParsedFile[]): ResourceWasteFindin
         }
       }
 
-      if (Array.isArray(node)) {
-        for (const child of node) {
-          visit(child);
-        }
+      const entries = Object.entries(node);
 
-        return;
-      }
-
-      for (const key in node) {
-        if (key === 'type' || key === 'loc') {
+      for (const [key, value] of entries) {
+        if (key === 'type' || key === 'loc' || key === 'start' || key === 'end') {
           continue;
         }
 
-        visit(node[key]);
+        visit(value);
       }
     };
 

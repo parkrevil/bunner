@@ -28,5 +28,5 @@ export interface ConfigLoadResult {
 }
 
 export interface ConfigModule {
-  default?: ResolvedBunnerConfig;
+  bunnerConfig?: ResolvedBunnerConfig;
 }

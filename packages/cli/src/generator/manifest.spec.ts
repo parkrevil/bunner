@@ -1,15 +1,20 @@
 import { describe, expect, it } from 'bun:test';
+import { runInNewContext } from 'node:vm';
+import { ModuleKind, ScriptTarget, transpileModule } from 'typescript';
 
 import type { FileAnalysis } from '../analyzer/graph/interfaces';
 
 import { ModuleGraph } from '../analyzer/graph/module-graph';
 import { ManifestGenerator } from './manifest';
+import type { GeneratedBlockParams, MetadataRegistryModule, ScopedKeysMapModule } from './types';
 
-async function importDataModule<TModule extends Record<string, unknown>>(jsCode: string): Promise<TModule> {
-  const base64 = Buffer.from(jsCode).toString('base64');
-  const moduleUrl = `data:text/javascript;base64,${base64}`;
+function executeModule<TModule>(jsCode: string): TModule {
+  const moduleContainer = { exports: {} as TModule };
+  const context = { module: moduleContainer, exports: moduleContainer.exports };
 
-  return (await import(moduleUrl)) as TModule;
+  runInNewContext(jsCode, context);
+
+  return moduleContainer.exports;
 }
 
 function createSingleModuleGraph(): ModuleGraph {
@@ -37,7 +42,7 @@ function createSingleModuleGraph(): ModuleGraph {
   return graph;
 }
 
-function extractGeneratedBlock(params: { readonly code: string; readonly matcher: RegExp; readonly name: string }): string {
+function extractGeneratedBlock(params: GeneratedBlockParams): string {
   const { code, matcher, name } = params;
   const match = code.match(matcher);
 
@@ -49,13 +54,17 @@ function extractGeneratedBlock(params: { readonly code: string; readonly matcher
 }
 
 function transpileTsModule(tsSnippet: string): string {
-  const transpiler = new Bun.Transpiler({ loader: 'ts' });
-
-  return transpiler.transformSync(tsSnippet);
+  return transpileModule(tsSnippet, {
+    compilerOptions: {
+      module: ModuleKind.CommonJS,
+      target: ScriptTarget.ES2020,
+    },
+  }).outputText;
 }
 
-describe('ManifestGenerator.generate', () => {
-  it('should export a sealed metadata registry', async () => {
+describe('manifest', () => {
+  it('should export a sealed metadata registry when generator runs', () => {
+    // Arrange
     const graph = createSingleModuleGraph();
     const gen = new ManifestGenerator();
     const code = gen.generate(graph, [], '/out');
@@ -75,10 +84,12 @@ describe('ManifestGenerator.generate', () => {
       name: 'createMetadataRegistry block',
     });
     const tsSnippet = `${deepFreezeBlock}\n${sealMapBlock}\n${createMetadataRegistryBlock}\nexport const metadataRegistry = createMetadataRegistry();`;
+    // Act
     const jsSnippet = transpileTsModule(tsSnippet);
-    const mod = await importDataModule<{ metadataRegistry: Map<unknown, unknown> }>(jsSnippet);
+    const mod = executeModule<MetadataRegistryModule>(jsSnippet);
     const registry = mod.metadataRegistry;
 
+    // Assert
     expect(Object.isFrozen(registry)).toBe(true);
     expect(() => registry.set('k', 'v')).toThrow(/immutable/i);
     expect(() => registry.delete('k')).toThrow(/immutable/i);
@@ -87,7 +98,8 @@ describe('ManifestGenerator.generate', () => {
     }).toThrow(/immutable/i);
   });
 
-  it('should export a scoped keys map that throws on mutation', async () => {
+  it('should export a scoped keys map when generator runs', () => {
+    // Arrange
     const graph = createSingleModuleGraph();
     const gen = new ManifestGenerator();
     const code = gen.generate(graph, [], '/out');
@@ -107,10 +119,12 @@ describe('ManifestGenerator.generate', () => {
       name: 'createScopedKeysMap block',
     });
     const tsSnippet = `${deepFreezeBlock}\n${sealMapBlock}\n${createScopedKeysMapBlock}\nexport const scopedKeysMap = createScopedKeysMap();`;
+    // Act
     const jsSnippet = transpileTsModule(tsSnippet);
-    const mod = await importDataModule<{ scopedKeysMap: Map<unknown, unknown> }>(jsSnippet);
+    const mod = executeModule<ScopedKeysMapModule>(jsSnippet);
     const map = mod.scopedKeysMap;
 
+    // Assert
     expect(Object.isFrozen(map)).toBe(true);
     expect(() => map.set('k', 'v')).toThrow(/immutable/i);
     expect(() => map.delete('k')).toThrow(/immutable/i);

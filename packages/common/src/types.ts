@@ -1,30 +1,36 @@
-export type AnyValue = string | number | boolean | bigint | symbol | null | undefined | object | Function;
+export type BunnerPrimitive = string | number | boolean | bigint | symbol | null | undefined;
 
-export type AnyFunction = (...args: AnyValue[]) => AnyValue;
+export type BunnerValue = BunnerPrimitive | BunnerRecord | BunnerArray;
 
-export type Class<T = object> = new (...args: readonly unknown[]) => T;
+export type BunnerArray = BunnerValue[];
+
+export type BunnerRecord = Record<string, BunnerValue>;
+
+export type BunnerFunction = (...args: readonly BunnerValue[]) => BunnerValue;
+
+export type Class<T = BunnerValue> = new (...args: readonly BunnerValue[]) => T;
 
 export type ClassProperties<T> = {
-  [K in keyof T]-?: T[K] extends (...args: AnyValue[]) => AnyValue ? K : never;
+  [K in keyof T]-?: T[K] extends (...args: BunnerValue[]) => BunnerValue ? K : never;
 }[keyof T];
 
-export type MethodParams<T, K extends ClassProperties<T>> = T[K] extends (...args: infer P) => AnyValue ? [...P] : never;
+export type MethodParams<T, K extends ClassProperties<T>> = T[K] extends (...args: infer P) => BunnerValue ? [...P] : never;
 
-export type MethodReturn<T, K extends ClassProperties<T>> = T[K] extends (...args: AnyValue[]) => infer R ? R : never;
+export type MethodReturn<T, K extends ClassProperties<T>> = T[K] extends (...args: BunnerValue[]) => infer R ? R : never;
 
-export type MethodTailParams<T, K extends ClassProperties<T>> = T[K] extends (first: AnyValue, ...rest: infer R) => AnyValue
+export type MethodTailParams<T, K extends ClassProperties<T>> = T[K] extends (first: BunnerValue, ...rest: infer R) => BunnerValue
   ? [...R]
   : [];
 
 export type MethodSecondParam<T, K extends ClassProperties<T>> = T[K] extends (
-  a: AnyValue,
+  a: BunnerValue,
   b: infer S,
-  ...args: AnyValue[]
-) => AnyValue
+  ...args: BunnerValue[]
+) => BunnerValue
   ? S
   : never;
 
-export type SyncFunction<T extends AnyFunction> = ReturnType<T> extends Promise<AnyValue> ? never : T;
+export type SyncFunction<T extends BunnerFunction> = ReturnType<T> extends Promise<BunnerValue> ? never : T;
 
 export type PrimitiveValue = string | number | boolean | bigint | symbol | null | undefined;
 
@@ -39,3 +45,5 @@ export type Constructor<T = PrimitiveRecord> = new (...args: PrimitiveArray) => 
 export type ValueLike = PrimitiveValue | PrimitiveArray | PrimitiveRecord | Callable | Constructor;
 
 export type ForwardRefFactory = () => ValueLike;
+
+export type DecoratorTarget = Class | Record<string, ValueLike>;

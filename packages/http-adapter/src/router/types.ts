@@ -1,4 +1,4 @@
-import type { HttpMethod } from '../types';
+import type { HttpMethod, MatchResult } from '../types';
 
 export interface RouterOptions {
   ignoreTrailingSlash?: boolean;
@@ -67,6 +67,12 @@ export type MatchStageName = 'static-fast' | 'cache' | 'dynamic';
 
 export type PatternTesterFn = (value: string) => boolean;
 
+export interface MatcherConfig {
+  patternTesters: ReadonlyArray<PatternTesterFn | undefined>;
+  encodedSlashBehavior: EncodedSlashBehavior;
+  failFastOnBadEncoding: boolean;
+}
+
 export interface NormalizedPathSegments {
   normalized: string;
   segments: string[];
@@ -96,7 +102,7 @@ export interface DynamicMatchResult {
   snapshot?: Array<[string, string | undefined]>;
 }
 
-export type Handler<R = any> = (params: RouteParams, meta: MatchResultMeta) => R;
+export type Handler<R = MatchResult> = (params: RouteParams, meta: MatchResultMeta) => R;
 
 export interface RouterInstance<R> {
   match(method: HttpMethod, path: string): R | null;

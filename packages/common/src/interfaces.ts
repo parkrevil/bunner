@@ -1,13 +1,15 @@
-import type { AnyFunction, AnyValue, Class } from './types';
+import type { BunnerErrorFilter } from './bunner-error-filter';
+import type { BunnerMiddleware } from './bunner-middleware';
+import type { BunnerFunction, BunnerValue, Class } from './types';
 
 export interface BunnerAdapter {
-  start(context: AnyValue): Promise<void>;
+  start(context: BunnerValue): Promise<void>;
   stop(): Promise<void>;
 }
 
 export interface Context {
   getType(): string;
-  get<T = AnyValue>(key: string): T | undefined;
+  get<T = BunnerValue>(key: string): T | undefined;
   to<TContext>(ctor: Class<TContext>): TContext;
 }
 
@@ -23,7 +25,7 @@ export interface ProviderBase {
 }
 
 export interface ProviderUseValue extends ProviderBase {
-  useValue: AnyValue;
+  useValue: BunnerValue;
 }
 
 export interface ProviderUseClass extends ProviderBase {
@@ -35,12 +37,12 @@ export interface ProviderUseExisting extends ProviderBase {
 }
 
 export interface ProviderUseFactory extends ProviderBase {
-  useFactory: AnyFunction;
+  useFactory: BunnerFunction;
   inject?: ProviderToken[];
 }
 
 export interface ForwardRef {
-  forwardRef: () => AnyValue;
+  forwardRef: () => BunnerValue;
 }
 
 // Lifecycle Interfaces
@@ -71,22 +73,22 @@ export interface AdapterGroup<T> {
 }
 
 export interface AdapterCollection {
-  [protocol: string]: AdapterGroup<AnyValue>;
+  [protocol: string]: AdapterGroup<BunnerValue>;
 }
 
 export interface Configurer {
-  configure(app: AnyValue, adapters: AdapterCollection): void;
+  configure(app: BunnerValue, adapters: AdapterCollection): void;
 }
 
 export interface BunnerApplicationOptions {
   name?: string;
   logLevel?: string | number;
-  logger?: AnyValue;
-  [key: string]: AnyValue;
+  logger?: BunnerValue;
+  [key: string]: BunnerValue;
 }
 
 export interface ConfigService {
-  get<T = AnyValue>(namespace: string | symbol): T;
+  get(namespace: string | symbol): BunnerValue;
 }
 
 export interface EnvService {
@@ -101,45 +103,19 @@ export interface EnvSource {
   load(): Promise<Readonly<Record<string, string>>> | Readonly<Record<string, string>>;
 }
 
-export class BunnerContextError extends Error {
-  constructor(message: string) {
-    super(message);
+export type MiddlewareToken<TOptions = BunnerValue> = Class<BunnerMiddleware<TOptions>> | symbol;
 
-    this.name = 'BunnerContextError';
-  }
-}
-
-export abstract class BunnerMiddleware<TOptions = void> {
-  public static withOptions<T extends typeof BunnerMiddleware, TOptions>(
-    this: T,
-    options: TOptions,
-  ): MiddlewareRegistration<TOptions> {
-    return {
-      token: this as unknown as MiddlewareToken<TOptions>,
-      options,
-    };
-  }
-
-  public abstract handle(context: Context, options?: TOptions): void | boolean | Promise<void | boolean>;
-}
-
-export type MiddlewareToken<TOptions = unknown> = Class<BunnerMiddleware<TOptions>> | symbol;
-
-export interface MiddlewareRegistration<TOptions = unknown> {
+export interface MiddlewareRegistration<TOptions = BunnerValue> {
   token: MiddlewareToken<TOptions>;
   options?: TOptions;
 }
 
 export interface BunnerContainer {
-  get(token: ProviderToken): AnyValue;
-  set(token: ProviderToken, factory: AnyFunction): void;
+  get(token: ProviderToken): BunnerValue;
+  set(token: ProviderToken, factory: BunnerFunction): void;
   has(token: ProviderToken): boolean;
-  getInstances(): IterableIterator<AnyValue>;
+  getInstances(): IterableIterator<BunnerValue>;
   keys(): IterableIterator<ProviderToken>;
-}
-
-export abstract class BunnerErrorFilter<TError = AnyValue> {
-  public abstract catch(error: TError, context: Context): void | Promise<void>;
 }
 
 export type ErrorFilterToken = Class<BunnerErrorFilter>;
@@ -152,15 +128,17 @@ export interface BunnerModule {
 }
 
 export interface AdapterConfig {
-  [protocol: string]: {
-    [instanceName: string]: AdapterInstanceConfig;
-  };
+  [protocol: string]: AdapterProtocolConfig;
+}
+
+export interface AdapterProtocolConfig {
+  [instanceName: string]: AdapterInstanceConfig;
 }
 
 export interface AdapterInstanceConfig {
   middlewares?: MiddlewareConfig;
   errorFilters?: ErrorFilterConfig[];
-  [key: string]: AnyValue;
+  [key: string]: BunnerValue;
 }
 
 export interface MiddlewareConfig {

@@ -1,6 +1,7 @@
 import { Injectable } from '@bunner/common';
 
 import { CommentRepository } from './comments.repository';
+import type { PostCommentInput } from './interfaces';
 
 @Injectable({
   visibility: 'exported',
@@ -8,7 +9,7 @@ import { CommentRepository } from './comments.repository';
 export class CommentsService {
   constructor(private readonly commentsRepo: CommentRepository) {}
 
-  create(id: number, body: any) {
+  create(id: number, body: PostCommentInput): void {
     this.commentsRepo.create(id, body);
   }
 }

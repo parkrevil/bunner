@@ -5,6 +5,7 @@ import { Logger } from '@bunner/logger';
 import { StatusCodes } from 'http-status-codes';
 
 import type {
+  BunnerHttpServerBootOptions,
   BunnerHttpServerOptions,
   HttpMiddlewareRegistry,
   HttpWorkerResponse,
@@ -20,6 +21,7 @@ import { HttpMiddlewareLifecycle } from './interfaces';
 import { RequestHandler } from './request-handler';
 import { RouteHandler } from './route-handler';
 import { getIps } from './utils';
+import type { AdaptiveRequest, RequestBodyValue, RequestQueryMap } from './types';
 
 export class BunnerHttpServer {
   private container: BunnerContainer;
@@ -28,22 +30,22 @@ export class BunnerHttpServer {
   private logger = new Logger(BunnerHttpServer.name);
 
   private options: BunnerHttpServerOptions;
-  private server: Server<any>;
+  private server: Server;
 
   private middlewares: Partial<Record<HttpMiddlewareLifecycle, BunnerMiddleware[]>> = {};
 
-  async boot(container: BunnerContainer, options: any): Promise<void> {
+  async boot(container: BunnerContainer, options: BunnerHttpServerBootOptions): Promise<void> {
     this.container = container;
     this.options = options.options ?? options; // Handle nested options
 
-    if ((this.options as any).middlewares) {
-      this.prepareMiddlewares((this.options as any).middlewares as HttpMiddlewareRegistry);
+    if (this.options.middlewares) {
+      this.prepareMiddlewares(this.options.middlewares);
     }
 
     this.logger.info('🚀 BunnerHttpServer booting...');
 
-    if (Array.isArray((this.options as any).errorFilters) && (this.options as any).errorFilters.length > 0) {
-      const tokens = (this.options as any).errorFilters as readonly any[];
+    if (Array.isArray(this.options.errorFilters) && this.options.errorFilters.length > 0) {
+      const tokens = this.options.errorFilters;
 
       this.container.set(HTTP_ERROR_FILTER, (c: BunnerContainer) => {
         return tokens.map(token => c.get(token));
@@ -65,7 +67,7 @@ export class BunnerHttpServer {
 
     const serveOptions = {
       port: this.options.port,
-      reusePort: (this.options as any).reusePort ?? true,
+      reusePort: this.options.reusePort ?? true,
       maxRequestBodySize: this.options.bodyLimit,
       fetch: this.fetch.bind(this),
     };
@@ -78,19 +80,19 @@ export class BunnerHttpServer {
   }
 
   async fetch(req: Request): Promise<Response> {
-    const adaptiveReq = {
+    const adaptiveReq: AdaptiveRequest = {
       httpMethod: req.method.toUpperCase() as HttpMethod,
       url: req.url,
       headers: req.headers.toJSON(),
-      body: undefined as any,
+      body: undefined,
       queryParams: {},
       params: {},
       ip: '',
-      ips: [] as string[],
+      ips: [],
       isTrustedProxy: this.options.trustProxy ?? false,
     };
     const bunnerReq = new BunnerRequest(adaptiveReq);
-    const bunnerRes = new BunnerResponse(bunnerReq, { headers: new Headers(), status: 0 } as any);
+    const bunnerRes = new BunnerResponse(bunnerReq, new Headers());
 
     try {
       const adapter = new BunnerHttpContextAdapter(bunnerReq, bunnerRes);
@@ -103,7 +105,7 @@ export class BunnerHttpServer {
       }
 
       const httpMethod = req.method.toUpperCase() as HttpMethod;
-      let body: any = undefined;
+      let body: RequestBodyValue | undefined = undefined;
       const contentType = req.headers.get('content-type') ?? '';
 
       if (
@@ -126,18 +128,19 @@ export class BunnerHttpServer {
       const { ip, ips } = getIps(req, this.server, this.options.trustProxy);
       const urlObj = new URL(req.url, 'http://localhost');
       const path = urlObj.pathname;
-
       // Update adaptiveReq with parsed data
+      const queryParams = Object.fromEntries(urlObj.searchParams.entries()) as RequestQueryMap;
+
       Object.assign(adaptiveReq, {
         body,
-        queryParams: Object.fromEntries(urlObj.searchParams.entries()),
+        queryParams,
         ip,
         ips,
+        query: queryParams,
       });
 
-      (adaptiveReq as any).query = (adaptiveReq as any).queryParams;
-      (bunnerReq as any).body = body;
-      (bunnerReq as any).query = (adaptiveReq as any).queryParams;
+      bunnerReq.body = body ?? null;
+      bunnerReq.query = queryParams;
 
       // 2. afterRequest (Post-Parsing)
       const continueAfterRequest = await this.runMiddlewares(HttpMiddlewareLifecycle.AfterRequest, context);
@@ -184,7 +187,7 @@ export class BunnerHttpServer {
       }
 
       return response;
-    } catch (e: any) {
+    } catch (e) {
       this.logger.error('Fetch Error', e);
 
       return new Response('Internal server error', {
@@ -236,7 +239,11 @@ export class BunnerHttpServer {
               return c.get(normalized.token);
             }
 
-            const ctor = normalized.token as any;
+            const ctor = normalized.token;
+
+            if (typeof ctor !== 'function') {
+              throw new Error('Middleware token must be a class constructor');
+            }
 
             try {
               if (normalized.options !== undefined) {
@@ -274,7 +281,11 @@ export class BunnerHttpServer {
       return token.description ?? 'symbol';
     }
 
-    return (token as any).name ?? 'anonymous';
+    if (typeof token === 'function') {
+      return token.name ?? 'anonymous';
+    }
+
+    return 'anonymous';
   }
 
   private toResponse(workerRes: HttpWorkerResponse): Response {

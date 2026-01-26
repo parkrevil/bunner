@@ -34,7 +34,7 @@ export class ClusterManager<T extends ClusterBaseWorker> {
   async init(params?: ClusterInitParams<T>) {
     this.initParams = params;
 
-    const tasks: Array<Promise<any>> = this.workers.map(async (worker, id) =>
+    const tasks: Array<Promise<void>> = this.workers.map(async (worker, id) =>
       worker ? worker.remote.init(id, params) : Promise.resolve(),
     );
 
@@ -44,8 +44,8 @@ export class ClusterManager<T extends ClusterBaseWorker> {
   async bootstrap(params?: ClusterBootstrapParams<T>) {
     this.bootstrapParams = params;
 
-    const tasks: Array<Promise<any>> = this.workers.map(async worker =>
-      worker ? (worker.remote.bootstrap(params) as Promise<any>) : Promise.resolve(),
+    const tasks: Array<Promise<void>> = this.workers.map(async worker =>
+      worker ? worker.remote.bootstrap(params) : Promise.resolve(),
     );
 
     await Promise.all(tasks);
@@ -60,27 +60,30 @@ export class ClusterManager<T extends ClusterBaseWorker> {
       smol: true, // Optional: memory optimization
     });
 
-    native.addEventListener('error', (e: unknown) => {
-      void this.handleCrash('error', id, e);
+    native.addEventListener('error', (event: ErrorEvent) => {
+      void this.handleCrash('error', id, event);
     });
-    native.addEventListener('messageerror', (e: unknown) => {
-      void this.handleCrash('messageerror', id, e);
+    native.addEventListener('messageerror', (event: MessageEvent) => {
+      void this.handleCrash('messageerror', id, event);
     });
-    native.addEventListener('close', (e: unknown) => {
-      void this.handleCrash('close', id, e);
+    native.addEventListener('close', (event: Event) => {
+      void this.handleCrash('close', id, event);
     });
 
-    return { remote: wrap<T>(native), native };
+    return { remote: wrap<T>(native, ['init', 'bootstrap']), native };
   }
 
-  private async handleCrash(event: 'error' | 'messageerror' | 'close', id: number, e: unknown) {
+  private async handleCrash(event: 'error' | 'messageerror' | 'close', id: number, error: Event) {
     if (this.destroying) {
       return;
     }
 
-    this.logger.error(`💥 Worker #${id} ${event}: `, e);
+    this.logger.error(`💥 Worker #${id} ${event}: `, error);
 
-    await this.destroyWorker(id).catch(() => {});
+    try {
+      await this.destroyWorker(id);
+    } catch {
+    }
 
     this.workers[id] = undefined;
 
@@ -96,39 +99,43 @@ export class ClusterManager<T extends ClusterBaseWorker> {
 
     let attempt = 0;
 
-    void backOff(
-      async () => {
-        if (this.destroying) {
-          this.reviving.delete(id);
+    void (async () => {
+      try {
+        await backOff(
+          async () => {
+            if (this.destroying) {
+              this.reviving.delete(id);
 
-          throw new Error();
-        }
+              throw new Error();
+            }
 
-        ++attempt;
+            ++attempt;
 
-        this.logger.info(`🩺 Revive attempt ${attempt} for worker #${id}`);
+            this.logger.info(`🩺 Revive attempt ${attempt} for worker #${id}`);
 
-        const worker = this.spawnWorker(id);
+            const worker = this.spawnWorker(id);
 
-        await worker.remote.init(id, this.initParams as any);
-        await worker.remote.bootstrap(this.bootstrapParams as any);
+            await worker.remote.init(id, this.initParams);
+            await worker.remote.bootstrap(this.bootstrapParams);
 
-        this.workers[id] = worker;
+            this.workers[id] = worker;
 
+            this.reviving.delete(id);
+          },
+          {
+            numOfAttempts: 50,
+            startingDelay: 300,
+            maxDelay: 30_000,
+            timeMultiple: 2,
+            jitter: 'full',
+            delayFirstAttempt: true,
+            retry: () => !this.destroying,
+          },
+        );
+      } catch {
         this.reviving.delete(id);
-      },
-      {
-        numOfAttempts: 50,
-        startingDelay: 300,
-        maxDelay: 30_000,
-        timeMultiple: 2,
-        jitter: 'full',
-        delayFirstAttempt: true,
-        retry: () => !this.destroying,
-      },
-    ).catch(() => {
-      this.reviving.delete(id);
-    });
+      }
+    })();
   }
 
   private async destroyWorker(id: number) {

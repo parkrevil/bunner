@@ -1,21 +1,31 @@
 import type {
-  BunnerAdapter,
-  Context,
-  OnInit,
-  BeforeStart,
-  OnStart,
-  OnShutdown,
-  OnDestroy,
   AdapterCollection,
-  Configurer,
   AdapterConfig,
   AdapterInstanceConfig,
+  BunnerAdapter,
+  Class,
+  Configurer,
+  MiddlewareConfig,
+  OnDestroy,
+  OnInit,
+  OnShutdown,
+  OnStart,
+  BeforeStart,
 } from '@bunner/common';
 
 import { Logger } from '@bunner/logger';
 
 import { Container } from '../injector/container';
 import { BunnerScanner } from '../injector/scanner';
+import type { ContainerValue } from '../injector/types';
+import type {
+  AdapterRegistrationOptions,
+  BunnerApplicationContext,
+  BunnerApplicationRuntimeOptions,
+  ConfigurableAdapter,
+  BunnerModule,
+} from './interfaces';
+import type { EntryModule, LifecycleHookMethod } from './types';
 
 export class BunnerApplication {
   private readonly adapters: Map<string, Map<string, BunnerAdapter>> = new Map();
@@ -23,10 +33,10 @@ export class BunnerApplication {
   private isInitialized = false;
 
   constructor(
-    private readonly entryModule: unknown,
-    private readonly _options: any = {},
+    private readonly entryModule: EntryModule,
+    private readonly _options: BunnerApplicationRuntimeOptions = {},
   ) {
-    const providedContainer = this._options?.container as Container | undefined;
+    const providedContainer = this._options.container;
 
     this.container = providedContainer ?? new Container();
 
@@ -36,7 +46,7 @@ export class BunnerApplication {
     }
   }
 
-  public addAdapter(adapter: BunnerAdapter, options: { name?: string; protocol?: string } = {}): this {
+  public addAdapter(adapter: BunnerAdapter, options: AdapterRegistrationOptions = {}): this {
     const protocol = options.protocol ?? 'http';
     const name = options.name ?? `adapter_${Math.random().toString(36).substr(2, 9)}`;
 
@@ -105,12 +115,13 @@ export class BunnerApplication {
     await this.callLifecycleHook('beforeStart');
 
     // Create base context
-    const context: Context & { entryModule: unknown } = {
+    const context: BunnerApplicationContext = {
       getType: () => 'bunner',
       get: (key: string) => this.container.get(key),
+      to: <TContext>(ctor: Class<TContext>) => this.container.get(ctor) as TContext,
       container: this.container,
       entryModule: this.entryModule,
-    } as any;
+    };
     const allAdapters = this.getAllAdapters();
 
     await Promise.all(allAdapters.map(async adapter => adapter.start(context)));
@@ -139,10 +150,9 @@ export class BunnerApplication {
     return adapters;
   }
 
-  private applyAdapterConfig(protocol: string, instanceName: string, adapter: unknown): void {
+  private applyAdapterConfig(protocol: string, instanceName: string, adapter: BunnerAdapter): void {
     const rawConfig =
-      (this._options?.adapterConfig as AdapterConfig | undefined) ??
-      ((this.entryModule as any)?.adapters as AdapterConfig | undefined);
+      this._options.adapterConfig ?? this.getEntryModuleAdapterConfig();
 
     if (!rawConfig) {
       return;
@@ -158,28 +168,28 @@ export class BunnerApplication {
     const specific = protocolConfig[instanceName];
     const middlewares = this.mergeMiddlewares(wildcard?.middlewares, specific?.middlewares);
     const errorFilters = [...(wildcard?.errorFilters ?? []), ...(specific?.errorFilters ?? [])];
-    const adapterAny = adapter as any;
+    const configurableAdapter = adapter as ConfigurableAdapter;
 
-    if (middlewares && typeof adapterAny.addMiddlewares === 'function') {
+    if (middlewares && typeof configurableAdapter.addMiddlewares === 'function') {
       Object.entries(middlewares).forEach(([lifecycle, items]) => {
         if (!Array.isArray(items) || items.length === 0) {
           return;
         }
 
-        adapterAny.addMiddlewares(lifecycle, items);
+        configurableAdapter.addMiddlewares(lifecycle, items);
       });
     }
 
-    if (errorFilters.length > 0 && typeof adapterAny.addErrorFilters === 'function') {
-      adapterAny.addErrorFilters(errorFilters);
+    if (errorFilters.length > 0 && typeof configurableAdapter.addErrorFilters === 'function') {
+      configurableAdapter.addErrorFilters(errorFilters);
     }
   }
 
   private mergeMiddlewares(
     wildcard: AdapterInstanceConfig['middlewares'] | undefined,
     specific: AdapterInstanceConfig['middlewares'] | undefined,
-  ): Record<string, readonly unknown[]> | undefined {
-    const result: Record<string, readonly unknown[]> = {};
+  ): MiddlewareConfig | undefined {
+    const result: MiddlewareConfig = {};
 
     if (wildcard) {
       Object.entries(wildcard).forEach(([lifecycle, items]) => {
@@ -226,22 +236,54 @@ export class BunnerApplication {
     return collection;
   }
 
-  private isConfigurer(instance: any): instance is Configurer {
-    return instance && typeof (instance as Configurer).configure === 'function';
-  }
-
-  private async callLifecycleHook(method: keyof (OnInit & BeforeStart & OnStart & OnShutdown & OnDestroy), args: any[] = []) {
+  private async callLifecycleHook(method: LifecycleHookMethod): Promise<void> {
     const instances = this.container.getInstances();
 
     for (const instance of instances) {
-      if (instance && typeof instance[method] === 'function') {
+      if (this.isLifecycleTarget(instance, method)) {
         try {
-          // await (instance as any)[method](...args);
-          await instance[method](...args);
+          await instance[method]();
         } catch (e) {
           console.error(`Lifecycle hook ${method} failed`, e);
         }
       }
     }
+  }
+
+  private getEntryModuleAdapterConfig(): AdapterConfig | undefined {
+    if (!this.isAdapterConfiguredModule(this.entryModule)) {
+      return undefined;
+    }
+
+    return this.entryModule.adapters;
+  }
+
+  private isConfigurer(instance: ContainerValue): instance is Configurer {
+    return Boolean(instance) && typeof (instance as Configurer).configure === 'function';
+  }
+
+  private isLifecycleTarget(instance: ContainerValue, method: LifecycleHookMethod): instance is OnInit &
+    BeforeStart & OnStart & OnShutdown & OnDestroy {
+    if (typeof instance !== 'object' && typeof instance !== 'function') {
+      return false;
+    }
+
+    if (instance === null) {
+      return false;
+    }
+
+    return typeof (instance as OnInit & BeforeStart & OnStart & OnShutdown & OnDestroy)[method] === 'function';
+  }
+
+  private isAdapterConfiguredModule(module: EntryModule): module is BunnerModule {
+    if (typeof module !== 'object' && typeof module !== 'function') {
+      return false;
+    }
+
+    if (module === null) {
+      return false;
+    }
+
+    return 'adapters' in module;
   }
 }

@@ -44,7 +44,11 @@ export class Processor {
     const startStepIndex = stripQueryParam ? 0 : 1;
 
     for (let i = startStepIndex; i < this.pipeline.length; i++) {
-      this.pipeline[i]!(ctx);
+      const step = this.pipeline[i];
+
+      if (step) {
+        step(ctx);
+      }
     }
 
     return {

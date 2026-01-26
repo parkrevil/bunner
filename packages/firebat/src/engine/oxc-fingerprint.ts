@@ -1,16 +1,18 @@
-import type { Statement, Expression, FunctionBody, Declaration } from 'oxc-parser';
-
 import { hashString } from './hasher';
+import type { OxcNode, OxcNodeValue } from './types';
+
+const isOxcNode = (value: OxcNodeValue | undefined): value is OxcNode =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
 
 // Oxc AST structure needs normalization for fingerprinting.
 // We traverse the AST and build a string representation of semantics.
 // Ignore names, locations, comments.
 // Focus on structure: types, operators, literals (optional, maybe normalized).
 
-export const createOxcFingerprint = (node: Statement | Expression | FunctionBody | Declaration): string => {
+export const createOxcFingerprint = (node: OxcNodeValue | undefined): string => {
   const diffs: string[] = [];
 
-  const visit = (n: any) => {
+  const visit = (n: OxcNodeValue | undefined) => {
     if (n == null) {
       return;
     }
@@ -26,6 +28,10 @@ export const createOxcFingerprint = (node: Statement | Expression | FunctionBody
         visit(child);
       }
 
+      return;
+    }
+
+    if (!isOxcNode(n)) {
       return;
     }
 
@@ -46,9 +52,11 @@ export const createOxcFingerprint = (node: Statement | Expression | FunctionBody
     // For 'Physical Limit', we might want a optimized traverser.
     // Let's stick to generic for now, optimizing later if profiled.
 
-    const keys = Object.keys(n).sort(); // Sort keys for deterministic output
+    const entries = (Object.entries(n)).sort((left, right) =>
+      left[0].localeCompare(right[0]),
+    );
 
-    for (const key of keys) {
+    for (const [key, value] of entries) {
       if (key === 'type' || key === 'start' || key === 'end' || key === 'loc' || key === 'span' || key === 'comments') {
         continue;
       }
@@ -68,7 +76,7 @@ export const createOxcFingerprint = (node: Statement | Expression | FunctionBody
         continue;
       }
 
-      visit(n[key]);
+      visit(value);
     }
   };
 

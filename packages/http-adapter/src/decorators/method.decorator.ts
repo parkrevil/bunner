@@ -1,21 +1,23 @@
+import type { DecoratorPropertyKey, DecoratorTarget, RouteDecoratorArgument } from '../types';
+
 export const Get =
-  (_pathOrOptions?: any, _options?: any) =>
-  (_target: object, _propertyKey: string | symbol, _descriptor: PropertyDescriptor) => {};
+  (_pathOrOptions?: RouteDecoratorArgument, _options?: RouteDecoratorArgument) =>
+  (_target: DecoratorTarget, _propertyKey: DecoratorPropertyKey, _descriptor: PropertyDescriptor) => {};
 export const Post =
-  (_pathOrOptions?: any, _options?: any) =>
-  (_target: object, _propertyKey: string | symbol, _descriptor: PropertyDescriptor) => {};
+  (_pathOrOptions?: RouteDecoratorArgument, _options?: RouteDecoratorArgument) =>
+  (_target: DecoratorTarget, _propertyKey: DecoratorPropertyKey, _descriptor: PropertyDescriptor) => {};
 export const Put =
-  (_pathOrOptions?: any, _options?: any) =>
-  (_target: object, _propertyKey: string | symbol, _descriptor: PropertyDescriptor) => {};
+  (_pathOrOptions?: RouteDecoratorArgument, _options?: RouteDecoratorArgument) =>
+  (_target: DecoratorTarget, _propertyKey: DecoratorPropertyKey, _descriptor: PropertyDescriptor) => {};
 export const Delete =
-  (_pathOrOptions?: any, _options?: any) =>
-  (_target: object, _propertyKey: string | symbol, _descriptor: PropertyDescriptor) => {};
+  (_pathOrOptions?: RouteDecoratorArgument, _options?: RouteDecoratorArgument) =>
+  (_target: DecoratorTarget, _propertyKey: DecoratorPropertyKey, _descriptor: PropertyDescriptor) => {};
 export const Patch =
-  (_pathOrOptions?: any, _options?: any) =>
-  (_target: object, _propertyKey: string | symbol, _descriptor: PropertyDescriptor) => {};
+  (_pathOrOptions?: RouteDecoratorArgument, _options?: RouteDecoratorArgument) =>
+  (_target: DecoratorTarget, _propertyKey: DecoratorPropertyKey, _descriptor: PropertyDescriptor) => {};
 export const Options =
-  (_pathOrOptions?: any, _options?: any) =>
-  (_target: object, _propertyKey: string | symbol, _descriptor: PropertyDescriptor) => {};
+  (_pathOrOptions?: RouteDecoratorArgument, _options?: RouteDecoratorArgument) =>
+  (_target: DecoratorTarget, _propertyKey: DecoratorPropertyKey, _descriptor: PropertyDescriptor) => {};
 export const Head =
-  (_pathOrOptions?: any, _options?: any) =>
-  (_target: object, _propertyKey: string | symbol, _descriptor: PropertyDescriptor) => {};
+  (_pathOrOptions?: RouteDecoratorArgument, _options?: RouteDecoratorArgument) =>
+  (_target: DecoratorTarget, _propertyKey: DecoratorPropertyKey, _descriptor: PropertyDescriptor) => {};

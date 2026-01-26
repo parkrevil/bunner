@@ -2,22 +2,32 @@ import { describe, expect, it } from 'bun:test';
 
 import { OxcCFGBuilder } from './cfg-builder';
 import { parseSource } from './oxc-wrapper';
+import type { OxcNode, OxcNodeValue } from './types';
 
-const getFirstFunction = (sourceText: string): unknown => {
+const isOxcNode = (value: OxcNodeValue | undefined): value is OxcNode =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const getFirstFunction = (sourceText: string): OxcNode => {
   const parsed = parseSource('/virtual/cfg-builder.spec.ts', sourceText);
   const program = parsed.program;
 
-  if (!program || typeof program !== 'object') {
-    throw new Error('Expected program object');
+  if (!isOxcNode(program)) {
+    throw new Error('Expected program node');
   }
 
-  const body = (program as Record<string, unknown>)['body'];
+  const body = program.body;
 
   if (!Array.isArray(body) || body.length === 0) {
     throw new Error('Expected program body array');
   }
 
-  return body[0];
+  const functionNode = body[0];
+
+  if (!isOxcNode(functionNode)) {
+    throw new Error('Expected function node');
+  }
+
+  return functionNode;
 };
 
 describe('OxcCFGBuilder', () => {
@@ -25,12 +35,7 @@ describe('OxcCFGBuilder', () => {
     const fn = getFirstFunction(
       ['function f() {', '  let value = 1;', '  try {', '    return 0;', '  } finally {', '    value;', '  }', '}'].join('\n'),
     );
-
-    if (!fn || typeof fn !== 'object') {
-      throw new Error('Expected function node');
-    }
-
-    const bodyNode = (fn as Record<string, unknown>)['body'];
+    const bodyNode = fn.body;
     const builder = new OxcCFGBuilder();
     const built = builder.buildFunctionBody(bodyNode);
     const edges = built.cfg.getEdges();
@@ -41,12 +46,12 @@ describe('OxcCFGBuilder', () => {
     for (let nodeId = 0; nodeId < built.nodePayloads.length; nodeId += 1) {
       const payload = built.nodePayloads[nodeId];
 
-      if (!payload || typeof payload !== 'object') {
+      if (!isOxcNode(payload)) {
         continue;
       }
 
-      const payloadType = (payload as Record<string, unknown>)['type'];
-      const payloadValue = (payload as Record<string, unknown>)['value'];
+      const payloadType = payload.type;
+      const payloadValue = payload.value;
 
       if (payloadType === 'Literal' && payloadValue === 0) {
         returnLiteralNodeId = nodeId;
@@ -55,7 +60,9 @@ describe('OxcCFGBuilder', () => {
       }
     }
 
-    expect(returnLiteralNodeId).not.toBeNull();
+    if (returnLiteralNodeId === null) {
+      throw new Error('Expected return literal node id');
+    }
 
     // Assert there is no direct edge from the return argument node to exit.
     let hasDirectEdgeToExit = false;
@@ -89,12 +96,7 @@ describe('OxcCFGBuilder', () => {
         '}',
       ].join('\n'),
     );
-
-    if (!fn || typeof fn !== 'object') {
-      throw new Error('Expected function node');
-    }
-
-    const bodyNode = (fn as Record<string, unknown>)['body'];
+    const bodyNode = fn.body;
     const builder = new OxcCFGBuilder();
     const built = builder.buildFunctionBody(bodyNode);
     // Find a node payload that looks like `return value` argument payload (Identifier named value).
@@ -103,12 +105,12 @@ describe('OxcCFGBuilder', () => {
     for (let nodeId = 0; nodeId < built.nodePayloads.length; nodeId += 1) {
       const payload = built.nodePayloads[nodeId];
 
-      if (!payload || typeof payload !== 'object') {
+      if (!isOxcNode(payload)) {
         continue;
       }
 
-      const payloadType = (payload as Record<string, unknown>)['type'];
-      const payloadName = (payload as Record<string, unknown>)['name'];
+      const payloadType = payload.type;
+      const payloadName = payload.name;
 
       if (payloadType === 'Identifier' && payloadName === 'value') {
         returnValueNodeId = nodeId;
@@ -117,7 +119,9 @@ describe('OxcCFGBuilder', () => {
       }
     }
 
-    expect(returnValueNodeId).not.toBeNull();
+    if (returnValueNodeId === null) {
+      throw new Error('Expected return value node id');
+    }
 
     // Basic reachability from entry node (0) to return value node.
     const edges = built.cfg.getEdges();
@@ -158,6 +162,6 @@ describe('OxcCFGBuilder', () => {
       }
     }
 
-    expect(visited.has(returnValueNodeId!)).toBe(true);
+    expect(visited.has(returnValueNodeId)).toBe(true);
   });
 });

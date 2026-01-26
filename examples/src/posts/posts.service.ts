@@ -3,6 +3,8 @@ import { Logger } from '@bunner/logger';
 
 import { CommentsService } from './comments';
 import { PostsRepository } from './posts.repository';
+import type { Post } from './interfaces';
+import type { PostCommentInput } from './comments/interfaces';
 
 @Injectable()
 export class PostsService {
@@ -14,27 +16,27 @@ export class PostsService {
     this.logger.debug('PostsService initialized');
   }
 
-  findAll() {
+  findAll(): ReadonlyArray<Post> {
     return this.postRepo.findAll();
   }
 
-  findOneById(id: number) {
+  findOneById(id: number): Post | undefined {
     return this.postRepo.findOneById(id);
   }
 
-  create(body: any) {
+  create(body: Post): number {
     return this.postRepo.create(body);
   }
 
-  update(id: number, data: any) {
+  update(id: number, data: Post): Post {
     return this.postRepo.update(id, data);
   }
 
-  delete(id: number) {
+  delete(id: number): Post[] {
     return this.postRepo.delete(id);
   }
 
-  createComment(id: number, body: any) {
+  createComment(id: number, body: PostCommentInput): void {
     this.commentsService.create(id, body);
   }
 }

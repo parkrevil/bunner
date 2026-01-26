@@ -2,33 +2,28 @@ import { describe, expect, it } from 'bun:test';
 import { StatusCodes } from 'http-status-codes';
 
 import type { BunnerResponse } from '../index';
+import type { ClassMetadata, MetadataRegistryKey, RequestParamMap, ResponseBodyValue } from '../../src/types';
 
 import { createHttpTestHarness, handleRequest, withGlobalMiddlewares } from '../http-test-kit';
 import { HttpMethod } from '../index';
 
 class RoutingController {
-  ok(res: BunnerResponse): unknown {
+  ok(res: BunnerResponse): ResponseBodyValue {
     res.setStatus(StatusCodes.OK);
 
     return { ok: true };
   }
 
-  echoParams(params: Record<string, string> | undefined, res: BunnerResponse): unknown {
+  echoParams(params: RequestParamMap | undefined, res: BunnerResponse): ResponseBodyValue {
     res.setStatus(StatusCodes.OK);
 
     return { id: params?.id };
   }
 }
 
-type RoutingControllerMeta = {
-  readonly className: string;
-  readonly decorators: ReadonlyArray<any>;
-  readonly methods: ReadonlyArray<any>;
-};
-
-function createRoutingRegistry(): Map<any, any> {
-  const registry = new Map<any, any>();
-  const controllerMeta: RoutingControllerMeta = {
+function createRoutingRegistry(): Map<MetadataRegistryKey, ClassMetadata> {
+  const registry = new Map<MetadataRegistryKey, ClassMetadata>();
+  const controllerMeta: ClassMetadata = {
     className: 'RoutingController',
     decorators: [{ name: 'RestController', arguments: ['test'] }],
     methods: [

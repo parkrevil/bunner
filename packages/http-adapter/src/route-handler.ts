@@ -38,7 +38,7 @@ export class RouteHandler {
   private container: BunnerContainer;
   private metadataRegistry: Map<ControllerConstructor, ClassMetadata>;
   private scopedKeys: Map<ProviderToken, string>;
-  private router: Router<MatchResult>;
+  private router: Router;
   private readonly logger = new Logger(RouteHandler.name);
   private validationPipe = new ValidationPipe();
 

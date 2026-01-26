@@ -1,4 +1,5 @@
-import type { BunnerApplicationOptions, Provider } from '@bunner/common';
+import type { BunnerApplicationRuntimeOptions } from './interfaces';
+import type { EntryModule } from './types';
 
 import type { BunnerApplication } from './bunner-application';
 
@@ -12,13 +13,10 @@ import { Bunner } from '../bunner';
  * @returns The created application instance.
  */
 export async function createApplication(
-  entry: unknown,
-  options?: BunnerApplicationOptions & {
-    readonly container?: unknown;
-    readonly providers?: readonly Provider[];
-  },
+  entry: EntryModule,
+  options?: BunnerApplicationRuntimeOptions,
 ): Promise<BunnerApplication> {
-  const app = await Bunner.create(entry as any, options);
+  const app = await Bunner.create(entry, options);
 
   return app;
 }

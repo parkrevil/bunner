@@ -1,1 +1,1 @@
-export { default } from './commitlint-plugin';
+export { commitlintPlugin } from './commitlint-plugin';

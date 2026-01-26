@@ -1,6 +1,6 @@
-import commitlintPlugin from './tooling/commitlint';
+import { commitlintPlugin } from './tooling/commitlint';
 
-const config = {
+const commitlintConfig = {
   extends: ['@commitlint/config-conventional'],
   plugins: [commitlintPlugin],
   rules: {
@@ -19,4 +19,4 @@ const config = {
   },
 };
 
-export default config;
+export { commitlintConfig };
