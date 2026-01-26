@@ -5,17 +5,8 @@ import { ROUTE_REGEX_TIMEOUT } from './constants';
 const DIGIT_PATTERNS = new Set(['\\d+', '\\d{1,}', '[0-9]+', '[0-9]{1,}']);
 const ALPHA_PATTERNS = new Set(['[a-zA-Z]+', '[A-Za-z]+']);
 const ALPHANUM_PATTERNS = new Set(['[A-Za-z0-9_\\-]+', '[A-Za-z0-9_-]+', '\\w+', '\\w{1,}']);
-const now: () => number = (() => {
-  if (typeof globalThis !== 'undefined' && globalThis.performance && typeof globalThis.performance.now === 'function') {
-    return () => globalThis.performance.now();
-  }
 
-  return () => {
-    const [sec, nano] = process.hrtime();
-
-    return sec * 1000 + nano / 1e6;
-  };
-})();
+const now = (): number => Number(Bun.nanoseconds()) / 1e6;
 
 function buildPatternTester(
   source: string | undefined,
@@ -47,7 +38,7 @@ function buildPatternTester(
           `Route parameter regex '${raw}' exceeded ${limit} ms(took ${duration.toFixed(3)}ms)`,
         );
 
-        timeoutError[ROUTE_REGEX_TIMEOUT] = true;
+        (timeoutError as any)[ROUTE_REGEX_TIMEOUT] = true;
 
         throw timeoutError;
       }

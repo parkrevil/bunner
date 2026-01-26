@@ -1,4 +1,3 @@
-import fs from 'node:fs';
 import path from 'node:path';
 
 const CODE_EXTENSIONS = new Set(['.ts', '.js', '.mjs', '.cjs']);
@@ -655,7 +654,7 @@ const listUnmappedMustIds = (taskMustIds: readonly string[], fileMustMap: Readon
   return taskMustIds.filter(mustId => !mapped.has(mustId));
 };
 
-const validateTask = (filePath: string, contents: string): string[] => {
+const validateTask = async (filePath: string, contents: string): Promise<string[]> => {
   const errors: string[] = [];
 
   if (!contents.includes('# Task')) {
@@ -700,10 +699,10 @@ const validateTask = (filePath: string, contents: string): string[] => {
     } else {
       const { planPath, stepNumber } = parsed;
 
-      if (!fs.existsSync(planPath)) {
+      if (!(await Bun.file(planPath).exists())) {
         errors.push(`[plan-task-verify] ${filePath}: referenced plan file not found: ${planPath}`);
       } else {
-        const planContents = fs.readFileSync(planPath, 'utf8');
+        const planContents = await Bun.file(planPath).text();
         const planAllowedPaths = extractPlanAllowedPaths(planContents);
         const normalizedTaskAllowedPaths = normalizeList(allowedPaths);
         const normalizedPlanAllowedPaths = normalizeList(planAllowedPaths);
@@ -804,13 +803,13 @@ const validateTask = (filePath: string, contents: string): string[] => {
         continue;
       }
 
-      if (!fs.existsSync(mappedFile)) {
+      if (!(await Bun.file(mappedFile).exists())) {
         errors.push(`[plan-task-verify] ${filePath}: referenced changed file not found: ${mappedFile}`);
 
         continue;
       }
 
-      const fileContents = fs.readFileSync(mappedFile, 'utf8');
+      const fileContents = await Bun.file(mappedFile).text();
 
       for (const mustId of mappedMustIds) {
         if (!hasMustTag(fileContents, mustId)) {
@@ -831,7 +830,7 @@ const listTargets = (files: readonly string[]): string[] => {
   return normalized.filter(file => isMarkdownFile(file) && (isPlanFile(file) || isTaskFile(file)));
 };
 
-const runPlanTaskVerify = (files: readonly string[]): boolean => {
+const runPlanTaskVerify = async (files: readonly string[]): Promise<boolean> => {
   const targets = listTargets(files);
 
   if (targets.length === 0) {
@@ -844,13 +843,13 @@ const runPlanTaskVerify = (files: readonly string[]): boolean => {
   const doneTaskMustByPlan = new Map<string, Set<string>>();
 
   for (const filePath of targets) {
-    if (!fs.existsSync(filePath)) {
+    if (!(await Bun.file(filePath).exists())) {
       errors.push(`[plan-task-verify] ${filePath}: file not found`);
 
       continue;
     }
 
-    const contents = fs.readFileSync(filePath, 'utf8');
+    const contents = await Bun.file(filePath).text();
 
     if (isPlanFile(filePath)) {
       const frontmatter = extractFrontmatter(contents);
@@ -866,6 +865,8 @@ const runPlanTaskVerify = (files: readonly string[]): boolean => {
     }
 
     if (isTaskFile(filePath)) {
+      errors.push(...(await validateTask(filePath, contents)));
+
       const status = extractTaskStatus(contents);
       const planLink = extractTaskPlanLink(contents);
 
@@ -884,7 +885,7 @@ const runPlanTaskVerify = (files: readonly string[]): boolean => {
         }
       }
 
-      errors.push(...validateTask(filePath, contents));
+      continue;
     }
   }
 

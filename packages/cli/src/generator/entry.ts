@@ -28,7 +28,7 @@ export class EntryGenerator {
     }
 
     return `
-const isWorker = !!process.env.BUNNER_WORKER_ID;
+const isWorker = !!Bun.env.BUNNER_WORKER_ID;
 
 if (!isWorker) {
   const workersCount = ${workersCount};

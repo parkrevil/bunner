@@ -9,7 +9,7 @@ import { ImportRegistry } from '../src/generator/import-registry';
 import { InjectorGenerator } from '../src/generator/injector';
 
 async function run() {
-  const appDir = resolve(__dirname, '../../../examples/src');
+  const appDir = resolve(new URL('../../../examples/src', import.meta.url).pathname);
 
   console.log('Verifying app at:', appDir);
 

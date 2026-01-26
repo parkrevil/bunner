@@ -20,7 +20,7 @@ declare global {
 export class Logger {
   private static globalOptions: LoggerOptions = {
     level: 'info',
-    format: process.env.NODE_ENV === 'production' ? 'json' : undefined,
+    format: Bun.env.NODE_ENV === 'production' ? 'json' : undefined,
   };
   private static transport: Transport = new ConsoleTransport(Logger.globalOptions);
 

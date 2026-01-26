@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { mkdir, rm, writeFile } from 'fs/promises';
+import { mkdir, rm } from 'fs/promises';
 import { dirname, join } from 'path';
 
 import type { FileAnalysis } from './graph/interfaces';
@@ -18,7 +18,7 @@ async function createTempDir(): Promise<string> {
 
 async function writeFileContent(filePath: string, content: string): Promise<void> {
   await mkdir(dirname(filePath), { recursive: true });
-  await writeFile(filePath, content, 'utf-8');
+  await Bun.write(filePath, content);
 }
 
 describe('AdapterSpecResolver', () => {

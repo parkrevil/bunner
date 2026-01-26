@@ -34,7 +34,7 @@ export class ConsoleTransport implements Transport {
   constructor(private options: LoggerOptions = {}) {}
 
   log<T>(message: LogMessage<T>): void {
-    const format = this.options.format ?? (process.env.NODE_ENV === 'production' ? 'json' : 'pretty');
+    const format = this.options.format ?? (Bun.env.NODE_ENV === 'production' ? 'json' : 'pretty');
 
     if (format === 'json') {
       this.logJson(message);

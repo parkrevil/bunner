@@ -136,7 +136,7 @@ async function loadEnvSnapshot(options: BootstrapEnvOptions | undefined): Promis
   }
 
   if (includeProcessEnv) {
-    for (const [k, v] of Object.entries(process.env)) {
+    for (const [k, v] of Object.entries(Bun.env)) {
       if (typeof v === 'string') {
         result[k] = v;
       }
@@ -145,7 +145,7 @@ async function loadEnvSnapshot(options: BootstrapEnvOptions | undefined): Promis
 
   if (options.mutateProcessEnv) {
     for (const [k, v] of Object.entries(result)) {
-      process.env[k] ??= v;
+      Bun.env[k] ??= v;
     }
   }
 

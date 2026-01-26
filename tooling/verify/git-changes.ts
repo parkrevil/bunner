@@ -4,7 +4,7 @@ import { splitLines } from './utils/text-utils';
 const repoRoot = process.cwd();
 
 const runCaptureAtRoot = (cmd: string, args: readonly string[]): string | null =>
-  runCapture({ cwd: repoRoot, env: process.env }, cmd, args);
+  runCapture({ cwd: repoRoot, env: Bun.env }, cmd, args);
 
 const getChangedFiles = (): string[] => {
   const changed = new Set<string>();

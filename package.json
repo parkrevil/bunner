@@ -27,6 +27,7 @@
   ],
   "type": "module",
   "scripts": {
+    "tools:update": "(cd ./packages/oxlint-plugin && bun run build) & p1=$!; (cd ./packages/firebat && bun run build) & p2=$!; wait $p1 && wait $p2 && bun install",
     "firebat": "firebat",
     "format": "oxfmt --config .oxfmtrc.jsonc --write .",
     "lint": "oxlint --config .oxlintrc.jsonc --type-aware --type-check --fix .",
