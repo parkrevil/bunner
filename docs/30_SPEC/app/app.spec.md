@@ -2,17 +2,17 @@
 
 ## 0. 정체성(Identity) (REQUIRED)
 
-| 필드(Field)      | 값(Value)                                                                                                                                                                                                                                                                            |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Title            | App Specification                                                                                                                                                                                                                                                                    |
-| ID               | APP                                                                                                                                                                                                                                                                                  |
-| Version          | v1                                                                                                                                                                                                                                                                                   |
-| Status           | Draft                                                                                                                                                                                                                                                                                |
-| Owner            | repo                                                                                                                                                                                                                                                                                 |
-| Uniqueness Scope | repo                                                                                                                                                                                                                                                                                 |
-| Depends-On       | path:docs/30_SPEC/common/common.spec.md, path:docs/30_SPEC/di/di.spec.md, path:docs/30_SPEC/provider/provider.spec.md, path:docs/30_SPEC/execution/execution.spec.md, path:docs/30_SPEC/error-handling/error-handling.spec.md, path:docs/30_SPEC/module-system/module-system.spec.md |
-| Depended-By      | Generated                                                                                                                                                                                                                                                                            |
-| Supersedes       | none                                                                                                                                                                                                                                                                                 |
+| 필드(Field) | 값(Value) |
+| --- | --- |
+| Title | App Specification |
+| ID | APP |
+| Version | v1 |
+| Status | Draft |
+| Owner | repo |
+| Uniqueness Scope | repo |
+| Depends-On | path:docs/30_SPEC/common/common.spec.md, path:docs/30_SPEC/common/declarations.spec.md, path:docs/30_SPEC/di/di.spec.md, path:docs/30_SPEC/provider/provider.spec.md, path:docs/30_SPEC/execution/execution.spec.md, path:docs/30_SPEC/error-handling/error-handling.spec.md, path:docs/30_SPEC/module-system/module-system.spec.md, path:docs/30_SPEC/module-system/define-module.spec.md |
+| Depended-By | Generated |
+| Supersedes | none |
 
 문서 참조 형식(Document Reference Format) (REQUIRED):
 
@@ -48,7 +48,7 @@ Rule ID 형식(Rule ID Format) (REQUIRED):
 | ---------------------------------------- |
 | createApplication 부트스트랩 및 preload  |
 | app.start / app.stop / app.get 관측 의미 |
-| app.attachAdapter 입력/제약              |
+| app.attach 입력/제약                     |
 | lifecycle hook 수집/호출 결정성          |
 
 ### 1.2 Out-of-Scope (REQUIRED)
@@ -89,6 +89,12 @@ Normative: 본 SPEC은 추가적인 용어 정의를 도입하지 않는다.
 | --------------------- | ------------------------- | ------------------------------- | ------------------------------------- | ------------------------------------------- | ----------------------------------------------- |
 | app-entry             | code (AOT)                | module-ref                      | yes                                   | yes                                         | string-id                                       |
 
+### 3.1.1 Normalization Rules (REQUIRED)
+
+| 정규화 출력(Normalized Output) | Rule ID | 입력(Input(s)) | 출력 제약(Output Constraints) | 안정성 보장(Stability Guarantees) (token list) | 강제 레벨(Enforced Level) (token) |
+| --- | --- | --- | --- | --- | --- |
+| string-id | APP-R-017 | app-entry | string-id MUST equal path:{module-file}#{export-name} and export-name MUST be default for default exports | stable | build |
+
 ### 3.2 정적 데이터 형상(Static Data Shapes) (REQUIRED)
 
 ```ts
@@ -106,6 +112,8 @@ export type AppLifecycleHookDeclaration = {
   methodName: AppLifecycleHookMethodName;
   token?: Token;
 };
+
+export type EntryModule = ModuleRef;
 
 export type AppConfigInput = {
   env?: string[];
@@ -128,24 +136,25 @@ export type AppContractData = {
 
 ### 3.3 Shape Rules (REQUIRED)
 
-| Rule ID   | 생명주기(Lifecycle) (token) | 키워드(Keyword) | 타깃(Targets) (token list)  | 타깃 참조(Target Ref(s))                                           | 조건(Condition) (boolean, declarative)                                                                                       | 강제 레벨(Enforced Level) (token) |
-| --------- | --------------------------- | --------------- | --------------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
-| APP-R-001 | active                      | MUST            | artifacts, shapes, outcomes | Artifact:AppContract, Shape:local:AppContractData, Outcome:OUT-001 | createApplication is async and completes only after preload                                                                  | runtime                           |
-| APP-R-002 | active                      | MUST            | inputs, outcomes            | InputKind:app-entry, Outcome:OUT-002                               | createApplication takes exactly one entry module and it is statically resolvable                                             | build                             |
-| APP-R-003 | active                      | MUST            | outcomes                    | Outcome:OUT-003                                                    | env/config preload results are stable for runtime lifetime                                                                   | runtime                           |
-| APP-R-004 | active                      | MUST            | outcomes                    | Outcome:OUT-004                                                    | env preload uses AppConfigInput.env when provided                                                                            | runtime                           |
-| APP-R-005 | active                      | MUST            | outcomes                    | Outcome:OUT-005                                                    | config preload runs only when AppConfigInput.loader exists                                                                   | runtime                           |
-| APP-R-006 | active                      | MUST            | outcomes                    | Outcome:OUT-006                                                    | loader failures are observable as throw from createApplication                                                               | runtime                           |
-| APP-R-007 | active                      | MUST NOT        | outcomes                    | Outcome:OUT-007                                                    | framework applies timeout or retry to loader execution                                                                       | runtime                           |
-| APP-R-008 | active                      | MUST            | outcomes                    | Outcome:OUT-008                                                    | attachAdapter is called only before start and adapterId exists in module adapter config keys                                 | build                             |
-| APP-R-009 | active                      | MUST NOT        | outcomes                    | Outcome:OUT-009                                                    | attachAdapter changes static graph/manifest-derived wiring                                                                   | runtime                           |
-| APP-R-010 | active                      | MUST            | outcomes                    | Outcome:OUT-010                                                    | app.get is the only external access path to DI results and follows DI success conditions                                     | runtime                           |
-| APP-R-011 | active                      | MUST            | outcomes                    | Outcome:OUT-011                                                    | lifecycle hooks are determined by AST collection and called in deterministic order                                           | runtime                           |
-| APP-R-012 | active                      | MUST            | outcomes                    | Outcome:OUT-012                                                    | app.stop disposes owned resources and aggregates shutdown errors deterministically                                           | runtime                           |
-| APP-R-014 | active                      | MUST            | outcomes                    | Outcome:OUT-014                                                    | if any shutdown throw is observed, app.stop throws an AggregateError instance after cleanup completes                        | runtime                           |
-| APP-R-015 | active                      | MUST            | outcomes                    | Outcome:OUT-015                                                    | AggregateError.errors preserves the observation order of shutdown throws                                                     | runtime                           |
-| APP-R-016 | active                      | MUST NOT        | outcomes                    | Outcome:OUT-016                                                    | shutdown throw values in AggregateError.errors are wrapped/normalized/converted instead of being included by strict equality | runtime                           |
-| APP-R-013 | active                      | MUST NOT        | outcomes                    | Outcome:OUT-013                                                    | createApplication/app.start/app.stop/app.get/app.attachAdapter returns Result                                                | runtime                           |
+| Rule ID | 생명주기(Lifecycle) (token) | 키워드(Keyword) | 타깃(Targets) (token list) | 타깃 참조(Target Ref(s)) | 조건(Condition) (boolean, declarative) | 강제 레벨(Enforced Level) (token) |
+| --- | --- | --- | --- | --- | --- | --- |
+| APP-R-001 | active | MUST | artifacts, shapes, outcomes | Artifact:AppContract, Shape:local:AppContractData, Outcome:OUT-001 | createApplication is async and completes only after preload | runtime |
+| APP-R-002 | active | MUST | inputs, outcomes | InputKind:app-entry, Outcome:OUT-002 | createApplication takes exactly one entry module and it is statically resolvable | build |
+| APP-R-003 | active | MUST | outcomes | Outcome:OUT-003 | env/config preload results are stable for runtime lifetime | runtime |
+| APP-R-004 | active | MUST | outcomes | Outcome:OUT-004 | env preload uses AppConfigInput.env when provided | runtime |
+| APP-R-005 | active | MUST | outcomes | Outcome:OUT-005 | config preload runs only when AppConfigInput.loader exists | runtime |
+| APP-R-006 | active | MUST | outcomes | Outcome:OUT-006 | loader failures are observable as throw from createApplication | runtime |
+| APP-R-007 | active | MUST NOT | outcomes | Outcome:OUT-007 | framework applies timeout or retry to loader execution | runtime |
+| APP-R-008 | active | MUST | outcomes | Outcome:OUT-008 | attach is called only before start and adapterId exists in module adapter config keys | runtime |
+| APP-R-009 | active | MUST NOT | outcomes | Outcome:OUT-009 | attach changes static graph/manifest-derived wiring | runtime |
+| APP-R-010 | active | MUST | outcomes | Outcome:OUT-010 | app.get is the only external access path to DI results and follows DI success conditions | runtime |
+| APP-R-011 | active | MUST | outcomes | Outcome:OUT-011 | lifecycle hooks are determined by AST collection and called in deterministic order | runtime |
+| APP-R-012 | active | MUST | outcomes | Outcome:OUT-012 | app.stop disposes owned resources and aggregates shutdown errors deterministically | runtime |
+| APP-R-014 | active | MUST | outcomes | Outcome:OUT-014 | if any shutdown throw is observed, app.stop throws an AggregateError instance after cleanup completes | runtime |
+| APP-R-015 | active | MUST | outcomes | Outcome:OUT-015 | AggregateError.errors preserves the observation order of shutdown throws | runtime |
+| APP-R-016 | active | MUST NOT | outcomes | Outcome:OUT-016 | shutdown throw values in AggregateError.errors are wrapped/normalized/converted instead of being included by strict equality | runtime |
+| APP-R-013 | active | MUST NOT | outcomes | Outcome:OUT-013 | createApplication/app.start/app.stop/app.get/app.attach returns Result | runtime |
+| APP-R-017 | active | MUST | inputs, outcomes | InputKind:app-entry, Outcome:OUT-017 | app-entry normalization produces string-id with required format | build |
 
 ---
 
@@ -163,6 +172,7 @@ export type AppContractData = {
 | ------------------------- | --------------------------------------------- |
 | Token                     | path:docs/30_SPEC/common/declarations.spec.md |
 | FactoryRef                | path:docs/30_SPEC/common/declarations.spec.md |
+| ModuleRef                 | path:docs/30_SPEC/common/declarations.spec.md |
 
 ### 4.3 No-Duplication Claim (REQUIRED)
 
@@ -182,9 +192,9 @@ export type AppContractData = {
 
 ### 5.2 Dependency
 
-| 의존 규칙(Dependency Rule)         | 참조 아티팩트(Referenced Artifact Ref(s)) | 허용(Allowed) | 금지(Forbidden) | 집행(Enforced By) (token) | 수동 사유(Manual Reason) (required if manual) |
-| ---------------------------------- | ----------------------------------------- | ------------- | --------------- | ------------------------- | --------------------------------------------- |
-| app-depends-on-common-declarations | Artifact:Token; Artifact:FactoryRef       | allowed       | forbidden       | lint                      | n/a                                           |
+| 의존 규칙(Dependency Rule) | 참조 아티팩트(Referenced Artifact Ref(s)) | 허용(Allowed) | 금지(Forbidden) | 집행(Enforced By) (token) | 수동 사유(Manual Reason) (required if manual) |
+| --- | --- | --- | --- | --- | --- |
+| app-depends-on-common-declarations | Artifact:Token; Artifact:FactoryRef; Artifact:ModuleRef | allowed | forbidden | lint | n/a |
 
 ---
 
@@ -192,24 +202,25 @@ export type AppContractData = {
 
 ### 6.1 Inputs → Observable Outcomes
 
-| 입력 조건(Input Condition) |   Rule ID | 타깃 참조(Target Ref(s)) | Outcome ID | 관측 결과(Observable Outcome)                                                                                       |
-| -------------------------- | --------: | ------------------------ | ---------- | ------------------------------------------------------------------------------------------------------------------- |
-| createApplication called   | APP-R-001 | Artifact:AppContract     | OUT-001    | preload completes before createApplication resolves                                                                 |
-| invalid entry module count | APP-R-002 | InputKind:app-entry      | OUT-002    | build failure is observable                                                                                         |
-| preload completed          | APP-R-003 | Outcome:OUT-003          | OUT-003    | config/env values do not change after bootstrap                                                                     |
-| env input provided         | APP-R-004 | Outcome:OUT-004          | OUT-004    | env preload consumes provided env list                                                                              |
-| loader missing             | APP-R-005 | Outcome:OUT-005          | OUT-005    | no config loader execution is observed                                                                              |
-| loader throws              | APP-R-006 | Outcome:OUT-006          | OUT-006    | createApplication throws the same failure value                                                                     |
-| loader executed            | APP-R-007 | Outcome:OUT-007          | OUT-007    | no timeout or retry behavior is observed                                                                            |
-| attachAdapter invoked      | APP-R-008 | Outcome:OUT-008          | OUT-008    | invalid adapterId yields build failure; post-start attach is rejected                                               |
-| attachAdapter invoked      | APP-R-009 | Outcome:OUT-009          | OUT-009    | manifest/wiring remains unchanged                                                                                   |
-| app.get invoked            | APP-R-010 | Outcome:OUT-010          | OUT-010    | DI access occurs only via app.get and matches DI success conditions                                                 |
-| lifecycle hooks present    | APP-R-011 | Outcome:OUT-011          | OUT-011    | hooks are called in deterministic order consistent with provider ordering                                           |
-| app.stop invoked           | APP-R-012 | Outcome:OUT-012          | OUT-012    | shutdown errors are aggregated and thrown after cleanup                                                             |
-| app.stop invoked           | APP-R-014 | Outcome:OUT-014          | OUT-014    | shutdown errors are thrown as AggregateError after cleanup                                                          |
-| app.stop invoked           | APP-R-015 | Outcome:OUT-015          | OUT-015    | AggregateError.errors preserves observation order                                                                   |
-| app.stop invoked           | APP-R-016 | Outcome:OUT-016          | OUT-016    | AggregateError.errors includes original shutdown throw values by strict equality and without wrapping/normalization |
-| app surface returns Result | APP-R-013 | Outcome:OUT-013          | OUT-013    | build/runtime violation is observable                                                                               |
+| 입력 조건(Input Condition) | Rule ID | 타깃 참조(Target Ref(s)) | Outcome ID | 관측 결과(Observable Outcome) |
+| --- | --- | --- | --- | --- |
+| createApplication called | APP-R-001 | Artifact:AppContract | OUT-001 | preload completes before createApplication resolves |
+| invalid entry module count | APP-R-002 | InputKind:app-entry | OUT-002 | build failure is observable |
+| preload completed | APP-R-003 | Outcome:OUT-003 | OUT-003 | config/env values do not change after bootstrap |
+| env input provided | APP-R-004 | Outcome:OUT-004 | OUT-004 | env preload consumes provided env list |
+| loader missing | APP-R-005 | Outcome:OUT-005 | OUT-005 | no config loader execution is observed |
+| loader throws | APP-R-006 | Outcome:OUT-006 | OUT-006 | createApplication throws the same failure value |
+| loader executed | APP-R-007 | Outcome:OUT-007 | OUT-007 | no timeout or retry behavior is observed |
+| attach invoked | APP-R-008 | Outcome:OUT-008 | OUT-008 | invalid adapterId is rejected; post-start attach is rejected |
+| attach invoked | APP-R-009 | Outcome:OUT-009 | OUT-009 | manifest/wiring remains unchanged |
+| app.get invoked | APP-R-010 | Outcome:OUT-010 | OUT-010 | DI access occurs only via app.get and matches DI success conditions |
+| lifecycle hooks present | APP-R-011 | Outcome:OUT-011 | OUT-011 | hooks are called in deterministic order consistent with provider ordering |
+| app.stop invoked | APP-R-012 | Outcome:OUT-012 | OUT-012 | shutdown errors are aggregated and thrown after cleanup |
+| app.stop invoked | APP-R-014 | Outcome:OUT-014 | OUT-014 | shutdown errors are thrown as AggregateError after cleanup |
+| app.stop invoked | APP-R-015 | Outcome:OUT-015 | OUT-015 | AggregateError.errors preserves observation order |
+| app.stop invoked | APP-R-016 | Outcome:OUT-016 | OUT-016 | AggregateError.errors includes original shutdown throw values by strict equality and without wrapping/normalization |
+| app surface returns Result | APP-R-013 | Outcome:OUT-013 | OUT-013 | build/runtime violation is observable |
+| app-entry collected | APP-R-017 | InputKind:app-entry | OUT-017 | app-entry string-id normalization is deterministic and matches required format |
 
 ### 6.2 State Conditions
 
@@ -230,8 +241,8 @@ export type AppContractData = {
 | APP-R-005 | loader execution observed without loader input                | BUNNER_APP_005  | error                    | symbol              | runtime:observation               |
 | APP-R-006 | loader failure not observable as throw                        | BUNNER_APP_006  | error                    | symbol              | runtime:observation               |
 | APP-R-007 | loader execution uses timeout/retry                           | BUNNER_APP_007  | error                    | symbol              | runtime:observation               |
-| APP-R-008 | attachAdapter after start or adapterId not declared           | BUNNER_APP_008  | error                    | symbol              | static:ast                        |
-| APP-R-009 | attachAdapter mutates static graph                            | BUNNER_APP_009  | error                    | symbol              | runtime:observation               |
+| APP-R-008 | attach after start or adapterId not declared                  | BUNNER_APP_008  | error                    | symbol              | runtime:observation               |
+| APP-R-009 | attach mutates static graph                                   | BUNNER_APP_009  | error                    | symbol              | runtime:observation               |
 | APP-R-010 | DI access bypasses app.get or violates DI rules               | BUNNER_APP_010  | error                    | symbol              | runtime:observation               |
 | APP-R-011 | lifecycle hooks not AST-collected or order not deterministic  | BUNNER_APP_011  | error                    | symbol              | runtime:observation               |
 | APP-R-012 | app.stop aggregation/ordering contract violated               | BUNNER_APP_012  | error                    | symbol              | runtime:observation               |
@@ -239,6 +250,7 @@ export type AppContractData = {
 | APP-R-015 | AggregateError.errors order does not match observation order  | BUNNER_APP_015  | error                    | symbol              | runtime:observation               |
 | APP-R-016 | AggregateError.errors values are wrapped/normalized/converted | BUNNER_APP_016  | error                    | symbol              | runtime:observation               |
 | APP-R-013 | Result returned from app surface                              | BUNNER_APP_013  | error                    | symbol              | runtime:observation               |
+| APP-R-017 | app-entry normalization output violates format                | BUNNER_APP_017  | error                    | symbol              | static:artifact                   |
 
 ---
 

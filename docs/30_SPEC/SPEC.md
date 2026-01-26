@@ -51,6 +51,7 @@
   - [execution/normal-flow.spec.md](execution/normal-flow.spec.md)
 - Module System
   - [module-system/module-system.spec.md](module-system/module-system.spec.md)
+  - [module-system/define-module.spec.md](module-system/define-module.spec.md)
   - [module-system/boundary.spec.md](module-system/boundary.spec.md)
   - [module-system/adapter-config.spec.md](module-system/adapter-config.spec.md)
   - [module-system/manifest.spec.md](module-system/manifest.spec.md)

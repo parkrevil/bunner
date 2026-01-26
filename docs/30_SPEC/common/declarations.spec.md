@@ -119,7 +119,7 @@ export type MiddlewaresDecoratorDeclaration = {
 
 export type CommonDecoratorDeclaration = RefListDecoratorDeclaration | MiddlewaresDecoratorDeclaration;
 
-export type ModuleRef = unknown;
+export type ModuleRef = symbol;
 export type ModuleRefList = ModuleRef[];
 
 export type InjectableOptions = {
@@ -172,7 +172,7 @@ export type CommonDeclarationsContractData = {
 | COMMON-DECLARATIONS-R-008 | active                      | MUST NOT        | outcomes                            | Outcome:OUT-008                                                                                                               | TokenThunk is executed at runtime or used for runtime token resolution                              | runtime                           |
 | COMMON-DECLARATIONS-R-009 | active                      | MUST            | artifacts, shapes, outcomes         | Artifact:Token, Shape:local:Token, Outcome:OUT-009                                                                            | Token is either a class token or a unique symbol token                                              | build                             |
 | COMMON-DECLARATIONS-R-010 | active                      | MUST            | shapes, outcomes                    | Shape:local:FactoryRef, Outcome:OUT-010                                                                                       | FactoryRef and DecoratorRef are function references                                                 | build                             |
-| COMMON-DECLARATIONS-R-011 | active                      | MUST            | shapes, outcomes                    | Shape:local:ModuleRef, Outcome:OUT-011                                                                                        | ModuleRef is an exported module marker identifier reference                                         | build                             |
+| COMMON-DECLARATIONS-R-011 | active                      | MUST            | shapes, outcomes                    | Shape:local:ModuleRef, Outcome:OUT-011                                                                                        | ModuleRef is an exported module marker binding reference (named export or default export)           | build                             |
 | COMMON-DECLARATIONS-R-012 | active                      | MUST            | shapes, outcomes                    | Shape:local:MiddlewaresDecoratorDeclaration, Outcome:OUT-012                                                                  | @Middlewares declarations normalize to one or more phase registrations                              | build                             |
 
 ---
