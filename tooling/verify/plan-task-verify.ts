@@ -184,7 +184,12 @@ const extractTaskPlanLink = (contents: string): string | null => {
   return typeof value === 'string' && value.length > 0 ? value : null;
 };
 
-const parsePlanLink = (planLink: string): { planPath: string; stepNumber: number } | null => {
+interface PlanLinkInfo {
+  readonly planPath: string;
+  readonly stepNumber: number;
+}
+
+const parsePlanLink = (planLink: string): PlanLinkInfo | null => {
   const pieces = planLink.split('#');
   const planPath = pieces[0] ?? '';
   const anchor = pieces[1] ?? '';

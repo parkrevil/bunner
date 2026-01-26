@@ -6,7 +6,7 @@ import type { ResourceWasteFinding } from './types';
 import { parseSource } from './engine/oxc-wrapper';
 import { detectResourceWaste } from './resource-waste-detector';
 
-describe('detectResourceWaste', () => {
+describe('resource-waste-detector', () => {
   it('should report a dead-store finding when a write is never read', () => {
     // Arrange
     let fileName = '/virtual/waste.ts';
@@ -117,7 +117,7 @@ describe('detectResourceWaste', () => {
     expect(hasFinding(findings, 'dead-store', 'value')).toBe(false);
   });
 
-  it('should report a dead-store finding inside a class method', () => {
+  it('should report a dead-store finding when inside a class method', () => {
     // Arrange
     let fileName = '/virtual/class-method.ts';
     let source = ['class Foo {', '  method() {', '    let unused = 1;', '    return 0;', '  }', '}'].join('\n');

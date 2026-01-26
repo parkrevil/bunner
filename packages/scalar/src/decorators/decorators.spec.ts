@@ -16,171 +16,295 @@ import {
 } from './index';
 
 class TestDecoratorTarget {
-  method(_arg?: unknown): void {}
+  method(_arg?: string): void {}
 }
 
-function getMethodDescriptor(): TypedPropertyDescriptor<unknown> {
+function getMethodDescriptor(): PropertyDescriptor {
   const descriptor = Object.getOwnPropertyDescriptor(TestDecoratorTarget.prototype, 'method');
 
   if (!descriptor) {
     throw new Error('Expected method descriptor to exist');
   }
 
-  return descriptor as unknown as TypedPropertyDescriptor<unknown>;
+  return descriptor;
 }
 
-describe('ApiTags', () => {
-  it('should return a decorator function', () => {
-    expect(typeof ApiTags('Users')).toBe('function');
+describe('decorators', () => {
+  describe('ApiTags', () => {
+    it('should return a decorator function when invoked', () => {
+      // Arrange
+      const tag = 'Users';
+      // Act
+      const decorator = ApiTags(tag);
+
+      // Assert
+      expect(typeof decorator).toBe('function');
+    });
+
+    it('should not throw when the decorator is applied', () => {
+      // Arrange
+      const decorator = ApiTags('Users');
+
+      // Act
+      const act = () => decorator(TestDecoratorTarget);
+
+      // Assert
+      expect(act).not.toThrow();
+    });
   });
 
-  it('should not throw when invoked', () => {
-    const decorator = ApiTags('Users') as unknown as ClassDecorator;
+  describe('ApiBearerAuth', () => {
+    it('should return a decorator function when invoked', () => {
+      // Arrange
+      // Act
+      const decorator = ApiBearerAuth();
 
-    expect(() => decorator(TestDecoratorTarget)).not.toThrow();
-  });
-});
+      // Assert
+      expect(typeof decorator).toBe('function');
+    });
 
-describe('ApiBearerAuth', () => {
-  it('should return a decorator function', () => {
-    expect(typeof ApiBearerAuth()).toBe('function');
-  });
+    it('should not throw when the decorator is applied', () => {
+      // Arrange
+      const decorator = ApiBearerAuth();
 
-  it('should not throw when invoked', () => {
-    const decorator = ApiBearerAuth() as unknown as ClassDecorator;
+      // Act
+      const act = () => decorator(TestDecoratorTarget);
 
-    expect(() => decorator(TestDecoratorTarget)).not.toThrow();
-  });
-});
-
-describe('ApiProperty', () => {
-  it('should return a decorator function', () => {
-    expect(typeof ApiProperty()).toBe('function');
+      // Assert
+      expect(act).not.toThrow();
+    });
   });
 
-  it('should not throw when invoked', () => {
-    const decorator = ApiProperty() as unknown as PropertyDecorator;
+  describe('ApiProperty', () => {
+    it('should return a decorator function when invoked', () => {
+      // Arrange
+      // Act
+      const decorator = ApiProperty();
 
-    expect(() => {
-      decorator(TestDecoratorTarget.prototype, 'method');
-    }).not.toThrow();
-  });
-});
+      // Assert
+      expect(typeof decorator).toBe('function');
+    });
 
-describe('ApiPropertyOptional', () => {
-  it('should return a decorator function', () => {
-    expect(typeof ApiPropertyOptional()).toBe('function');
-  });
+    it('should not throw when the decorator is applied', () => {
+      // Arrange
+      const decorator = ApiProperty();
 
-  it('should not throw when invoked', () => {
-    const decorator = ApiPropertyOptional() as unknown as PropertyDecorator;
+      // Act
+      const act = () =>{  decorator(TestDecoratorTarget.prototype, 'method'); };
 
-    expect(() => {
-      decorator(TestDecoratorTarget.prototype, 'method');
-    }).not.toThrow();
-  });
-});
-
-describe('ApiOperation', () => {
-  it('should return a decorator function', () => {
-    expect(typeof ApiOperation({ summary: 'Get one' })).toBe('function');
+      // Assert
+      expect(act).not.toThrow();
+    });
   });
 
-  it('should not throw when invoked', () => {
-    const descriptor = getMethodDescriptor();
-    const decorator = ApiOperation({ summary: 'Get one' }) as unknown as MethodDecorator;
+  describe('ApiPropertyOptional', () => {
+    it('should return a decorator function when invoked', () => {
+      // Arrange
+      // Act
+      const decorator = ApiPropertyOptional();
 
-    expect(() => decorator(TestDecoratorTarget.prototype, 'method', descriptor)).not.toThrow();
-  });
-});
+      // Assert
+      expect(typeof decorator).toBe('function');
+    });
 
-describe('ApiResponse', () => {
-  it('should return a decorator function', () => {
-    expect(typeof ApiResponse({ status: 200 })).toBe('function');
-  });
+    it('should not throw when the decorator is applied', () => {
+      // Arrange
+      const decorator = ApiPropertyOptional();
 
-  it('should not throw when invoked', () => {
-    const descriptor = getMethodDescriptor();
-    const decorator = ApiResponse({ status: 200 }) as unknown as MethodDecorator;
+      // Act
+      const act = () =>{  decorator(TestDecoratorTarget.prototype, 'method'); };
 
-    expect(() => decorator(TestDecoratorTarget.prototype, 'method', descriptor)).not.toThrow();
-  });
-});
-
-describe('ApiOkResponse', () => {
-  it('should return a decorator function', () => {
-    expect(typeof ApiOkResponse()).toBe('function');
+      // Assert
+      expect(act).not.toThrow();
+    });
   });
 
-  it('should not throw when invoked', () => {
-    const descriptor = getMethodDescriptor();
-    const decorator = ApiOkResponse() as unknown as MethodDecorator;
+  describe('ApiOperation', () => {
+    it('should return a decorator function when invoked', () => {
+      // Arrange
+      const options = { summary: 'Get one' };
+      // Act
+      const decorator = ApiOperation(options);
 
-    expect(() => decorator(TestDecoratorTarget.prototype, 'method', descriptor)).not.toThrow();
-  });
-});
+      // Assert
+      expect(typeof decorator).toBe('function');
+    });
 
-describe('ApiCreatedResponse', () => {
-  it('should return a decorator function', () => {
-    expect(typeof ApiCreatedResponse()).toBe('function');
-  });
+    it('should not throw when the decorator is applied', () => {
+      // Arrange
+      const descriptor = getMethodDescriptor();
+      const decorator = ApiOperation({ summary: 'Get one' });
 
-  it('should not throw when invoked', () => {
-    const descriptor = getMethodDescriptor();
-    const decorator = ApiCreatedResponse() as unknown as MethodDecorator;
+      // Act
+      const act = () => decorator(TestDecoratorTarget.prototype, 'method', descriptor);
 
-    expect(() => decorator(TestDecoratorTarget.prototype, 'method', descriptor)).not.toThrow();
-  });
-});
-
-describe('ApiNotFoundResponse', () => {
-  it('should return a decorator function', () => {
-    expect(typeof ApiNotFoundResponse()).toBe('function');
+      // Assert
+      expect(act).not.toThrow();
+    });
   });
 
-  it('should not throw when invoked', () => {
-    const descriptor = getMethodDescriptor();
-    const decorator = ApiNotFoundResponse() as unknown as MethodDecorator;
+  describe('ApiResponse', () => {
+    it('should return a decorator function when invoked', () => {
+      // Arrange
+      const options = { status: 200 };
+      // Act
+      const decorator = ApiResponse(options);
 
-    expect(() => decorator(TestDecoratorTarget.prototype, 'method', descriptor)).not.toThrow();
-  });
-});
+      // Assert
+      expect(typeof decorator).toBe('function');
+    });
 
-describe('ApiBody', () => {
-  it('should return a decorator function', () => {
-    expect(typeof ApiBody({ type: String })).toBe('function');
-  });
+    it('should not throw when the decorator is applied', () => {
+      // Arrange
+      const descriptor = getMethodDescriptor();
+      const decorator = ApiResponse({ status: 200 });
 
-  it('should not throw when invoked', () => {
-    const descriptor = getMethodDescriptor();
-    const decorator = ApiBody({ type: String }) as unknown as MethodDecorator;
+      // Act
+      const act = () => decorator(TestDecoratorTarget.prototype, 'method', descriptor);
 
-    expect(() => decorator(TestDecoratorTarget.prototype, 'method', descriptor)).not.toThrow();
-  });
-});
-
-describe('ApiQuery', () => {
-  it('should return a decorator function', () => {
-    expect(typeof ApiQuery({ name: 'q' })).toBe('function');
+      // Assert
+      expect(act).not.toThrow();
+    });
   });
 
-  it('should not throw when invoked', () => {
-    const descriptor = getMethodDescriptor();
-    const decorator = ApiQuery({ name: 'q' }) as unknown as MethodDecorator;
+  describe('ApiOkResponse', () => {
+    it('should return a decorator function when invoked', () => {
+      // Arrange
+      // Act
+      const decorator = ApiOkResponse();
 
-    expect(() => decorator(TestDecoratorTarget.prototype, 'method', descriptor)).not.toThrow();
+      // Assert
+      expect(typeof decorator).toBe('function');
+    });
+
+    it('should not throw when the decorator is applied', () => {
+      // Arrange
+      const descriptor = getMethodDescriptor();
+      const decorator = ApiOkResponse();
+
+      // Act
+      const act = () => decorator(TestDecoratorTarget.prototype, 'method', descriptor);
+
+      // Assert
+      expect(act).not.toThrow();
+    });
   });
-});
 
-describe('ApiParam', () => {
-  it('should return a decorator function', () => {
-    expect(typeof ApiParam({ name: 'id' })).toBe('function');
+  describe('ApiCreatedResponse', () => {
+    it('should return a decorator function when invoked', () => {
+      // Arrange
+      // Act
+      const decorator = ApiCreatedResponse();
+
+      // Assert
+      expect(typeof decorator).toBe('function');
+    });
+
+    it('should not throw when the decorator is applied', () => {
+      // Arrange
+      const descriptor = getMethodDescriptor();
+      const decorator = ApiCreatedResponse();
+
+      // Act
+      const act = () => decorator(TestDecoratorTarget.prototype, 'method', descriptor);
+
+      // Assert
+      expect(act).not.toThrow();
+    });
   });
 
-  it('should not throw when invoked', () => {
-    const descriptor = getMethodDescriptor();
-    const decorator = ApiParam({ name: 'id' }) as unknown as MethodDecorator;
+  describe('ApiNotFoundResponse', () => {
+    it('should return a decorator function when invoked', () => {
+      // Arrange
+      // Act
+      const decorator = ApiNotFoundResponse();
 
-    expect(() => decorator(TestDecoratorTarget.prototype, 'method', descriptor)).not.toThrow();
+      // Assert
+      expect(typeof decorator).toBe('function');
+    });
+
+    it('should not throw when the decorator is applied', () => {
+      // Arrange
+      const descriptor = getMethodDescriptor();
+      const decorator = ApiNotFoundResponse();
+
+      // Act
+      const act = () => decorator(TestDecoratorTarget.prototype, 'method', descriptor);
+
+      // Assert
+      expect(act).not.toThrow();
+    });
+  });
+
+  describe('ApiBody', () => {
+    it('should return a decorator function when invoked', () => {
+      // Arrange
+      const options = { type: String };
+      // Act
+      const decorator = ApiBody(options);
+
+      // Assert
+      expect(typeof decorator).toBe('function');
+    });
+
+    it('should not throw when the decorator is applied', () => {
+      // Arrange
+      const descriptor = getMethodDescriptor();
+      const decorator = ApiBody({ type: String });
+
+      // Act
+      const act = () => decorator(TestDecoratorTarget.prototype, 'method', descriptor);
+
+      // Assert
+      expect(act).not.toThrow();
+    });
+  });
+
+  describe('ApiQuery', () => {
+    it('should return a decorator function when invoked', () => {
+      // Arrange
+      const options = { name: 'q' };
+      // Act
+      const decorator = ApiQuery(options);
+
+      // Assert
+      expect(typeof decorator).toBe('function');
+    });
+
+    it('should not throw when the decorator is applied', () => {
+      // Arrange
+      const descriptor = getMethodDescriptor();
+      const decorator = ApiQuery({ name: 'q' });
+
+      // Act
+      const act = () => decorator(TestDecoratorTarget.prototype, 'method', descriptor);
+
+      // Assert
+      expect(act).not.toThrow();
+    });
+  });
+
+  describe('ApiParam', () => {
+    it('should return a decorator function when invoked', () => {
+      // Arrange
+      const options = { name: 'id' };
+      // Act
+      const decorator = ApiParam(options);
+
+      // Assert
+      expect(typeof decorator).toBe('function');
+    });
+
+    it('should not throw when the decorator is applied', () => {
+      // Arrange
+      const descriptor = getMethodDescriptor();
+      const decorator = ApiParam({ name: 'id' });
+
+      // Act
+      const act = () => decorator(TestDecoratorTarget.prototype, 'method', descriptor);
+
+      // Assert
+      expect(act).not.toThrow();
+    });
   });
 });

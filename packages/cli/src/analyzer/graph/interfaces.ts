@@ -1,9 +1,10 @@
 import type { ClassMetadata } from '../interfaces';
 import type { ModuleDefinition, ReExport } from '../parser-models';
+import type { AnalyzerValue, AnalyzerValueRecord } from '../types';
 
 export interface ProviderRef {
   token: string;
-  metadata?: unknown;
+  metadata?: AnalyzerValue | ClassMetadata;
   isExported: boolean;
   scope?: string;
   filePath?: string;
@@ -16,9 +17,14 @@ export interface FileAnalysis {
   exports: string[];
   imports?: Record<string, string>;
   importEntries?: import('../interfaces').ImportEntry[];
-  exportedValues?: Record<string, unknown>;
-  localValues?: Record<string, unknown>;
+  exportedValues?: AnalyzerValueRecord;
+  localValues?: AnalyzerValueRecord;
   moduleDefinition?: ModuleDefinition;
+}
+
+export interface AdapterSpecResolveParams {
+  fileMap: Map<string, FileAnalysis>;
+  projectRoot: string;
 }
 
 export interface CyclePath {

@@ -1,5 +1,5 @@
 import type { QueryParserOptions } from './interfaces';
-import type { QueryArray, QueryArrayRecord, QueryContainer, QueryValue, QueryValueRecord } from './types';
+import type { QueryArray, QueryContainer, QueryValue, QueryValueRecord } from './types';
 
 import { BadRequestError } from '../../errors';
 import { DEFAULT_QUERY_PARSER_OPTIONS } from './constants';
@@ -280,7 +280,18 @@ export class QueryParser {
         }
 
         current = this.arrayToMaybeObject(current);
-        parent[parentKey] = current;
+
+        if (Array.isArray(parent)) {
+          const normalizedKey = this.normalizeKey(parentKey);
+
+          this.assignArrayRecordValue(parent, normalizedKey, current);
+        } else if (this.isRecordValue(parent)) {
+          const normalizedKey = this.normalizeKey(parentKey);
+
+          parent[normalizedKey] = current;
+        } else {
+          return;
+        }
       }
 
       if (isLast) {
@@ -383,16 +394,14 @@ export class QueryParser {
           return;
         } // Sparse Array Protection
 
-        obj[idx] = value;
+          this.assignArrayRecordValue(obj, key, value);
       } else {
         // Mixed keys: Non-numeric key in array context
         if (this.options.strictMode) {
           throw new BadRequestError(`Conflict: non-numeric key "${key}" used on an array structure`);
         }
 
-        const arrayRecord = obj as QueryArrayRecord;
-
-        arrayRecord[key] = value;
+        this.assignArrayRecordValue(obj, key, value);
       }
 
       return;
@@ -431,7 +440,7 @@ export class QueryParser {
         if (Array.isArray(existing)) {
           existing.push(value);
         } else {
-          obj[key] = [existing, value];
+          obj[key] = existing === undefined ? [value] : [existing, value];
         }
       }
     } else {
@@ -439,6 +448,18 @@ export class QueryParser {
     }
   }
 
+  private assignArrayRecordValue(target: QueryArray, key: string, value: QueryValue): void {
+    Object.defineProperty(target, key, {
+      value,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+  }
+
+  private normalizeKey(key: string | number): string {
+    return typeof key === 'number' ? key.toString() : key;
+  }
   /**
    * Checks if a string represents a valid non-negative integer for array indexing.
    * Rejects: negative numbers, floats, empty strings, non-numeric strings.
@@ -474,8 +495,10 @@ export class QueryParser {
     const obj: QueryValueRecord = {};
 
     for (let i = 0; i < arr.length; i++) {
-      if (arr[i] !== undefined) {
-        obj[i.toString()] = arr[i];
+      const entry = arr[i];
+
+      if (entry !== undefined) {
+        obj[i.toString()] = entry;
       }
     }
 

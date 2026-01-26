@@ -1,4 +1,4 @@
-import type { BunnerModule } from '@bunner/common';
+import type { BunnerModule } from '@bunner/core';
 
 import { PostsRepository } from './posts.repository';
 import { PostsService } from './posts.service';

@@ -1,13 +1,9 @@
-import type { AdapterCollectionLike, DocumentTargets, HttpTargets, ScalarInput } from './types';
+import type { AdapterCollectionLike, AdapterGroupLike, AdapterGroupWithName, DocumentTargets, HttpTargets } from './types';
 
-import { hasFunctionProperty, isMap } from '../common';
+import { isMap } from '../common';
 
-type GroupWithForEachName = {
-  forEach: (cb: (adapter: unknown, name: unknown) => void) => void;
-};
-
-function hasForEachWithName(value: ScalarInput): value is GroupWithForEachName {
-  if (value === null || value === undefined) {
+function hasForEachWithName(value: AdapterGroupLike): value is AdapterGroupWithName {
+  if (value === undefined || value === null) {
     return false;
   }
 
@@ -15,12 +11,26 @@ function hasForEachWithName(value: ScalarInput): value is GroupWithForEachName {
     return false;
   }
 
-  const record = value as Record<string, unknown>;
+  if (!('forEach' in value)) {
+    return false;
+  }
 
-  return typeof record.forEach === 'function';
+  return typeof value.forEach === 'function';
 }
 
-function listAdapterNames(group: ScalarInput): string[] {
+function hasAllMethod(value: AdapterGroupLike): boolean {
+  if (value === undefined || value === null) {
+    return false;
+  }
+
+  if (typeof value !== 'object') {
+    return false;
+  }
+
+  return 'all' in value && typeof value.all === 'function';
+}
+
+function listAdapterNames(group: AdapterGroupLike | undefined): string[] {
   const names: string[] = [];
 
   if (group === undefined || group === null) {
@@ -51,7 +61,7 @@ function listAdapterNames(group: ScalarInput): string[] {
     return names;
   }
 
-  if (hasFunctionProperty(group, 'all')) {
+  if (hasAllMethod(group)) {
     return [];
   }
 
@@ -59,7 +69,7 @@ function listAdapterNames(group: ScalarInput): string[] {
 }
 
 export function resolveHttpNamesForDocuments(adapters: AdapterCollectionLike, documentTargets: DocumentTargets): string[] {
-  const httpGroup = adapters.http;
+  const httpGroup: AdapterGroupLike | undefined = adapters.http;
   const allHttpNames = listAdapterNames(httpGroup);
 
   if (documentTargets === 'all') {
@@ -86,7 +96,7 @@ export function resolveHttpNamesForDocuments(adapters: AdapterCollectionLike, do
 }
 
 export function resolveHttpNamesForHosting(adapters: AdapterCollectionLike, httpTargets: HttpTargets): string[] {
-  const httpGroup = adapters.http;
+  const httpGroup: AdapterGroupLike | undefined = adapters.http;
   const allHttpNames = listAdapterNames(httpGroup);
 
   if (httpTargets === 'all') {

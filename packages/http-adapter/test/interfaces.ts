@@ -9,7 +9,7 @@ import type {
   RouteHandler,
   RouterOptions,
 } from './index';
-import type { RequestBodyValue, RequestQueryMap } from '../src/types';
+import type { RequestBodyValue, RequestQueryMap, SystemError } from '../src/types';
 import type { TestMetadataRegistry, TestProviderValue } from './types';
 
 export interface TestProvider {
@@ -58,6 +58,6 @@ export interface GlobalMiddlewaresParams {
   beforeRequest?: ReadonlyArray<BunnerMiddleware>;
   beforeResponse?: ReadonlyArray<BunnerMiddleware>;
   afterResponse?: ReadonlyArray<BunnerMiddleware>;
-  errorFilters?: ReadonlyArray<BunnerErrorFilter | null>;
+  errorFilters?: ReadonlyArray<BunnerErrorFilter<SystemError> | null>;
   systemErrorHandler?: TestProviderValue;
 }

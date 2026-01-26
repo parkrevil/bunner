@@ -923,7 +923,7 @@ this.state = {};
 - AnyValue, AnyFunction, UnsafeValue, UnsafeRecord 같은 "포괄 alias"를 추가하거나 확산하는 행위는 금지한다(MUST NOT).
 - 위반 판정은 diff 기반으로 수행한다(MUST).
 
-#### 위반 판정 (Decidable)
+#### 위반 판정 (Decidable, STYLE-024)
 
 아래 중 하나라도 true이면 위반:
 
@@ -940,7 +940,7 @@ git diff --unified=0 | grep -nE "^\\+.*\\b(AnyValue|AnyFunction|UnsafeValue|Unsa
 - 공용 타입 정의(예: packages/_/src/types.ts, packages/_/src/interfaces.ts)에서 object/Function 타입 도입은 금지한다(MUST NOT).
 - 위반 판정은 diff 기반으로 수행한다(MUST).
 
-#### 위반 판정 (Decidable)
+#### 위반 판정 (Decidable, STYLE-025)
 
 아래 중 하나라도 true이면 위반:
 

@@ -66,6 +66,7 @@ export interface ConfigurableAdapter extends BunnerAdapter {
 }
 
 export interface BunnerApplicationContext extends Context {
+  container: Container;
   entryModule: EntryModule;
 }
 

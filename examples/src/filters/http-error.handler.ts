@@ -1,6 +1,6 @@
 import { type Context, Catch } from '@bunner/common';
 import { BunnerHttpContext } from '@bunner/http-adapter';
-import { Logger } from '@bunner/logger';
+import { Logger, type LogMetadataValue } from '@bunner/logger';
 import type { HttpErrorPayload } from './interfaces';
 
 @Catch()
@@ -13,7 +13,7 @@ export class HttpErrorHandler {
     const req = http.request;
     const errorPayload = this.getHttpErrorPayload(error);
 
-    this.logger.error('Caught error:', error);
+    this.logger.error('Caught error:', error as LogMetadataValue);
 
     res.setStatus(500);
 

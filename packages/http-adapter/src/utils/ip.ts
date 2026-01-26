@@ -1,10 +1,15 @@
 import type { Server } from 'bun';
+import type { BunnerValue } from '@bunner/common';
 
 import type { ClientIpsResult } from './interfaces';
 
 import { HeaderField } from '../enums';
 
-export function getIps(request: Request, server: Server<unknown>, trustProxy?: boolean): ClientIpsResult {
+function getIps(
+  request: Request,
+  server: Pick<Server<BunnerValue>, 'requestIP'>,
+  trustProxy?: boolean,
+): ClientIpsResult {
   const shouldTrustProxy = trustProxy ?? false;
   const headers = request.headers;
   const socketAddress = server.requestIP(request) ?? undefined;
@@ -16,7 +21,7 @@ export function getIps(request: Request, server: Server<unknown>, trustProxy?: b
   const ipCandidates: Array<string | undefined> = [
     dedupedForwardChain[0],
     xRealIp,
-    socketIp && isIpAddress(socketIp) ? socketIp : undefined,
+    socketIp !== undefined && isIpAddress(socketIp) ? socketIp : undefined,
   ];
   const ip = ipCandidates.find(candidate => Boolean(candidate));
 
@@ -27,7 +32,7 @@ export function getIps(request: Request, server: Server<unknown>, trustProxy?: b
 }
 
 function collectForwardedFor(headerValue: string | null): string[] {
-  if (!headerValue) {
+  if (headerValue === null || headerValue.trim().length === 0) {
     return [];
   }
 
@@ -36,7 +41,7 @@ function collectForwardedFor(headerValue: string | null): string[] {
   for (const entry of headerValue.split(',')) {
     const element = entry.trim();
 
-    if (!element) {
+    if (element.length === 0) {
       continue;
     }
 
@@ -56,7 +61,7 @@ function collectForwardedFor(headerValue: string | null): string[] {
       const value = segment.slice(separator + 1);
       const ip = extractHeaderIp(value);
 
-      if (ip) {
+      if (ip !== undefined) {
         results.push(ip);
       }
     }
@@ -66,7 +71,7 @@ function collectForwardedFor(headerValue: string | null): string[] {
 }
 
 function collectXForwardedFor(headerValue: string | null): string[] {
-  if (!headerValue) {
+  if (headerValue === null || headerValue.trim().length === 0) {
     return [];
   }
 
@@ -75,7 +80,7 @@ function collectXForwardedFor(headerValue: string | null): string[] {
   for (const token of headerValue.split(',')) {
     const ip = extractHeaderIp(token);
 
-    if (ip) {
+    if (ip !== undefined) {
       results.push(ip);
     }
   }
@@ -102,7 +107,7 @@ function dedupePreserveOrder(values: string[]): string[] {
 function extractHeaderIp(raw: string | undefined | null): string | undefined {
   const candidate = sanitizeIpCandidate(raw);
 
-  if (!candidate || !isIpAddress(candidate)) {
+  if (candidate === undefined || !isIpAddress(candidate)) {
     return undefined;
   }
 
@@ -110,13 +115,13 @@ function extractHeaderIp(raw: string | undefined | null): string | undefined {
 }
 
 function sanitizeIpCandidate(raw: string | undefined | null): string | undefined {
-  if (!raw) {
+  if (raw === null || raw === undefined) {
     return undefined;
   }
 
   let value = raw.trim();
 
-  if (!value) {
+  if (value.length === 0) {
     return undefined;
   }
 
@@ -128,7 +133,7 @@ function sanitizeIpCandidate(raw: string | undefined | null): string | undefined
 
   value = stripOptionalQuotes(value);
 
-  if (!value || isPlaceholder(value)) {
+  if (value.length === 0 || isPlaceholder(value)) {
     return undefined;
   }
 
@@ -150,7 +155,7 @@ function sanitizeIpCandidate(raw: string | undefined | null): string | undefined
   value = stripOptionalQuotes(value);
   value = value.trim();
 
-  if (!value || isPlaceholder(value)) {
+  if (value.length === 0 || isPlaceholder(value)) {
     return undefined;
   }
 
@@ -286,3 +291,5 @@ export const __internals = {
   isIpv4,
   isIpv6,
 };
+
+export { getIps };

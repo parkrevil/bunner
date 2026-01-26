@@ -3,10 +3,10 @@ import { ApiProperty } from '@bunner/scalar';
 
 export class CreatePostDto {
   @ApiProperty({ description: 'Title of the post', example: 'Hello World' })
-  @IsString()
+  @(IsString() as PropertyDecorator)
   title: string;
 
   @ApiProperty({ description: 'Content of the post', example: 'This is a content' })
-  @IsString()
+  @(IsString() as PropertyDecorator)
   content: string;
 }

@@ -2,8 +2,6 @@ import { LogLevel } from '@bunner/common';
 import { bootstrapApplication } from '@bunner/core';
 import { bunnerHttpAdapter } from '@bunner/http-adapter';
 
-import type { SomeConfig } from './core/config/some-config';
-
 import { rootModule } from './__module__';
 import { ConfigNamespace } from './core/config/config-namespace';
 import { SomeConfig as SomeConfigImpl } from './core/config/some-config';
@@ -34,7 +32,7 @@ await bootstrapApplication(rootModule, {
   },
   adapters: [
     bunnerHttpAdapter(configService => {
-      const httpConfig = configService.get<SomeConfig>(ConfigNamespace.USER_HTTP);
+      const httpConfig = configService.get(ConfigNamespace.USER_HTTP) as unknown as SomeConfigImpl;
 
       return {
         name: 'user-api-server',
@@ -44,7 +42,7 @@ await bootstrapApplication(rootModule, {
       };
     }),
     bunnerHttpAdapter(configService => {
-      const httpConfig = configService.get<SomeConfig>(ConfigNamespace.ADMIN_HTTP);
+      const httpConfig = configService.get(ConfigNamespace.ADMIN_HTTP) as unknown as SomeConfigImpl;
 
       return {
         name: 'admin-api-server',

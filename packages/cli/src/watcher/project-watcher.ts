@@ -12,7 +12,8 @@ export class ProjectWatcher {
 
     this.watcher = watch(this.rootPath, { recursive: true }, (event, filename) => {
       if (
-        !filename ||
+        typeof filename !== 'string' ||
+        filename.length === 0 ||
         filename.includes('node_modules') ||
         filename.includes('.git') ||
         filename.includes('.bunner') ||

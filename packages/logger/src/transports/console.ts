@@ -33,7 +33,7 @@ const COLORS: Record<Color, string> = {
 export class ConsoleTransport implements Transport {
   constructor(private options: LoggerOptions = {}) {}
 
-  log<T>(message: LogMessage<T>): void {
+  log(message: LogMessage): void {
     const format = this.options.format ?? (Bun.env.NODE_ENV === 'production' ? 'json' : 'pretty');
 
     if (format === 'json') {
@@ -43,7 +43,7 @@ export class ConsoleTransport implements Transport {
     }
   }
 
-  private logJson<T>(message: LogMessage<T>): void {
+  private logJson(message: LogMessage): void {
     const replacer = (_key: string, value: LogMetadataValue) => {
       if (value instanceof Error) {
         const { name, message, stack, ...rest } = value;
@@ -68,7 +68,7 @@ export class ConsoleTransport implements Transport {
     process.stdout.write(str + '\n');
   }
 
-  private logPretty<T>(message: LogMessage<T>): void {
+  private logPretty(message: LogMessage): void {
     const { level, time, msg, context, reqId, workerId, err, ...rest } = message;
     const date = new Date(time);
     const timeStr = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}:${date.getSeconds().toString().padStart(2, '0')}`;
@@ -82,11 +82,11 @@ export class ConsoleTransport implements Transport {
       metaStr += `[W:${workerId}] `;
     }
 
-    if (reqId) {
+    if (typeof reqId === 'string' && reqId.length > 0) {
       metaStr += `[${reqId}] `;
     }
 
-    if (context) {
+    if (typeof context === 'string' && context.length > 0) {
       metaStr += `[${COLORS.cyan}${context}${RESET}] `;
     }
 
@@ -106,7 +106,7 @@ export class ConsoleTransport implements Transport {
     if (Object.keys(rest).length > 0) {
       const processedRest: LogMetadataRecord = {};
 
-      for (const [key, val] of Object.entries(rest as LogMetadataRecord)) {
+      for (const [key, val] of Object.entries(rest)) {
         if (this.isLoggable(val)) {
           processedRest[key] = val.toLog();
         } else {
@@ -119,6 +119,6 @@ export class ConsoleTransport implements Transport {
   }
 
   private isLoggable(value: LogMetadataValue): value is Loggable {
-    return Boolean(value) && typeof value === 'object' && typeof (value as Loggable).toLog === 'function';
+    return typeof value === 'object' && value !== null && 'toLog' in value && typeof value.toLog === 'function';
   }
 }

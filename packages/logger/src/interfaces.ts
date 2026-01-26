@@ -1,4 +1,4 @@
-import type { Color, LogArgument, LogLevel, LogMessage, LogMetadataRecord, LogMetadataValue } from './types';
+import type { Color, LogLevel, LogMessage, LogMetadataRecord } from './types';
 
 export type { Color, LogArgument, LogLevel, LogMessage, LogMetadataRecord, LogMetadataValue } from './types';
 
@@ -25,18 +25,18 @@ export interface LogContextTarget {
   constructor?: LogContextConstructor;
 }
 
-export interface LoggerPrettyOptions<T extends LogMetadataRecord = LogMetadataRecord> {
+export interface LoggerPrettyOptions {
   colors?: Record<LogLevel, Color>;
-  columns?: Array<keyof LogMessage<T>>;
+  columns?: Array<keyof LogMessage>;
 }
 
-export interface LoggerOptions<T extends LogMetadataRecord = LogMetadataRecord> {
+export interface LoggerOptions {
   level?: LogLevel;
 
   format?: 'pretty' | 'json';
-  prettyOptions?: LoggerPrettyOptions<T>;
+  prettyOptions?: LoggerPrettyOptions;
 }
 
 export interface Transport {
-  log<T>(message: LogMessage<T>): void;
+  log(message: LogMessage): void;
 }

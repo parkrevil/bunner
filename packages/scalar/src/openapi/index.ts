@@ -4,6 +4,7 @@ export { addOperationMetadata, addOperationParameters, addOperationRequestBody, 
 export { getSchemaForType } from './schema';
 export {
   ensurePath,
+  extractDecorators,
   getControllerBasePath,
   getControllerTag,
   getDecorator,
@@ -11,4 +12,11 @@ export {
   normalizeFullPath,
 } from './utils';
 
-export type { DecoratorMeta, OpenApiConfig, OpenApiDocument, OpenApiOperation } from './interfaces';
+export type {
+  DecoratorMeta,
+  OpenApiConfig,
+  OpenApiDocument,
+  OpenApiOperation,
+  OpenApiPathItem,
+  OpenApiRecord,
+} from './interfaces';

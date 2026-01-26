@@ -1,21 +1,13 @@
 import type { Doc } from './interfaces';
 
-import { isRecord } from '../common/guards';
-
 export function uiResponse(doc: Doc): Response {
   let title = 'API Docs';
   const spec = doc.spec;
+  const info = spec.info;
+  const rawTitle = info.title;
 
-  if (isRecord(spec)) {
-    const info = spec.info;
-
-    if (isRecord(info)) {
-      const rawTitle = info.title;
-
-      if (typeof rawTitle === 'string' && rawTitle.length > 0) {
-        title = rawTitle;
-      }
-    }
+  if (typeof rawTitle === 'string' && rawTitle.length > 0) {
+    title = rawTitle;
   }
 
   const embedded = JSON.stringify(spec).replace(/'/g, '&apos;');

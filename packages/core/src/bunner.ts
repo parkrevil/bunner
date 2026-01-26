@@ -59,11 +59,15 @@ export class Bunner {
         try {
           await app.stop();
         } catch (e) {
-          Bunner.logger.error('app stop failed', e);
+          const meta = e instanceof Error ? e : { error: String(e) };
+
+          Bunner.logger.error('app stop failed', meta);
         }
       }),
     ).catch(e => {
-      Bunner.logger.error('Shutdown Error', e);
+      const meta = e instanceof Error ? e : { error: String(e) };
+
+      Bunner.logger.error('Shutdown Error', meta);
     });
   }
 
@@ -86,7 +90,7 @@ export class Bunner {
       return;
     }
 
-    const handler = async (signal: string) => {
+    const handler = async (signal: NodeJS.Signals) => {
       let exitCode = 0;
 
       try {
@@ -100,7 +104,9 @@ export class Bunner {
           ),
         ]);
       } catch (e) {
-        Bunner.logger.error(`graceful shutdown failed on ${signal}`, e);
+        const meta = e instanceof Error ? e : { error: String(e) };
+
+        Bunner.logger.error(`graceful shutdown failed on ${signal}`, meta);
 
         exitCode = 1;
       } finally {
@@ -110,8 +116,10 @@ export class Bunner {
       }
     };
 
-    ['SIGINT', 'SIGTERM', 'SIGQUIT', 'SIGHUP', 'SIGUSR2'].forEach(sig => {
-      process.on(sig, signal => void handler(signal));
+    const signals: NodeJS.Signals[] = ['SIGINT', 'SIGTERM', 'SIGQUIT', 'SIGHUP', 'SIGUSR2'];
+
+    signals.forEach(signal => {
+      process.on(signal, handledSignal => void handler(handledSignal));
     });
 
     this.signalsInitialized = true;

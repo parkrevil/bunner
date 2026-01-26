@@ -15,7 +15,11 @@ export function collapseSlashes(ctx: ProcessorContext): void {
 }
 
 export function handleTrailingSlashOptions(ctx: ProcessorContext): void {
-  if (ctx.config.ignoreTrailingSlash && ctx.segments.length > 0 && ctx.segments[ctx.segments.length - 1] === '') {
+  if (
+    ctx.config.ignoreTrailingSlash === true &&
+    ctx.segments.length > 0 &&
+    ctx.segments[ctx.segments.length - 1] === ''
+  ) {
     ctx.segments.pop();
   }
 }

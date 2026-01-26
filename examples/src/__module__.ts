@@ -1,7 +1,6 @@
-import type { BunnerModule } from '@bunner/common';
+import type { BunnerModule } from '@bunner/core';
 
-import { CorsMiddleware, HttpMethod, HttpMiddlewareLifecycle, QueryParserMiddleware } from '@bunner/http-adapter';
-import { Logger } from '@bunner/logger';
+import { HttpMiddlewareLifecycle } from '@bunner/http-adapter';
 import { provideScalar } from '@bunner/scalar';
 
 import { HttpErrorFilter } from './filters/http-error.filter';
@@ -11,7 +10,6 @@ export const rootModule: BunnerModule = {
   name: 'AppModule',
   providers: [
     HttpErrorFilter,
-    { provide: Logger, useFactory: () => new Logger('AppModule') },
     ...provideScalar({
       documentTargets: 'all',
       httpTargets: 'all',
@@ -21,14 +19,7 @@ export const rootModule: BunnerModule = {
     http: {
       '*': {
         middlewares: {
-          [HttpMiddlewareLifecycle.BeforeRequest]: [
-            LoggerMiddleware,
-            CorsMiddleware.withOptions({
-              origin: '*',
-              methods: [HttpMethod.Get, HttpMethod.Post, HttpMethod.Put, HttpMethod.Delete, HttpMethod.Options],
-            }),
-          ],
-          [HttpMiddlewareLifecycle.AfterRequest]: [QueryParserMiddleware],
+          [HttpMiddlewareLifecycle.BeforeRequest]: [LoggerMiddleware],
         },
         errorFilters: [HttpErrorFilter],
       },

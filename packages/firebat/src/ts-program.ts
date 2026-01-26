@@ -95,8 +95,10 @@ export const createFirebatProgram = async (config: FirebatProgramConfig): Promis
       const parsed = parseSource(filePath, sourceText);
 
       results.push(parsed);
-    } catch (e) {
-      console.error(`[firebat] Failed to parse ${filePath}: ${e}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+
+      console.error(`[firebat] Failed to parse ${filePath}: ${message}`);
     }
   }
 

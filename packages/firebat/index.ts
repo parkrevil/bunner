@@ -1,3 +1,3 @@
 import { runFirebat } from './src/firebat';
 
-runFirebat();
+void runFirebat();

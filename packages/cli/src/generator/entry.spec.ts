@@ -2,11 +2,14 @@ import { describe, expect, it } from 'bun:test';
 
 import { EntryGenerator } from './entry';
 
-describe('EntryGenerator.generate', () => {
+describe('entry', () => {
   it('should inline bootstrap when workers is 1', () => {
+    // Arrange
     const gen = new EntryGenerator();
+    // Act
     const code = gen.generate('./src/main.ts', false, { workers: 1 });
 
+    // Assert
     expect(code).toContain('if (workersCount <= 1)');
     expect(code).toContain('await bootstrap();');
     expect(code).toContain("const runtimeFileName = './runtime.js'");
@@ -15,9 +18,12 @@ describe('EntryGenerator.generate', () => {
   });
 
   it('should use ClusterManager when workers is greater than 1', () => {
+    // Arrange
     const gen = new EntryGenerator();
+    // Act
     const code = gen.generate('./src/main.ts', false, { workers: 2 });
 
+    // Assert
     expect(code).toContain('if (workersCount <= 1)');
     expect(code).toContain('new ClusterManager');
   });

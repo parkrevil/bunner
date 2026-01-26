@@ -17,6 +17,6 @@ export {
 } from '../src/constants';
 
 export type { HttpWorkerResponse } from '../src/interfaces';
-export type { SystemErrorHandler } from '../src/interfaces';
+export { SystemErrorHandler } from '../src/system-error-handler';
 
 export type { RouterOptions } from '../src/router/types';

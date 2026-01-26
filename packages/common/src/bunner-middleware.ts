@@ -1,6 +1,5 @@
-import type { Context } from './interfaces';
+import type { Context, MiddlewareRegistration } from './interfaces';
 import type { Class } from './types';
-import type { MiddlewareRegistration } from './interfaces';
 
 export abstract class BunnerMiddleware<TOptions = void> {
   public static withOptions<TOptions>(

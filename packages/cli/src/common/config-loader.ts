@@ -2,7 +2,7 @@ import { basename, join, relative } from 'path';
 import { runInNewContext } from 'node:vm';
 import { ModuleKind, ScriptTarget, transpileModule } from 'typescript';
 
-import type { ConfigLoadResult, ConfigModule, ResolvedBunnerConfig } from './interfaces';
+import type { ConfigLoadResult, ConfigModule, JsonRecord, JsonValue, ResolvedBunnerConfig } from './interfaces';
 
 import { ConfigLoadError } from './errors';
 
@@ -24,7 +24,7 @@ export class ConfigLoader {
         const resolved =
           candidate.format === 'ts'
             ? await ConfigLoader.loadTsConfig(candidate.path, cwd)
-            : await Bun.file(candidate.path).json<ResolvedBunnerConfig>();
+            : await ConfigLoader.loadJsonConfig(candidate.path, cwd);
         const moduleConfig = resolved.module;
         const fileName = moduleConfig?.fileName;
 
@@ -62,6 +62,92 @@ export class ConfigLoader {
     throw new ConfigLoadError('Missing bunner config: bunner.config.ts or bunner.config.json is required.');
   }
 
+  private static isRecord(value: JsonValue | undefined): value is JsonRecord {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+  }
+
+  private static isNonEmptyString(value: JsonValue | undefined): value is string {
+    return typeof value === 'string' && value.length > 0;
+  }
+
+  private static isStringArray(value: JsonValue | undefined): value is string[] {
+    return Array.isArray(value) && value.every(entry => typeof entry === 'string');
+  }
+
+  private static toResolvedConfig(value: JsonValue, sourcePath: string): ResolvedBunnerConfig {
+    if (!this.isRecord(value)) {
+      throw new ConfigLoadError('Invalid bunner config: must be an object.', sourcePath);
+    }
+
+    const moduleValue = value.module;
+
+    if (!this.isRecord(moduleValue)) {
+      throw new ConfigLoadError('Invalid bunner config: module is required.', sourcePath);
+    }
+
+    const fileName = moduleValue.fileName;
+
+    if (!this.isNonEmptyString(fileName)) {
+      throw new ConfigLoadError('Invalid bunner config: module.fileName is required.', sourcePath);
+    }
+
+    const config: ResolvedBunnerConfig = {
+      module: { fileName },
+    };
+    const entry = value.entry;
+
+    if (typeof entry === 'string') {
+      config.entry = entry;
+    }
+
+    const workers = value.workers;
+
+    if (typeof workers === 'number') {
+      config.workers = workers;
+    } else if (workers === 'full' || workers === 'half') {
+      config.workers = workers;
+    } else if (this.isStringArray(workers)) {
+      config.workers = workers;
+    }
+
+    const port = value.port;
+
+    if (typeof port === 'number') {
+      config.port = port;
+    }
+
+    const compiler = value.compiler;
+
+    if (this.isRecord(compiler)) {
+      const compilerConfig: ResolvedBunnerConfig['compiler'] = {};
+      const strictValidation = compiler.strictValidation;
+      const minify = compiler.minify;
+      const profile = compiler.profile;
+
+      if (typeof strictValidation === 'boolean') {
+        compilerConfig.strictValidation = strictValidation;
+      }
+
+      if (typeof minify === 'boolean') {
+        compilerConfig.minify = minify;
+      }
+
+      if (profile === 'minimal' || profile === 'standard' || profile === 'full') {
+        compilerConfig.profile = profile;
+      }
+
+      config.compiler = compilerConfig;
+    }
+
+    const scanPaths = value.scanPaths;
+
+    if (this.isStringArray(scanPaths)) {
+      config.scanPaths = scanPaths;
+    }
+
+    return config;
+  }
+
   private static async loadTsConfig(path: string, cwd: string): Promise<ResolvedBunnerConfig> {
     const source = await Bun.file(path).text();
     const output = transpileModule(source, {
@@ -80,5 +166,14 @@ export class ConfigLoader {
     }
 
     return moduleContainer.exports.bunnerConfig;
+  }
+
+  private static async loadJsonConfig(path: string, cwd: string): Promise<ResolvedBunnerConfig> {
+    const sourcePath = relative(cwd, path);
+    const rawText = await Bun.file(path).text();
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+    const parsed = JSON.parse(rawText) as JsonValue;
+
+    return this.toResolvedConfig(parsed, sourcePath);
   }
 }

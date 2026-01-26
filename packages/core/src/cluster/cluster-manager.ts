@@ -3,11 +3,11 @@ import { backOff } from 'exponential-backoff'; // Consider removing if complex r
 
 import type { ClusterBaseWorker } from './cluster-base-worker';
 import type { ClusterWorker, ClusterOptions } from './interfaces';
-import type { ClusterBootstrapParams, ClusterInitParams } from './types';
+import type { ClusterBootstrapParams, ClusterInitParams, RpcCallable } from './types';
 
 import { wrap } from './ipc';
 
-export class ClusterManager<T extends ClusterBaseWorker> {
+export class ClusterManager<T extends ClusterBaseWorker & Record<string, RpcCallable>> {
   private readonly script: URL;
   private readonly reviving = new Set<number>();
   private readonly workers: Array<ClusterWorker<T> | undefined>;
@@ -34,9 +34,13 @@ export class ClusterManager<T extends ClusterBaseWorker> {
   async init(params?: ClusterInitParams<T>) {
     this.initParams = params;
 
-    const tasks: Array<Promise<void>> = this.workers.map(async (worker, id) =>
-      worker ? worker.remote.init(id, params) : Promise.resolve(),
-    );
+    const tasks = this.workers.map(async (worker, id) => {
+      if (!worker) {
+        return;
+      }
+
+      await worker.remote.init(id, params);
+    });
 
     await Promise.all(tasks);
   }
@@ -44,9 +48,13 @@ export class ClusterManager<T extends ClusterBaseWorker> {
   async bootstrap(params?: ClusterBootstrapParams<T>) {
     this.bootstrapParams = params;
 
-    const tasks: Array<Promise<void>> = this.workers.map(async worker =>
-      worker ? worker.remote.bootstrap(params) : Promise.resolve(),
-    );
+    const tasks = this.workers.map(async worker => {
+      if (!worker) {
+        return;
+      }
+
+      await worker.remote.bootstrap(params);
+    });
 
     await Promise.all(tasks);
   }
@@ -78,7 +86,12 @@ export class ClusterManager<T extends ClusterBaseWorker> {
       return;
     }
 
-    this.logger.error(`💥 Worker #${id} ${event}: `, error);
+    const meta =
+      error instanceof Error
+        ? error
+        : { error: error instanceof Event ? error.type : 'unknown' };
+
+    this.logger.error(`💥 Worker #${id} ${event}: `, meta);
 
     try {
       await this.destroyWorker(id);

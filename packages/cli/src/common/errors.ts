@@ -5,6 +5,9 @@ export class ConfigLoadError extends Error {
     super(message);
 
     this.name = 'ConfigLoadError';
-    this.sourcePath = sourcePath;
+
+    if (sourcePath !== undefined) {
+      this.sourcePath = sourcePath;
+    }
   }
 }

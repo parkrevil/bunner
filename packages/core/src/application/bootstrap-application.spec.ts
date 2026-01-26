@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 
 import { createApplication } from './create-application';
 
-describe('createApplication', () => {
+describe('bootstrap-application', () => {
   it('should create isolated containers when multiple apps are created', async () => {
     // Arrange
     const app1 = await createApplication({ providers: [] }, { name: 'app1', logLevel: 10 });
@@ -28,6 +28,8 @@ describe('createApplication', () => {
     await app.init();
 
     // Assert
-    expect(app.getContainer().get<string>('BACKEND_URL')).toBe('https://example.test/api');
+    const backendUrl = app.getContainer().get('BACKEND_URL');
+
+    expect(backendUrl).toBe('https://example.test/api');
   });
 });

@@ -8,6 +8,7 @@ import type {
   Provider,
   ProviderToken,
   ValueLike,
+  AdapterConfig,
 } from '@bunner/common';
 import type {
   BootstrapConfigLoaderParams,
@@ -23,6 +24,7 @@ export type ModuleMetadataValue =
   | Class
   | Provider
   | ProviderToken
+  | AdapterConfig
   | BunnerModule
   | DynamicModule
   | ReadonlyArray<Class | Provider | ProviderToken | BunnerModule | DynamicModule | ApplicationOptionValue>;

@@ -1,1 +1,1 @@
-export { hasFunctionProperty, isMap, isObjectLike, isRecord } from './guards';
+export { isMap, isObjectLike, isRecord } from './guards';

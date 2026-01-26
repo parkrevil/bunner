@@ -1,14 +1,14 @@
 import { RestController, Get, Post, Put, Delete, Body } from '@bunner/http-adapter';
-import { Logger } from '@bunner/logger';
+import { Logger, type LogMetadataValue } from '@bunner/logger';
 
 import { CreateUserComplexDto, AddressDto, SocialDto } from './dto/complex.dto';
 import type { ComplexCreateResponse, User } from './interfaces';
 import type { IdRouteParams } from '../interfaces';
 import { UsersService } from './users.service';
 
-@RestController('users')
+@(RestController('users') as ClassDecorator)
 export class UsersController {
-  private readonly logger = new Logger(UsersController);
+  private readonly logger = new Logger('UsersController');
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
@@ -18,7 +18,7 @@ export class UsersController {
 
   @Post('complex')
   complexCreate(@Body() body: CreateUserComplexDto): ComplexCreateResponse<CreateUserComplexDto> {
-    this.logger.info('Complex Data Received:', body);
+    this.logger.info('Complex Data Received:', body as LogMetadataValue);
 
     return {
       message: 'Validated and Transformed!',

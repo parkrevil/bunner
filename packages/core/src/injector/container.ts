@@ -1,5 +1,6 @@
 import type {
   BunnerContainer,
+  BunnerFactory,
   Class,
   Provider,
   ProviderToken,
@@ -14,15 +15,13 @@ import type {
   ConstructorParamMetadata,
   DecoratorArgument,
   DecoratorMetadata,
+  FactoryFn,
   ModuleObject,
+  Token,
   TokenRecord,
 } from './types';
 
 import { getRuntimeContext } from '../runtime/runtime-context';
-
-export type FactoryFn<T = ContainerValue> = (container: Container) => T;
-
-export type Token = ProviderToken;
 
 export class Container implements BunnerContainer {
   private factories = new Map<Token, FactoryFn>();
@@ -34,15 +33,23 @@ export class Container implements BunnerContainer {
     }
   }
 
-  set(token: Token, factory: FactoryFn): void {
-    this.factories.set(token, factory);
+  set<TValue extends ContainerValue = ContainerValue>(token: Token, factory: BunnerFactory<TValue>): void;
+  set(token: Token, factory: FactoryFn): void;
+  set<TValue extends ContainerValue = ContainerValue>(
+    token: Token,
+    factory: BunnerFactory<TValue> | FactoryFn,
+  ): void {
+    const wrapped: FactoryFn = c => factory(c);
+
+    this.factories.set(token, wrapped);
   }
 
-  get(token: Token): ContainerValue {
+  get<TValue = ContainerValue>(token: Token): TValue {
     const existing = this.instances.get(token);
 
     if (this.instances.has(token)) {
-      return existing;
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+      return existing as TValue;
     }
 
     const factory = this.factories.get(token);
@@ -57,7 +64,8 @@ export class Container implements BunnerContainer {
 
     this.instances.set(token, instance);
 
-    return instance;
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+    return instance as TValue;
   }
 
   keys(): IterableIterator<Token> {

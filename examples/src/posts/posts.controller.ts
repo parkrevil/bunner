@@ -3,20 +3,20 @@ import { RestController, Delete, Get, Param, Post, Put, Body } from '@bunner/htt
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { PostsService } from './posts.service';
-import type { Post } from './interfaces';
+import type { Post as PostEntity } from './interfaces';
 import type { PostCommentInput } from './comments/interfaces';
 
-@RestController('posts')
+@(RestController('posts') as ClassDecorator)
 export class PostsController {
   constructor(private readonly postsService: PostsService) {}
 
   @Get()
-  getAll(): ReadonlyArray<Post> {
+  getAll(): ReadonlyArray<PostEntity> {
     return this.postsService.findAll();
   }
 
   @Get(':id')
-  getById(@Param('id') id: string): Post | undefined {
+  getById(@Param('id') id: string): PostEntity | undefined {
     return this.postsService.findOneById(Number(id));
   }
 
@@ -26,12 +26,12 @@ export class PostsController {
   }
 
   @Put(':id')
-  update(@Param('id') id: string, @Body() body: UpdatePostDto): Post {
+  update(@Param('id') id: string, @Body() body: UpdatePostDto): PostEntity {
     return this.postsService.update(Number(id), body);
   }
 
   @Delete(':id')
-  delete(@Param('id') id: string): Post[] {
+  delete(@Param('id') id: string): PostEntity[] {
     return this.postsService.delete(Number(id));
   }
 

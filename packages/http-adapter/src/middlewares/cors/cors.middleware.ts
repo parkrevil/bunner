@@ -1,8 +1,6 @@
 import { BunnerMiddleware, type Context } from '@bunner/common';
 
 import type { CorsOptions } from './interfaces';
-import type { CustomOriginFn } from './types';
-
 import { BunnerHttpContext } from '../../adapter';
 import { HeaderField, HttpMethod } from '../../enums';
 import { CORS_DEFAULT_METHODS, CORS_DEFAULT_OPTIONS_SUCCESS_STATUS } from './constants';
@@ -13,7 +11,7 @@ export class CorsMiddleware extends BunnerMiddleware<CorsOptions> {
   }
 
   public async handle(context: Context): Promise<void | boolean> {
-    const http = context.to(BunnerHttpContext);
+    const http = this.assertHttpContext(context);
     const req = http.request;
     const res = http.response;
     const origin = req.headers.get(HeaderField.Origin);
@@ -28,14 +26,14 @@ export class CorsMiddleware extends BunnerMiddleware<CorsOptions> {
     const optionsSuccessStatus = this.options.optionsSuccessStatus ?? CORS_DEFAULT_OPTIONS_SUCCESS_STATUS;
 
     // Handle Origin
-    if (!origin) {
+    if (origin === null || origin.length === 0) {
       return;
     }
 
     // Validate Origin and set header
     const allowedOrigin = await this.matchOrigin(origin, this.options);
 
-    if (!allowedOrigin) {
+    if (allowedOrigin === undefined) {
       return;
     }
 
@@ -47,16 +45,17 @@ export class CorsMiddleware extends BunnerMiddleware<CorsOptions> {
     }
 
     // Credentials
-    if (allowCredentials) {
+    if (allowCredentials === true) {
       res.setHeader(HeaderField.AccessControlAllowCredentials, 'true');
     }
 
     // Exposed Headers (Actual Request)
-    if (exposedHeaders?.length > 0) {
-      res.setHeader(
-        HeaderField.AccessControlExposeHeaders,
-        Array.isArray(exposedHeaders) ? exposedHeaders.join(',') : exposedHeaders,
-      );
+    if (exposedHeaders !== undefined) {
+      const headerValue = Array.isArray(exposedHeaders) ? exposedHeaders.join(',') : exposedHeaders;
+
+      if (headerValue.length > 0) {
+        res.setHeader(HeaderField.AccessControlExposeHeaders, headerValue);
+      }
     }
 
     // Handle Preflight
@@ -64,30 +63,32 @@ export class CorsMiddleware extends BunnerMiddleware<CorsOptions> {
       // Access-Control-Request-Method
       const requestMethod = req.headers.get(HeaderField.AccessControlRequestMethod);
 
-      if (!requestMethod) {
+      if (requestMethod === null || requestMethod.length === 0) {
         // Proceed if not a valid preflight
         return;
       }
 
       // Access-Control-Allow-Methods
-      if (allowedMethods) {
-        res.setHeader(
-          HeaderField.AccessControlAllowMethods,
-          Array.isArray(allowedMethods) ? allowedMethods.join(',') : allowedMethods,
-        );
+      if (allowedMethods !== undefined) {
+        const headerValue = Array.isArray(allowedMethods) ? allowedMethods.join(',') : allowedMethods;
+
+        if (headerValue.length > 0) {
+          res.setHeader(HeaderField.AccessControlAllowMethods, headerValue);
+        }
       }
 
       // Access-Control-Allow-Headers
-      if (allowedHeaders) {
-        res.setHeader(
-          HeaderField.AccessControlAllowHeaders,
-          Array.isArray(allowedHeaders) ? allowedHeaders.join(',') : allowedHeaders,
-        );
+      if (allowedHeaders !== undefined) {
+        const headerValue = Array.isArray(allowedHeaders) ? allowedHeaders.join(',') : allowedHeaders;
+
+        if (headerValue.length > 0) {
+          res.setHeader(HeaderField.AccessControlAllowHeaders, headerValue);
+        }
       } else {
         // If not specified, reflect request headers
         const requestHeaders = req.headers.get(HeaderField.AccessControlRequestHeaders);
 
-        if (requestHeaders) {
+        if (typeof requestHeaders === 'string' && requestHeaders.length > 0) {
           res.setHeader(HeaderField.AccessControlAllowHeaders, requestHeaders);
           res.appendHeader(HeaderField.Vary, HeaderField.AccessControlRequestHeaders);
         }
@@ -109,29 +110,39 @@ export class CorsMiddleware extends BunnerMiddleware<CorsOptions> {
     }
   }
 
+  private assertHttpContext(context: Context): BunnerHttpContext {
+    if (context instanceof BunnerHttpContext) {
+      return context;
+    }
+
+    throw new Error('Expected BunnerHttpContext');
+  }
+
   private async matchOrigin(origin: string, options: CorsOptions): Promise<string | undefined> {
     if (options.origin === false) {
       return undefined;
     }
 
-    if (options.origin === undefined || options.origin === '*') {
-      return options.credentials ? origin : '*';
+    const originOption = options.origin;
+
+    if (originOption === undefined || originOption === '*') {
+      return options.credentials === true ? origin : '*';
     }
 
-    if (typeof options.origin === 'string') {
-      return options.origin === origin ? options.origin : undefined;
+    if (typeof originOption === 'string') {
+      return originOption === origin ? originOption : undefined;
     }
 
-    if (typeof options.origin === 'boolean') {
-      return options.origin ? origin : undefined;
+    if (typeof originOption === 'boolean') {
+      return originOption ? origin : undefined;
     }
 
-    if (options.origin instanceof RegExp) {
-      return options.origin.test(origin) ? origin : undefined;
+    if (originOption instanceof RegExp) {
+      return originOption.test(origin) ? origin : undefined;
     }
 
-    if (Array.isArray(options.origin)) {
-      const matched = options.origin.some(o => {
+    if (Array.isArray(originOption)) {
+      const matched = originOption.some(o => {
         if (o instanceof RegExp) {
           return o.test(origin);
         }
@@ -142,10 +153,10 @@ export class CorsMiddleware extends BunnerMiddleware<CorsOptions> {
       return matched ? origin : undefined;
     }
 
-    if (typeof options.origin === 'function') {
+    if (typeof originOption === 'function') {
       return new Promise<string | undefined>(resolve => {
-        (options.origin as CustomOriginFn)(origin, (err, allow) => {
-          if (err || !allow) {
+        originOption(origin, (err, allow) => {
+          if (err !== null || allow !== true) {
             resolve(undefined);
           } else {
             resolve(origin);

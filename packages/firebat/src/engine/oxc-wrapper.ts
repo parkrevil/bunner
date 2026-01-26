@@ -1,6 +1,7 @@
 import * as path from 'node:path';
 
 import type { SourcePosition } from '../types';
+import type { ParserOptions } from 'oxc-parser';
 import type { OxcParseResult, ParseSyncFn, ParsedFile } from './types';
 
 import * as oxcParser from 'oxc-parser';
@@ -21,13 +22,15 @@ const resolveOxcParserNativeBinding = async (): Promise<string | null> => {
 };
 
 const ensureOxcParserNativeBinding = async (): Promise<void> => {
-  if (Bun.env.NAPI_RS_NATIVE_LIBRARY_PATH) {
+  const envPath = Bun.env.NAPI_RS_NATIVE_LIBRARY_PATH;
+
+  if ((envPath?.length ?? 0) > 0) {
     return;
   }
 
   const bindingPath = await resolveOxcParserNativeBinding();
 
-  if (bindingPath) {
+  if (bindingPath !== null) {
     Bun.env.NAPI_RS_NATIVE_LIBRARY_PATH = bindingPath;
   }
 };
@@ -35,8 +38,12 @@ const ensureOxcParserNativeBinding = async (): Promise<void> => {
 await ensureOxcParserNativeBinding();
 
 const loadParseSync = (): ParseSyncFn => {
-  if (typeof oxcParser.parseSync === 'function') {
-    return oxcParser.parseSync as unknown as ParseSyncFn;
+  const candidate = oxcParser.parseSync;
+
+  if (typeof candidate === 'function') {
+    return (filePath: string, sourceText: string, options?: ParserOptions | null) => {
+      return candidate(filePath, sourceText, options ?? undefined);
+    };
   }
 
   throw new Error('[firebat] Loaded oxc-parser but parseSync is missing');
@@ -77,3 +84,5 @@ export const getLineColumn = (source: string, offset: number): SourcePosition =>
 
   return { line, column: offset - lastNewline - 1 };
 };
+
+export type { ParsedFile } from './types';

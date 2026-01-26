@@ -117,6 +117,16 @@ export interface AdapterSpecExtraction {
   staticSpec: AdapterStaticSpec;
 }
 
+export interface AdapterSpecExportResolution {
+  value: AnalyzerValue;
+  sourceFile: string;
+}
+
+export interface AdapterStaticSpecResult {
+  adapterId: string;
+  staticSpec: AdapterStaticSpec;
+}
+
 export interface HandlerIndexEntry {
   id: string;
 }

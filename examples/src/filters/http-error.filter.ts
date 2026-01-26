@@ -1,7 +1,6 @@
 import { BunnerErrorFilter, type Context, Catch } from '@bunner/common';
 import { BunnerHttpContext } from '@bunner/http-adapter';
-import { Logger } from '@bunner/logger';
-import type { StatusCodes } from 'http-status-codes';
+import { Logger, type LogMetadataValue } from '@bunner/logger';
 
 import type { HttpErrorPayload } from './interfaces';
 
@@ -16,7 +15,7 @@ export class HttpErrorFilter extends BunnerErrorFilter {
     const errorPayload = this.getHttpErrorPayload(error);
     const status = this.resolveStatus(errorPayload?.status);
 
-    this.logger.error('Caught error:', error);
+    this.logger.error('Caught error:', error as LogMetadataValue);
 
     res.setStatus(status);
     res.setBody({
@@ -44,9 +43,9 @@ export class HttpErrorFilter extends BunnerErrorFilter {
     return undefined;
   }
 
-  private resolveStatus(status: HttpErrorPayload['status']): StatusCodes {
+  private resolveStatus(status: HttpErrorPayload['status']): number {
     if (typeof status === 'number' && status !== 101 && status >= 200 && status <= 599) {
-      return status as StatusCodes;
+      return status;
     }
 
     return 500;

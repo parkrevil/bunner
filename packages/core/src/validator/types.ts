@@ -2,7 +2,7 @@ import type { Class, PrimitiveArray, PrimitiveRecord, PrimitiveValue } from '@bu
 
 export type ValidatorTarget = Class;
 
-export type ValidatorValueItem = PrimitiveValue | PrimitiveArray | PrimitiveRecord | InstanceType<Class>;
+export type ValidatorValueItem = PrimitiveValue | PrimitiveArray | PrimitiveRecord  ;
 
 export type ValidatorValueArray = Array<ValidatorValueItem>;
 

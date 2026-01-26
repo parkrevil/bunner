@@ -1,7 +1,6 @@
-import type { Doc, InternalRouter, ScalarOptionsWithRegistry, ScalarRequest, ScalarSetupOptions } from './interfaces';
-import type { AdapterCollectionLike, ScalarKeyedRecord, ScalarMetadataRegistry } from './types';
+import type { Doc, InternalRouter, ScalarRequest, ScalarSetupOptionsInput } from './interfaces';
+import type { AdapterCollectionLike, AdapterGroupGetResult, AdapterGroupLike, AdapterGroupWithGet, ScalarInput, ScalarKeyedRecord } from './types';
 
-import { hasFunctionProperty, isObjectLike } from '../common';
 import { resolveHttpNamesForDocuments, resolveHttpNamesForHosting } from './adapter-names';
 import { buildDocsForHttpAdapters } from './docs';
 import { indexResponse } from './index-html';
@@ -9,7 +8,43 @@ import { resolveDocFromPath } from './routing';
 import { uiResponse } from './ui';
 
 const BUNNER_HTTP_INTERNAL = Symbol.for('bunner:http:internal');
-const boundAdapters = new WeakSet<object>();
+const boundAdapters = new WeakSet<ScalarKeyedRecord>();
+
+function isKeyedRecord(value: AdapterGroupGetResult): value is ScalarKeyedRecord {
+  return value !== null && (typeof value === 'object' || typeof value === 'function');
+}
+
+function hasAdapterGroupGet(value: AdapterGroupLike | undefined): value is AdapterGroupWithGet {
+  if (value === undefined || value === null) {
+    return false;
+  }
+
+  if (typeof value !== 'object' && typeof value !== 'function') {
+    return false;
+  }
+
+  if (!('get' in value)) {
+    return false;
+  }
+
+  return typeof value.get === 'function';
+}
+
+function hasInternalRouter(value: ScalarInput | InternalRouter | undefined): value is InternalRouter {
+  if (value === undefined || value === null) {
+    return false;
+  }
+
+  if (typeof value !== 'object' && typeof value !== 'function') {
+    return false;
+  }
+
+  if (!('get' in value)) {
+    return false;
+  }
+
+  return typeof value.get === 'function';
+}
 
 function jsonResponse(doc: Doc): Response {
   return new Response(JSON.stringify(doc.spec), {
@@ -47,47 +82,48 @@ function registerInternalRoutes(internal: InternalRouter, docs: Doc[], docsById:
   });
 }
 
-export function setupScalar(adapters: AdapterCollectionLike, options?: ScalarSetupOptions & ScalarOptionsWithRegistry): void {
-  if (options?.documentTargets === undefined || options.httpTargets === undefined) {
+export function setupScalar(adapters: AdapterCollectionLike, options?: ScalarSetupOptionsInput): void {
+  if (options === undefined) {
     throw new Error('Scalar: options { documentTargets, httpTargets } is required.');
   }
 
-  if (options.documentTargets !== 'all' && !Array.isArray(options.documentTargets)) {
+  const { documentTargets, httpTargets, metadataRegistry } = options;
+
+  if (documentTargets === undefined || httpTargets === undefined) {
+    throw new Error('Scalar: options { documentTargets, httpTargets } is required.');
+  }
+
+  if (documentTargets !== 'all' && !Array.isArray(documentTargets)) {
     throw new Error('Scalar: documentTargets must be "all" or an array of targets.');
   }
 
-  if (options.httpTargets !== 'all' && !Array.isArray(options.httpTargets)) {
+  if (httpTargets !== 'all' && !Array.isArray(httpTargets)) {
     throw new Error('Scalar: httpTargets must be "all" or an array of names.');
   }
 
-  if (options.httpTargets === null) {
-    throw new Error('Scalar: httpTargets must be specified.');
-  }
-
-  const httpDocNames = resolveHttpNamesForDocuments(adapters, options.documentTargets);
-  const registry = options.metadataRegistry;
-  const docs = buildDocsForHttpAdapters(httpDocNames, registry);
+  const httpDocNames = resolveHttpNamesForDocuments(adapters, documentTargets);
+  const docs = buildDocsForHttpAdapters(httpDocNames, metadataRegistry);
   const docsById = new Map(docs.map(d => [d.docId, d] as const));
-  const httpHostNames = resolveHttpNamesForHosting(adapters, options.httpTargets);
+  const httpHostNames = resolveHttpNamesForHosting(adapters, httpTargets);
 
   if (httpHostNames.length === 0) {
     throw new Error('Scalar: no HTTP adapter selected/found. Install/add @bunner/http-adapter and register an http adapter.');
   }
 
-  const httpGroup = adapters.http;
+  const httpGroup: AdapterGroupLike | undefined = adapters.http;
 
-  if (!hasFunctionProperty(httpGroup, 'get')) {
+  if (!hasAdapterGroupGet(httpGroup)) {
     throw new Error('Scalar: selected http adapter group does not support lookup (missing .get).');
   }
 
   for (const name of httpHostNames) {
     const adapter = httpGroup.get(name);
 
-    if (!adapter) {
+    if (adapter === undefined || adapter === null) {
       throw new Error(`Scalar: selected http target not found: ${name}`);
     }
 
-    if (!isObjectLike(adapter)) {
+    if (!isKeyedRecord(adapter)) {
       throw new Error(`Scalar: selected http adapter is not an object: ${name}`);
     }
 
@@ -95,14 +131,9 @@ export function setupScalar(adapters: AdapterCollectionLike, options?: ScalarSet
       continue;
     }
 
-    const adapterRecord = adapter as ScalarKeyedRecord;
-    const internalValue = adapterRecord[BUNNER_HTTP_INTERNAL];
+    const internalValue: ScalarInput | InternalRouter = adapter[BUNNER_HTTP_INTERNAL];
 
-    if (!internalValue || !hasFunctionProperty(internalValue, 'get')) {
-      throw new Error('Scalar: selected http adapter does not support internal route binding (upgrade http-adapter).');
-    }
-
-    if (!hasFunctionProperty(internalValue, 'get')) {
+    if (!hasInternalRouter(internalValue)) {
       throw new Error('Scalar: selected http adapter does not support internal route binding (upgrade http-adapter).');
     }
 

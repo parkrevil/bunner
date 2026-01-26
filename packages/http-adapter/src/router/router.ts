@@ -1,7 +1,7 @@
 import type { HttpMethod, MatchResult } from '../types';
-import type { DynamicMatchResult, Handler, MatchResultMeta, RouterOptions } from './types';
+import type { DynamicMatchResult, Handler, MatchResultMeta, RegexSafetyOptions, RouterOptions } from './types';
 
-import { Builder, OptionalParamDefaults } from './builder';
+import { Builder, OptionalParamDefaults, type BuilderConfig } from './builder';
 import { RouterCache } from './cache';
 import { Matcher } from './matcher';
 import { buildPatternTester } from './matcher/pattern-tester';
@@ -31,23 +31,37 @@ export class Router<R = MatchResult> {
 
     this.processor = new Processor(procConfig);
 
-    if (options.enableCache) {
+    if (options.enableCache === true) {
       this.cache = new RouterCache(options.cacheSize);
     }
 
-    const buildConfig = {
-      regexSafety: {
-        mode: options.regexSafety?.mode ?? 'error',
-        maxLength: options.regexSafety?.maxLength ?? 256,
-        forbidBacktrackingTokens: options.regexSafety?.forbidBacktrackingTokens ?? true,
-        forbidBackreferences: options.regexSafety?.forbidBackreferences ?? true,
-        maxExecutionMs: options.regexSafety?.maxExecutionMs,
-        validator: options.regexSafety?.validator,
-      },
-      regexAnchorPolicy: options.regexAnchorPolicy,
-      optionalParamDefaults: new OptionalParamDefaults(options.optionalParamBehavior),
-      strictParamNames: options.strictParamNames,
+    const regexSafety: RegexSafetyOptions = {
+      mode: options.regexSafety?.mode ?? 'error',
+      maxLength: options.regexSafety?.maxLength ?? 256,
+      forbidBacktrackingTokens: options.regexSafety?.forbidBacktrackingTokens ?? true,
+      forbidBackreferences: options.regexSafety?.forbidBackreferences ?? true,
     };
+
+    if (options.regexSafety?.maxExecutionMs !== undefined) {
+      regexSafety.maxExecutionMs = options.regexSafety.maxExecutionMs;
+    }
+
+    if (options.regexSafety?.validator !== undefined) {
+      regexSafety.validator = options.regexSafety.validator;
+    }
+
+    const buildConfig: BuilderConfig = {
+      regexSafety,
+      optionalParamDefaults: new OptionalParamDefaults(options.optionalParamBehavior),
+    };
+
+    if (options.regexAnchorPolicy !== undefined) {
+      buildConfig.regexAnchorPolicy = options.regexAnchorPolicy;
+    }
+
+    if (options.strictParamNames !== undefined) {
+      buildConfig.strictParamNames = options.strictParamNames;
+    }
 
     this.builder = new Builder<Handler<R>>(buildConfig);
   }
@@ -145,7 +159,11 @@ export class Router<R = MatchResult> {
     let searchPath = path;
 
     // Fast-path: Trailing slash
-    if (this.options.ignoreTrailingSlash && searchPath.length > 1 && searchPath.endsWith('/')) {
+    if (
+      this.options.ignoreTrailingSlash === true &&
+      searchPath.length > 1 &&
+      searchPath.endsWith('/')
+    ) {
       searchPath = searchPath.slice(0, -1);
     }
 
@@ -182,7 +200,7 @@ export class Router<R = MatchResult> {
         // Execute Handler
         const handler = this.builder.handlers[cached.handlerIndex];
 
-        if (!handler) {
+        if (handler === undefined) {
           return null;
         }
 

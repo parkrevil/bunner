@@ -4,6 +4,8 @@ import type { OxcNode, OxcNodeValue } from './types';
 const isOxcNode = (value: OxcNodeValue | undefined): value is OxcNode =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
+const isOxcNodeArray = (value: OxcNodeValue | undefined): value is ReadonlyArray<OxcNodeValue> => Array.isArray(value);
+
 // Oxc AST structure needs normalization for fingerprinting.
 // We traverse the AST and build a string representation of semantics.
 // Ignore names, locations, comments.
@@ -17,13 +19,25 @@ export const createOxcFingerprint = (node: OxcNodeValue | undefined): string => 
       return;
     }
 
-    if (typeof n !== 'object') {
-      diffs.push(`${typeof n}:${String(n)}`);
+    if (typeof n === 'string') {
+      diffs.push(`string:${n}`);
 
       return;
     }
 
-    if (Array.isArray(n)) {
+    if (typeof n === 'number') {
+      diffs.push(`number:${n}`);
+
+      return;
+    }
+
+    if (typeof n === 'boolean') {
+      diffs.push(`boolean:${n}`);
+
+      return;
+    }
+
+    if (isOxcNodeArray(n)) {
       for (const child of n) {
         visit(child);
       }
@@ -36,13 +50,13 @@ export const createOxcFingerprint = (node: OxcNodeValue | undefined): string => 
     }
 
     // push Type
-    if (n.type) {
+    if (typeof n.type === 'string' && n.type.length > 0) {
       diffs.push(n.type);
     }
 
     // push specific semantic properties
     // e.g. Operator for BinaryExpression
-    if (n.operator) {
+    if (typeof n.operator === 'string' && n.operator.length > 0) {
       diffs.push(n.operator);
     }
 

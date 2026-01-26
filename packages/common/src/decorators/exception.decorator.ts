@@ -1,6 +1,7 @@
 import type { ErrorFilterToken } from '../interfaces';
+import type { ErrorToken } from '../types';
 
-export function Catch(..._exceptions: Array<ErrorFilterToken>): ClassDecorator {
+export function Catch(..._exceptions: Array<ErrorToken>): ClassDecorator {
   return () => {};
 }
 

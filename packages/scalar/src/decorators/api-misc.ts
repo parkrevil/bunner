@@ -1,3 +1,5 @@
+import type { ApiBodyOptions, ApiParamOptions, ApiQueryOptions } from './interfaces';
+
 /**
  * Declares OpenAPI tag(s) for a controller.
  *
@@ -23,7 +25,7 @@ export function ApiBearerAuth(): ClassDecorator {
  * @param _options Body options.
  * @returns A method decorator.
  */
-export function ApiBody(_options: { type: unknown; description?: string; isArray?: boolean }): MethodDecorator {
+export function ApiBody(_options: ApiBodyOptions): MethodDecorator {
   return () => {};
 }
 
@@ -33,7 +35,7 @@ export function ApiBody(_options: { type: unknown; description?: string; isArray
  * @param _options Query parameter options.
  * @returns A method decorator.
  */
-export function ApiQuery(_options: { name: string; required?: boolean; type?: unknown; description?: string }): MethodDecorator {
+export function ApiQuery(_options: ApiQueryOptions): MethodDecorator {
   return () => {};
 }
 
@@ -43,6 +45,6 @@ export function ApiQuery(_options: { name: string; required?: boolean; type?: un
  * @param _options Path parameter options.
  * @returns A method decorator.
  */
-export function ApiParam(_options: { name: string; type?: unknown; description?: string }): MethodDecorator {
+export function ApiParam(_options: ApiParamOptions): MethodDecorator {
   return () => {};
 }

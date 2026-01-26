@@ -1,17 +1,8 @@
-import type { RoaringBitmap32Ctor, RoaringBitmap32Instance } from './types';
+import { RoaringBitmap32 } from 'roaring';
 
-let RoaringBitmap32: RoaringBitmap32Ctor | null = null;
+import type { RoaringBitmap32Instance } from './types';
 
-try {
-  const roaringNative = await import('../../node_modules/roaring/native/roaring-node-v137-linux-x64-glibc/roaring.node');
-  const candidate = (roaringNative as { RoaringBitmap32?: RoaringBitmap32Ctor }).RoaringBitmap32;
-
-  RoaringBitmap32 = candidate ?? null;
-} catch {
-  RoaringBitmap32 = null;
-}
-
-export interface IBitSet {
+interface IBitSet {
   add(index: number): void;
   remove(index: number): void;
   has(index: number): boolean;
@@ -30,7 +21,7 @@ export interface IBitSet {
   toArray(): number[];
 }
 
-export class BigIntBitSet implements IBitSet {
+class BigIntBitSet implements IBitSet {
   private mask: bigint;
 
   constructor(initial: bigint = 0n) {
@@ -107,14 +98,10 @@ export class BigIntBitSet implements IBitSet {
   }
 }
 
-export class RoaringBitSet implements IBitSet {
+class RoaringBitSet implements IBitSet {
   private bitmap: RoaringBitmap32Instance;
 
   constructor(bitmap?: RoaringBitmap32Instance) {
-    if (!RoaringBitmap32) {
-      throw new Error('roaring is not available');
-    }
-
     this.bitmap = bitmap ? new RoaringBitmap32(bitmap) : new RoaringBitmap32();
   }
 
@@ -187,116 +174,13 @@ export class RoaringBitSet implements IBitSet {
   }
 }
 
-export class SetBitSet implements IBitSet {
-  private readonly values: Set<number>;
-
-  constructor(values?: Iterable<number>) {
-    this.values = new Set(values);
-  }
-
-  add(index: number): void {
-    this.values.add(index);
-  }
-
-  remove(index: number): void {
-    this.values.delete(index);
-  }
-
-  has(index: number): boolean {
-    return this.values.has(index);
-  }
-
-  union(other: IBitSet): IBitSet {
-    if (other instanceof SetBitSet) {
-      return new SetBitSet([...this.values, ...other.values]);
-    }
-
-    const merged = new Set<number>(this.values);
-
-    for (const value of other.toArray()) {
-      merged.add(value);
-    }
-
-    return new SetBitSet(merged);
-  }
-
-  intersect(other: IBitSet): IBitSet {
-    const otherValues = new Set(other.toArray());
-    const result: number[] = [];
-
-    for (const value of this.values) {
-      if (otherValues.has(value)) {
-        result.push(value);
-      }
-    }
-
-    return new SetBitSet(result);
-  }
-
-  subtract(other: IBitSet): IBitSet {
-    const otherValues = new Set(other.toArray());
-    const result: number[] = [];
-
-    for (const value of this.values) {
-      if (!otherValues.has(value)) {
-        result.push(value);
-      }
-    }
-
-    return new SetBitSet(result);
-  }
-
-  clone(): IBitSet {
-    return new SetBitSet(this.values);
-  }
-
-  isEmpty(): boolean {
-    return this.values.size === 0;
-  }
-
-  equals(other: IBitSet): boolean {
-    if (other instanceof SetBitSet) {
-      if (this.values.size !== other.values.size) {
-        return false;
-      }
-
-      for (const value of this.values) {
-        if (!other.values.has(value)) {
-          return false;
-        }
-      }
-
-      return true;
-    }
-
-    const otherArray = other.toArray();
-
-    if (this.values.size !== otherArray.length) {
-      return false;
-    }
-
-    for (const value of otherArray) {
-      if (!this.values.has(value)) {
-        return false;
-      }
-    }
-
-    return true;
-  }
-
-  toArray(): number[] {
-    return [...this.values].sort((a, b) => a - b);
-  }
-}
-
-export const createBitSet = (variableCount: number): IBitSet => {
+const createBitSet = (variableCount: number): IBitSet => {
   if (variableCount <= 64) {
     return new BigIntBitSet();
   }
 
-  if (RoaringBitmap32) {
     return new RoaringBitSet();
-  }
-
-  return new SetBitSet();
 };
+
+export { createBitSet };
+export type { IBitSet };

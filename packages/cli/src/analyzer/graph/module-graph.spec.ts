@@ -1,20 +1,40 @@
 import { describe, expect, it } from 'bun:test';
 
 import type { ClassMetadata } from '../interfaces';
+import type { ModuleNode } from './module-node';
 import type { FileAnalysis } from './interfaces';
 
 import { ModuleGraph } from './module-graph';
 
-function createInjectableClassMetadata(params: {
+interface InjectableClassParams {
   readonly className: string;
   readonly injectedTokens?: readonly string[];
-}): ClassMetadata {
+}
+
+interface ModuleFileAnalysisParams {
+  readonly filePath: string;
+  readonly name: string;
+}
+
+interface ClassFileAnalysisParams {
+  readonly filePath: string;
+  readonly classes: ClassMetadata[];
+}
+
+const requireNode = (node: ModuleNode | undefined): ModuleNode => {
+  if (!node) {
+    throw new Error('Expected module node to exist.');
+  }
+
+  return node;
+};
+
+function createInjectableClassMetadata(params: InjectableClassParams): ClassMetadata {
   const { className, injectedTokens } = params;
   const constructorParams = (injectedTokens ?? []).map((token, index) => {
     return {
       name: `p${index}`,
       type: { __bunner_ref: token },
-      typeArgs: undefined,
       decorators: [],
     };
   });
@@ -32,12 +52,10 @@ function createInjectableClassMetadata(params: {
     methods: [],
     properties: [],
     imports: {},
-    middlewares: undefined,
-    errorFilters: undefined,
   };
 }
 
-function createModuleFileAnalysis(params: { readonly filePath: string; readonly name: string }): FileAnalysis {
+function createModuleFileAnalysis(params: ModuleFileAnalysisParams): FileAnalysis {
   const { filePath, name } = params;
 
   return {
@@ -50,12 +68,11 @@ function createModuleFileAnalysis(params: { readonly filePath: string; readonly 
       name,
       providers: [],
       imports: {},
-      adapters: undefined,
     },
   };
 }
 
-function createClassFileAnalysis(params: { readonly filePath: string; readonly classes: ClassMetadata[] }): FileAnalysis {
+function createClassFileAnalysis(params: ClassFileAnalysisParams): FileAnalysis {
   const { filePath, classes } = params;
 
   return {
@@ -64,12 +81,12 @@ function createClassFileAnalysis(params: { readonly filePath: string; readonly c
     reExports: [],
     exports: [],
     imports: {},
-    moduleDefinition: undefined,
   };
 }
 
-describe('ModuleGraph.build', () => {
-  it('should be deterministic regardless of fileMap insertion order', () => {
+describe('module-graph', () => {
+  it('should be deterministic when fileMap insertion order differs', () => {
+    // Arrange
     const modulePath = '/app/src/a/__module__.ts';
     const servicePath = '/app/src/a/a.service.ts';
     const moduleFile = createModuleFileAnalysis({ filePath: modulePath, name: 'AModule' });
@@ -80,30 +97,36 @@ describe('ModuleGraph.build', () => {
     const fileMap1 = new Map<string, FileAnalysis>();
 
     fileMap1.set(servicePath, serviceFile);
+
     fileMap1.set(modulePath, moduleFile);
 
     const fileMap2 = new Map<string, FileAnalysis>();
 
     fileMap2.set(modulePath, moduleFile);
+
     fileMap2.set(servicePath, serviceFile);
 
     const graph1 = new ModuleGraph(fileMap1, '__module__.ts');
     const graph2 = new ModuleGraph(fileMap2, '__module__.ts');
+    // Act
     const modules1 = graph1.build();
     const modules2 = graph2.build();
 
+    // Assert
     expect(Array.from(modules1.keys())).toEqual(Array.from(modules2.keys()));
 
-    const node1 = modules1.get(modulePath);
-    const node2 = modules2.get(modulePath);
+    const node1 = requireNode(modules1.get(modulePath));
+    const node2 = requireNode(modules2.get(modulePath));
 
-    expect(node1?.name).toBe('AModule');
-    expect(node2?.name).toBe('AModule');
-    expect(Array.from(node1?.providers.keys() ?? [])).toEqual(['AService']);
-    expect(Array.from(node2?.providers.keys() ?? [])).toEqual(['AService']);
+    expect(node1.name).toBe('AModule');
+
+    expect(node2.name).toBe('AModule');
+    expect(Array.from(node1.providers.keys())).toEqual(['AService']);
+    expect(Array.from(node2.providers.keys())).toEqual(['AService']);
   });
 
   it('should throw when a circular dependency exists between modules', () => {
+    // Arrange
     const moduleAPath = '/app/src/a/__module__.ts';
     const moduleBPath = '/app/src/b/__module__.ts';
     const serviceAPath = '/app/src/a/a.service.ts';
@@ -127,8 +150,10 @@ describe('ModuleGraph.build', () => {
       }),
     );
 
+    // Act
     const graph = new ModuleGraph(fileMap, '__module__.ts');
 
+    // Assert
     expect(() => graph.build()).toThrow(/Circular dependency detected/);
   });
 });

@@ -1,6 +1,6 @@
-type ParsedCommit = {
+interface ParsedCommit {
   readonly scope?: string;
-};
+}
 
 type RuleWhen = 'always' | 'never';
 
@@ -11,7 +11,7 @@ type Rule = (parsed: ParsedCommit, when: RuleWhen) => RuleResult;
 const scopeNoMulti: Rule = (parsed, when) => {
   const scope = parsed.scope;
 
-  if (!scope) {
+  if (scope === undefined || scope.length === 0) {
     return [true];
   }
 

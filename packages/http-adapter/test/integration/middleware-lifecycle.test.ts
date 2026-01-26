@@ -4,19 +4,27 @@ import { BunnerErrorFilter, BunnerMiddleware } from '@bunner/common';
 import { describe, expect, it, mock } from 'bun:test';
 import { StatusCodes } from 'http-status-codes';
 
-import type { ClassMetadata, ControllerConstructor, DecoratorArgument } from '../types';
+import type { ClassMetadata, DecoratorArgument, MetadataRegistryKey } from '../../src/types';
 
 import { createHttpTestHarness, handleRequest, withGlobalMiddlewares } from '../http-test-kit';
 import { BunnerHttpContext, type BunnerResponse, HttpMethod } from '../index';
 
 class StopBeforeRequestMiddleware extends BunnerMiddleware {
   handle(ctx: Context): boolean {
-    const res = ctx.to(BunnerHttpContext).response;
+    const res = assertHttpContext(ctx).response;
 
     res.setStatus(StatusCodes.NO_CONTENT);
 
     return false;
   }
+}
+
+function assertHttpContext(ctx: Context): BunnerHttpContext {
+  if (ctx instanceof BunnerHttpContext) {
+    return ctx;
+  }
+
+  throw new Error('Expected BunnerHttpContext');
 }
 
 class ThrowBeforeRequestMiddleware extends BunnerMiddleware {
@@ -39,8 +47,8 @@ class MiddlewareController {
   }
 }
 
-function createRegistry(useScopedMiddleware: readonly DecoratorArgument[]): Map<ControllerConstructor, ClassMetadata> {
-  const registry = new Map<ControllerConstructor, ClassMetadata>();
+function createRegistry(useScopedMiddleware: readonly DecoratorArgument[]): Map<MetadataRegistryKey, ClassMetadata> {
+  const registry = new Map<MetadataRegistryKey, ClassMetadata>();
 
   registry.set(MiddlewareController, {
     className: 'MiddlewareController',

@@ -7,7 +7,7 @@ import type { PostCommentInput } from './interfaces';
   visibility: 'exported',
 })
 export class CommentsService {
-  constructor(private readonly commentsRepo: CommentRepository) {}
+  private readonly commentsRepo = new CommentRepository();
 
   create(id: number, body: PostCommentInput): void {
     this.commentsRepo.create(id, body);

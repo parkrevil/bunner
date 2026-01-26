@@ -4,7 +4,7 @@ import type { DuplicateGroup, ResourceWasteFinding } from '../../src/types';
 import { parseSource } from '../../src/engine/oxc-wrapper';
 
 const parseSeed = (seedText: string | undefined): number => {
-  if (!seedText) {
+  if (seedText === undefined) {
     return 1;
   }
 
@@ -30,7 +30,7 @@ export const getFuzzSeed = (): number => {
 export const getFuzzIterations = (fallback: number): number => {
   const raw = Bun.env.FIREBAT_FUZZ_ITERS;
 
-  if (!raw) {
+  if (raw === undefined || raw.length === 0) {
     return fallback;
   }
 
@@ -71,7 +71,18 @@ export const createPrng = (seed: number) => {
   };
 
   const pick = <T>(items: readonly T[]): T => {
-    return items[nextInt(items.length)];
+    if (items.length === 0) {
+      throw new Error('Expected non-empty items');
+    }
+
+    const index = nextInt(items.length);
+    const item = items[index];
+
+    if (item === undefined) {
+      throw new Error('Expected item at index');
+    }
+
+    return item;
   };
 
   return {

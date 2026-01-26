@@ -3,6 +3,8 @@ import type { OxcNode, OxcNodeValue } from './types';
 const isOxcNode = (value: OxcNodeValue | undefined): value is OxcNode =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
+const isOxcNodeArray = (value: OxcNodeValue | undefined): value is ReadonlyArray<OxcNodeValue> => Array.isArray(value);
+
 export const countOxcTokens = (node: OxcNodeValue | undefined): number => {
   // Oxc doesn't expose raw token count directly in AST.
   // Estimation based on AST depth or span length is possible, but raw token count requires lexer.
@@ -19,7 +21,7 @@ export const countOxcTokens = (node: OxcNodeValue | undefined): number => {
   // Let's implement a fast recursive node counter.
 
   const visit = (n: OxcNodeValue | undefined) => {
-    if (Array.isArray(n)) {
+    if (isOxcNodeArray(n)) {
       for (const child of n) {
         visit(child);
       }

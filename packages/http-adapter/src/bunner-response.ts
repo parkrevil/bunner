@@ -3,7 +3,7 @@ import { StatusCodes, getReasonPhrase } from 'http-status-codes';
 
 import type { BunnerRequest } from './bunner-request';
 import type { HttpWorkerResponse } from './interfaces';
-import type { ResponseBodyValue } from './types';
+import type { HeadersInit, ResponseBodyValue } from './types';
 
 import { ContentType, HeaderField, HttpMethod } from './enums';
 
@@ -74,7 +74,7 @@ export class BunnerResponse {
   appendHeader(name: string, value: string) {
     const existing = this._headers.get(name);
 
-    if (existing) {
+    if (typeof existing === 'string' && existing.length > 0) {
       this._headers.set(name, `${existing}, ${value}`);
     } else {
       this._headers.set(name, value);
@@ -140,7 +140,9 @@ export class BunnerResponse {
       return this;
     }
 
-    if (this.getHeader(HeaderField.Location)) {
+    const location = this.getHeader(HeaderField.Location);
+
+    if (typeof location === 'string' && location.length > 0) {
       if (!this._status) {
         this.setStatus(StatusCodes.MOVED_PERMANENTLY);
       }
@@ -148,7 +150,7 @@ export class BunnerResponse {
       return this.setBody(undefined).buildWorkerResponse();
     }
 
-    if (!this.getContentType()) {
+    if (this.getContentType() === null) {
       this.setContentType(this.inferContentType());
     }
 
@@ -170,11 +172,11 @@ export class BunnerResponse {
       return this.setStatus(StatusCodes.NO_CONTENT).setBody(undefined).buildWorkerResponse();
     }
 
-    if (contentType?.startsWith(ContentType.Json)) {
+    if (contentType?.startsWith(ContentType.Json) === true) {
       try {
         this.setBody(JSON.stringify(this._body));
       } catch {
-        this.setContentType(ContentType.Text).setBody(String(this._body));
+        this.setContentType(ContentType.Text).setBody('[unserializable body]');
       }
     }
 
@@ -186,20 +188,12 @@ export class BunnerResponse {
       this.setHeader(HeaderField.SetCookie, this._cookies.toSetCookieHeaders().join(', '));
     }
 
-    const baseInit: ResponseInit = {
-      headers: this._headers.toJSON(),
-    };
-    const init: ResponseInit =
-      this._status !== 0
-        ? {
-            ...baseInit,
-            status: this._status,
-            statusText: this._statusText,
-          }
-        : baseInit;
+    const headers: Record<string, string> = this._headers.toJSON();
+    const init: ResponseInit = this._status !== 0 ? this.buildStatusInit(headers) : { headers };
+    const body: HttpWorkerResponse['body'] = this.normalizeWorkerBody(this._body);
 
     this._workerResponse = {
-      body: this._body,
+      body,
       init,
     };
 
@@ -218,5 +212,48 @@ export class BunnerResponse {
     }
 
     return ContentType.Text;
+  }
+
+  private normalizeWorkerBody(body: ResponseBodyValue | undefined): HttpWorkerResponse['body'] {
+    if (body === undefined || body === null) {
+      return null;
+    }
+
+    if (typeof body === 'string') {
+      return body;
+    }
+
+    if (body instanceof Uint8Array) {
+      return body;
+    }
+
+    if (body instanceof ArrayBuffer) {
+      return body;
+    }
+
+    if (typeof body === 'number' || typeof body === 'boolean') {
+      return body.toString();
+    }
+
+    try {
+      return JSON.stringify(body);
+    } catch {
+      return '[unserializable body]';
+    }
+  }
+
+  private buildStatusInit(headers: HeadersInit): ResponseInit {
+    if (this._statusText !== undefined) {
+      return {
+        headers,
+        status: this._status,
+        statusText: this._statusText,
+      };
+    }
+
+    return {
+      headers,
+      status: this._status,
+    };
   }
 }

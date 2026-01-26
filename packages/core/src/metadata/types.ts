@@ -2,7 +2,13 @@ import type { Class, PrimitiveArray, PrimitiveRecord, PrimitiveValue } from '@bu
 
 export type MetadataForwardRef = () => Class;
 
-export type MetadataTypeReference = Class | MetadataForwardRef | string;
+export type MetadataTypeReference =
+	| Class
+	| MetadataForwardRef
+	| string
+	| NumberConstructor
+	| StringConstructor
+	| BooleanConstructor;
 
 export type MetadataTypeValue = MetadataTypeReference | PrimitiveValue;
 

@@ -1,20 +1,36 @@
 import { ValidatorCompiler, TransformerCompiler } from '@bunner/core';
 import { StatusCodes } from 'http-status-codes';
 
-import type { Class } from '@bunner/common';
+import type { Class, PrimitiveArray, PrimitiveRecord, PrimitiveValue } from '@bunner/common';
+import type { TransformerPlainValue, TransformerValue } from '@bunner/core/src/transformer/types';
+import type { ValidatorValueRecord } from '@bunner/core/src/validator/types';
 import type { ArgumentMetadata, PipeTransform } from '../interfaces';
-import type { RouteParamValue } from '../types';
+import type { RequestBodyValue, RouteParamType, RouteParamValue } from '../types';
 
 export class ValidationPipe implements PipeTransform {
   transform(value: RouteParamValue, metadata: ArgumentMetadata): RouteParamValue {
-    if (!metadata.metatype || !this.toValidate(metadata.metatype)) {
+    const metatype = metadata.metatype;
+
+    if (metatype === undefined || !this.isValidationClass(metatype)) {
       return value;
     }
 
-    const p2iFn = TransformerCompiler.compilePlainToInstance(metadata.metatype);
-    const object = p2iFn(value);
-    const validateFn = ValidatorCompiler.compile(metadata.metatype);
-    const errors = validateFn(object);
+    const plainValue = this.toPlainValue(value);
+
+    if (plainValue === undefined) {
+      return value;
+    }
+
+    const p2iFn = TransformerCompiler.compilePlainToInstance(metatype);
+    const object = p2iFn(plainValue);
+    const validatorRecord = this.toValidatorRecord(object);
+
+    if (!validatorRecord) {
+      return value;
+    }
+
+    const validateFn = ValidatorCompiler.compile(metatype);
+    const errors = validateFn(validatorRecord);
 
     if (errors.length > 0) {
       const error = new Error('Validation failed');
@@ -27,16 +43,167 @@ export class ValidationPipe implements PipeTransform {
       throw error;
     }
 
-    return object;
+    const converted = this.toRouteParamValue(object);
+
+    return converted ?? value;
   }
 
-  private toValidate(metatype: Class): boolean {
-    if (typeof metatype !== 'function') {
+  private isValidationClass(metatype: RouteParamType): metatype is Class {
+    if (this.isPrimitiveMetatype(metatype)) {
       return false;
     }
 
-    const types: Array<Class> = [String, Boolean, Number, Array, Object];
+    return typeof metatype === 'function';
+  }
 
-    return !types.includes(metatype);
+  private isPrimitiveMetatype(metatype: RouteParamType): boolean {
+    return metatype === String || metatype === Boolean || metatype === Number || metatype === Array || metatype === Object;
+  }
+
+  private toPlainValue(value: RouteParamValue): TransformerPlainValue | undefined {
+    if (this.isPrimitiveValue(value)) {
+      return value;
+    }
+
+    const arrayValue = this.toPrimitiveArray(value);
+
+    if (arrayValue !== undefined) {
+      return arrayValue;
+    }
+
+    const recordValue = this.toPrimitiveRecord(value);
+
+    if (recordValue !== undefined) {
+      return recordValue;
+    }
+
+    return undefined;
+  }
+
+  private toValidatorRecord(value: TransformerValue): ValidatorValueRecord | undefined {
+    const recordValue = this.toPrimitiveRecord(value);
+
+    if (recordValue === undefined) {
+      return undefined;
+    }
+
+    return recordValue;
+  }
+
+  private toRouteParamValue(value: TransformerValue): RouteParamValue | undefined {
+    const jsonValue = this.toJsonValue(value);
+
+    if (jsonValue === undefined) {
+      return undefined;
+    }
+
+    return jsonValue;
+  }
+
+  private toJsonValue(value: TransformerValue): RequestBodyValue | undefined {
+    if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      return value;
+    }
+
+    if (Array.isArray(value)) {
+      const items: RequestBodyValue[] = [];
+
+      for (const item of value) {
+        const converted = this.toJsonValue(item);
+
+        if (converted === undefined) {
+          return undefined;
+        }
+
+        items.push(converted);
+      }
+
+      return items;
+    }
+
+    if (this.isTransformerRecord(value)) {
+      const record: Record<string, RequestBodyValue> = {};
+
+      for (const [key, item] of Object.entries(value)) {
+        const converted = this.toJsonValue(item);
+
+        if (converted === undefined) {
+          return undefined;
+        }
+
+        record[key] = converted;
+      }
+
+      return record;
+    }
+
+    return undefined;
+  }
+
+  private isPrimitiveValue(value: RouteParamValue): value is PrimitiveValue {
+    return (
+      value === null ||
+      value === undefined ||
+      typeof value === 'string' ||
+      typeof value === 'number' ||
+      typeof value === 'boolean' ||
+      typeof value === 'bigint' ||
+      typeof value === 'symbol'
+    );
+  }
+
+  private toPrimitiveArray(value: RouteParamValue): PrimitiveArray | undefined {
+    if (!Array.isArray(value)) {
+      return undefined;
+    }
+
+    const items: PrimitiveArray = [];
+
+    for (const item of value) {
+      if (!this.isPrimitiveValue(item)) {
+        return undefined;
+      }
+
+      items.push(item);
+    }
+
+    return items;
+  }
+
+  private toPrimitiveRecord(value: RouteParamValue): PrimitiveRecord | undefined {
+    if (!this.isRouteParamRecord(value)) {
+      return undefined;
+    }
+
+    const record: PrimitiveRecord = {};
+    const entries = Object.entries(value);
+
+    for (const [key, item] of entries) {
+      if (this.isPrimitiveValue(item)) {
+        record[key] = item;
+
+        continue;
+      }
+
+      const arrayValue = this.toPrimitiveArray(item);
+
+      if (arrayValue !== undefined) {
+        record[key] = arrayValue;
+
+        continue;
+      }
+
+      return undefined;
+    }
+
+    return record;
+  }
+
+  private isTransformerRecord(value: TransformerValue): value is Record<string, TransformerValue> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+  }
+
+  private isRouteParamRecord(value: RouteParamValue): value is Record<string, RouteParamValue> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
   }
 }

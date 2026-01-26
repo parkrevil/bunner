@@ -70,7 +70,13 @@ const mulberry32 = (seed: number): Rng => {
         throw new Error('cannot pick from empty list');
       }
 
-      return items[nextU32() % items.length];
+      const item = items[nextU32() % items.length];
+
+      if (item === undefined) {
+        throw new Error('random pick failed');
+      }
+
+      return item;
     },
   };
 };
@@ -267,7 +273,10 @@ const collectIdentifierUsages = (
         return;
       }
 
-      if (range[0] >= excludeRange?.[0] && range[1] <= excludeRange[1]) {
+      const excludeStart = excludeRange?.[0];
+      const excludeEnd = excludeRange?.[1];
+
+      if (excludeStart !== undefined && excludeEnd !== undefined && range[0] >= excludeStart && range[1] <= excludeEnd) {
         return;
       }
 

@@ -22,13 +22,13 @@ export class Processor {
     this.pipeline.push(removeLeadingSlash);
     this.pipeline.push(splitPath);
 
-    if (config.blockTraversal) {
+    if (config.blockTraversal === true) {
       this.pipeline.push(resolveDotSegments);
     }
 
-    if (config.collapseSlashes) {
+    if (config.collapseSlashes === true) {
       this.pipeline.push(collapseSlashes);
-    } else if (config.ignoreTrailingSlash) {
+    } else if (config.ignoreTrailingSlash === true) {
       this.pipeline.push(handleTrailingSlashOptions);
     }
 
@@ -46,16 +46,22 @@ export class Processor {
     for (let i = startStepIndex; i < this.pipeline.length; i++) {
       const step = this.pipeline[i];
 
-      if (step) {
-        step(ctx);
+      if (!step) {
+        continue;
       }
+
+      step(ctx);
     }
 
-    return {
+    const normalized: NormalizedPathSegments = {
       normalized: '/' + ctx.segments.join('/'),
       segments: ctx.segments,
-      segmentDecodeHints: ctx.segmentDecodeHints,
-      suffixPlan: undefined,
     };
+
+    if (ctx.segmentDecodeHints !== undefined) {
+      normalized.segmentDecodeHints = ctx.segmentDecodeHints;
+    }
+
+    return normalized;
   }
 }

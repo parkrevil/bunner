@@ -19,13 +19,13 @@ export class OptionalParamDefaults {
   }
 
   apply(key: number, params: RouteParams): void {
-    if (this.behavior === 'omit' || !this.behavior) {
+    if (this.behavior === 'omit') {
       return;
     }
 
     const defaults = this.defaults.get(key);
 
-    if (!defaults) {
+    if (defaults === undefined) {
       return;
     }
 
@@ -35,7 +35,7 @@ export class OptionalParamDefaults {
     for (let i = 0; i < len; i++) {
       const name = defaults[i];
 
-      if (name && !(name in params)) {
+      if (typeof name === 'string' && name.length > 0 && !(name in params)) {
         params[name] = val;
       }
     }

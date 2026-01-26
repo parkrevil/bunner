@@ -3,7 +3,7 @@ import * as path from 'node:path';
 
 import { parseArgs } from './arg-parse';
 
-describe('parseArgs', () => {
+describe('arg-parse', () => {
   it('should return default options when no args are provided', () => {
     // Arrange
     let argv: string[] = [];

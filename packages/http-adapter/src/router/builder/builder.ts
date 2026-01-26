@@ -253,14 +253,14 @@ export class Builder<T> {
     const release = registerScope();
     let child = this.findMatchingParamChild(node, name, patternSrc);
 
-    if (!child) {
+    if (child === undefined) {
       // Conflict Checks
       this.ensureNoParamConflict(node, name, patternSrc, segments, index);
       this.registerGlobalParamName(name);
 
       child = acquireNode(NodeKind.Param, name);
 
-      if (patternSrc) {
+      if (typeof patternSrc === 'string' && patternSrc.length > 0) {
         this.applyParamRegex(child, patternSrc);
       }
 
@@ -368,18 +368,22 @@ export class Builder<T> {
 
     // Note: Logic for 'segmentParts' (chain optimization) might belong here if we implement it fully.
     // For now, consistent with previous logic:
-    if (parts?.length > 1) {
-      const matched = matchStaticParts(parts, segments, index);
+    if (parts?.length <= 1) {
+      this.addSegments(child, index + 1, activeParams, omittedOptionals, method, key, segments);
 
-      if (matched < parts.length) {
-        splitStaticChain(child, matched);
-      }
+      return;
+    }
 
-      if (matched > 1) {
-        this.addSegments(child, index + matched, activeParams, omittedOptionals, method, key, segments);
+    const matched = matchStaticParts(parts, segments, index);
 
-        return;
-      }
+    if (matched < parts.length) {
+      splitStaticChain(child, matched);
+    }
+
+    if (matched > 1) {
+      this.addSegments(child, index + matched, activeParams, omittedOptionals, method, key, segments);
+
+      return;
     }
 
     this.addSegments(child, index + 1, activeParams, omittedOptionals, method, key, segments);
@@ -441,7 +445,7 @@ export class Builder<T> {
   }
 
   private registerGlobalParamName(name: string): void {
-    if (this.config.strictParamNames && this.globalParamNames.has(name)) {
+    if (this.config.strictParamNames === true && this.globalParamNames.has(name)) {
       throw new Error(`Parameter ':${name}' already registered (strict uniqueness enabled)`);
     }
 
@@ -451,7 +455,7 @@ export class Builder<T> {
   private ensureRegexSafe(patternSrc: string): void {
     const safety = this.config.regexSafety;
 
-    if (!safety) {
+    if (safety === undefined) {
       return;
     }
 

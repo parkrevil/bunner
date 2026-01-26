@@ -9,12 +9,8 @@ import { UserRepository } from './users.repository';
   visibility: 'exported',
 })
 export class UsersService {
-  constructor(
-    private readonly userRepository: UserRepository,
-    private readonly logger: Logger,
-  ) {
-    this.logger.debug('UsersService initialized');
-  }
+  private readonly userRepository = new UserRepository();
+  private readonly logger = new Logger('UsersService');
 
   findAll(): ReadonlyArray<User> {
     return this.userRepository.findAll();

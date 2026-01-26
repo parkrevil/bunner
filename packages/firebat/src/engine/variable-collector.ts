@@ -1,5 +1,3 @@
-import type { Statement, Expression } from 'oxc-parser';
-
 import type { VariableCollectorOptions, VariableUsage, OxcNode, OxcNodeValue } from './types';
 
 const isOxcNode = (value: OxcNodeValue | undefined): value is OxcNode =>
@@ -8,6 +6,8 @@ const isOxcNode = (value: OxcNodeValue | undefined): value is OxcNode =>
 const getNodeType = (node: OxcNode): string | null => {
   return typeof node.type === 'string' ? node.type : null;
 };
+
+const isOxcNodeArray = (value: OxcNodeValue | undefined): value is ReadonlyArray<OxcNodeValue> => Array.isArray(value);
 
 const getNodeName = (node: OxcNode): string | null => {
   return typeof node.name === 'string' ? node.name : null;
@@ -28,7 +28,7 @@ const isFunctionNode = (node: OxcNodeValue | undefined): boolean => {
 const unwrapExpression = (node: OxcNodeValue | undefined): OxcNode | null => {
   let current = isOxcNode(node) ? node : null;
 
-  while (current) {
+  while (current !== null) {
     const nodeType = getNodeType(current);
 
     if (nodeType === 'ParenthesizedExpression') {
@@ -112,7 +112,7 @@ const getStaticObjectExpressionKeys = (node: OxcNodeValue | undefined): Set<stri
   }
 
   const keys = new Set<string>();
-  const properties = Array.isArray(n.properties) ? n.properties : [];
+  const properties = isOxcNodeArray(n.properties) ? n.properties : [];
 
   for (const prop of properties) {
     if (!isOxcNode(prop)) {
@@ -149,7 +149,7 @@ const getStaticObjectExpressionKeys = (node: OxcNodeValue | undefined): Set<stri
   return keys;
 };
 
-export const collectVariables = (node: Statement | Expression | OxcNodeValue, options: VariableCollectorOptions = {}): VariableUsage[] => {
+export const collectVariables = (node: OxcNodeValue | undefined, options: VariableCollectorOptions = {}): VariableUsage[] => {
   const usages: VariableUsage[] = [];
   const includeNestedFunctions = options.includeNestedFunctions !== false;
 
@@ -159,7 +159,7 @@ export const collectVariables = (node: Statement | Expression | OxcNodeValue, op
     allowNestedFunctions: boolean = includeNestedFunctions,
     writeKind?: VariableUsage['writeKind'],
   ) => {
-    if (Array.isArray(current)) {
+    if (isOxcNodeArray(current)) {
       for (const item of current) {
         visit(item, isWriteContext, allowNestedFunctions);
       }
@@ -254,7 +254,9 @@ export const collectVariables = (node: Statement | Expression | OxcNodeValue, op
       return;
     }
 
-    if (nodeType !== null && nodeType.includes('MemberExpression')) {
+    const isMemberExpression = nodeType?.includes('MemberExpression') === true;
+
+    if (isMemberExpression) {
       // `obj.prop` does not read `prop` as a variable; only `obj`.
       // `obj[prop]` reads both `obj` and `prop`.
       const objectNode = current.object;
@@ -391,7 +393,7 @@ export const collectVariables = (node: Statement | Expression | OxcNodeValue, op
 
       if (idNode !== null && getNodeType(idNode) === 'ObjectPattern' && initKeys !== null) {
         // Object destructuring defaults are only evaluated if the property is missing.
-        const properties = Array.isArray(idNode.properties) ? idNode.properties : [];
+        const properties = isOxcNodeArray(idNode.properties) ? idNode.properties : [];
 
         for (const prop of properties) {
           if (!isOxcNode(prop)) {
@@ -455,7 +457,7 @@ export const collectVariables = (node: Statement | Expression | OxcNodeValue, op
 
     if (nodeType === 'CallExpression') {
       const callee = current.callee;
-      const args = Array.isArray(current.arguments) ? current.arguments : [];
+      const args = isOxcNodeArray(current.arguments) ? current.arguments : [];
       const unwrappedCallee = unwrapExpression(callee);
 
       if (unwrappedCallee !== null && isFunctionNode(unwrappedCallee)) {

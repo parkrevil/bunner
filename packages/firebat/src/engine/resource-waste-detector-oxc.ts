@@ -10,6 +10,8 @@ import { collectVariables } from './variable-collector';
 const isOxcNode = (value: OxcNodeValue | undefined): value is OxcNode =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
+const isOxcNodeArray = (value: OxcNodeValue | undefined): value is ReadonlyArray<OxcNodeValue> => Array.isArray(value);
+
 const getNodeType = (node: OxcNode): string | null => {
   return typeof node.type === 'string' ? node.type : null;
 };
@@ -25,7 +27,7 @@ const isFunctionNode = (node: OxcNodeValue | undefined): boolean => {
 
 const collectLocalVarIndexes = (functionNode: OxcNode): Map<string, number> => {
   const names = new Set<string>();
-  const params = Array.isArray(functionNode.params) ? functionNode.params : [];
+  const params = isOxcNodeArray(functionNode.params) ? functionNode.params : [];
 
   for (const param of params) {
     if (isOxcNode(param) && getNodeType(param) === 'Identifier' && typeof param.name === 'string') {
@@ -265,14 +267,16 @@ export const detectResourceWasteOxc = (files: ParsedFile[]): ResourceWasteFindin
         return;
       }
 
-      if (isFunctionNode(node) && node.body) {
+      const functionBody = node.body;
+
+      if (isFunctionNode(node) && functionBody !== undefined && functionBody !== null) {
         const localIndexByName = collectLocalVarIndexes(node);
 
         if (localIndexByName.size === 0) {
           return;
         }
 
-        const analysis = analyzeFunctionBody(node.body, localIndexByName);
+        const analysis = analyzeFunctionBody(functionBody, localIndexByName);
         const defs = analysis.defs;
         const usedDefs = analysis.usedDefs;
         const overwrittenDefIds = analysis.overwrittenDefIds;

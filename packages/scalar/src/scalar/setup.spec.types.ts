@@ -1,3 +1,5 @@
+import type { BunnerAdapter } from '@bunner/common';
+
 export interface InternalRouteRequest {
   path?: string;
 }
@@ -13,7 +15,13 @@ export interface HttpAdapterInternal {
   get(path: string, handler: InternalRouteHandler): void;
 }
 
-export type HttpAdapter = Record<PropertyKey, HttpAdapterInternal>;
+export interface HttpAdapter extends BunnerAdapter {
+  [key: PropertyKey]:
+    | HttpAdapterInternal
+    | BunnerAdapter['start']
+    | BunnerAdapter['stop']
+    | undefined;
+}
 
 export interface HttpAdapterSpy {
   adapter: HttpAdapter;

@@ -50,7 +50,11 @@ export async function build(commandOptions?: CommandOptions) {
     }
 
     while (queue.length > 0) {
-      const filePath = queue.shift()!;
+      const filePath = queue.shift();
+
+      if (filePath === undefined) {
+        continue;
+      }
 
       if (visited.has(filePath)) {
         continue;
@@ -72,25 +76,43 @@ export async function build(commandOptions?: CommandOptions) {
         const classInfos = parseResult.classes.map(meta => ({ metadata: meta, filePath }));
 
         allClasses.push(...classInfos);
-        fileMap.set(filePath, {
+
+        const analysis: FileAnalysis = {
           filePath,
           classes: parseResult.classes,
           reExports: parseResult.reExports,
           exports: parseResult.exports,
-          imports: parseResult.imports,
-          importEntries: parseResult.importEntries,
-          exportedValues: parseResult.exportedValues,
-          localValues: parseResult.localValues,
-          moduleDefinition: parseResult.moduleDefinition,
-        });
+        };
+
+        if (parseResult.imports !== undefined) {
+          analysis.imports = parseResult.imports;
+        }
+
+        if (parseResult.importEntries !== undefined) {
+          analysis.importEntries = parseResult.importEntries;
+        }
+
+        if (parseResult.exportedValues !== undefined) {
+          analysis.exportedValues = parseResult.exportedValues;
+        }
+
+        if (parseResult.localValues !== undefined) {
+          analysis.localValues = parseResult.localValues;
+        }
+
+        if (parseResult.moduleDefinition !== undefined) {
+          analysis.moduleDefinition = parseResult.moduleDefinition;
+        }
+
+        fileMap.set(filePath, analysis);
 
         const pathsToFollow = new Set<string>();
 
-        if (parseResult.imports) {
+        if (parseResult.imports !== undefined) {
           Object.values(parseResult.imports).forEach(p => pathsToFollow.add(p));
         }
 
-        if (parseResult.reExports) {
+        if (parseResult.reExports.length > 0) {
           parseResult.reExports.forEach(re => pathsToFollow.add(re.module));
         }
 
@@ -167,7 +189,8 @@ export async function build(commandOptions?: CommandOptions) {
 
     const entryPointFile = join(buildTempDir, 'entry.ts');
     const entryGen = new EntryGenerator();
-    const buildEntryContent = entryGen.generate(userMain, false, { workers: config.workers });
+    const buildGenerateConfig = config.workers !== undefined ? { workers: config.workers } : {};
+    const buildEntryContent = entryGen.generate(userMain, false, buildGenerateConfig);
 
     await writeIfChanged(entryPointFile, buildEntryContent);
 
@@ -251,7 +274,8 @@ export async function build(commandOptions?: CommandOptions) {
     console.info(`   Runtime: ${join(outDir, 'runtime.js')}`);
     console.info(`   Manifest: ${manifestFile}`);
   } catch (error) {
-    const file = error instanceof ConfigLoadError && error.sourcePath ? error.sourcePath : '.';
+    const sourcePath = error instanceof ConfigLoadError ? error.sourcePath : undefined;
+    const file = typeof sourcePath === 'string' && sourcePath.length > 0 ? sourcePath : '.';
     const reason = error instanceof Error ? error.message : 'Unknown build error.';
     const diagnostic = buildDiagnostic({
       code: 'BUILD_FAILED',

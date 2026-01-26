@@ -1,4 +1,4 @@
-import type { BunnerModule } from '@bunner/common';
+import type { BunnerModule } from '@bunner/core';
 
 import { AuditMiddleware } from './audit.middleware';
 import { PaymentErrorFilter } from './payment-error.filter';

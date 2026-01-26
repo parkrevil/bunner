@@ -7,7 +7,7 @@ import { ChargeDto } from './charge.dto';
 import { PaymentErrorFilter } from './payment-error.filter';
 import { PaymentFailedError } from './payment-failed.error';
 
-@Controller('billing')
+@(Controller('billing') as ClassDecorator)
 @UseMiddlewares(AuditMiddleware)
 export class BillingController {
   private logger = new Logger('BillingController');

@@ -1,9 +1,11 @@
 import { IntegerCFG } from './cfg';
 
-import type { EdgeType, LoopTargets, NodeId, OxcBuiltFunctionCfg, OxcNode, OxcNodeValue } from './types';
+import { EdgeType, type LoopTargets, type NodeId, type OxcBuiltFunctionCfg, type OxcNode, type OxcNodeValue } from './types';
 
 const isOxcNode = (value: OxcNodeValue | undefined): value is OxcNode =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const isOxcNodeArray = (value: OxcNodeValue | undefined): value is ReadonlyArray<OxcNodeValue> => Array.isArray(value);
 
 const getNodeType = (node: OxcNode): string | null => {
   return typeof node.type === 'string' ? node.type : null;
@@ -12,7 +14,7 @@ const getNodeType = (node: OxcNode): string | null => {
 const unwrapExpression = (node: OxcNodeValue | undefined): OxcNode | null => {
   let current = isOxcNode(node) ? node : null;
 
-  while (current) {
+  while (current !== null) {
     const nodeType = getNodeType(current);
 
     if (nodeType === 'ParenthesizedExpression') {
@@ -144,7 +146,7 @@ export class OxcCFGBuilder {
     loopStack: readonly LoopTargets[],
     currentLabel: string | null,
   ): NodeId[] {
-    if (Array.isArray(node)) {
+    if (isOxcNodeArray(node)) {
       let tails: NodeId[] = [...incoming];
 
       for (const entry of node) {
@@ -168,7 +170,7 @@ export class OxcCFGBuilder {
       case 'BlockStatement': {
         let tails: NodeId[] = [...incoming];
         const bodyValue = node.body;
-        const bodyItems = Array.isArray(bodyValue) ? bodyValue : [];
+        const bodyItems = isOxcNodeArray(bodyValue) ? bodyValue : [];
 
         for (const child of bodyItems) {
           tails = this.visitStatement(child, tails, loopStack, null);
@@ -279,9 +281,16 @@ export class OxcCFGBuilder {
         // are not attributed to the same CFG node as the loop variable write.
         const headerPayload: OxcNode = {
           type: statementType === 'ForInStatement' ? 'ForInHeader' : 'ForOfHeader',
-          left: node.left ?? null,
-          right: node.right ?? null,
         };
+
+        if (node.left !== undefined) {
+          headerPayload.left = node.left;
+        }
+
+        if (node.right !== undefined) {
+          headerPayload.right = node.right;
+        }
+
         const headerNode = this.addNode(headerPayload);
         const bodyEntry = this.addNode(null);
         const afterLoop = this.addNode(null);
@@ -310,7 +319,7 @@ export class OxcCFGBuilder {
         const testValue = node.test;
         const updateValue = node.update;
 
-        if (initValue) {
+        if (initValue !== undefined && initValue !== null) {
           const initNode = this.addNode(initValue);
 
           this.connect(tails, initNode, EdgeType.Normal);
@@ -338,7 +347,7 @@ export class OxcCFGBuilder {
         let continueTarget = testNode;
         let updateNode: NodeId | null = null;
 
-        if (updateValue) {
+        if (updateValue !== undefined && updateValue !== null) {
           updateNode = this.addNode(updateValue);
           continueTarget = updateNode;
         }
@@ -347,7 +356,7 @@ export class OxcCFGBuilder {
         const bodyValue = node.body;
         const bodyTails = this.visitStatement(bodyValue, [bodyEntry], nextLoopStack, null);
 
-        if (updateNode) {
+        if (updateNode !== null) {
           this.connect(bodyTails, updateNode, EdgeType.Normal);
           this.cfg.addEdge(updateNode, testNode, EdgeType.Normal);
         } else {
@@ -363,7 +372,7 @@ export class OxcCFGBuilder {
         this.connect(incoming, discriminantNode, EdgeType.Normal);
 
         const afterSwitch = this.addNode(null);
-        const cases = Array.isArray(node.cases) ? node.cases : [];
+        const cases = isOxcNodeArray(node.cases) ? node.cases : [];
         const caseEntries: NodeId[] = cases.map(() => this.addNode(null));
 
         for (const entry of caseEntries) {
@@ -377,14 +386,19 @@ export class OxcCFGBuilder {
 
         for (let index = 0; index < cases.length; index += 1) {
           const caseNode = cases[index];
-          const caseEntry = caseEntries[index]!;
+          const caseEntry = caseEntries[index];
+
+          if (caseEntry === undefined) {
+            continue;
+          }
+
           const consequentValue = isOxcNode(caseNode) ? caseNode.consequent : undefined;
-          const consequent = Array.isArray(consequentValue) ? consequentValue : [];
+          const consequent = isOxcNodeArray(consequentValue) ? consequentValue : [];
           const caseTails = this.visitStatement(consequent, [caseEntry], nextLoopStack, null);
           // Note: switch `case` test expressions are not modeled as nodes.
-          const nextEntry = index + 1 < caseEntries.length ? caseEntries[index + 1]! : null;
+          const nextEntry = index + 1 < caseEntries.length ? caseEntries[index + 1] : undefined;
 
-          if (nextEntry) {
+          if (nextEntry !== undefined) {
             this.connect(caseTails, nextEntry, EdgeType.Normal);
           } else {
             this.connect(caseTails, afterSwitch, EdgeType.Normal);

@@ -40,18 +40,15 @@ const reportInvalidCommand = (value: string | undefined): void => {
   reportDiagnostics({ diagnostics: [diagnostic] });
 };
 
-const resolveProfileOption = (value: unknown): string | undefined => {
-  if (typeof value === 'string') {
-    return value;
+const createCommandOptions = (): CommandOptions => {
+  const profile = typeof values.profile === 'string' ? values.profile : undefined;
+  const options: CommandOptions = {};
+
+  if (profile !== undefined) {
+    options.profile = profile;
   }
 
-  return undefined;
-};
-
-const createCommandOptions = (): CommandOptions => {
-  const profile = resolveProfileOption(values.profile);
-
-  return { profile };
+  return options;
 };
 
 const commandOptions = createCommandOptions();
@@ -64,11 +61,16 @@ try {
     case 'build':
       await build(commandOptions);
       break;
+    case undefined:
+      reportInvalidCommand(command);
+      printUsage();
+      process.exitCode = 1;
+      break;
     default:
       reportInvalidCommand(command);
       printUsage();
       process.exitCode = 1;
   }
-} catch (error) {
+} catch (_error) {
   process.exitCode = 1;
 }

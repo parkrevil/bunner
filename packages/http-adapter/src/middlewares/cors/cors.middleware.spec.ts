@@ -28,6 +28,7 @@ describe('cors.middleware', () => {
   };
 
   const isHttpMethod = (value: string): value is HttpMethod => {
+    // oxlint-disable-next-line typescript-eslint/no-unsafe-enum-comparison
     return Object.values(HttpMethod).some(method => method === value);
   };
 
@@ -514,7 +515,7 @@ describe('cors.middleware', () => {
         expect(result).toBe(false);
         expect(getResHeader(ctx, HeaderField.AccessControlAllowOrigin)).toBe('*');
         expect(getResHeader(ctx, HeaderField.AccessControlAllowMethods)).toBe(CORS_DEFAULT_METHODS.join(','));
-        expect(ctx.response.setStatus).toHaveBeenCalledWith(204);
+        expect(ctx.response.getStatus()).toBe(StatusCodes.NO_CONTENT);
       });
 
       it('should use custom optionsSuccessStatus when configured', async () => {
@@ -529,7 +530,7 @@ describe('cors.middleware', () => {
 
         // Assert
         expect(result).toBe(false);
-        expect(ctx.response.setStatus).toHaveBeenCalledWith(200);
+        expect(ctx.response.getStatus()).toBe(StatusCodes.OK);
       });
 
       it('should skip preflight when Access-Control-Request-Method is missing', async () => {
@@ -545,7 +546,7 @@ describe('cors.middleware', () => {
         // Assert
         expect(result).toBeUndefined();
         expect(getResHeader(ctx, HeaderField.AccessControlAllowMethods)).toBeNull();
-        expect(ctx.response.setStatus).not.toHaveBeenCalled();
+        expect(ctx.response.getStatus()).toBe(0);
       });
 
       it('should continue to next handler when preflightContinue is true', async () => {
@@ -560,7 +561,7 @@ describe('cors.middleware', () => {
 
         // Assert
         expect(result).toBeUndefined();
-        expect(ctx.response.setStatus).not.toHaveBeenCalled();
+        expect(ctx.response.getStatus()).toBe(0);
       });
     });
 

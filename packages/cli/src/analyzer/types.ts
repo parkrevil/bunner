@@ -18,6 +18,17 @@ export interface NodeRecord extends AnalyzerValueRecord {
   readonly end?: number;
 }
 
+export interface TypeInfo {
+  typeName: string;
+  typeArgs?: string[];
+  isUnion?: boolean;
+  unionTypes?: TypeInfo[];
+  isArray?: boolean;
+  isEnum?: boolean;
+  literals?: (string | number | boolean)[];
+  items?: TypeInfo;
+}
+
 export interface ExtractedParam {
   readonly name: string;
   readonly type: AnalyzerValue;

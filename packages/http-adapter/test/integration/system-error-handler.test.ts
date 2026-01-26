@@ -3,11 +3,11 @@ import type { Context } from '@bunner/common';
 import { describe, expect, it, mock } from 'bun:test';
 import { StatusCodes } from 'http-status-codes';
 
-import type { ClassMetadata, ControllerConstructor, SystemError } from '../types';
+import type { ClassMetadata, MetadataRegistryKey, SystemError } from '../../src/types';
 
 import { createHttpTestHarness, handleRequest, withGlobalMiddlewares } from '../http-test-kit';
 import { BunnerHttpContext, type BunnerResponse, HttpMethod } from '../index';
-import { SystemErrorHandler } from '../system-error-handler';
+import { SystemErrorHandler } from '../../src/system-error-handler';
 
 class SystemController {
   boom(): void {
@@ -21,8 +21,8 @@ class SystemController {
   }
 }
 
-function createRegistry(): Map<ControllerConstructor, ClassMetadata> {
-  const registry = new Map<ControllerConstructor, ClassMetadata>();
+function createRegistry(): Map<MetadataRegistryKey, ClassMetadata> {
+  const registry = new Map<MetadataRegistryKey, ClassMetadata>();
 
   registry.set(SystemController, {
     className: 'SystemController',
@@ -47,10 +47,10 @@ describe('RequestHandler.handle', () => {
     const onCall = mock(() => {});
 
     class TestSystemErrorHandler extends SystemErrorHandler {
-      async handle(_error: SystemError, ctx: Context): Promise<void> {
+      handle(_error: SystemError, ctx: Context): void {
         onCall();
 
-        const http = ctx.to(BunnerHttpContext);
+        const http = assertHttpContext(ctx);
 
         http.response.setStatus(StatusCodes.INTERNAL_SERVER_ERROR);
         http.response.setBody('system');
@@ -114,10 +114,10 @@ describe('RequestHandler.handle', () => {
     const onCall = mock(() => {});
 
     class TestSystemErrorHandler extends SystemErrorHandler {
-      async handle(_error: SystemError, ctx: Context): Promise<void> {
+      handle(_error: SystemError, ctx: Context): void {
         onCall();
 
-        const http = ctx.to(BunnerHttpContext);
+        const http = assertHttpContext(ctx);
 
         http.response.setStatus(StatusCodes.INTERNAL_SERVER_ERROR);
         http.response.setBody('system');
@@ -162,10 +162,10 @@ describe('RequestHandler.handle', () => {
     const onCall = mock(() => {});
 
     class TestSystemErrorHandler extends SystemErrorHandler {
-      async handle(_error: SystemError, ctx: Context): Promise<void> {
+      handle(_error: SystemError, ctx: Context): void {
         onCall();
 
-        const http = ctx.to(BunnerHttpContext);
+        const http = assertHttpContext(ctx);
 
         http.response.setStatus(StatusCodes.INTERNAL_SERVER_ERROR);
         http.response.setBody('system');
@@ -201,3 +201,11 @@ describe('RequestHandler.handle', () => {
     expect(workerResponse.body).toBe('{"ok":true}');
   });
 });
+
+function assertHttpContext(ctx: Context): BunnerHttpContext {
+  if (ctx instanceof BunnerHttpContext) {
+    return ctx;
+  }
+
+  throw new Error('Expected BunnerHttpContext');
+}

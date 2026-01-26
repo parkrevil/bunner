@@ -67,18 +67,18 @@ const resolveNodeName = (node: ts.Node, checker: ts.TypeChecker): string | null 
   }
 
   if (ts.isMethodDeclaration(node) || ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node)) {
-    if (node.name) {
+    if (node.name !== undefined) {
       return resolveNameFromPropertyName(node.name, checker);
     }
 
     return null;
   }
 
-  if (ts.isPropertyAssignment(node) && node.name) {
+  if (ts.isPropertyAssignment(node) && node.name !== undefined) {
     return resolveNameFromPropertyName(node.name, checker);
   }
 
-  if (ts.isVariableDeclaration(node) && node.name && ts.isIdentifier(node.name)) {
+  if (ts.isVariableDeclaration(node) && node.name !== undefined && ts.isIdentifier(node.name)) {
     return node.name.text;
   }
 

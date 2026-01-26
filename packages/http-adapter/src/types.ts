@@ -1,11 +1,15 @@
 import type {
   BunnerErrorFilter,
   BunnerMiddleware,
+  BunnerRecord,
+  BunnerValue,
   Class,
+  ClassToken,
   Context,
-  ErrorFilterToken,
   MiddlewareRegistration,
   MiddlewareToken,
+  PrimitiveArray,
+  PrimitiveRecord,
   ProviderToken,
 } from '@bunner/common';
 import type { CookieMap } from 'bun';
@@ -18,19 +22,50 @@ export type RouteKey = number;
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS' | 'HEAD';
 
+export type HeadersInit = Headers | Array<[string, string]> | Record<string, string>;
+
+export type HttpWorkerRpcCallable = (...args: ReadonlyArray<BunnerValue>) => BunnerValue | Promise<BunnerValue>;
+
+export type HttpWorkerRpc = Record<string, HttpWorkerRpcCallable>;
+
 export type RequestParamMap = Record<string, string | undefined>;
 
-export type RequestQueryMap = Record<string, string | string[] | undefined>;
+export interface RequestQueryArray extends Array<RequestQueryValue> {}
 
-export type RequestBodyValue =
-  | string
-  | number
-  | boolean
-  | null
-  | Record<string, string | number | boolean | null>
-  | Array<string | number | boolean | null>;
+export interface RequestQueryRecord extends Record<string, RequestQueryValue> {}
 
-export type ResponseBodyValue = HttpWorkerResponseBody | RequestBodyValue;
+export type RequestQueryValue = string | RequestQueryArray | RequestQueryRecord;
+
+export type RequestQueryMap = Record<string, RequestQueryValue | undefined>;
+
+export type JsonPrimitive = string | number | boolean | null;
+
+export interface JsonArray extends Array<JsonValue> {}
+
+export interface JsonObject {
+  [key: string]: JsonValue;
+}
+
+export type JsonValue = JsonPrimitive | JsonObject | JsonArray;
+
+export type RequestBodyValue = JsonValue;
+
+export type ResponseBodyValue = RequestBodyValue | string | Uint8Array | ArrayBuffer | null;
+
+export interface HttpMiddlewareInstance extends BunnerRecord {
+  handle(context: Context, options?: MiddlewareOptions): void | boolean | Promise<void | boolean>;
+}
+
+export interface HttpMiddlewareConstructor<TOptions = MiddlewareOptions> extends Class<HttpMiddlewareInstance> {
+  new (options?: TOptions): HttpMiddlewareInstance;
+}
+
+export type HttpMiddlewareToken<_TOptions = MiddlewareOptions> = Class<HttpMiddlewareInstance> | symbol;
+
+export interface HttpMiddlewareRegistration<TOptions = MiddlewareOptions> {
+  token: HttpMiddlewareToken<TOptions>;
+  options?: TOptions;
+}
 
 export interface BunnerRequestInit {
   readonly url: string;
@@ -58,7 +93,7 @@ export interface AdaptiveRequest {
   query?: RequestQueryMap;
 }
 
-export type HttpWorkerResponseBody = ConstructorParameters<typeof Response>[0];
+export type HttpWorkerResponseBody = string | Uint8Array | ArrayBuffer | null;
 
 export type RouteHandlerArgument =
   | BunnerRequest
@@ -100,20 +135,14 @@ export type HttpContextValue =
   | RequestQueryMap
   | Headers
   | CookieMap
-  | string
-  | number
-  | boolean
   | bigint
   | symbol
   | null
   | undefined;
 
-export type HttpContextConstructor<TContext> = new (...args: readonly HttpContextValue[]) => TContext;
+export type HttpContextConstructor<TContext> = ClassToken<TContext>;
 
-export type MetadataRegistryKey =
-  | ControllerConstructor
-  | (new (...args: readonly ContainerInstance[]) => BunnerErrorFilter)
-  | (new (...args: readonly ContainerInstance[]) => BunnerMiddleware);
+export type MetadataRegistryKey = ClassToken;
 
 export interface TokenRecord {
   readonly __bunner_ref?: string;
@@ -131,8 +160,10 @@ export type DecoratorArgument =
   | TokenCarrier
   | MiddlewareToken
   | MiddlewareRegistration
-  | ErrorFilterToken
+   
   | ErrorConstructor
+  | PrimitiveArray
+  | PrimitiveRecord
   | string
   | number
   | boolean
@@ -196,7 +227,7 @@ export interface ErrorFilterRunResult {
 
 export interface ShouldCatchParams {
   readonly error: SystemError;
-  readonly filter: BunnerErrorFilter;
+  readonly filter: BunnerErrorFilter<SystemError>;
 }
 
 export interface MatchCatchArgumentParams {
@@ -206,6 +237,11 @@ export interface MatchCatchArgumentParams {
 
 export interface ResolveTokenOptions {
   readonly strict?: boolean;
+}
+
+export interface ResolveTokenContext {
+  readonly strict: boolean;
+  readonly token: string;
 }
 
 export type MiddlewareOptions = Record<string, string | number | boolean | null | undefined>;
@@ -227,6 +263,7 @@ export interface ConstructorParamMetadata {
 }
 
 export interface ParameterMetadata {
+  readonly index?: number;
   readonly name?: string;
   readonly type?: ParamTypeReference;
   readonly decorators?: readonly DecoratorMetadata[];

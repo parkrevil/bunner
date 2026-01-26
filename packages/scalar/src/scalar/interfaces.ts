@@ -1,13 +1,22 @@
-import type { DocumentTargets, HttpTargets, ScalarMetadataRegistry, ScalarRecord } from './types';
+import type { BunnerRecord } from '@bunner/common';
 
-export interface ScalarSetupOptions {
+import type { OpenApiDocument } from '../openapi';
+
+import type { DocumentTarget, DocumentTargets, HttpTargets, ScalarMetadataRegistry } from './types';
+
+export interface ScalarSetupOptions extends BunnerRecord {
   documentTargets: DocumentTargets;
   httpTargets: HttpTargets;
 }
 
 export interface Doc {
   docId: string;
-  spec: ScalarRecord;
+  spec: OpenApiDocument;
+}
+
+export interface ResolvedDocPath {
+  docId: string;
+  isJson: boolean;
 }
 
 export interface ScalarRequest {
@@ -22,4 +31,9 @@ export interface InternalRouter {
 
 export interface ScalarOptionsWithRegistry {
   metadataRegistry?: ScalarMetadataRegistry;
+}
+
+export interface ScalarSetupOptionsInput extends ScalarOptionsWithRegistry {
+  documentTargets?: string | DocumentTarget[];
+  httpTargets?: string | string[] | undefined;
 }

@@ -1,8 +1,6 @@
 import { CookieMap } from 'bun';
 
-import type { BunnerRequestInit, RequestBodyValue, RequestParamMap, RequestQueryMap } from './types';
-
-import { HttpMethod } from './enums';
+import type { BunnerRequestInit, HttpMethod, RequestBodyValue, RequestParamMap, RequestQueryMap } from './types';
 
 export class BunnerRequest {
   public readonly requestId: string;
@@ -45,7 +43,12 @@ export class BunnerRequest {
 
     const contentLengthValue = this.headers.get('content-length');
 
-    this.contentLength = contentLengthValue ? parseInt(contentLengthValue) : null;
+    if (typeof contentLengthValue === 'string' && contentLengthValue.length > 0) {
+      this.contentLength = parseInt(contentLengthValue, 10);
+    } else {
+      this.contentLength = null;
+    }
+
     this.charset = null;
     this.params = req.params ?? {};
     this.query = req.query ?? {};

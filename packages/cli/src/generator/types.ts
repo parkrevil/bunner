@@ -11,3 +11,7 @@ export interface MetadataRegistryModule {
 export interface ScopedKeysMapModule {
   scopedKeysMap: Map<string, string>;
 }
+
+export interface DeepFreezeModule {
+  deepFreeze: (obj: import('../analyzer/types').AnalyzerValue) => import('../analyzer/types').AnalyzerValue;
+}

@@ -10,7 +10,6 @@ import type {
   TransformerPlainValue,
   TransformerValue,
   TransformerValueArray,
-  TransformerValueItem,
   TransformerValueRecord,
 } from './types';
 
@@ -66,7 +65,7 @@ function isValueRecord(value: TransformerValue): value is TransformerValueRecord
   return typeof value === 'object' && value !== null;
 }
 
-function isTransformerValueArray(value: TransformerValueItem | TransformerValueArray): value is TransformerValueArray {
+function isTransformerValueArray(value: TransformerValue): value is TransformerValueArray {
   return Array.isArray(value);
 }
 

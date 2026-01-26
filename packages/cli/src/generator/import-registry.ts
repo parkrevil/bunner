@@ -1,7 +1,8 @@
 import { PathResolver, compareCodePoint } from '../common';
+import type { ImportRegistryEntry } from './interfaces';
 
 export class ImportRegistry {
-  private imports = new Map<string, { path: string; alias: string; originalName: string }>();
+  private imports = new Map<string, ImportRegistryEntry>();
   private aliases = new Set<string>();
   private fileClassMap = new Map<string, string>();
 
@@ -9,9 +10,10 @@ export class ImportRegistry {
 
   public getAlias(className: string, filePath: string): string {
     const key = `${filePath}::${className}`;
+    const existing = this.fileClassMap.get(key);
 
-    if (this.fileClassMap.has(key)) {
-      return this.fileClassMap.get(key)!;
+    if (existing !== undefined) {
+      return existing;
     }
 
     let alias = className;

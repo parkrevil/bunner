@@ -1,5 +1,7 @@
 import type { IntegerCFG } from './cfg';
 import type { IBitSet } from './dataflow';
+import type { RoaringBitmap32 } from 'roaring';
+import type { ParseResult, ParserOptions, Program } from 'oxc-parser';
 
 export type NodeId = number;
 
@@ -35,25 +37,14 @@ export interface FunctionBodyAnalysis {
   readonly defs: ReadonlyArray<DefMeta>;
 }
 
-export interface RoaringBitmap32Instance {
-  add(index: number): void;
-  remove(index: number): void;
-  has(index: number): boolean;
-  orInPlace(other: RoaringBitmap32Instance): void;
-  andInPlace(other: RoaringBitmap32Instance): void;
-  andNotInPlace(other: RoaringBitmap32Instance): void;
-  isEmpty: boolean;
-  isEqual(other: RoaringBitmap32Instance): boolean;
-  toArray(): number[];
-}
-
-export type RoaringBitmap32Ctor = new (bitmap?: RoaringBitmap32Instance) => RoaringBitmap32Instance;
+export type RoaringBitmap32Instance = RoaringBitmap32;
 
 export type OxcNodeValue =
   | string
   | number
   | boolean
   | null
+  | Program
   | OxcNode
   | ReadonlyArray<OxcNodeValue>;
 
@@ -87,23 +78,18 @@ export interface OxcNode {
   label?: OxcNode;
   discriminant?: OxcNode;
   cases?: ReadonlyArray<OxcNode>;
-  argument?: OxcNode;
   handler?: OxcNode;
   block?: OxcNode;
   finalizer?: OxcNode;
 }
 
-export interface OxcParseResult {
-  program: OxcNode;
-  errors: ReadonlyArray<OxcNode>;
-  comments: ReadonlyArray<OxcNode>;
-}
+export type OxcParseResult = ParseResult;
 
 export interface ParseSyncModule {
   parseSync?: ParseSyncFn;
 }
 
-export type ParseSyncFn = (filePath: string, sourceText: string) => OxcParseResult;
+export type ParseSyncFn = (filePath: string, sourceText: string, options?: ParserOptions | null) => OxcParseResult;
 
 export interface ParseTask {
   filePath: string;
@@ -112,9 +98,9 @@ export interface ParseTask {
 
 export interface ParsedFile {
   filePath: string;
-  program: OxcNode;
-  errors: ReadonlyArray<OxcNode>;
-  comments: ReadonlyArray<OxcNode>;
+  program: OxcParseResult['program'];
+  errors: OxcParseResult['errors'];
+  comments: OxcParseResult['comments'];
   sourceText: string;
 }
 

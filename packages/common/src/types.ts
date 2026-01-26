@@ -1,24 +1,69 @@
+import type {
+  BeforeStart,
+  BunnerAdapter,
+  ConfigService,
+  Configurer,
+  EnvService,
+  OnDestroy,
+  OnInit,
+  OnShutdown,
+  OnStart,
+} from './interfaces';
+
 export type BunnerPrimitive = string | number | boolean | bigint | symbol | null | undefined;
 
-export type BunnerValue = BunnerPrimitive | BunnerRecord | BunnerArray;
+export type ErrorToken =
+  | ErrorConstructor
+  | StringConstructor
+  | NumberConstructor
+  | BooleanConstructor
+  | BigIntConstructor
+  | SymbolConstructor;
 
-export type BunnerArray = BunnerValue[];
+export interface BunnerArray extends Array<BunnerValue> {}
 
-export type BunnerRecord = Record<string, BunnerValue>;
+export interface BunnerRecord extends Record<string, BunnerValue> {}
 
-export type BunnerFunction = (...args: readonly BunnerValue[]) => BunnerValue;
+export interface BunnerConstructorDescriptor {
+  readonly name?: string;
+}
 
-export type Class<T = BunnerValue> = new (...args: readonly BunnerValue[]) => T;
+export interface BunnerInstance {
+  readonly constructor: BunnerConstructorDescriptor;
+}
+
+export type BunnerValue =
+  | BunnerPrimitive
+  | BunnerRecord
+  | BunnerArray
+  | BunnerInstance
+  | ClassToken
+  | Callable
+  | BunnerAdapter
+  | ConfigService
+  | Configurer
+  | EnvService
+  | OnInit
+  | BeforeStart
+  | OnStart
+  | OnShutdown
+  | OnDestroy;
+
+export type BunnerFunction = (...args: readonly BunnerValue[]) => BunnerValue | void;
+
+export type Class<T = BunnerRecord> = new (...args: ReadonlyArray<BunnerValue>) => T;
+
+export type ClassToken<T = unknown> = new (...args: ReadonlyArray<BunnerValue>) => T;
 
 export type ClassProperties<T> = {
   [K in keyof T]-?: T[K] extends (...args: BunnerValue[]) => BunnerValue ? K : never;
 }[keyof T];
 
-export type MethodParams<T, K extends ClassProperties<T>> = T[K] extends (...args: infer P) => BunnerValue ? [...P] : never;
+export type MethodParams<T, K extends ClassProperties<T>> = T[K] extends (...args: infer P) => BunnerValue | void ? [...P] : never;
 
 export type MethodReturn<T, K extends ClassProperties<T>> = T[K] extends (...args: BunnerValue[]) => infer R ? R : never;
 
-export type MethodTailParams<T, K extends ClassProperties<T>> = T[K] extends (first: BunnerValue, ...rest: infer R) => BunnerValue
+export type MethodTailParams<T, K extends ClassProperties<T>> = T[K] extends (first: BunnerValue, ...rest: infer R) => BunnerValue | void
   ? [...R]
   : [];
 
@@ -26,7 +71,7 @@ export type MethodSecondParam<T, K extends ClassProperties<T>> = T[K] extends (
   a: BunnerValue,
   b: infer S,
   ...args: BunnerValue[]
-) => BunnerValue
+) => BunnerValue | void
   ? S
   : never;
 
@@ -38,12 +83,12 @@ export type PrimitiveArray = Array<PrimitiveValue>;
 
 export type PrimitiveRecord = Record<string, PrimitiveValue | PrimitiveArray>;
 
-export type Callable = (...args: PrimitiveArray) => PrimitiveValue;
+export type Callable = (...args: ReadonlyArray<BunnerValue>) => BunnerValue | void;
 
-export type Constructor<T = PrimitiveRecord> = new (...args: PrimitiveArray) => T;
+export type Constructor<T = BunnerRecord> = new (...args: ReadonlyArray<BunnerValue>) => T;
 
-export type ValueLike = PrimitiveValue | PrimitiveArray | PrimitiveRecord | Callable | Constructor;
+export type ValueLike = PrimitiveValue | PrimitiveArray | PrimitiveRecord | Callable;
 
-export type ForwardRefFactory = () => ValueLike;
+export type ForwardRefFactory = () => BunnerValue;
 
 export type DecoratorTarget = Class | Record<string, ValueLike>;

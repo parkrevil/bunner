@@ -1,7 +1,7 @@
 import { IsNumber, Min } from '@bunner/core';
 
 export class ChargeDto {
-  @IsNumber()
-  @Min(1)
+  @(IsNumber() as PropertyDecorator)
+  @(Min(1) as PropertyDecorator)
   amount: number;
 }

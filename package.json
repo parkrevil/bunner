@@ -35,7 +35,8 @@
     "test": "bun test",
     "test:coverage": "bun test --coverage",
     "tsc": "tsc --noEmit",
-    "verify": "bun run tooling/verify"
+    "verify": "bun run tooling/verify",
+    "knip": "knip"
   },
   "dependencies": {},
   "devDependencies": {

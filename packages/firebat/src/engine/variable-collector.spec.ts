@@ -2,10 +2,12 @@ import { describe, expect, it } from 'bun:test';
 
 import { parseSource } from './oxc-wrapper';
 import { collectVariables } from './variable-collector';
-import type { OxcNode, OxcNodeValue } from './types';
+import type { OxcNode, OxcNodeValue, VariableUsage } from './types';
 
 const isOxcNode = (value: OxcNodeValue | undefined): value is OxcNode =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const isOxcNodeArray = (value: OxcNodeValue | undefined): value is ReadonlyArray<OxcNodeValue> => Array.isArray(value);
 
 const getFunctionBodyStatement = (sourceText: string, statementIndex: number): OxcNodeValue => {
   const parsed = parseSource('/virtual/variable-collector.spec.ts', sourceText);
@@ -17,7 +19,7 @@ const getFunctionBodyStatement = (sourceText: string, statementIndex: number): O
 
   const body = program.body;
 
-  if (!Array.isArray(body) || body.length === 0) {
+  if (!isOxcNodeArray(body) || body.length === 0) {
     throw new Error('Expected program body array');
   }
 
@@ -35,63 +37,82 @@ const getFunctionBodyStatement = (sourceText: string, statementIndex: number): O
 
   const statements = functionBody.body;
 
-  if (!Array.isArray(statements) || statements.length === 0) {
+  if (!isOxcNodeArray(statements) || statements.length === 0) {
     throw new Error('Expected function body statements');
   }
 
   const picked = statements[statementIndex];
 
-  if (!picked) {
+  if (picked === undefined) {
     throw new Error('Expected statement at index');
   }
 
   return picked;
 };
 
-describe('collectVariables', () => {
-  it('does not count reads in a statically never-executed && branch', () => {
+const getReadCount = (usages: ReadonlyArray<VariableUsage>, name: string): number => {
+  return usages.filter(usage => usage.name === name && usage.isRead).length;
+};
+
+describe('variable-collector', () => {
+  it('should not count reads when a statically never-executed && branch exists', () => {
+    // Arrange
     const statement = getFunctionBodyStatement(['function f() {', '  let value = 1;', '  false && value;', '}'].join('\n'), 1);
+    // Act
     const usages = collectVariables(statement, { includeNestedFunctions: false });
-    const valueReads = usages.filter(usage => usage.name === 'value' && usage.isRead);
+    const valueReads = getReadCount(usages, 'value');
 
-    expect(valueReads.length).toBe(0);
+    // Assert
+    expect(valueReads).toBe(0);
   });
 
-  it('does not count reads in a statically unreachable conditional branch', () => {
+  it('should not count reads when a conditional branch is statically unreachable', () => {
+    // Arrange
     const statement = getFunctionBodyStatement(['function f() {', '  let value = 1;', '  true ? 0 : value;', '}'].join('\n'), 1);
+    // Act
     const usages = collectVariables(statement, { includeNestedFunctions: false });
-    const valueReads = usages.filter(usage => usage.name === 'value' && usage.isRead);
+    const valueReads = getReadCount(usages, 'value');
 
-    expect(valueReads.length).toBe(0);
+    // Assert
+    expect(valueReads).toBe(0);
   });
 
-  it('counts reads inside an immediately-invoked function expression', () => {
+  it('should count reads when inside an immediately-invoked function expression', () => {
+    // Arrange
     const statement = getFunctionBodyStatement(['function f() {', '  let value = 1;', '  (() => value)();', '}'].join('\n'), 1);
+    // Act
     const usages = collectVariables(statement, { includeNestedFunctions: false });
-    const valueReads = usages.filter(usage => usage.name === 'value' && usage.isRead);
+    const valueReads = getReadCount(usages, 'value');
 
-    expect(valueReads.length).toBeGreaterThan(0);
+    // Assert
+    expect(valueReads).toBeGreaterThan(0);
   });
 
-  it('does not count destructuring default reads when the property is statically present', () => {
+  it('should not count destructuring default reads when the property is statically present', () => {
+    // Arrange
     const statement = getFunctionBodyStatement(
       ['function f() {', '  let value = 1;', '  let { a = value } = { a: 2 };', '}'].join('\n'),
       1,
     );
+    // Act
     const usages = collectVariables(statement, { includeNestedFunctions: false });
-    const valueReads = usages.filter(usage => usage.name === 'value' && usage.isRead);
+    const valueReads = getReadCount(usages, 'value');
 
-    expect(valueReads.length).toBe(0);
+    // Assert
+    expect(valueReads).toBe(0);
   });
 
-  it('counts destructuring default reads when the property is statically missing', () => {
+  it('should count destructuring default reads when the property is statically missing', () => {
+    // Arrange
     const statement = getFunctionBodyStatement(
       ['function f() {', '  let value = 1;', '  let { a = value } = {};', '}'].join('\n'),
       1,
     );
+    // Act
     const usages = collectVariables(statement, { includeNestedFunctions: false });
-    const valueReads = usages.filter(usage => usage.name === 'value' && usage.isRead);
+    const valueReads = getReadCount(usages, 'value');
 
-    expect(valueReads.length).toBeGreaterThan(0);
+    // Assert
+    expect(valueReads).toBeGreaterThan(0);
   });
 });

@@ -33,10 +33,12 @@ const hasMutantMixedGroup = (signature: string, mutantFile: string): boolean => 
 
 describe('integration/duplicates (fuzz)', () => {
   it('should detect duplicated structures when inputs are deterministic (seeded)', () => {
+    // Arrange
     const seed = getFuzzSeed();
     const prng = createPrng(seed);
     const iterations = getFuzzIterations(200);
 
+    // Act
     for (let iteration = 0; iteration < iterations; iteration += 1) {
       const sources = new Map<string, string>();
       const baseLiteral = prng.nextInt(10) + 1;
@@ -64,6 +66,7 @@ describe('integration/duplicates (fuzz)', () => {
       const first = toDuplicateSignatures(detectDuplicates(program, 1));
       const second = toDuplicateSignatures(detectDuplicates(program, 1));
 
+      // Assert
       // Determinism: same input yields same normalized output.
       expect(second).toEqual(first);
 
