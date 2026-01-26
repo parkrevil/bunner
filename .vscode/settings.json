@@ -1,0 +1,7 @@
+{
+  "oxc.requireConfig": true,
+  "oxc.typeAware": true,
+  "oxc.fmt.configPath": ".oxfmtrc.jsonc",
+  "oxc.configPath": ".oxlintrc.jsonc",
+  "oxc.disableNestedConfig": true,
+}

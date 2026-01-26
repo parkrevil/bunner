@@ -146,12 +146,16 @@ Baseline 기록 (필수):
 ### Recon (변경 전 필수)
 
 - [ ] (skip) status=draft: 엔트리포인트/사용처(usages) 확인
-- [ ] (skip) status=draft: BitSet 요구사항 정리(연산/성능/최대 인덱스)
+- [ ] (skip) status=draft: `packages/firebat/src/engine/dataflow.ts`에서 BitSet 사용 연산 목록 추출(and/or/flip/iterate 등)
+- [ ] (skip) status=draft: `packages/firebat/src/engine/types.ts`에서 BitSet 관련 타입 경계 확인(대체 구현이 만족해야 할 인터페이스)
+- [ ] (skip) status=draft: BitSet 요구사항 정리(연산/성능/최대 인덱스/메모리) + “Bun에서 설치/실행 결정성” 체크리스트 작성
 
 ### Implementation
 
-- [ ] (skip) status=draft: roaring 제거 전략 확정
-- [ ] (skip) status=draft: dataflow.ts에서 네이티브 .node 직접 import 제거
+- [ ] (skip) status=draft: 후보(Plan §7.6) 중 1개를 선택하고 선택 이유를 `plans/260126_01_firebat_pure-code-quality.md` Step-2 산출물에 기록
+- [ ] (skip) status=draft: `packages/firebat/src/engine/types.ts`에 BitSet 최소 인터페이스(대체 구현용) 확정(Plan 범위 내에서만)
+- [ ] (skip) status=draft: `packages/firebat/src/engine/dataflow.ts`에서 네이티브 `.node` 직접 import 제거(대체 BitSet으로 교체)
+- [ ] (skip) status=draft: deps 변경이 실제로 필요하면(패키지 채택) 승인 아티팩트 요청 후에만 `packages/firebat/package.json`을 변경
 
 ### Verification (Gate)
 
@@ -202,6 +206,35 @@ Baseline 기록 (필수):
 - [ ] (skip) status=draft: Hard Constraints 4개 체크됨
 - [ ] (skip) status=draft: Verification Gate 통과 (`bun run verify`)
 - [ ] (skip) status=draft: Evidence가 충분함
+
+### Acceptance Criteria (draft, concrete)
+
+- `packages/firebat/src/engine/dataflow.ts`에서 사용 중인 BitSet 연산 요구사항 목록이 문서화된다(최소: 생성/설정/해제/교집합/합집합/순회 여부).
+- 대체 후보 1개가 “Bun 설치/실행 결정성” 기준으로 선택되고, 선택 이유가 Plan Step-2 산출물로 기록된다.
+- 네이티브 `.node` 직접 import 제거가 코드 레벨 목표로 명확히 고정된다(교체 대상 파일: `dataflow.ts`, 타입 경계: `engine/types.ts`).
+
+### Output Example (draft)
+
+아래처럼 Plan Step-2 산출물(결정 기록)이 남아있으면 된다.
+
+```text
+Selected BitSet implementation: fastbitset
+
+Why:
+- Bun에서 네이티브 바이너리(.node) 직접 import가 불필요
+- API가 단순하고 and/or 등 집합 연산 지원
+- 유지보수/라이선스 확인 가능
+
+Required ops (from dataflow.ts):
+- set(i), get(i), clear(i)
+- and(other), or(other)
+- iterate set bits (or toArray)
+
+Files impacted:
+- packages/firebat/src/engine/dataflow.ts
+- packages/firebat/src/engine/types.ts
+- packages/firebat/package.json (deps change requires approval)
+```
 
 ---
 

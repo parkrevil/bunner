@@ -147,6 +147,11 @@ MUST-1:
 | ------- | ----------- | ------ |
 | MUST-1  | MUST-EVID-1 | Step N |
 
+### Plan Code Scope Cross-check (참고, Non-gate)
+
+- Plan 링크(`plans/{{...}}.md#Step-N`)의 유효성 확인은 필수지만, 이 섹션 자체는 설계 게이트가 아니다.
+- 실제 범위 판정은 아래 `## 2) Scope`의 `Allowed paths (MUST, copy from Plan)`로 한다.
+
 ### Claimed IDs (참조만)
 
 - MUST IDs covered by this Task (필수):
@@ -260,6 +265,15 @@ Environment snapshot (권장, 기계 판정 강화):
 ## 5) Execution Checklist (필수)
 
 > 체크리스트는 **명령/파일 단위**로 작게 쪼갠다.
+
+Draft quality gate (MUST):
+
+- `Status=draft`라도 아래는 “(skip)”로 미체크인 상태를 허용할 뿐, 내용 자체를 비워두거나 추상적으로 쓰는 것을 허용하지 않는다.
+  - Recon: 최소 2개 이상, 각 항목에 확인 대상(경로/심볼/명령)을 포함
+  - Implementation: 최소 3개 이상, 각 항목에 파일(또는 디렉토리) + 변경 요약을 포함
+- 아래와 같은 추상 표현만으로 구성되면 이 Task는 “구체화 실패”로 판정한다(리뷰어/CI 기준).
+  - 예: “구조 설계”, “구현”, “확정”, “정리”, “리포트 추가”
+  - 예외: 해당 추상 표현이 바로 뒤에 구체 항목(파일/심볼/포맷)이 동반될 때만 허용
 
 ### Recon (변경 전 필수)
 

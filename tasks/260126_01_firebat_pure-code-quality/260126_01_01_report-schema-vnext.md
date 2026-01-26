@@ -124,6 +124,7 @@ Scope delta rule (MUST):
 
 - Plan 상태:
   - [ ] (skip) status=draft: `status: accepted` 또는 `status: in-progress`
+  - [ ] (skip) status=draft: Step 2(MUST-2) 완료(= `roaring` 제거 + BitSet 대체 적용)
 - 필요한 승인(있는 경우):
   - [ ] (skip) status=draft: Approval Ledger 증거 존재
 
@@ -144,7 +145,9 @@ Baseline 기록 (필수):
 
 ### Implementation
 
-- [ ] (skip) status=draft: 스키마/타입 확장 설계 반영
+- [ ] (skip) status=draft: `packages/firebat/src/types.ts`에 report vNext 확장 포인트(분석기별 섹션/배열) 타입 추가
+- [ ] (skip) status=draft: `packages/firebat/src/report.ts`에서 text/json 출력이 신규 필드를 포함하되 기존 필드 호환 유지
+- [ ] (skip) status=draft: 기존 consumers(있다면) 깨지지 않도록 default/optional 처리(필드 optional + 빈 배열 등)
 
 ### Verification (Gate)
 
@@ -195,6 +198,31 @@ Baseline 기록 (필수):
 - [ ] (skip) status=draft: Hard Constraints 4개 체크됨
 - [ ] (skip) status=draft: Verification Gate 통과 (`bun run verify`)
 - [ ] (skip) status=draft: Evidence가 충분함
+
+### Acceptance Criteria (draft, concrete)
+
+- `packages/firebat/src/types.ts`의 `FirebatReport`는 `meta` + `analyses` 구조를 가진다.
+- `packages/firebat/src/report.ts`의 `--format json` 출력은 JSON 최상위에 `meta`, `analyses`를 가진다(legacy top-level `duplicates/waste`는 제공하지 않는다).
+- `--format text`의 헤더 라인(`[firebat] ...`)은 기존처럼 출력되며, 신규 분석기 결과가 추가되더라도 기본 헤더 파싱이 깨지지 않는다.
+
+### Output Example (draft)
+
+```json
+{
+  "meta": {
+    "engine": "oxc",
+    "version": "2.0.0-strict",
+    "tsconfigPath": "/abs/path/tsconfig.json",
+    "targetCount": 42,
+    "minTokens": 60,
+    "detectors": ["duplicates", "waste"]
+  },
+  "analyses": {
+    "duplicates": [],
+    "waste": []
+  }
+}
+```
 
 ---
 

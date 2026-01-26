@@ -1,5 +1,5 @@
 ---
-status: draft
+status: accepted
 allowed_paths:
   - packages/firebat/**
   - plans/**
@@ -42,16 +42,14 @@ allowed_paths:
     - (가능하면) 디렉토리 구조를 분석기 확장에 유리하게 재정렬
   - Success condition:
     - 현재 기능(duplicates, waste)은 유지
-    - 신규 기능(1,5,6,7 + complexity) 추가를 위한 구조/계획/단계가 명확
+    - 신규 기능(1,5,6,7 + nesting/earlyReturn/coupling) 추가를 위한 구조/계획/단계가 명확
     - CLI 출력이 사람/도구 친화적(텍스트 + JSON 중심)
   - Explicit constraints:
     - 프레임워크 의존 없이 “순수 코드 품질” 중심
     - oxlint/tsc/knip이 잘하는 영역(단순 unused/스타일)에 과도하게 겹치지 않기
     - 코드 변경이 자주 예상되므로, **유닛 테스트는 작성하지 않고** **Public API 기반 통합 테스트만 작성**한다.
 
-- SSOT 충돌 여부:
-  - [ ] 없음
-  - [ ] 있음 → (해당 시) STOP 후 Phase 3로 전이
+- SSOT 충돌 여부: `none`
 
 ---
 
@@ -69,19 +67,43 @@ allowed_paths:
 - 이 Plan에서의 SPEC 변경:
   - [x] 없음(게이트)
 
-- [ ] Section Gate: (draft 상태에서는 미체크 허용)
+- Section Gate: `pass`
 
 ---
 
 ## 3) Open Questions (STOP 후보)
 
-- Step Start Gate:
-  - [ ] Open Questions가 비어 있음
+- none
 
-- Q1: Firebat 전용 spec 문서(`docs/30_SPEC/...`)를 새로 만들지 여부는 언제/누가 결정할 것인가?
-- Q2: JSON report 스키마의 “안정화(버전)”를 언제 보장할 것인가?
-- Q3: `roaring` 제거 시 사용할 BitSet 구현(대체 패키지)을 무엇으로 확정할 것인가?
-- Q4: `roaring` 제거를 “성능 유지(동급)”로 볼지, “결정성/휴대성 우선”으로 볼지 우선순위를 확정할 것인가?
+### 3.1) Locked Decisions (구체화, Plan에서만 확정)
+
+- D1: Firebat 전용 L3 spec 문서(`docs/30_SPEC/**`)는 본 Plan 범위에서 생성하지 않는다.
+  - 이유: 본 Plan은 내부 구현/리포트 구조 확장에 집중하며, SSOT/SPEC 작업은 별도 Plan으로 분리한다.
+
+- D2: Report 스키마 vNext는 “additive only”를 기본 원칙으로 한다.
+  - 리포트는 `meta` + `analyses`의 2-파트 구조로 고정한다.
+  - 모든 기능 결과(기존 + 신규)는 `analyses` 아래에서 같은 레벨로 제공한다(legacy top-level 분리/미러링 금지).
+  - 별도의 `schemaVersion` 필드는 도입하지 않는다(현재 `meta.version`을 유지).
+
+- D3: vNext에서 사용할 `analyses`의 canonical key는 아래로 고정한다.
+  - `duplicates`
+  - `waste`
+  - `dependencies`
+  - `coupling`
+  - `duplication`
+  - `nesting`
+  - `earlyReturn`
+  - `noop`
+  - `apiDrift`
+
+- D4: CLI detector id(옵션 입력 문자열) canonical set은 아래로 고정한다.
+  - `duplicates`, `waste`, `dependencies`, `coupling`, `duplication`, `nesting`, `early-return`, `noop`, `api-drift`
+  - Note: report에서는 `apiDrift`(camelCase), CLI에서는 `api-drift`(kebab-case)를 사용한다.
+  - Note: “branching”은 detector key로 두지 않고, `decisionPoints`(결정 지점 수) 메트릭으로만 사용한다.
+
+- D5: `roaring` 제거의 1순위 기준은 Bun 환경에서의 결정성/휴대성(네이티브 `.node` 직접 import 제거)이다.
+  - 성능 동급 보장은 본 Plan 범위에서 요구하지 않는다.
+  - Step-2의 기본 후보는 `fastbitset`으로 고정한다(교체/추가 후보 채택 시 Plan Step-2에서 근거 갱신).
 
 ---
 
@@ -96,7 +118,7 @@ allowed_paths:
 - MUST-4:
   - Structural Duplication(near-miss 포함) 분석을 clone class(클러스터) 단위로 리포트한다.
 - MUST-5:
-  - Complexity/Depth/Early Return 메트릭을 결합해 “리팩터 우선순위” 신호로 제공한다.
+  - Nesting + Early Return 메트릭(및 decision points)을 결합해 “리팩터 우선순위” 신호로 제공한다.
 - MUST-6:
   - Semantic No-op/Redundant Logic을 confidence/evidence와 함께 리포트한다.
 - MUST-7:
@@ -116,7 +138,7 @@ allowed_paths:
   - lint/tsc 수준을 넘어 “프로젝트 레벨(다중 파일) 의미 분석”을 제공
 
 - Success definition(간단):
-  - Firebat이 duplicates/waste를 유지하면서, 신규 분석기(duplication 확장, dependencies, no-op, api drift, complexity)를 모듈화된 구조로 추가할 수 있다.
+  - Firebat이 duplicates/waste를 유지하면서, 신규 분석기(duplication 확장, dependencies/coupling, no-op, api drift, nesting/earlyReturn)를 모듈화된 구조로 추가할 수 있다.
 
 ---
 
@@ -182,7 +204,15 @@ allowed_paths:
     - fan-in/fan-out 과다
     - unstable dependency(변동성/중심성 기반은 향후)
 - 출력:
-  - “문제 나열”이 아니라, cycle의 경로/끊기 후보 힌트 포함
+  - “문제 나열”이 아니라, cycle의 경로/끊기 후보 힌트(edge cut) 포함
+
+### 7.2.1 (확장) Coupling / Hotspot (프로젝트 레벨 우선순위)
+
+- 목표:
+  - dependency graph를 근거로 “어디부터 고칠지”를 결정 가능한 coupling/hotspot 신호를 제공
+- 예시 신호:
+  - fan-in/out, cycle(SCC) 참여도, 중심성(허브)
+  - (향후) 다른 분석 결과(duplicates/nesting/earlyReturn 등)와 합성한 우선순위 스코어
 
 ### 7.3 (6) Semantic No-op / Redundant Logic
 
@@ -198,13 +228,17 @@ allowed_paths:
 - 출력:
   - ‘표준 후보’와 ‘이탈 그룹’을 함께 제시
 
-### 7.5 (신규) Complexity + Depth + Early Return (리팩터 제안형)
+### 7.5 (신규) Nesting + Early Return (리팩터 제안형)
 
 - 목표:
   - 단순 룰 강제가 아니라 “리팩터 우선순위”를 위한 신호로 결합
 - 예시 제안 카드:
   - Guard clauses 도입 후보(early return 부족 + 깊은 중첩)
-  - Extract function 후보(LOC/branch/depth 과다)
+  - Extract function 후보(LOC/결정 지점 수/깊은 중첩)
+
+- Note:
+  - “branching”을 detector 명으로 쓰지 않는다.
+  - 분기/결정 지점 수는 `decisionPoints` 메트릭으로만 제공한다.
 
 ### 7.6 (필수) `roaring` 제거 및 BitSet 대체
 
@@ -223,6 +257,7 @@ allowed_paths:
   - 3순위: 성능(분석 대상 규모 기준으로 수용 가능)
 
 ---
+
 ## 8) 목표 디렉토리 구조(합의 초안)
 
 > 기존 구현을 한 번에 다 옮기지 않고, “새 기능부터 새 구조에 추가”하고 기존 기능을 단계적으로 이관한다.
@@ -240,7 +275,9 @@ packages/firebat/
       dependencies/
       no-op/
       api-drift/
-      complexity/
+      coupling/
+      nesting/
+      early-return/
 
     ir/                        # (신규) 공통 중간표현 (파일/함수/그래프/핑거프린트)
     report/                    # (신규) 공통 report schema + baseline/증분
@@ -280,6 +317,26 @@ packages/firebat/
 
 ## 9) 실행 계획 (Step Gates, 필수)
 
+### 9.0) 권장 실행 순서 (즉시 작업 가능화를 위한 운영 가이드)
+
+- Gate-0 (필수): Step 2(`roaring`)을 먼저 완료한다.
+  - 목표: `engine/dataflow.ts`의 네이티브 `.node` 직접 import 제거 + BitSet 대체로 완전 교체
+  - 주의: 실제 deps 변경(`packages/firebat/package.json`)이 발생하면 승인 아티팩트가 필요하므로, 교체 구현 착수 직전에 승인 게이트를 통과해야 한다.
+
+- Gate-1 (권장): `bun run verify`의 현재 실패 원인을 triage하여 “baseline(현 브랜치 기준) 기록/안정화”를 끝낸다.
+  - 이유: 각 Task의 Evidence/Verification Gate에 `bun run verify` 결과를 기록해야 하며, 실패 상태에서는 Step별 완료 증거를 채울 수 없다.
+
+- 권장 순서(의존 관계 기준, Step-2 이후):
+  1. Step 1: Report 스키마 vNext (모든 신규 분석 결과의 공통 착지점)
+  2. Step 8: CLI wiring/output (선택 실행/JSON 출력 안정화로 이후 Step 검증을 쉽게)
+  3. Step 3: Dependencies + Coupling (graph 기반 공통 증거/우선순위 신호)
+  4. Step 5: Nesting + EarlyReturn (함수 단위 메트릭/제안 카드)
+  5. Step 4: Structural Duplication (near-miss 확장)
+  6. Step 6: Semantic No-op
+  7. Step 7: API Drift
+
+<!-- markdownlint-disable MD033 -->
+
 <a id="Step-1"></a>
 
 ### Step 1) Report 스키마 vNext 설계(호환 유지)
@@ -287,6 +344,10 @@ packages/firebat/
 - 목표:
   - 기존 `FirebatReport`에 신규 분석 결과를 추가할 수 있는 구조 확정
   - `text/json` 출력은 유지
+
+- Contract (고정):
+  - JSON 최상위 키는 `meta`, `analyses`를 가진다.
+  - `analyses` 아래 canonical key는 §3.1(D3)을 따른다.
 
 - Files to change (expected):
   - packages/firebat/src/types.ts
@@ -303,6 +364,10 @@ packages/firebat/
 - 목표:
   - `engine/dataflow.ts`의 BitSet 구현 요구사항(연산 종류/성능/최대 인덱스 범위)을 정리한다.
   - 위 7.6 후보 중 1개를 선택하고, 제거/교체 작업의 변경 범위를 고정한다.
+
+- Contract (고정):
+  - 네이티브 `.node` 직접 import는 제거한다.
+  - 선택 기준/기본 후보는 §3.1(D5)을 따른다.
 
 - 산출물:
   - 대체 패키지 결정 기록(왜 이 선택인지)
@@ -327,13 +392,20 @@ packages/firebat/
 - 목표:
   - import graph 구성 + cycle 탐지 + fan-in/fan-out 산출
 
+- Contract (고정):
+  - report의 `analyses.dependencies` 아래에 cycle path + fan-in/out top 리스트를 포함한다.
+  - report의 `analyses.dependencies`는 edge cut(절단 후보) 힌트를 포함한다.
+  - report의 `analyses.coupling` 아래에 hotspot(우선순위 후보) 리스트를 포함한다.
+
 - Files to change (expected):
   - packages/firebat/src/analyses/dependencies/
+  - packages/firebat/src/analyses/coupling/
   - packages/firebat/src/report.ts
   - packages/firebat/src/types.ts
 
 - File → MUST IDs 매핑 (MUST):
   - packages/firebat/src/analyses/dependencies/: MUST-3
+  - packages/firebat/src/analyses/coupling/: MUST-3
   - packages/firebat/src/report.ts: MUST-3
   - packages/firebat/src/types.ts: MUST-3
 
@@ -343,6 +415,9 @@ packages/firebat/
 
 - 목표:
   - near-miss fingerprint + clone class clustering + 리팩터 후보 제시
+
+- Contract (고정):
+  - report의 `analyses.duplication` 아래에 clone class(클러스터) 단위 결과를 포함한다.
 
 - Files to change (expected):
   - packages/firebat/src/analyses/duplication/
@@ -356,18 +431,25 @@ packages/firebat/
 
 <a id="Step-5"></a>
 
-### Step 5) Complexity/Depth/EarlyReturn (신규) 구현
+### Step 5) Nesting + EarlyReturn (신규) 구현
 
 - 목표:
   - 메트릭 산출 + 리팩터 제안 카드 생성
 
+- Contract (고정):
+  - report의 `analyses.nesting` 아래에 함수/메서드 단위 depth/중첩 관련 메트릭을 포함한다.
+  - report의 `analyses.earlyReturn` 아래에 guard clause/early return 신호 및 제안 카드를 포함한다.
+  - “분기 수”는 `decisionPoints` 메트릭으로만 제공한다(독립 detector 금지).
+
 - Files to change (expected):
-  - packages/firebat/src/analyses/complexity/
+  - packages/firebat/src/analyses/nesting/
+  - packages/firebat/src/analyses/early-return/
   - packages/firebat/src/report.ts
   - packages/firebat/src/types.ts
 
 - File → MUST IDs 매핑 (MUST):
-  - packages/firebat/src/analyses/complexity/: MUST-5
+  - packages/firebat/src/analyses/nesting/: MUST-5
+  - packages/firebat/src/analyses/early-return/: MUST-5
   - packages/firebat/src/report.ts: MUST-5
   - packages/firebat/src/types.ts: MUST-5
 
@@ -377,6 +459,9 @@ packages/firebat/
 
 - 목표:
   - 확신도 기반 no-op 탐지 + evidence 제공
+
+- Contract (고정):
+  - report의 `analyses.noop` 아래에 confidence(0..1) + evidence(문자열) 포함 findings를 제공한다.
 
 - Files to change (expected):
   - packages/firebat/src/analyses/no-op/
@@ -394,6 +479,9 @@ packages/firebat/
 
 - 목표:
   - 시그니처 shape 추출 + 군집화 + 표준 후보 제시
+
+- Contract (고정):
+  - report의 `analyses.apiDrift` 아래에 군집화 결과를 제공한다.
 
 - Files to change (expected):
   - packages/firebat/src/analyses/api-drift/
@@ -413,6 +501,10 @@ packages/firebat/
   - `--only` 확장 또는 `--detectors` 체계로 신규 분석기 선택 가능
   - `--format json`을 LLM/자동화에 적합하게 안정화
 
+- Contract (고정):
+  - CLI detector id canonical set은 §3.1(D4)을 따른다.
+  - `--format json`은 JSON만 출력한다(추가 프리픽스/로그 금지).
+
 - Files to change (expected):
   - packages/firebat/src/arg-parse.ts
   - packages/firebat/src/firebat.ts
@@ -423,20 +515,22 @@ packages/firebat/
   - packages/firebat/src/firebat.ts: MUST-8
   - packages/firebat/src/report.ts: MUST-8
 
+<!-- markdownlint-enable MD033 -->
+
 ---
 
 ## 10) 검증 매트릭스 (MUST → Evidence, 필수)
 
-| MUST ID | Evidence ID | Step |
-| ------- | ----------- | ---- |
-| MUST-1  | MUST-EVID-1 | Step 1 |
-| MUST-2  | MUST-EVID-2 | Step 2 |
-| MUST-3  | MUST-EVID-3 | Step 3 |
-| MUST-4  | MUST-EVID-4 | Step 4 |
-| MUST-5  | MUST-EVID-5 | Step 5 |
-| MUST-6  | MUST-EVID-6 | Step 6 |
-| MUST-7  | MUST-EVID-7 | Step 7 |
-| MUST-8  | MUST-EVID-8 | Step 8 |
+| MUST ID  | Evidence ID  | Step   |
+| -------- | ------------ | ------ |
+| MUST-1   | MUST-EVID-1  | Step 1 |
+| MUST-2   | MUST-EVID-2  | Step 2 |
+| MUST-3   | MUST-EVID-3  | Step 3 |
+| MUST-4   | MUST-EVID-4  | Step 4 |
+| MUST-5   | MUST-EVID-5  | Step 5 |
+| MUST-6   | MUST-EVID-6  | Step 6 |
+| MUST-7   | MUST-EVID-7  | Step 7 |
+| MUST-8   | MUST-EVID-8  | Step 8 |
 
 ---
 
