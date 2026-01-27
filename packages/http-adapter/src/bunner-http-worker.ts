@@ -1,4 +1,4 @@
-import type { BunnerRecord, ProviderToken } from '@bunner/common';
+import type { BunnerRecord, BunnerValue, ProviderToken } from '@bunner/common';
 import { ClusterBaseWorker, Container, type ClusterWorkerId, expose } from '@bunner/core';
 import type { RpcArgs, RpcCallable } from '@bunner/core/src/cluster/types';
 import { Logger } from '@bunner/logger';
@@ -34,7 +34,8 @@ class BunnerHttpWorker extends ClusterBaseWorker {
     if (typeof manifestPath === 'string' && manifestPath.length > 0) {
       this.logger.info(`⚡ AOT Worker Load: ${manifestPath}`);
 
-      const manifestModule: unknown = await import(manifestPath);
+      // eslint-disable-next-line bunner/no-dynamic-import, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-type-assertion
+      const manifestModule = (await import(manifestPath)) as BunnerValue;
 
       if (!this.isHttpWorkerManifest(manifestModule)) {
         throw new Error('Invalid AOT manifest module. Missing createContainer().');
@@ -83,7 +84,7 @@ class BunnerHttpWorker extends ClusterBaseWorker {
     this.logger.info(`🛑 Worker #${this.id} is destroying...`);
   }
 
-  private isHttpWorkerManifest(value: unknown): value is HttpWorkerManifest {
+  private isHttpWorkerManifest(value: BunnerValue): value is HttpWorkerManifest {
     if (!this.isRecord(value)) {
       return false;
     }
@@ -93,7 +94,7 @@ class BunnerHttpWorker extends ClusterBaseWorker {
     return typeof createContainer === 'function';
   }
 
-  private isHttpWorkerInitParams(value: unknown): value is HttpWorkerInitParams {
+  private isHttpWorkerInitParams(value: BunnerValue): value is HttpWorkerInitParams {
     if (!this.isRecord(value)) {
       return false;
     }
@@ -112,7 +113,7 @@ class BunnerHttpWorker extends ClusterBaseWorker {
     return this.isRecord(options);
   }
 
-  private isRecord(value: unknown): value is Record<string, unknown> {
+  private isRecord(value: BunnerValue): value is BunnerRecord {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
   }
 }
@@ -153,7 +154,7 @@ expose({
   getStats: getWorkerStats,
 });
 
-function isBunnerRecord(value: unknown): value is BunnerRecord {
+function isBunnerRecord(value: BunnerValue): value is BunnerRecord {
   return typeof value === 'object' && value !== null;
 }
 

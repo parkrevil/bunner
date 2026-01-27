@@ -1,4 +1,4 @@
-import type { Class, PrimitiveArray, PrimitiveRecord, PrimitiveValue } from '@bunner/common';
+import type { BunnerValue, Class, PrimitiveArray, PrimitiveRecord, PrimitiveValue } from '@bunner/common';
 
 export type ValidatorTarget = Class;
 
@@ -18,6 +18,6 @@ export type ValidatorDecoratorArgument = ValidatorOptionValue;
 
 export type ValidatorDecoratorArgs = ReadonlyArray<ValidatorDecoratorArgument>;
 
-export type ValidatorDecoratorTarget = Record<string, ValidatorOptionValue>;
+export type ValidatorDecoratorTarget = BunnerValue;
 
-export type ValidatorPropertyDecorator = (target: ValidatorDecoratorTarget, propertyKey: string | symbol) => void;
+export type ValidatorPropertyDecorator = PropertyDecorator;

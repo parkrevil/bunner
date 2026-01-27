@@ -28,7 +28,8 @@ export class PostsRepository {
   }
 
   create(body: CreatePostDto): number {
-    const nextId = this.posts.length > 0 ? this.posts[this.posts.length - 1].id + 1 : 1;
+    const lastPost = this.posts.at(-1);
+    const nextId = lastPost ? lastPost.id + 1 : 1;
     const post: Post = {
       id: nextId,
       title: body.title,
@@ -46,6 +47,11 @@ export class PostsRepository {
     }
 
     const current = this.posts[index];
+
+    if (!current) {
+      throw new Error(`Post not found: ${id}`);
+    }
+
     const updated: Post = {
       id: current.id,
       title: data.title ?? current.title,
@@ -58,9 +64,12 @@ export class PostsRepository {
   }
 
   delete(id: number): Post[] {
-    return this.posts.splice(
-      this.posts.findIndex(post => post.id === id),
-      1,
-    );
+    const index = this.posts.findIndex(post => post.id === id);
+
+    if (index < 0) {
+      throw new Error(`Post not found: ${id}`);
+    }
+
+    return this.posts.splice(index, 1);
   }
 }

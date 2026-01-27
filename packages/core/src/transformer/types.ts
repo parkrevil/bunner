@@ -16,7 +16,7 @@ export type TransformerPlainRecord = PrimitiveRecord;
 
 export type TransformerDecoratorTarget = Record<string, TransformerValue>;
 
-export type ClassRefs = Record<string, Class | null | undefined>;
+export type ClassRefs = Record<string, Class<TransformerValue> | null | undefined>;
 
 export type PlainToInstanceFn = (plain: TransformerPlainValue) => TransformerValue;
 

@@ -48,7 +48,7 @@ export class ValidationPipe implements PipeTransform {
     return converted ?? value;
   }
 
-  private isValidationClass(metatype: RouteParamType): metatype is Class {
+  private isValidationClass(metatype: RouteParamType): metatype is Class<TransformerValue> {
     if (this.isPrimitiveMetatype(metatype)) {
       return false;
     }
@@ -107,8 +107,9 @@ export class ValidationPipe implements PipeTransform {
 
     if (Array.isArray(value)) {
       const items: RequestBodyValue[] = [];
+      const values: TransformerValue[] = value;
 
-      for (const item of value) {
+      for (const item of values) {
         const converted = this.toJsonValue(item);
 
         if (converted === undefined) {
@@ -140,7 +141,7 @@ export class ValidationPipe implements PipeTransform {
     return undefined;
   }
 
-  private isPrimitiveValue(value: RouteParamValue): value is PrimitiveValue {
+  private isPrimitiveValue(value: RouteParamValue | TransformerValue): value is PrimitiveValue {
     return (
       value === null ||
       value === undefined ||
@@ -152,14 +153,15 @@ export class ValidationPipe implements PipeTransform {
     );
   }
 
-  private toPrimitiveArray(value: RouteParamValue): PrimitiveArray | undefined {
+  private toPrimitiveArray(value: RouteParamValue | TransformerValue): PrimitiveArray | undefined {
     if (!Array.isArray(value)) {
       return undefined;
     }
 
     const items: PrimitiveArray = [];
+    const values: Array<RouteParamValue | TransformerValue> = value;
 
-    for (const item of value) {
+    for (const item of values) {
       if (!this.isPrimitiveValue(item)) {
         return undefined;
       }
@@ -170,8 +172,8 @@ export class ValidationPipe implements PipeTransform {
     return items;
   }
 
-  private toPrimitiveRecord(value: RouteParamValue): PrimitiveRecord | undefined {
-    if (!this.isRouteParamRecord(value)) {
+  private toPrimitiveRecord(value: RouteParamValue | TransformerValue): PrimitiveRecord | undefined {
+    if (!this.isPrimitiveRecordValue(value)) {
       return undefined;
     }
 
@@ -199,11 +201,13 @@ export class ValidationPipe implements PipeTransform {
     return record;
   }
 
+  private isPrimitiveRecordValue(value: RouteParamValue | TransformerValue): value is PrimitiveRecord {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+  }
+
   private isTransformerRecord(value: TransformerValue): value is Record<string, TransformerValue> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
   }
 
-  private isRouteParamRecord(value: RouteParamValue): value is Record<string, RouteParamValue> {
-    return typeof value === 'object' && value !== null && !Array.isArray(value);
-  }
+  
 }

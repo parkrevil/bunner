@@ -153,7 +153,8 @@ export class BunnerHttpServer {
       ) {
         if (contentType.includes('application/json')) {
           try {
-            const parsed = await req.json<BunnerValue>();
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-type-assertion
+            const parsed = (await req.json()) as BunnerValue;
 
             body = this.isJsonValue(parsed) ? parsed : {};
           } catch {
@@ -206,7 +207,16 @@ export class BunnerHttpServer {
           return this.toResponse(bunnerRes.end());
         }
       } catch (error) {
-        this.logger.error('Error in beforeResponse', this.toLogMetadata(error));
+        const logValue: LogMetadataValue =
+          error instanceof Error
+            ? error
+            : typeof error === 'string' || typeof error === 'number' || typeof error === 'boolean'
+              ? error
+              : typeof error === 'object'
+                ? JSON.stringify(error) ?? 'Unknown error'
+                : 'Unknown error';
+
+        this.logger.error('Error in beforeResponse', logValue);
 
         if (bunnerRes.getStatus() === 0) {
           bunnerRes.setStatus(StatusCodes.INTERNAL_SERVER_ERROR);
@@ -222,12 +232,30 @@ export class BunnerHttpServer {
       try {
         await this.runMiddlewares(HttpMiddlewareLifecycle.AfterResponse, context);
       } catch (error) {
-        this.logger.error('Error in afterResponse', this.toLogMetadata(error));
+        const logValue: LogMetadataValue =
+          error instanceof Error
+            ? error
+            : typeof error === 'string' || typeof error === 'number' || typeof error === 'boolean'
+              ? error
+              : typeof error === 'object'
+                ? JSON.stringify(error) ?? 'Unknown error'
+                : 'Unknown error';
+
+        this.logger.error('Error in afterResponse', logValue);
       }
 
       return response;
     } catch (error) {
-      this.logger.error('Fetch Error', this.toLogMetadata(error));
+      const logValue: LogMetadataValue =
+        error instanceof Error
+          ? error
+          : typeof error === 'string' || typeof error === 'number' || typeof error === 'boolean'
+            ? error
+            : typeof error === 'object'
+              ? JSON.stringify(error) ?? 'Unknown error'
+              : 'Unknown error';
+
+      this.logger.error('Fetch Error', logValue);
 
       return new Response('Internal server error', {
         status: StatusCodes.INTERNAL_SERVER_ERROR,
@@ -368,22 +396,6 @@ export class BunnerHttpServer {
     }
 
     return false;
-  }
-
-  private toLogMetadata(value: BunnerValue | Error | null | undefined): LogMetadataValue {
-    if (value instanceof Error) {
-      return value;
-    }
-
-    if (value === null || value === undefined) {
-      return value;
-    }
-
-    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-      return value;
-    }
-
-    return { error: 'Unknown error' };
   }
 
   private getTokenName(token: HttpMiddlewareToken): string {

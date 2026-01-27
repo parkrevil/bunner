@@ -72,12 +72,17 @@ function normalizeMetadataRegistry(
   const normalized = new Map<MetadataRegistryKey, ClassMetadata>();
 
   for (const [key, value] of registry.entries()) {
-    normalized.set(key, {
-      className: value.className,
-      decorators: normalizeDecorators(value.decorators),
-      methods: normalizeMethods(value.methods),
-      constructorParams: normalizeConstructorParams(value.constructorParams),
-    });
+    const decorators = normalizeDecorators(value.decorators);
+    const methods = normalizeMethods(value.methods);
+    const constructorParams = normalizeConstructorParams(value.constructorParams);
+    const normalizedMeta: ClassMetadata = {
+      ...(value.className !== undefined ? { className: value.className } : {}),
+      ...(decorators !== undefined ? { decorators } : {}),
+      ...(methods !== undefined ? { methods } : {}),
+      ...(constructorParams !== undefined ? { constructorParams } : {}),
+    };
+
+    normalized.set(key, normalizedMeta);
   }
 
   return normalized;
@@ -104,10 +109,15 @@ function normalizeDecorators(
     return undefined;
   }
 
-  return decorators.map(decorator => ({
-    name: decorator.name,
-    arguments: normalizeDecoratorArguments(decorator.arguments),
-  }));
+  return decorators.map(decorator => {
+    const args = normalizeDecoratorArguments(decorator.arguments);
+
+    if (args !== undefined) {
+      return { name: decorator.name, arguments: args };
+    }
+
+    return { name: decorator.name };
+  });
 }
 
 function normalizeMethods(
@@ -117,11 +127,16 @@ function normalizeMethods(
     return undefined;
   }
 
-  return methods.map(method => ({
-    name: method.name ?? '',
-    decorators: normalizeDecorators(method.decorators),
-    parameters: normalizeParameters(method.parameters),
-  }));
+  return methods.map(method => {
+    const decorators = normalizeDecorators(method.decorators);
+    const parameters = normalizeParameters(method.parameters);
+
+    return {
+      name: method.name ?? '',
+      ...(decorators !== undefined ? { decorators } : {}),
+      ...(parameters !== undefined ? { parameters } : {}),
+    };
+  });
 }
 
 function normalizeParameters(
@@ -131,12 +146,17 @@ function normalizeParameters(
     return undefined;
   }
 
-  return parameters.map(param => ({
-    index: param.index,
-    name: param.name,
-    type: normalizeParamType(param.type),
-    decorators: normalizeDecorators(param.decorators),
-  }));
+  return parameters.map(param => {
+    const type = normalizeParamType(param.type);
+    const decorators = normalizeDecorators(param.decorators);
+
+    return {
+      ...(param.index !== undefined ? { index: param.index } : {}),
+      ...(param.name !== undefined ? { name: param.name } : {}),
+      ...(type !== undefined ? { type } : {}),
+      ...(decorators !== undefined ? { decorators } : {}),
+    };
+  });
 }
 
 function normalizeConstructorParams(
@@ -146,22 +166,39 @@ function normalizeConstructorParams(
     return undefined;
   }
 
-  return params.map(param => ({
-    type: normalizeParamType(param.type),
-    decorators: normalizeDecorators(param.decorators),
-  }));
+  return params.map(param => {
+    const type = normalizeParamType(param.type);
+    const decorators = normalizeDecorators(param.decorators);
+
+    return {
+      ...(type !== undefined ? { type } : {}),
+      ...(decorators !== undefined ? { decorators } : {}),
+    };
+  });
 }
 
 function normalizeParamType(type: MetadataTypeValue | ParamTypeReference | undefined): ParamTypeReference | undefined {
-  if (typeof type === 'string' || typeof type === 'symbol') {
-    return type;
+  if (type === undefined) {
+    return undefined;
   }
 
-  if (typeof type === 'function' && type.prototype !== undefined) {
-    return type;
+  return isParamTypeReference(type) ? type : undefined;
+}
+
+function isParamTypeReference(value: MetadataTypeValue | ParamTypeReference): value is ParamTypeReference {
+  if (typeof value === 'string' || typeof value === 'symbol') {
+    return true;
   }
 
-  return undefined;
+  if (typeof value !== 'function') {
+    return false;
+  }
+
+  if (value === Number || value === String || value === Boolean) {
+    return false;
+  }
+
+  return value.prototype !== undefined;
 }
 
 function normalizeDecoratorArguments(

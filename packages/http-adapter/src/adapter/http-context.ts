@@ -8,7 +8,11 @@ import type { HttpContext } from './interfaces';
 import { HTTP_CONTEXT_TYPE } from '../constants';
 
 export class BunnerHttpContext implements HttpContext {
-  constructor(private adapter: HttpAdapter) {}
+  private adapter: HttpAdapter;
+
+  constructor(adapter: BunnerValue) {
+    this.adapter = this.assertHttpAdapter(adapter);
+  }
 
   getType(): string {
     return HTTP_CONTEXT_TYPE;
@@ -35,5 +39,24 @@ export class BunnerHttpContext implements HttpContext {
 
   get response(): BunnerResponse {
     return this.adapter.getResponse();
+  }
+
+  private assertHttpAdapter(value: BunnerValue): HttpAdapter {
+    if (this.isHttpAdapter(value)) {
+      return value;
+    }
+
+    throw new BunnerContextError('Invalid HTTP adapter provided to BunnerHttpContext');
+  }
+
+  private isHttpAdapter(value: BunnerValue): value is HttpAdapter {
+    return (
+      typeof value === 'object' &&
+      value !== null &&
+      'getRequest' in value &&
+      'getResponse' in value &&
+      'setHeader' in value &&
+      'setStatus' in value
+    );
   }
 }

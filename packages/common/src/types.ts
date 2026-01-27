@@ -12,8 +12,10 @@ import type {
 
 export type BunnerPrimitive = string | number | boolean | bigint | symbol | null | undefined;
 
+export type ErrorConstructorLike = new (...args: ReadonlyArray<BunnerValue>) => Error;
+
 export type ErrorToken =
-  | ErrorConstructor
+  | ErrorConstructorLike
   | StringConstructor
   | NumberConstructor
   | BooleanConstructor
@@ -49,11 +51,17 @@ export type BunnerValue =
   | OnShutdown
   | OnDestroy;
 
-export type BunnerFunction = (...args: readonly BunnerValue[]) => BunnerValue | void;
+export interface BunnerFunction {
+  (...args: readonly BunnerValue[]): BunnerValue | void;
+}
 
-export type Class<T = BunnerRecord> = new (...args: ReadonlyArray<BunnerValue>) => T;
+export interface Class<T = BunnerValue> {
+  new (...args: ReadonlyArray<BunnerValue>): T;
+}
 
-export type ClassToken<T = unknown> = new (...args: ReadonlyArray<BunnerValue>) => T;
+export interface ClassToken<T = BunnerValue> {
+  new (...args: ReadonlyArray<BunnerValue>): T;
+}
 
 export type ClassProperties<T> = {
   [K in keyof T]-?: T[K] extends (...args: BunnerValue[]) => BunnerValue ? K : never;
@@ -83,9 +91,11 @@ export type PrimitiveArray = Array<PrimitiveValue>;
 
 export type PrimitiveRecord = Record<string, PrimitiveValue | PrimitiveArray>;
 
-export type Callable = (...args: ReadonlyArray<BunnerValue>) => BunnerValue | void;
+export interface Callable {
+  (...args: ReadonlyArray<BunnerValue>): BunnerValue | void;
+}
 
-export type Constructor<T = BunnerRecord> = new (...args: ReadonlyArray<BunnerValue>) => T;
+export type Constructor<T = BunnerValue> = new (...args: ReadonlyArray<BunnerValue>) => T;
 
 export type ValueLike = PrimitiveValue | PrimitiveArray | PrimitiveRecord | Callable;
 

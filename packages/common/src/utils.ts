@@ -1,7 +1,7 @@
 import type { ForwardRef } from './interfaces';
-import type { Callable, Constructor, ForwardRefFactory, PrimitiveArray, PrimitiveRecord, ValueLike } from './types';
+import type { BunnerValue, Callable, Constructor, ForwardRefFactory, PrimitiveArray, PrimitiveRecord, ValueLike } from './types';
 
-export function isClass(target: ValueLike): target is Constructor {
+export function isClass(target: BunnerValue): target is Constructor {
   return typeof target === 'function' && 'prototype' in target;
 }
 

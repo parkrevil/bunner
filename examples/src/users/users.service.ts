@@ -1,5 +1,5 @@
 import { Injectable } from '@bunner/common';
-import { Logger } from '@bunner/logger';
+import { Logger, type LogMetadataValue } from '@bunner/logger';
 
 import type { User } from './interfaces';
 
@@ -21,7 +21,12 @@ export class UsersService {
   }
 
   create(body: User): void {
-    this.logger.info('Creating user', body);
+    const metadata: Record<string, LogMetadataValue> = {
+      id: body.id,
+      name: body.name,
+    };
+
+    this.logger.info('Creating user', metadata);
 
     this.userRepository.create(body);
   }

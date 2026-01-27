@@ -29,7 +29,7 @@ function isPrimitiveName(value: MetadataTypeValue | undefined, name: 'string' | 
   return typeof value === 'string' && value.toLowerCase() === name;
 }
 
-function isClassConstructor(value: MetadataTypeValue | undefined): value is Class {
+function isClassConstructor(value: MetadataTypeValue | undefined): value is Class<TransformerValue> {
   if (typeof value !== 'function') {
     return false;
   }
@@ -37,11 +37,11 @@ function isClassConstructor(value: MetadataTypeValue | undefined): value is Clas
   return Object.prototype.hasOwnProperty.call(value, 'prototype');
 }
 
-function isForwardRef(value: MetadataTypeValue | undefined): value is () => Class {
+function isForwardRef(value: MetadataTypeValue | undefined): value is () => Class<TransformerValue> {
   return typeof value === 'function' && !isClassConstructor(value);
 }
 
-function resolveClassReference(value: MetadataTypeValue | undefined): Class | null {
+function resolveClassReference(value: MetadataTypeValue | undefined): Class<TransformerValue> | null {
   if (isClassConstructor(value)) {
     return value;
   }
@@ -77,7 +77,7 @@ export class TransformerCompiler {
   private static p2iCache = new Map<Class, PlainToInstanceFn>();
   private static i2pCache = new Map<Class, InstanceToPlainFn>();
 
-  static compilePlainToInstance(target: Class): PlainToInstanceFn {
+  static compilePlainToInstance(target: Class<TransformerValue>): PlainToInstanceFn {
     const cached = this.p2iCache.get(target);
 
     if (cached) {

@@ -6,7 +6,7 @@ import { PostsService } from './posts.service';
 import type { Post as PostEntity } from './interfaces';
 import type { PostCommentInput } from './comments/interfaces';
 
-@(RestController('posts') as ClassDecorator)
+@RestController('posts')
 export class PostsController {
   constructor(private readonly postsService: PostsService) {}
 

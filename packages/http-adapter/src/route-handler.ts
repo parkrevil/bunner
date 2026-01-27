@@ -288,7 +288,7 @@ export class RouteHandler {
     return typeof value === 'object' && value !== null;
   }
 
-  private isControllerConstructor(value: DecoratorArgument): value is ControllerConstructor {
+  private isControllerConstructor(value: DecoratorArgument | MetadataRegistryKey): value is ControllerConstructor {
     return typeof value === 'function' && !this.isErrorConstructor(value);
   }
 

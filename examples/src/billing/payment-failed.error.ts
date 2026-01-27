@@ -1,16 +1,20 @@
+import type { BunnerValue } from '@bunner/common';
+
 export class PaymentFailedError extends Error {
   public readonly amount: number;
   public readonly reason: string;
 
-  constructor(message?: string);
-  constructor(amount: number, reason: string);
-  constructor(amountOrMessage?: number | string, reason?: string) {
-    const isAmount = typeof amountOrMessage === 'number';
-    const resolvedAmount = isAmount ? amountOrMessage : 0;
-    const resolvedReason = isAmount ? reason ?? 'Unknown reason' : 'Unknown reason';
+  constructor(...args: ReadonlyArray<BunnerValue>) {
+    const amountCandidate = args[0];
+    const reasonCandidate = args[1];
+    const isAmount = typeof amountCandidate === 'number';
+    const resolvedAmount = isAmount ? amountCandidate : 0;
+    const resolvedReason = isAmount && typeof reasonCandidate === 'string' ? reasonCandidate : 'Unknown reason';
     const resolvedMessage = isAmount
       ? `Payment of $${resolvedAmount} failed: ${resolvedReason}`
-      : (amountOrMessage ?? 'Payment failed');
+      : typeof amountCandidate === 'string'
+        ? amountCandidate
+        : 'Payment failed';
 
     super(resolvedMessage);
 

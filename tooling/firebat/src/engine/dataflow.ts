@@ -1,37 +1,5 @@
 
-interface RoaringBitmap32Instance {
-  add(value: number): void;
-  remove(value: number): void;
-  has(value: number): boolean;
-  orInPlace(other: RoaringBitmap32Instance): void;
-  andInPlace(other: RoaringBitmap32Instance): void;
-  andNotInPlace(other: RoaringBitmap32Instance): void;
-  isEqual(other: RoaringBitmap32Instance): boolean;
-  toArray(): number[];
-  isEmpty: boolean;
-}
-
-type RoaringBitmap32Ctor = new (bitmap?: RoaringBitmap32Instance) => RoaringBitmap32Instance;
-
-let RoaringBitmap32: RoaringBitmap32Ctor | null = null;
-
-try {
-  const roaringNative = await import('roaring');
-
-  RoaringBitmap32 = (roaringNative?.RoaringBitmap32 as RoaringBitmap32Ctor | undefined) ?? null;
-} catch {
-  RoaringBitmap32 = null;
-}
-
-const getRoaringBitmapCtor = (): RoaringBitmap32Ctor => {
-  if (!RoaringBitmap32) {
-    throw new Error('roaring is not available');
-  }
-
-  return RoaringBitmap32;
-};
-
-export interface IBitSet {
+interface IBitSet {
   add(index: number): void;
   remove(index: number): void;
   has(index: number): boolean;
@@ -124,87 +92,6 @@ class BigIntBitSet implements IBitSet {
     }
 
     return values;
-  }
-}
-
-class RoaringBitSet implements IBitSet {
-  private bitmap: RoaringBitmap32Instance;
-
-  constructor(bitmap?: RoaringBitmap32Instance) {
-    const roaring = getRoaringBitmapCtor();
-
-    this.bitmap = bitmap ? new roaring(bitmap) : new roaring();
-  }
-
-  add(index: number): void {
-    this.bitmap.add(index);
-  }
-
-  remove(index: number): void {
-    this.bitmap.remove(index);
-  }
-
-  has(index: number): boolean {
-    return this.bitmap.has(index);
-  }
-
-  union(other: IBitSet): IBitSet {
-    if (other instanceof RoaringBitSet) {
-      const roaring = getRoaringBitmapCtor();
-      const result = new roaring(this.bitmap);
-
-      result.orInPlace(other.bitmap);
-
-      return new RoaringBitSet(result);
-    }
-
-    throw new Error('BitSet type mismatch in union');
-  }
-
-  intersect(other: IBitSet): IBitSet {
-    if (other instanceof RoaringBitSet) {
-      const roaring = getRoaringBitmapCtor();
-      const result = new roaring(this.bitmap);
-
-      result.andInPlace(other.bitmap);
-
-      return new RoaringBitSet(result);
-    }
-
-    throw new Error('BitSet type mismatch in intersect');
-  }
-
-  subtract(other: IBitSet): IBitSet {
-    if (other instanceof RoaringBitSet) {
-      const roaring = getRoaringBitmapCtor();
-      const result = new roaring(this.bitmap);
-
-      result.andNotInPlace(other.bitmap);
-
-      return new RoaringBitSet(result);
-    }
-
-    throw new Error('BitSet type mismatch in subtract');
-  }
-
-  clone(): IBitSet {
-    return new RoaringBitSet(this.bitmap);
-  }
-
-  isEmpty(): boolean {
-      return this.bitmap.isEmpty;
-  }
-
-  equals(other: IBitSet): boolean {
-      if (other instanceof RoaringBitSet) {
-        return this.bitmap.isEqual(other.bitmap);
-      }
-
-      return false;
-  }
-
-  toArray(): number[] {
-      return this.bitmap.toArray();
   }
 }
 
@@ -310,14 +197,13 @@ class SetBitSet implements IBitSet {
   }
 }
 
-export const createBitSet = (variableCount: number): IBitSet => {
+const createBitSet = (variableCount: number): IBitSet => {
   if (variableCount <= 64) {
     return new BigIntBitSet();
   }
 
-  if (RoaringBitmap32) {
-    return new RoaringBitSet();
-  }
-
   return new SetBitSet();
 };
+
+export { createBitSet };
+export type { IBitSet };

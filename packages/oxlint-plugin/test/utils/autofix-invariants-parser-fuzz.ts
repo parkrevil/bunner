@@ -1,7 +1,5 @@
-import { parseSync } from 'oxc-parser';
-
 import type { AstNode, AstNodeValue, RuleContext, Variable } from '../../src/types';
-
+import { parseSync } from 'oxc-parser';
 import { blankLinesBetweenStatementGroupsRule } from '../../src/rules/blank-lines-between-statement-groups';
 import { noBracketNotationRule } from '../../src/rules/no-bracket-notation';
 import { paddingLineBetweenStatementsRule } from '../../src/rules/padding-line-between-statements';

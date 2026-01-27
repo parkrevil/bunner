@@ -3,9 +3,10 @@ import type {
   AdapterConfig,
   AdapterInstanceConfig,
   BunnerAdapter,
-  Class,
+  ClassToken,
   Configurer,
   MiddlewareConfig,
+  ProviderToken,
   OnDestroy,
   OnInit,
   OnShutdown,
@@ -137,8 +138,9 @@ export class BunnerApplication {
     await this.callLifecycleHook('onDestroy');
   }
 
-  private getContextInstance<TContext>(ctor: Class<TContext>): TContext {
-    const instance = this.container.get(ctor);
+  private getContextInstance<TContext>(ctor: ClassToken<TContext>): TContext {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+    const instance = this.container.get<TContext>(ctor as ProviderToken);
 
     if (instance instanceof ctor) {
       return instance;
@@ -157,7 +159,7 @@ export class BunnerApplication {
           return undefined;
         }
       },
-      to: <TContext>(ctor: Class<TContext>) => this.getContextInstance(ctor),
+      to: <TContext>(ctor: ClassToken<TContext>) => this.getContextInstance(ctor),
       container: this.container,
       entryModule: this.entryModule,
     };

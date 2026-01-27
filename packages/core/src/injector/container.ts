@@ -122,8 +122,13 @@ export class Container implements BunnerContainer {
         } else if (this.isProviderUseFactory(provider)) {
           factory = c => {
             const args = Array.isArray(provider.inject) ? provider.inject.map((dep: ProviderToken) => c.get(dep)) : [];
+            const result = provider.useFactory(...args);
 
-            return provider.useFactory(...args);
+            if (result === undefined) {
+              return undefined;
+            }
+
+            return result;
           };
         }
       }

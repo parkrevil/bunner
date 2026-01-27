@@ -1,5 +1,4 @@
 import { Injectable } from '@bunner/common';
-import { Logger } from '@bunner/logger';
 
 import { CommentsService } from './comments';
 import { PostsRepository } from './posts.repository';
@@ -12,7 +11,6 @@ import type { PostCommentInput } from './comments/interfaces';
 export class PostsService {
   private readonly postRepo = new PostsRepository();
   private readonly commentsService = new CommentsService();
-  private readonly logger = new Logger('PostsService');
 
   findAll(): ReadonlyArray<Post> {
     return this.postRepo.findAll();

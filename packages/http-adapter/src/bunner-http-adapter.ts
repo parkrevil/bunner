@@ -2,9 +2,16 @@ import type { BunnerAdapter, BunnerRecord, Class, Context, ErrorFilterToken } fr
 
 import { ClusterManager, getRuntimeContext, type ClusterBaseWorker } from '@bunner/core';
 
+import type {
+  ClassMetadata as CoreClassMetadata,
+  ConstructorParamMetadata as CoreConstructorParamMetadata,
+  DecoratorMetadata as CoreDecoratorMetadata,
+} from '../../core/src/injector/types';
+
 import { BunnerHttpServer } from './bunner-http-server';
 import type {
   BunnerHttpInternalChannel,
+  BunnerHttpServerBootOptions,
   BunnerHttpServerOptions,
   HttpAdapterStartContext,
   HttpMiddlewareRegistry,
@@ -13,7 +20,7 @@ import type {
   MiddlewareRegistrationInput,
 } from './interfaces';
 import { HttpMiddlewareLifecycle } from './interfaces';
-import type { ClassMetadata, HttpWorkerRpc, MetadataRegistryKey } from './types';
+import type { ClassMetadata, HttpWorkerRpc, MetadataRegistryKey, ParamTypeReference } from './types';
 
 const BUNNER_HTTP_INTERNAL = Symbol.for('bunner:http:internal');
 
@@ -73,15 +80,18 @@ export class BunnerHttpAdapter implements BunnerAdapter {
       this.httpServer = new BunnerHttpServer();
 
       const runtimeContext = getRuntimeContext();
-
-      await this.httpServer.boot(startContext.container, {
+      const metadata = this.normalizeMetadataRegistry(runtimeContext.metadataRegistry);
+      const scopedKeys = runtimeContext.scopedKeys;
+      const bootOptions: BunnerHttpServerBootOptions = {
         ...this.options,
-        metadata: this.normalizeMetadataRegistry(runtimeContext.metadataRegistry),
-        scopedKeys: runtimeContext.scopedKeys,
+        ...(metadata !== undefined ? { metadata } : {}),
+        ...(scopedKeys !== undefined ? { scopedKeys } : {}),
         middlewares: this.middlewareRegistry,
         errorFilters: this.errorFilterTokens,
         internalRoutes: this.internalRoutes,
-      });
+      };
+
+      await this.httpServer.boot(startContext.container, bootOptions);
 
       return;
     }
@@ -153,7 +163,10 @@ export class BunnerHttpAdapter implements BunnerAdapter {
   }
 
   private normalizeMetadataRegistry(
-    registry: Map<MetadataRegistryKey, ClassMetadata> | Map<Class, ClassMetadata> | undefined,
+    registry:
+      | Map<MetadataRegistryKey, ClassMetadata | CoreClassMetadata>
+      | Map<Class, ClassMetadata | CoreClassMetadata>
+      | undefined,
   ): Map<MetadataRegistryKey, ClassMetadata> | undefined {
     if (!registry) {
       return undefined;
@@ -163,11 +176,55 @@ export class BunnerHttpAdapter implements BunnerAdapter {
 
     for (const [key, value] of registry.entries()) {
       if (this.isClassToken(key)) {
-        normalized.set(key, value);
+        normalized.set(key, this.toHttpClassMetadata(value));
       }
     }
 
     return normalized;
+  }
+
+  private toHttpClassMetadata(value: ClassMetadata | CoreClassMetadata): ClassMetadata {
+    if (this.isHttpClassMetadata(value)) {
+      return value;
+    }
+
+    const decorators = value.decorators ? this.normalizeCoreDecorators(value.decorators) : undefined;
+    const constructorParams = value.constructorParams
+      ? this.normalizeCoreConstructorParams(value.constructorParams)
+      : undefined;
+
+    return {
+      ...(decorators !== undefined ? { decorators } : {}),
+      ...(constructorParams !== undefined ? { constructorParams } : {}),
+    };
+  }
+
+  private isHttpClassMetadata(value: ClassMetadata | CoreClassMetadata): value is ClassMetadata {
+    return 'methods' in value || 'className' in value;
+  }
+
+  private normalizeCoreDecorators(
+    decorators: readonly CoreDecoratorMetadata[],
+  ): ClassMetadata['decorators'] {
+    return decorators.map(decorator => ({ name: decorator.name }));
+  }
+
+  private normalizeCoreConstructorParams(
+    params: readonly CoreConstructorParamMetadata[],
+  ): ClassMetadata['constructorParams'] {
+    return params.map(param => {
+      const type = this.isProviderToken(param.type) ? param.type : undefined;
+      const decorators = param.decorators ? this.normalizeCoreDecorators(param.decorators) : undefined;
+
+      return {
+        ...(type !== undefined ? { type } : {}),
+        ...(decorators !== undefined ? { decorators } : {}),
+      };
+    });
+  }
+
+  private isProviderToken(value: CoreConstructorParamMetadata['type']): value is ParamTypeReference {
+    return typeof value === 'string' || typeof value === 'symbol' || typeof value === 'function';
   }
 
   private isClassToken(value: MetadataRegistryKey | Class): value is MetadataRegistryKey {

@@ -264,7 +264,6 @@ describe('ip', () => {
     expect(quotedResult).toBe('198.51.100.5');
   });
   });
-});
 
 describe('stripOptionalQuotes', () => {
   it('should remove matching quotes when unescaping characters', () => {
@@ -386,4 +385,6 @@ describe('isIpv6', () => {
     // Assert
     expect(result).toBe(false);
   });
+});
+
 });

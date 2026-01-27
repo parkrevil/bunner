@@ -5,12 +5,22 @@ import { describe, expect, it, mock } from 'bun:test';
 import { StatusCodes } from 'http-status-codes';
 
 import type { CombinedMetadataInput } from '../../../core/src/metadata/interfaces';
-import type { ClassMetadata, HttpWorkerResponseBody, MetadataRegistryKey, SystemError } from '../../src/types';
+import type {
+  ClassMetadata,
+  HttpWorkerResponseBody,
+  MetadataRegistryKey,
+  RequestBodyValue,
+  SystemError,
+} from '../../src/types';
 
 import { createHttpTestHarness, handleRequest, withGlobalMiddlewares } from '../http-test-kit';
 import { BunnerHttpContext, type BunnerResponse, HttpMethod } from '../index';
 
-const isBunnerValue = (value: unknown): value is BunnerValue => {
+function isBunnerRecordValue(value: BunnerValue): value is Record<string, BunnerValue> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+const isBunnerValue = (value: BunnerValue): value is BunnerValue => {
   if (value === null || value === undefined) {
     return true;
   }
@@ -29,11 +39,19 @@ const isBunnerValue = (value: unknown): value is BunnerValue => {
   }
 
   if (Array.isArray(value)) {
-    return value.every(entry => isBunnerValue(entry));
+    const arrayValue: BunnerValue[] = value;
+
+    return arrayValue.every(entry => isBunnerValue(entry));
   }
 
-  if (valueType === 'object') {
-    return Object.values(value).every(entry => isBunnerValue(entry));
+  if (isBunnerRecordValue(value)) {
+    for (const key of Object.keys(value)) {
+      if (!isBunnerValue(value[key])) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   return false;
@@ -47,10 +65,45 @@ const isBunnerValueArray = (value: BunnerValue | undefined): value is BunnerValu
   return Array.isArray(value);
 };
 
-const assertRecord = (value: BunnerValue | null): asserts value is Record<string, BunnerValue> => {
+const assertBunnerValueArray = (value: BunnerValue | undefined): BunnerValue[] => {
+  if (!isBunnerValueArray(value)) {
+    throw new Error('Expected BunnerValue[]');
+  }
+
+  return value;
+};
+
+
+const assertRecord: (value: BunnerValue | null) => asserts value is Record<string, BunnerValue> = value => {
   if (!isRecord(value)) {
     throw new Error('Expected record');
   }
+};
+
+const toJsonValue = (value: BunnerValue): RequestBodyValue => {
+  if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    const arrayValue: BunnerValue[] = value;
+
+    return arrayValue.map(entry => toJsonValue(entry));
+  }
+
+  if (isBunnerRecordValue(value)) {
+    const record: Record<string, RequestBodyValue> = {};
+
+    for (const [key, entry] of Object.entries(value)) {
+      record[key] = toJsonValue(entry);
+    }
+
+    return record;
+  }
+
+  const serialized = JSON.stringify(value);
+
+  return serialized ?? 'Unserializable value';
 };
 
 const toBunnerRecord = (value: SystemError): Record<string, BunnerValue> | undefined => {
@@ -59,8 +112,10 @@ const toBunnerRecord = (value: SystemError): Record<string, BunnerValue> | undef
   }
 
   const record: Record<string, BunnerValue> = {};
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+  const entries = Object.entries(value as Record<string, BunnerValue>);
 
-  for (const [key, entry] of Object.entries(value)) {
+  for (const [key, entry] of entries) {
     if (isBunnerValue(entry)) {
       record[key] = entry;
     }
@@ -75,7 +130,8 @@ const parseWorkerBody = (body: HttpWorkerResponseBody): BunnerValue | null => {
   }
 
   try {
-    const parsed: unknown = JSON.parse(body);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    const parsed: BunnerValue = JSON.parse(body);
 
     return isBunnerValue(parsed) ? parsed : null;
   } catch {
@@ -125,7 +181,7 @@ class HttpStatusErrorFilter extends BunnerErrorFilter<SystemError> {
         : typeof messageValue === 'number' || typeof messageValue === 'boolean'
           ? String(messageValue)
           : '';
-    const detailsList = isBunnerValueArray(detailsValue) ? detailsValue : [];
+    const detailsList = isBunnerValueArray(detailsValue) ? detailsValue.map(entry => toJsonValue(entry)) : [];
 
     http.response.setStatus(statusValue);
     http.response.setBody({ message: messageText, details: detailsList });
@@ -193,7 +249,8 @@ describe('RequestHandler.handle', () => {
     const metadataRegistry = createRegistry();
     const onErrorFilter = mock(() => undefined);
 
-    metadataRegistry.set(HttpStatusErrorFilter, {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+    metadataRegistry.set(HttpStatusErrorFilter as MetadataRegistryKey, {
       className: 'HttpStatusErrorFilter',
       decorators: [{ name: 'Catch', arguments: [Error] }],
     });
@@ -235,7 +292,8 @@ describe('RequestHandler.handle', () => {
     const metadataRegistry = createRegistry();
     const onErrorFilter = mock(() => {});
 
-    metadataRegistry.set(HttpStatusErrorFilter, {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+    metadataRegistry.set(HttpStatusErrorFilter as MetadataRegistryKey, {
       className: 'HttpStatusErrorFilter',
       decorators: [{ name: 'Catch', arguments: [Error] }],
     });
@@ -269,11 +327,10 @@ describe('RequestHandler.handle', () => {
 
     const record = parsed;
     const details = record.details;
+    const detailList = assertBunnerValueArray(details);
 
     expect(record).toMatchObject({ message: 'Validation failed' });
     expect(isBunnerValueArray(details)).toBeTrue();
-
-    const detailList = isBunnerValueArray(details) ? details : [];
 
     expect(detailList).toContain('name must be a string');
   });
@@ -283,7 +340,8 @@ describe('RequestHandler.handle', () => {
     const metadataRegistry = createRegistry();
     const onErrorFilter = mock(() => {});
 
-    metadataRegistry.set(HttpStatusErrorFilter, {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+    metadataRegistry.set(HttpStatusErrorFilter as MetadataRegistryKey, {
       className: 'HttpStatusErrorFilter',
       decorators: [{ name: 'Catch', arguments: [Error] }],
     });
@@ -317,10 +375,9 @@ describe('RequestHandler.handle', () => {
 
     const record = parsed;
     const details = record.details;
+    const detailList = assertBunnerValueArray(details);
 
     expect(isBunnerValueArray(details)).toBeTrue();
-
-    const detailList = isBunnerValueArray(details) ? details : [];
 
     expect(detailList).toContain('age must be an integer');
   });
@@ -330,7 +387,8 @@ describe('RequestHandler.handle', () => {
     const metadataRegistry = createRegistry();
     const onErrorFilter = mock(() => {});
 
-    metadataRegistry.set(HttpStatusErrorFilter, {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+    metadataRegistry.set(HttpStatusErrorFilter as MetadataRegistryKey, {
       className: 'HttpStatusErrorFilter',
       decorators: [{ name: 'Catch', arguments: [Error] }],
     });
@@ -364,10 +422,9 @@ describe('RequestHandler.handle', () => {
 
     const record = parsed;
     const details = record.details;
+    const detailList = assertBunnerValueArray(details);
 
     expect(isBunnerValueArray(details)).toBeTrue();
-
-    const detailList = isBunnerValueArray(details) ? details : [];
 
     expect(detailList).toContain('age must be <= 150');
   });

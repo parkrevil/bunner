@@ -364,11 +364,11 @@ export class Builder<T> {
     key: number,
     segments: string[],
   ): void {
-    const parts = child.segmentParts;
+    const parts = child.segmentParts ?? [];
 
     // Note: Logic for 'segmentParts' (chain optimization) might belong here if we implement it fully.
     // For now, consistent with previous logic:
-    if (parts?.length <= 1) {
+    if (parts.length <= 1) {
       this.addSegments(child, index + 1, activeParams, omittedOptionals, method, key, segments);
 
       return;

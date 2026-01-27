@@ -1,4 +1,3 @@
-import type { BunnerErrorFilter } from './bunner-error-filter';
 import type { BunnerMiddleware } from './bunner-middleware';
 import type { BunnerFunction, BunnerValue, Class, ClassToken, ValueLike } from './types';
 
@@ -14,7 +13,7 @@ export interface Context {
 }
 
 // DI Interfaces
-export type ProviderToken = string | symbol | ClassToken;
+export type ProviderToken = string | symbol | ClassToken | Class;
 
 export type ProviderScope = 'singleton' | 'request-context' | 'transient';
 

@@ -7,7 +7,7 @@ import { ChargeDto } from './charge.dto';
 import { PaymentErrorFilter } from './payment-error.filter';
 import { PaymentFailedError } from './payment-failed.error';
 
-@(Controller('billing') as ClassDecorator)
+@Controller('billing')
 @UseMiddlewares(AuditMiddleware)
 export class BillingController {
   private logger = new Logger('BillingController');
@@ -29,7 +29,7 @@ export class BillingController {
 
     return {
       success: true,
-      transactionId: 'txn_' + Math.random().toString(36).substr(2, 9),
+      transactionId: `txn_${Math.random().toString(36).slice(2, 11)}`,
       amount,
       status: 'COMPLETED',
     };
