@@ -129,10 +129,10 @@ const analyzeFunctionBody = (bodyNode: OxcNodeValue | undefined, localIndexByNam
   }
 
   const defCount = defMetaById.length;
-  const empty = createBitSet(defCount);
-  const genByNode: IBitSet[] = Array.from({ length: nodeCount }, () => createBitSet(defCount));
-  const killByNode: IBitSet[] = Array.from({ length: nodeCount }, () => createBitSet(defCount));
-  const defsOfVar: IBitSet[] = Array.from({ length: localIndexByName.size }, () => createBitSet(defCount));
+  const empty = createBitSet();
+  const genByNode: IBitSet[] = Array.from({ length: nodeCount }, () => createBitSet());
+  const killByNode: IBitSet[] = Array.from({ length: nodeCount }, () => createBitSet());
+  const defsOfVar: IBitSet[] = Array.from({ length: localIndexByName.size }, () => createBitSet());
 
   for (let varIndex = 0; varIndex < defsByVarIndex.length; varIndex += 1) {
     const ids = defsByVarIndex[varIndex] ?? [];
@@ -149,7 +149,7 @@ const analyzeFunctionBody = (bodyNode: OxcNodeValue | undefined, localIndexByNam
       genByNode[nodeId]?.add(defId);
     }
 
-    let kill = createBitSet(defCount);
+    let kill = createBitSet();
     const writtenVars = writeVarIndexesByNode[nodeId] ?? [];
 
     for (const varIndex of writtenVars) {
@@ -162,12 +162,12 @@ const analyzeFunctionBody = (bodyNode: OxcNodeValue | undefined, localIndexByNam
       kill = kill.union(defs);
     }
 
-    killByNode[nodeId] = kill.subtract(genByNode[nodeId] ?? createBitSet(defCount));
+    killByNode[nodeId] = kill.subtract(genByNode[nodeId] ?? createBitSet());
   }
 
   const pred = built.cfg.buildAdjacency('backward');
-  const inByNode: IBitSet[] = Array.from({ length: nodeCount }, () => createBitSet(defCount));
-  const outByNode: IBitSet[] = Array.from({ length: nodeCount }, () => createBitSet(defCount));
+  const inByNode: IBitSet[] = Array.from({ length: nodeCount }, () => createBitSet());
+  const outByNode: IBitSet[] = Array.from({ length: nodeCount }, () => createBitSet());
   let changed = true;
 
   while (changed) {
@@ -186,27 +186,27 @@ const analyzeFunctionBody = (bodyNode: OxcNodeValue | undefined, localIndexByNam
       }
 
       const nextIn = unionAll(predOutSets, empty.clone());
-      const nextOut = (genByNode[nodeId] ?? createBitSet(defCount)).union(
-        nextIn.subtract(killByNode[nodeId] ?? createBitSet(defCount)),
+      const nextOut = (genByNode[nodeId] ?? createBitSet()).union(
+        nextIn.subtract(killByNode[nodeId] ?? createBitSet()),
       );
 
-      if (!nextIn.equals(inByNode[nodeId] ?? createBitSet(defCount))) {
+      if (!nextIn.equals(inByNode[nodeId] ?? createBitSet())) {
         inByNode[nodeId] = nextIn;
         changed = true;
       }
 
-      if (!nextOut.equals(outByNode[nodeId] ?? createBitSet(defCount))) {
+      if (!nextOut.equals(outByNode[nodeId] ?? createBitSet())) {
         outByNode[nodeId] = nextOut;
         changed = true;
       }
     }
   }
 
-  let usedDefs = createBitSet(defCount);
+  let usedDefs = createBitSet();
 
   for (let nodeId = 0; nodeId < nodeCount; nodeId += 1) {
     const uses = useVarIndexesByNode[nodeId] ?? [];
-    const reachingIn = inByNode[nodeId] ?? createBitSet(defCount);
+    const reachingIn = inByNode[nodeId] ?? createBitSet();
 
     for (const varIndex of uses) {
       const defs = defsOfVar[varIndex];
@@ -223,7 +223,7 @@ const analyzeFunctionBody = (bodyNode: OxcNodeValue | undefined, localIndexByNam
 
   for (let nodeId = 0; nodeId < nodeCount; nodeId += 1) {
     const writtenVars = writeVarIndexesByNode[nodeId] ?? [];
-    const reachingIn = inByNode[nodeId] ?? createBitSet(defCount);
+    const reachingIn = inByNode[nodeId] ?? createBitSet();
 
     for (const varIndex of writtenVars) {
       const defs = defsOfVar[varIndex];
@@ -232,7 +232,7 @@ const analyzeFunctionBody = (bodyNode: OxcNodeValue | undefined, localIndexByNam
         continue;
       }
 
-      const killedHere = reachingIn.intersect(defs).subtract(genByNode[nodeId] ?? createBitSet(defCount));
+      const killedHere = reachingIn.intersect(defs).subtract(genByNode[nodeId] ?? createBitSet());
       const killedIds = killedHere.toArray();
 
       for (const defId of killedIds) {
@@ -262,7 +262,9 @@ export const detectResourceWasteOxc = (files: ParsedFile[]): ResourceWasteFindin
 
     const visit = (node: OxcNodeValue | undefined): void => {
       if (Array.isArray(node)) {
-        for (const entry of node) {
+        const entries = node as ReadonlyArray<OxcNodeValue>;
+
+        for (const entry of entries) {
           visit(entry);
         }
 

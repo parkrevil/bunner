@@ -86,7 +86,7 @@ function createHttpTestHarness(params: CreateHttpTestHarnessParams): HttpTestHar
 const isCombinedMetadataInput = (
   value: ClassMetadata | CombinedMetadataInput,
 ): value is CombinedMetadataInput => {
-  return Array.isArray(value.properties);
+  return 'properties' in value && Array.isArray(value.properties);
 };
 
 function normalizeMetadataRegistry(

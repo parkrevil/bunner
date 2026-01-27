@@ -78,7 +78,9 @@ export class RouteHandler {
         continue;
       }
 
-      const controllerDec = (meta.decorators ?? []).find(d => d.name === 'Controller');
+      const controllerDec = (meta.decorators ?? []).find(
+        d => d.name === 'RestController',
+      );
 
       if (controllerDec) {
         this.logger.debug(`FOUND Controller: ${meta.className}`);

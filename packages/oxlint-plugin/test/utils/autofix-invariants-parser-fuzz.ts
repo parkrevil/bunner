@@ -1,3 +1,12 @@
+import type { AstNode, AstNodeValue, RuleContext, Variable } from '../../src/types';
+
+import { blankLinesBetweenStatementGroupsRule } from '../../src/rules/blank-lines-between-statement-groups';
+import { noBracketNotationRule } from '../../src/rules/no-bracket-notation';
+import { paddingLineBetweenStatementsRule } from '../../src/rules/padding-line-between-statements';
+import { unusedImportsRule } from '../../src/rules/unused-imports';
+import { applyFixes, createRuleContext, createSourceCode } from './rule-test-kit';
+import { buildCommaTokens } from './token-utils';
+
 let parseSync: typeof import('oxc-parser').parseSync | undefined;
 
 try {
@@ -9,15 +18,6 @@ try {
 } catch {
   parseSync = undefined;
 }
-
-import type { AstNode, AstNodeValue, RuleContext, Variable } from '../../src/types';
-
-import { blankLinesBetweenStatementGroupsRule } from '../../src/rules/blank-lines-between-statement-groups';
-import { noBracketNotationRule } from '../../src/rules/no-bracket-notation';
-import { paddingLineBetweenStatementsRule } from '../../src/rules/padding-line-between-statements';
-import { unusedImportsRule } from '../../src/rules/unused-imports';
-import { applyFixes, createRuleContext, createSourceCode } from './rule-test-kit';
-import { buildCommaTokens } from './token-utils';
 
 interface Visitor {
   [key: string]: ((node: AstNode) => void) | undefined;
@@ -303,6 +303,10 @@ const runRuleOnParsedCode = (
   rule: RuleModule,
   options: RuleContext['options'] = [],
 ): RuleRunResult => {
+  if (parseSync === undefined) {
+    return { reports: [], fixed: code };
+  }
+
   const parsed = parseSync(filename, code);
   const program = parsed.program;
 
@@ -355,7 +359,11 @@ const runRuleOnParsedCode = (
 };
 
 const runParserAutofixInvariantsFuzz = (): void => {
-  if (!parseSync) {
+  if (parseSync === undefined) {
+    return;
+  }
+
+  if (parseSync === undefined) {
     return;
   }
 
