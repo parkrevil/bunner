@@ -1,16 +1,18 @@
-import type { DecoratorPropertyKey, DecoratorTarget } from '../types';
-
 export const Body =
-  (_property?: string) => (_target: DecoratorTarget, _propertyKey: DecoratorPropertyKey, _parameterIndex: number) => {};
+  (_property?: string): ParameterDecorator =>
+  () => {};
 export const Query =
-  (_property?: string) => (_target: DecoratorTarget, _propertyKey: DecoratorPropertyKey, _parameterIndex: number) => {};
+  (_property?: string): ParameterDecorator =>
+  () => {};
 export const Params =
-  (_property?: string) => (_target: DecoratorTarget, _propertyKey: DecoratorPropertyKey, _parameterIndex: number) => {};
+  (_property?: string): ParameterDecorator =>
+  () => {};
 export const Param = Params;
-export const Request = () => (_target: DecoratorTarget, _propertyKey: DecoratorPropertyKey, _parameterIndex: number) => {};
+export const Request = (): ParameterDecorator => () => {};
 export const Req = Request;
-export const Response = () => (_target: DecoratorTarget, _propertyKey: DecoratorPropertyKey, _parameterIndex: number) => {};
+export const Response = (): ParameterDecorator => () => {};
 export const Res = Response;
 export const Cookie =
-  (_property?: string) => (_target: DecoratorTarget, _propertyKey: DecoratorPropertyKey, _parameterIndex: number) => {};
-export const Ip = () => (_target: DecoratorTarget, _propertyKey: DecoratorPropertyKey, _parameterIndex: number) => {};
+  (_property?: string): ParameterDecorator =>
+  () => {};
+export const Ip = (): ParameterDecorator => () => {};

@@ -2,7 +2,7 @@ import type { AdapterCollection } from '@bunner/common';
 
 import { describe, expect, it } from 'bun:test';
 
-import type { ScalarOptionsWithRegistry, ScalarSetupOptions } from './interfaces';
+import type { ScalarSetupOptionsInput } from './interfaces';
 import type {
   HttpAdapter,
   HttpAdapterInternal,
@@ -25,6 +25,8 @@ function createHttpAdapterSpy(): HttpAdapterSpy {
   };
   const adapter: HttpAdapter = {
     [BUNNER_HTTP_INTERNAL]: internalAdapter,
+    start: async () => {},
+    stop: async () => {},
   };
 
   return { adapter, calls };
@@ -46,9 +48,11 @@ function createHttpAdapters(entries: Array<[string, HttpAdapter]>): AdapterColle
   const http = {
     get: (name: string): HttpAdapter | undefined => map.get(name),
     all: (): HttpAdapter[] => Array.from(map.values()),
-    forEach: (callback: (adapter: HttpAdapter, name: string) => void): void => {
+    forEach: (callback: (adapter: HttpAdapter) => void): void => {
       map.forEach((adapter, name) => {
-        callback(adapter, name);
+        const handler = callback as (adapter: HttpAdapter, name: string) => void;
+
+        handler(adapter, name);
       });
     },
   };
@@ -56,7 +60,7 @@ function createHttpAdapters(entries: Array<[string, HttpAdapter]>): AdapterColle
   return { http };
 }
 
-describe('setupScalar', () => {
+describe('setup', () => {
   // Removed global beforeEach/afterEach for AOT/Strict-Immutable compliance.
   // Instead, we inject a mock registry to each setupScalar call where needed.
 
@@ -79,11 +83,11 @@ describe('setupScalar', () => {
 
     // Act
     const act = () => {
-      const options = {
+      const options: ScalarSetupOptionsInput = {
         documentTargets: 'invalid',
         httpTargets: [],
         metadataRegistry: new Map(),
-      } satisfies ScalarSetupOptions & ScalarOptionsWithRegistry;
+      };
 
       setupScalar(adapters, options);
     };
@@ -98,11 +102,11 @@ describe('setupScalar', () => {
 
     // Act
     const act = () => {
-      const options = {
+      const options: ScalarSetupOptionsInput = {
         documentTargets: 'all',
         httpTargets: undefined,
         metadataRegistry: new Map(),
-      } satisfies ScalarSetupOptions & ScalarOptionsWithRegistry;
+      };
 
       setupScalar(adapters, options);
     };
@@ -117,11 +121,11 @@ describe('setupScalar', () => {
 
     // Act
     const act = () => {
-      const options = {
+      const options: ScalarSetupOptionsInput = {
         documentTargets: 'all',
         httpTargets: 'invalid',
         metadataRegistry: new Map(),
-      } satisfies ScalarSetupOptions & ScalarOptionsWithRegistry;
+      };
 
       setupScalar(adapters, options);
     };
@@ -154,9 +158,12 @@ describe('setupScalar', () => {
         get: () => undefined,
         all: () => [],
         forEach: callback => {
-          const adapter: HttpAdapter = {};
+          const adapter: HttpAdapter = {
+            start: async () => {},
+            stop: async () => {},
+          };
 
-          callback(adapter, 'http-server');
+          callback(adapter);
         },
       },
     };
@@ -209,7 +216,7 @@ describe('setupScalar', () => {
     expect(calls.map(call => call.path)).toEqual(['/api-docs', '/api-docs/*']);
   });
 
-  it('should not register routes twice for the same adapter', () => {
+  it('should not register routes twice when setupScalar is invoked twice', () => {
     // Arrange
     const { adapter, calls } = createHttpAdapterSpy();
     const adapters = createHttpAdapters([['http-server', adapter]]);
@@ -225,8 +232,7 @@ describe('setupScalar', () => {
   it('should serve Scalar UI at /api-docs when exactly one document exists', async () => {
     // Arrange
     const { adapter, calls } = createHttpAdapterSpy();
-    const http = new Map<string, HttpAdapter>([['http-server', adapter]]);
-    const adapters: AdapterCollection = { http };
+    const adapters = createHttpAdapters([['http-server', adapter]]);
 
     // Act
     setupScalar(adapters, {

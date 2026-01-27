@@ -3,13 +3,38 @@ import { runInNewContext } from 'node:vm';
 import { ModuleKind, ScriptTarget, transpileModule } from 'typescript';
 
 import type { FileAnalysis } from '../analyzer/graph/interfaces';
+import type { AnalyzerValue, AnalyzerValueRecord } from '../analyzer/types';
+import type { DeepFreezeModule, GeneratedBlockParams, MetadataRegistryModule, ScopedKeysMapModule } from './types';
 
 import { ModuleGraph } from '../analyzer/graph/module-graph';
 import { ManifestGenerator } from './manifest';
-import type { GeneratedBlockParams, MetadataRegistryModule, ScopedKeysMapModule } from './types';
 
-function executeModule<TModule>(jsCode: string): TModule {
-  const moduleContainer = { exports: {} as TModule };
+const isAnalyzerValueRecord = (value: AnalyzerValue): value is AnalyzerValueRecord => {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+};
+
+const isAnalyzerValueArray = (value: AnalyzerValue): value is AnalyzerValue[] => {
+  return Array.isArray(value);
+};
+
+const assertRecordValue = (value: AnalyzerValue): AnalyzerValueRecord => {
+  if (isAnalyzerValueRecord(value)) {
+    return value;
+  }
+
+  throw new Error('Expected a record value.');
+};
+
+const assertArrayValue = (value: AnalyzerValue): AnalyzerValue[] => {
+  if (isAnalyzerValueArray(value)) {
+    return value;
+  }
+
+  throw new Error('Expected an array value.');
+};
+
+function executeModule<TModule>(jsCode: string, initialExports: TModule): TModule {
+  const moduleContainer = { exports: initialExports };
   const context = { module: moduleContainer, exports: moduleContainer.exports };
 
   runInNewContext(jsCode, context);
@@ -31,7 +56,6 @@ function createSingleModuleGraph(): ModuleGraph {
       name: 'AppModule',
       providers: [],
       imports: {},
-      adapters: undefined,
     },
   });
 
@@ -86,7 +110,7 @@ describe('manifest', () => {
     const tsSnippet = `${deepFreezeBlock}\n${sealMapBlock}\n${createMetadataRegistryBlock}\nexport const metadataRegistry = createMetadataRegistry();`;
     // Act
     const jsSnippet = transpileTsModule(tsSnippet);
-    const mod = executeModule<MetadataRegistryModule>(jsSnippet);
+    const mod = executeModule<MetadataRegistryModule>(jsSnippet, { metadataRegistry: new Map() });
     const registry = mod.metadataRegistry;
 
     // Assert
@@ -121,7 +145,7 @@ describe('manifest', () => {
     const tsSnippet = `${deepFreezeBlock}\n${sealMapBlock}\n${createScopedKeysMapBlock}\nexport const scopedKeysMap = createScopedKeysMap();`;
     // Act
     const jsSnippet = transpileTsModule(tsSnippet);
-    const mod = executeModule<ScopedKeysMapModule>(jsSnippet);
+    const mod = executeModule<ScopedKeysMapModule>(jsSnippet, { scopedKeysMap: new Map() });
     const map = mod.scopedKeysMap;
 
     // Assert
@@ -133,7 +157,8 @@ describe('manifest', () => {
     }).toThrow(/immutable/i);
   });
 
-  it('should deep-freeze nested metadata-like objects', async () => {
+  it('should deep-freeze nested metadata-like objects when invoked', () => {
+    // Arrange
     const graph = createSingleModuleGraph();
     const gen = new ManifestGenerator();
     const code = gen.generate(graph, [], '/out');
@@ -143,26 +168,32 @@ describe('manifest', () => {
       name: 'deepFreeze block',
     });
     const tsSnippet = `${deepFreezeBlock}\nexport { deepFreeze };`;
-    const jsSnippet = transpileTsModule(tsSnippet);
-    const mod = await importDataModule<{ deepFreeze: (obj: unknown) => unknown }>(jsSnippet);
-    const deepFreeze = mod.deepFreeze;
-    const sample = {
+    const sample: AnalyzerValueRecord = {
       className: 'A',
       decorators: [{ name: 'X', arguments: [] }],
       constructorParams: [],
       methods: [],
       properties: [],
     };
+    // Act
+    const jsSnippet = transpileTsModule(tsSnippet);
+    const mod = executeModule<DeepFreezeModule>(jsSnippet, {
+      deepFreeze: (obj: AnalyzerValue) => obj,
+    });
+    const deepFreeze = mod.deepFreeze;
+    const decorators = assertArrayValue(sample.decorators);
 
     deepFreeze(sample);
+    // Assert
     expect(Object.isFrozen(sample)).toBe(true);
     expect(Object.isFrozen(sample.decorators)).toBe(true);
     expect(() => {
-      (sample.decorators as Array<unknown>).push({ name: 'Y', arguments: [] });
+      decorators.push({ name: 'Y', arguments: [] });
     }).toThrow();
   });
 
-  it('should include adapterStaticSpecs and handlerIndex in JSON output', () => {
+  it('should include adapterStaticSpecs and handlerIndex in JSON output when generated', () => {
+    // Arrange
     const graph = createSingleModuleGraph();
     const gen = new ManifestGenerator();
     const json = gen.generateJson({
@@ -186,10 +217,13 @@ describe('manifest', () => {
       },
       handlerIndex: [{ id: 'test:src/controllers.ts#SampleController.handle' }],
     });
-    const parsed = JSON.parse(json) as Record<string, unknown>;
-    const adapterSpecs = parsed.adapterStaticSpecs as Record<string, unknown>;
-    const handlerIndex = parsed.handlerIndex as Array<Record<string, unknown>>;
+    // Act
+    const parsed = JSON.parse(json);
+    const parsedRecord = assertRecordValue(parsed);
+    const adapterSpecs = assertRecordValue(parsedRecord.adapterStaticSpecs);
+    const handlerIndex = assertArrayValue(parsedRecord.handlerIndex);
 
+    // Assert
     expect(adapterSpecs.test).toBeDefined();
     expect(handlerIndex).toEqual([{ id: 'test:src/controllers.ts#SampleController.handle' }]);
   });

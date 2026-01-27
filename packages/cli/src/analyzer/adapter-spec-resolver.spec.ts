@@ -7,6 +7,28 @@ import type { FileAnalysis } from './graph/interfaces';
 import { PathResolver } from '../common';
 import { AdapterSpecResolver, AstParser } from './index';
 
+type AstParseResult = ReturnType<AstParser['parse']>;
+
+const applyParseToAnalysis = (analysis: FileAnalysis, parseResult: AstParseResult): FileAnalysis => {
+  if (parseResult.imports !== undefined) {
+    analysis.imports = parseResult.imports;
+  }
+
+  if (parseResult.exportedValues !== undefined) {
+    analysis.exportedValues = parseResult.exportedValues;
+  }
+
+  if (parseResult.localValues !== undefined) {
+    analysis.localValues = parseResult.localValues;
+  }
+
+  if (parseResult.moduleDefinition !== undefined) {
+    analysis.moduleDefinition = parseResult.moduleDefinition;
+  }
+
+  return analysis;
+};
+
 async function createTempDir(): Promise<string> {
   const base = join(process.cwd(), '.tmp-adapter-spec');
 
@@ -21,8 +43,9 @@ async function writeFileContent(filePath: string, content: string): Promise<void
   await Bun.write(filePath, content);
 }
 
-describe('AdapterSpecResolver', () => {
-  it('resolves adapterStaticSpecs and handlerIndex from entry files', async () => {
+describe('adapter-spec-resolver', () => {
+  it('should resolve adapterStaticSpecs and handlerIndex when entry files are provided', async () => {
+    // Arrange
     const projectRoot = await createTempDir();
     const srcDir = join(projectRoot, 'src');
     const adapterDir = join(projectRoot, 'adapters', 'test-adapter');
@@ -75,13 +98,11 @@ describe('AdapterSpecResolver', () => {
     const controllerContent = await Bun.file(controllerFile).text();
     const controllerParse = parser.parse(controllerFile, controllerContent);
     const fileMap = new Map<string, FileAnalysis>();
-
-    fileMap.set(controllerFile, {
+    const controllerAnalysis: FileAnalysis = {
       filePath: controllerFile,
       classes: controllerParse.classes,
       reExports: controllerParse.reExports,
       exports: controllerParse.exports,
-      imports: controllerParse.imports,
       importEntries: [
         {
           source: '@test/adapter',
@@ -89,14 +110,17 @@ describe('AdapterSpecResolver', () => {
           isRelative: false,
         },
       ],
-      exportedValues: controllerParse.exportedValues,
-      localValues: controllerParse.localValues,
-      moduleDefinition: controllerParse.moduleDefinition,
-    });
+    };
 
+    applyParseToAnalysis(controllerAnalysis, controllerParse);
+
+    fileMap.set(controllerFile, controllerAnalysis);
+
+    // Act
     const resolver = new AdapterSpecResolver();
     const result = await resolver.resolve({ fileMap, projectRoot });
 
+    // Assert
     expect(Object.keys(result.adapterStaticSpecs)).toEqual(['test']);
 
     const expectedFile = PathResolver.normalize('src/controllers.ts');
@@ -106,7 +130,8 @@ describe('AdapterSpecResolver', () => {
     await rm(projectRoot, { recursive: true, force: true });
   });
 
-  it('fails when adapterSpec is missing', async () => {
+  it('should fail when adapterSpec is missing', async () => {
+    // Arrange
     const projectRoot = await createTempDir();
     const srcDir = join(projectRoot, 'src');
     const adapterDir = join(projectRoot, 'adapters', 'missing-adapter');
@@ -122,13 +147,11 @@ describe('AdapterSpecResolver', () => {
     const controllerContent = await Bun.file(controllerFile).text();
     const controllerParse = parser.parse(controllerFile, controllerContent);
     const fileMap = new Map<string, FileAnalysis>();
-
-    fileMap.set(controllerFile, {
+    const missingAnalysis: FileAnalysis = {
       filePath: controllerFile,
       classes: controllerParse.classes,
       reExports: controllerParse.reExports,
       exports: controllerParse.exports,
-      imports: controllerParse.imports,
       importEntries: [
         {
           source: '@test/missing',
@@ -136,21 +159,24 @@ describe('AdapterSpecResolver', () => {
           isRelative: false,
         },
       ],
-      exportedValues: controllerParse.exportedValues,
-      localValues: controllerParse.localValues,
-      moduleDefinition: controllerParse.moduleDefinition,
-    });
+    };
+
+    applyParseToAnalysis(missingAnalysis, controllerParse);
+
+    fileMap.set(controllerFile, missingAnalysis);
 
     const resolver = new AdapterSpecResolver();
+    let errorMessage = '';
 
+    // Act
     try {
       await resolver.resolve({ fileMap, projectRoot });
-
-      throw new Error('Expected resolver.resolve to throw');
     } catch (error) {
-      expect(String(error)).toContain('No adapterSpec exports found');
+      errorMessage = String(error);
     }
 
+    // Assert
+    expect(errorMessage).toContain('No adapterSpec exports found');
     await rm(projectRoot, { recursive: true, force: true });
   });
 });

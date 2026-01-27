@@ -1,23 +1,7 @@
-import { IsString, IsNumber, IsBoolean, IsIn, Min, Max, IsArray, IsOptional, ValidateNested } from '@bunner/core';
+import { IsArray, IsOptional, IsString, Max, Min, ValidateNested } from '@bunner/core';
 
-export class AddressDto {
-  @IsString()
-  street: string;
-
-  @IsNumber()
-  zipCode: number;
-
-  @IsBoolean()
-  isBusiness: boolean;
-}
-
-export class SocialDto {
-  @IsIn(['twitter', 'github', 'linkedin'])
-  platform: string;
-
-  @IsString()
-  url: string;
-}
+import { AddressDto } from './address.dto';
+import { SocialDto } from './social.dto';
 
 export class CreateUserComplexDto {
   @IsString()

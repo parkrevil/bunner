@@ -1,6 +1,10 @@
 import type {
+  BunnerValue,
   ConfigService,
   EnvService,
+  PrimitiveArray,
+  PrimitiveRecord,
+  PrimitiveValue,
   Provider,
   ProviderToken,
   ProviderUseValue,
@@ -10,10 +14,12 @@ import type {
 import { CONFIG_SERVICE, ENV_SERVICE } from '@bunner/common';
 import { config as dotenvConfig } from 'dotenv';
 
+import type { BunnerApplication } from './bunner-application';
 import type {
   BootstrapApplicationOptions,
   BootstrapConfigLoadParams,
   BootstrapEnvOptions,
+  BunnerApplicationRuntimeOptions,
 } from './interfaces';
 import type { EntryModule } from './types';
 
@@ -21,9 +27,95 @@ import { BunnerScanner } from '../injector/scanner';
 import { getRuntimeContext } from '../runtime/runtime-context';
 import { createApplication } from './create-application';
 
+function isRecord(value: BunnerValue): value is Record<string, BunnerValue> {
+  return (typeof value === 'object' || typeof value === 'function') && value !== null;
+}
+
+function isPrimitiveValue(value: BunnerValue): value is PrimitiveValue {
+  return (
+    value === null ||
+    value === undefined ||
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean' ||
+    typeof value === 'bigint' ||
+    typeof value === 'symbol'
+  );
+}
+
+function isPrimitiveArray(value: BunnerValue): value is PrimitiveArray {
+  return Array.isArray(value) && value.every(isPrimitiveValue);
+}
+
+function isPrimitiveRecord(value: BunnerValue): value is PrimitiveRecord {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  for (const key of Object.keys(value)) {
+    const entry = value[key];
+
+    if (!isPrimitiveValue(entry) && !isPrimitiveArray(entry)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function isValueLike(value: BunnerValue): value is ValueLike {
+  return isPrimitiveValue(value) || isPrimitiveArray(value) || isPrimitiveRecord(value) || typeof value === 'function';
+}
+
+function isStringRecord(value: BunnerValue): value is Record<string, string> {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  for (const key of Object.keys(value)) {
+    const entry = value[key];
+
+    if (typeof entry !== 'string') {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function isValueLikeRecord(value: BunnerValue): value is Record<string, ValueLike> {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  for (const key of Object.keys(value)) {
+    const entry = value[key];
+
+    if (!isValueLike(entry)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function isValueLikeMap(value: ReadonlyMap<string | symbol, ValueLike>): boolean {
+  for (const [key, entry] of value.entries()) {
+    if (typeof key !== 'string' && typeof key !== 'symbol') {
+      return false;
+    }
+
+    if (!isValueLike(entry)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 function hasProviderToken(providers: readonly Provider[], token: ProviderToken): boolean {
   return providers.some(p => {
-    if (!p) {
+    if (p === null || p === undefined) {
       return false;
     }
 
@@ -107,10 +199,10 @@ async function loadEnvSnapshot(options: BootstrapEnvOptions | undefined): Promis
   const dotenvFile = options.dotenvFile ?? '.env';
   const includeProcessEnv = options.includeProcessEnv !== false;
 
-  if (dotenvFile) {
+  if (typeof dotenvFile === 'string' && dotenvFile.length > 0) {
     const parsed = dotenvConfig({ path: dotenvFile }).parsed;
 
-    if (!parsed && options.dotenvStrict) {
+    if (!parsed && options.dotenvStrict === true) {
       throw new Error(`Failed to load dotenv file: ${dotenvFile}`);
     }
 
@@ -123,10 +215,14 @@ async function loadEnvSnapshot(options: BootstrapEnvOptions | undefined): Promis
     }
   }
 
-  const sources = Array.isArray(options.sources) ? options.sources : [];
+  const sources = options.sources ?? [];
 
   for (const source of sources) {
     const loaded = await Promise.resolve(source.load());
+
+    if (!isStringRecord(loaded)) {
+      continue;
+    }
 
     for (const [k, v] of Object.entries(loaded)) {
       if (typeof v === 'string') {
@@ -143,7 +239,7 @@ async function loadEnvSnapshot(options: BootstrapEnvOptions | undefined): Promis
     }
   }
 
-  if (options.mutateProcessEnv) {
+  if (options.mutateProcessEnv === true) {
     for (const [k, v] of Object.entries(result)) {
       Bun.env[k] ??= v;
     }
@@ -163,15 +259,29 @@ async function loadConfigMap(params: BootstrapConfigLoadParams): Promise<Readonl
     }
 
     if (loaded instanceof Map) {
-      loaded.forEach((v, k) => {
-        result.set(k, v);
-      });
+      const valueMap: ReadonlyMap<string | symbol, ValueLike> = loaded;
+
+      if (!isValueLikeMap(valueMap)) {
+        continue;
+      }
+
+      for (const [key, value] of valueMap.entries()) {
+        result.set(key, value);
+      }
 
       continue;
     }
 
-    Object.entries(loaded).forEach(([k, v]) => {
-      result.set(k, v);
+    if (!isRecord(loaded)) {
+      continue;
+    }
+
+    if (!isValueLikeRecord(loaded)) {
+      continue;
+    }
+
+    Object.entries(loaded).forEach(([key, value]) => {
+      result.set(key, value);
     });
   }
 
@@ -185,12 +295,9 @@ async function loadConfigMap(params: BootstrapConfigLoadParams): Promise<Readonl
  * @param options Bootstrap options.
  * @returns The started application instance.
  */
-export async function bootstrapApplication(entry: EntryModule, options?: BootstrapApplicationOptions): Promise<BunnerApplication> {
-  const preloadProviders = await options?.preload?.();
-  const baseProviders = [
-    ...(Array.isArray(preloadProviders) ? preloadProviders : []),
-    ...(Array.isArray(options?.providers) ? options.providers : []),
-  ];
+async function bootstrapApplication(entry: EntryModule, options?: BootstrapApplicationOptions): Promise<BunnerApplication> {
+  const preloadProviders = (await options?.preload?.()) ?? [];
+  const baseProviders = [...preloadProviders, ...(options?.providers ?? [])];
   const envSnapshot = await loadEnvSnapshot(options?.env);
   const mergedProviders: Provider[] = [...baseProviders];
 
@@ -200,7 +307,8 @@ export async function bootstrapApplication(entry: EntryModule, options?: Bootstr
     mergedProviders.push({ provide: ENV_SERVICE, useValue: envService });
   }
 
-  const hasConfigLoaders = Array.isArray(options?.config?.loaders) && options.config.loaders.length > 0;
+  const configLoaders = options?.config?.loaders ?? [];
+  const hasConfigLoaders = configLoaders.length > 0;
   const hasEnvService = hasProviderToken(mergedProviders, ENV_SERVICE);
 
   if (hasConfigLoaders && hasEnvService && !hasProviderToken(mergedProviders, CONFIG_SERVICE)) {
@@ -210,7 +318,7 @@ export async function bootstrapApplication(entry: EntryModule, options?: Bootstr
       throw new Error('EnvService provider is missing or invalid');
     }
 
-    const configMap = await loadConfigMap({ env: envService, loaders: options.config.loaders });
+    const configMap = await loadConfigMap({ env: envService, loaders: configLoaders });
     const configService = createConfigService(configMap);
 
     mergedProviders.push({ provide: CONFIG_SERVICE, useValue: configService });
@@ -218,11 +326,17 @@ export async function bootstrapApplication(entry: EntryModule, options?: Bootstr
 
   const aotContainer = getRuntimeContext().container;
   const providedContainer = options?.container;
-  const app = await createApplication(entry, {
-    ...options,
-    container: providedContainer ?? aotContainer,
+  const runtimeContainer = providedContainer ?? aotContainer;
+  const runtimeOptions: BunnerApplicationRuntimeOptions = {
+    ...(options?.name !== undefined ? { name: options.name } : {}),
+    ...(options?.logLevel !== undefined ? { logLevel: options.logLevel } : {}),
+    ...(options?.logger !== undefined ? { logger: options.logger } : {}),
+    ...(options?.adapterConfig !== undefined ? { adapterConfig: options.adapterConfig } : {}),
+    ...(options?.skipScanning !== undefined ? { skipScanning: options.skipScanning } : {}),
+    ...(runtimeContainer !== undefined ? { container: runtimeContainer } : {}),
     providers: mergedProviders,
-  });
+  };
+  const app = await createApplication(entry, runtimeOptions);
 
   if (mergedProviders.length > 0) {
     const scanner = new BunnerScanner(app.getContainer());
@@ -230,10 +344,10 @@ export async function bootstrapApplication(entry: EntryModule, options?: Bootstr
     await scanner.scan({ providers: mergedProviders });
   }
 
-  if (Array.isArray(options?.adapters) && options.adapters.length > 0) {
-    for (const adapter of options.adapters) {
-      await adapter.install(app);
-    }
+  const adapters = options?.adapters ?? [];
+
+  for (const adapter of adapters) {
+    await adapter.install(app);
   }
 
   if (options?.configure) {
@@ -250,19 +364,30 @@ function isProviderWithValue(provider: Provider): provider is ProviderUseValue {
 }
 
 function isEnvService(value: ProviderUseValue['useValue']): value is EnvService {
-  if (typeof value !== 'object' || value === null) {
+  if (!isRecord(value)) {
     return false;
   }
 
-  const candidate = value as EnvService;
+  const get = value.get;
+  const getOptional = value.getOptional;
 
-  return typeof candidate.get === 'function' && typeof candidate.getOptional === 'function';
+  return typeof get === 'function' && typeof getOptional === 'function';
 }
 
 function getEnvService(providers: ReadonlyArray<Provider>): EnvService | undefined {
-  const provider = providers.find(item => isProviderWithValue(item) && item.provide === ENV_SERVICE);
+  const provider = providers.find(item => {
+    if (typeof item !== 'object' || item === null) {
+      return false;
+    }
 
-  if (!provider) {
+    if (!('provide' in item)) {
+      return false;
+    }
+
+    return item.provide === ENV_SERVICE;
+  });
+
+  if (!provider || !isProviderWithValue(provider)) {
     return undefined;
   }
 
@@ -273,6 +398,7 @@ function getEnvService(providers: ReadonlyArray<Provider>): EnvService | undefin
   return provider.useValue;
 }
 
+export { bootstrapApplication };
 export type { BootstrapApplicationOptions, BootstrapConfigLoadParams, BootstrapEnvOptions } from './interfaces';
 export type { BootstrapAdapter, BootstrapConfigOptions } from './interfaces';
 export type { BootstrapConfigLoader } from './types';

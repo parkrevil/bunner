@@ -30,11 +30,34 @@ async function run() {
   for (const file of files) {
     const code = await Bun.file(file).text();
     const result = parser.parse(file, code);
-
-    fileMap.set(file, {
+    const analysis: FileAnalysis = {
       filePath: file,
-      ...result,
-    });
+      classes: result.classes,
+      reExports: result.reExports,
+      exports: result.exports,
+    };
+
+    if (result.imports !== undefined) {
+      analysis.imports = result.imports;
+    }
+
+    if (result.importEntries !== undefined) {
+      analysis.importEntries = result.importEntries;
+    }
+
+    if (result.exportedValues !== undefined) {
+      analysis.exportedValues = result.exportedValues;
+    }
+
+    if (result.localValues !== undefined) {
+      analysis.localValues = result.localValues;
+    }
+
+    if (result.moduleDefinition !== undefined) {
+      analysis.moduleDefinition = result.moduleDefinition;
+    }
+
+    fileMap.set(file, analysis);
   }
 
   console.log('Building Module Graph...');
@@ -54,7 +77,7 @@ async function run() {
         console.log('  Has dynamic bundles!');
       }
 
-      if (node.moduleDefinition?.adapters) {
+      if (node.moduleDefinition?.adapters !== undefined) {
         console.log('  Has Adapters:', JSON.stringify(node.moduleDefinition.adapters, null, 2));
       }
     });
@@ -70,7 +93,7 @@ async function run() {
     console.log('--- GENERATED CODE START ---');
     console.log(code);
     console.log('--- GENERATED CODE END ---');
-  } catch (e: unknown) {
+  } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
 
     console.error('AOT Validation Failed:', message);

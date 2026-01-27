@@ -15,5 +15,5 @@ export {
 } from './decorators';
 export { provideScalar } from './scalar/provide-scalar';
 export { ScalarConfigurer } from './scalar/scalar-configurer';
-export { ScalarSetupOptionsToken } from './scalar/tokens';
+export { ScalarConfigurerToken, ScalarSetupOptionsToken } from './scalar/tokens';
 export type { ScalarSetupOptions } from './scalar/interfaces';

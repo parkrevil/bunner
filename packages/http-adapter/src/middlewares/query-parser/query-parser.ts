@@ -1,5 +1,5 @@
 import type { QueryParserOptions } from './interfaces';
-import type { QueryArray, QueryArrayRecord, QueryContainer, QueryValue, QueryValueRecord } from './types';
+import type { QueryArray, QueryContainer, QueryValue, QueryValueRecord } from './types';
 
 import { BadRequestError } from '../../errors';
 import { DEFAULT_QUERY_PARSER_OPTIONS } from './constants';
@@ -280,7 +280,76 @@ export class QueryParser {
         }
 
         current = this.arrayToMaybeObject(current);
-        parent[parentKey] = current;
+
+        if (Array.isArray(parent)) {
+          const normalizedKey = this.normalizeKey(parentKey);
+
+          this.assignArrayRecordValue(parent, normalizedKey, current);
+        } else if (this.isRecordValue(parent)) {
+          const normalizedKey = this.normalizeKey(parentKey);
+
+          parent[normalizedKey] = current;
+        } else {
+          return;
+        }
+      }
+
+      if (Array.isArray(current)) {
+        if (prop === '') {
+          if (isLast) {
+            this.assignLeaf(current, prop, value);
+
+            depth++;
+
+            continue;
+          }
+
+          const nextKey = keys[k + 1] ?? '';
+          const nextContainer: QueryContainer = this.shouldCreateArray(nextKey) ? [] : {};
+
+          current.push(nextContainer);
+
+          parent = current;
+          parentKey = current.length - 1;
+          current = nextContainer;
+
+          depth++;
+
+          continue;
+        }
+
+        if (this.isValidArrayIndex(prop)) {
+          const index = parseInt(prop, 10);
+
+          if (index > this.options.arrayLimit) {
+            return;
+          }
+
+          if (isLast) {
+            this.assignLeaf(current, prop, value);
+
+            depth++;
+
+            continue;
+          }
+
+          const nextKey = keys[k + 1] ?? '';
+          let nextValue = current[index];
+
+          if (!this.isRecordValue(nextValue) && !Array.isArray(nextValue)) {
+            nextValue = this.shouldCreateArray(nextKey) ? [] : {};
+
+            this.assignArrayRecordValue(current, prop, nextValue);
+          }
+
+          parent = current;
+          parentKey = prop;
+          current = nextValue;
+
+          depth++;
+
+          continue;
+        }
       }
 
       if (isLast) {
@@ -383,16 +452,14 @@ export class QueryParser {
           return;
         } // Sparse Array Protection
 
-        obj[idx] = value;
+        this.assignArrayRecordValue(obj, key, value);
       } else {
         // Mixed keys: Non-numeric key in array context
         if (this.options.strictMode) {
           throw new BadRequestError(`Conflict: non-numeric key "${key}" used on an array structure`);
         }
 
-        const arrayRecord = obj as QueryArrayRecord;
-
-        arrayRecord[key] = value;
+        this.assignArrayRecordValue(obj, key, value);
       }
 
       return;
@@ -431,7 +498,7 @@ export class QueryParser {
         if (Array.isArray(existing)) {
           existing.push(value);
         } else {
-          obj[key] = [existing, value];
+          obj[key] = existing === undefined ? [value] : [existing, value];
         }
       }
     } else {
@@ -439,6 +506,18 @@ export class QueryParser {
     }
   }
 
+  private assignArrayRecordValue(target: QueryArray, key: string, value: QueryValue): void {
+    Object.defineProperty(target, key, {
+      value,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+  }
+
+  private normalizeKey(key: string | number): string {
+    return typeof key === 'number' ? key.toString() : key;
+  }
   /**
    * Checks if a string represents a valid non-negative integer for array indexing.
    * Rejects: negative numbers, floats, empty strings, non-numeric strings.
@@ -474,8 +553,10 @@ export class QueryParser {
     const obj: QueryValueRecord = {};
 
     for (let i = 0; i < arr.length; i++) {
-      if (arr[i] !== undefined) {
-        obj[i.toString()] = arr[i];
+      const entry = arr[i];
+
+      if (entry !== undefined) {
+        obj[i.toString()] = entry;
       }
     }
 

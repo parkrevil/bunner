@@ -15,6 +15,11 @@ export interface RouteMethods {
   byMethod: Map<HttpMethod, number>;
 }
 
+export interface MethodEntry {
+  code: number;
+  key: number;
+}
+
 export type StaticChildEntry = [string, Node];
 
 export interface StaticChildEntryFingerprint {

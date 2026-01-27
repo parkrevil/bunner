@@ -1,7 +1,7 @@
-import type { BunnerContainer, Context } from '@bunner/common';
+import type { BunnerContainer, BunnerRecord, BunnerValue, Context } from '@bunner/common';
 
 import { BunnerErrorFilter, BunnerMiddleware } from '@bunner/common';
-import { Logger } from '@bunner/logger';
+import { Logger, type LogMetadataValue } from '@bunner/logger';
 import { StatusCodes } from 'http-status-codes';
 
 import type { RouteHandler } from './route-handler';
@@ -13,6 +13,7 @@ import type {
   MatchCatchArgumentParams,
   MetadataRegistryKey,
   MatchResult,
+  ResolveTokenContext,
   ResolveTokenOptions,
   ShouldCatchParams,
   SystemError,
@@ -38,7 +39,7 @@ export class RequestHandler {
   private globalBeforeRequest: BunnerMiddleware[] = [];
   private globalBeforeResponse: BunnerMiddleware[] = [];
   private globalAfterResponse: BunnerMiddleware[] = [];
-  private globalErrorFilters: BunnerErrorFilter[] = [];
+  private globalErrorFilters: Array<BunnerErrorFilter<SystemError>> = [];
   private errorFilterEngineHealthy = true;
   private systemErrorHandler: SystemErrorHandlerLike | undefined;
 
@@ -82,7 +83,7 @@ export class RequestHandler {
           stage,
           statusWasUnset,
           bodyWasUnset: allowBody && bodyWasUnset,
-          error,
+          error: this.toLogMetadata(error),
         });
       }
     };
@@ -108,7 +109,7 @@ export class RequestHandler {
         this.logger.error('SystemErrorHandler failed', {
           stage,
           handlerToken: this.systemErrorHandler.constructor?.name,
-          originalError: error,
+          originalError: this.toLogMetadata(error),
           handlerError,
         });
 
@@ -149,8 +150,16 @@ export class RequestHandler {
             };
           }
 
+          if (result instanceof BunnerResponse) {
+            return result.end();
+          }
+
           if (result !== undefined) {
-            res.setBody(result);
+            if (typeof result === 'bigint') {
+              res.setBody(result.toString());
+            } else {
+              res.setBody(result);
+            }
           }
         }
       }
@@ -172,8 +181,8 @@ export class RequestHandler {
       if (errorFiltersCalled) {
         this.logger.error('runErrorFilters reentry blocked', {
           stage: 'runErrorFilters:reentryBlocked',
-          originalError: normalizedError,
-          currentError,
+          originalError: this.toLogMetadata(normalizedError),
+          currentError: this.toLogMetadata(currentError),
         });
       } else {
         errorFiltersCalled = true;
@@ -187,7 +196,7 @@ export class RequestHandler {
 
           this.logger.error('ErrorFilter engine failed', {
             stage: 'runErrorFilters:failed',
-            originalError: normalizedError,
+            originalError: this.toLogMetadata(normalizedError),
             errorFilterEngineError: engineError,
           });
 
@@ -253,7 +262,7 @@ export class RequestHandler {
       return false;
     }
 
-    if (typeof value !== 'object') {
+    if (!this.isBunnerRecord(value)) {
       return false;
     }
 
@@ -261,7 +270,9 @@ export class RequestHandler {
       return false;
     }
 
-    return typeof (value as SystemErrorHandlerLike).handle === 'function';
+    const handle = value.handle;
+
+    return typeof handle === 'function';
   }
 
   private async runErrorFilters(
@@ -273,7 +284,7 @@ export class RequestHandler {
       throw new Error('ErrorFilter engine failed');
     }
 
-    const filters: BunnerErrorFilter[] = [...(entry?.errorFilters ?? []), ...this.globalErrorFilters];
+    const filters: Array<BunnerErrorFilter<SystemError>> = [...(entry?.errorFilters ?? []), ...this.globalErrorFilters];
     const originalError = error;
     let currentError: SystemError = error;
 
@@ -442,7 +453,7 @@ export class RequestHandler {
     return this.resolveTokenValues(token, options, value => this.isMiddleware(value));
   }
 
-  private resolveErrorFilters(token: string, options?: ResolveTokenOptions): BunnerErrorFilter[] {
+  private resolveErrorFilters(token: string, options?: ResolveTokenOptions): Array<BunnerErrorFilter<SystemError>> {
     return this.resolveTokenValues(token, options, value => this.isErrorFilter(value));
   }
 
@@ -450,10 +461,10 @@ export class RequestHandler {
     return this.resolveTokenValues(token, options, value => this.isSystemErrorHandler(value));
   }
 
-  private resolveTokenValues<T extends BunnerMiddleware | BunnerErrorFilter | SystemErrorHandlerLike>(
+  private resolveTokenValues<T extends BunnerMiddleware | BunnerErrorFilter<SystemError> | SystemErrorHandlerLike>(
     token: string,
     options: ResolveTokenOptions | undefined,
-    predicate: (value: BunnerMiddleware | BunnerErrorFilter | SystemErrorHandlerLike) => value is T,
+    predicate: (value: BunnerMiddleware | BunnerErrorFilter<SystemError> | SystemErrorHandlerLike) => value is T,
   ): T[] {
     const results: T[] = [];
     const strict = options?.strict === true;
@@ -485,11 +496,11 @@ export class RequestHandler {
     return results;
   }
 
-  private collectValues<T extends BunnerMiddleware | BunnerErrorFilter | SystemErrorHandlerLike>(
+  private collectValues<T extends BunnerMiddleware | BunnerErrorFilter<SystemError> | SystemErrorHandlerLike>(
     results: T[],
     value: ReturnType<BunnerContainer['get']>,
-    predicate: (value: BunnerMiddleware | BunnerErrorFilter | SystemErrorHandlerLike) => value is T,
-    options: { readonly strict: boolean; readonly token: string },
+    predicate: (value: BunnerMiddleware | BunnerErrorFilter<SystemError> | SystemErrorHandlerLike) => value is T,
+    options: ResolveTokenContext,
   ): void {
     if (this.isValueArray(value)) {
       for (const entry of value) {
@@ -524,7 +535,7 @@ export class RequestHandler {
 
   private isTokenValue(
     value: ReturnType<BunnerContainer['get']>,
-  ): value is BunnerMiddleware | BunnerErrorFilter | SystemErrorHandlerLike {
+  ): value is BunnerMiddleware | BunnerErrorFilter<SystemError> | SystemErrorHandlerLike {
     if (value instanceof BunnerMiddleware || value instanceof BunnerErrorFilter || value instanceof SystemErrorHandler) {
       return true;
     }
@@ -532,15 +543,21 @@ export class RequestHandler {
     return this.isSystemErrorHandlerLike(value);
   }
 
-  private isMiddleware(value: BunnerMiddleware | BunnerErrorFilter | SystemErrorHandlerLike): value is BunnerMiddleware {
+  private isMiddleware(
+    value: BunnerMiddleware | BunnerErrorFilter<SystemError> | SystemErrorHandlerLike,
+  ): value is BunnerMiddleware {
     return value instanceof BunnerMiddleware;
   }
 
-  private isErrorFilter(value: BunnerMiddleware | BunnerErrorFilter | SystemErrorHandlerLike): value is BunnerErrorFilter {
+  private isErrorFilter(
+    value: BunnerMiddleware | BunnerErrorFilter<SystemError> | SystemErrorHandlerLike,
+  ): value is BunnerErrorFilter<SystemError> {
     return value instanceof BunnerErrorFilter;
   }
 
-  private isSystemErrorHandler(value: BunnerMiddleware | BunnerErrorFilter | SystemErrorHandlerLike): value is SystemErrorHandlerLike {
+  private isSystemErrorHandler(
+    value: BunnerMiddleware | BunnerErrorFilter<SystemError> | SystemErrorHandlerLike,
+  ): value is SystemErrorHandlerLike {
     if (value instanceof SystemErrorHandler) {
       return true;
     }
@@ -585,9 +602,25 @@ export class RequestHandler {
     return undefined;
   }
 
-  private async invokeErrorFilter(filter: BunnerErrorFilter, error: SystemError, ctx: Context): Promise<void> {
+  private async invokeErrorFilter(filter: BunnerErrorFilter<SystemError>, error: SystemError, ctx: Context): Promise<void> {
     const catchHandler = filter.catch.bind(filter);
 
     await catchHandler(error, ctx);
+  }
+
+  private toLogMetadata(value: SystemError): LogMetadataValue {
+    if (value instanceof Error) {
+      return value;
+    }
+
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      return value;
+    }
+
+    return { error: this.formatSystemError(value) };
+  }
+
+  private isBunnerRecord(value: BunnerValue | null | undefined): value is BunnerRecord {
+    return typeof value === 'object' && value !== null;
   }
 }

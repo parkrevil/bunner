@@ -1,4 +1,6 @@
-export function resolveDocFromPath(path: string): { docId: string; isJson: boolean } | null {
+import type { ResolvedDocPath } from './interfaces';
+
+export function resolveDocFromPath(path: string): ResolvedDocPath | null {
   const base = '/api-docs/';
 
   if (!path.startsWith(base)) {

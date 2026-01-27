@@ -1,10 +1,11 @@
 import { LogLevel, type BunnerApplicationOptions } from '@bunner/common';
 import { Logger } from '@bunner/logger';
 
-import { type BunnerApplicationBaseOptions } from './application';
-import { BunnerApplication } from './application/bunner-application';
 import type { BunnerApplicationRuntimeOptions } from './application/interfaces';
 import type { EntryModule } from './application/types';
+
+import { type BunnerApplicationBaseOptions } from './application';
+import { BunnerApplication } from './application/bunner-application';
 
 export class Bunner {
   static apps: Map<string, BunnerApplication> = new Map();
@@ -59,11 +60,15 @@ export class Bunner {
         try {
           await app.stop();
         } catch (e) {
-          Bunner.logger.error('app stop failed', e);
+          const meta = e instanceof Error ? e : { error: String(e) };
+
+          Bunner.logger.error('app stop failed', meta);
         }
       }),
     ).catch(e => {
-      Bunner.logger.error('Shutdown Error', e);
+      const meta = e instanceof Error ? e : { error: String(e) };
+
+      Bunner.logger.error('Shutdown Error', meta);
     });
   }
 
@@ -86,7 +91,7 @@ export class Bunner {
       return;
     }
 
-    const handler = async (signal: string) => {
+    const handler = async (signal: NodeJS.Signals) => {
       let exitCode = 0;
 
       try {
@@ -100,7 +105,9 @@ export class Bunner {
           ),
         ]);
       } catch (e) {
-        Bunner.logger.error(`graceful shutdown failed on ${signal}`, e);
+        const meta = e instanceof Error ? e : { error: String(e) };
+
+        Bunner.logger.error(`graceful shutdown failed on ${signal}`, meta);
 
         exitCode = 1;
       } finally {
@@ -110,8 +117,10 @@ export class Bunner {
       }
     };
 
-    ['SIGINT', 'SIGTERM', 'SIGQUIT', 'SIGHUP', 'SIGUSR2'].forEach(sig => {
-      process.on(sig, signal => void handler(signal));
+    const signals: NodeJS.Signals[] = ['SIGINT', 'SIGTERM', 'SIGQUIT', 'SIGHUP', 'SIGUSR2'];
+
+    signals.forEach(signal => {
+      process.on(signal, handledSignal => void handler(handledSignal));
     });
 
     this.signalsInitialized = true;

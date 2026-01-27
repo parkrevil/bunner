@@ -1,17 +1,10 @@
-import type {
-  Callable,
-  Class,
-  ForwardRef,
-  PrimitiveArray,
-  PrimitiveRecord,
-  PrimitiveValue,
-  Provider,
-  ProviderToken,
-} from '@bunner/common';
+import type { BunnerValue, Class, ForwardRef, PrimitiveRecord, Provider, ProviderToken } from '@bunner/common';
 
 import type { Container } from './container';
 
 export type DependencyProvider = ProviderToken | ForwardRef;
+
+export type Token = ProviderToken;
 
 export interface TokenRecord {
   readonly __bunner_ref?: string;
@@ -31,9 +24,11 @@ export type DecoratorArgument =
   | null
   | undefined;
 
-export type ContainerValue = PrimitiveValue | PrimitiveArray | PrimitiveRecord | Callable | InstanceType<Class>;
+export type ContainerValue = BunnerValue;
 
-export type ProviderFactory = (container: Container) => ContainerValue;
+export type FactoryFn<T = ContainerValue> = (container: Container) => T;
+
+export type ProviderFactory<T = ContainerValue> = (container: Container) => T;
 
 export interface DecoratorMetadata {
   readonly name: string;

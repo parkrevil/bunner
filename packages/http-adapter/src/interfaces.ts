@@ -3,23 +3,30 @@ import type {
   BunnerContainer,
   BunnerErrorFilter,
   BunnerMiddleware,
+  BunnerValue,
   Class,
+  Context,
   ErrorFilterToken,
-  MiddlewareRegistration,
-  MiddlewareToken,
+  ProviderToken,
 } from '@bunner/common';
-import type { RuntimeContext } from '@bunner/core';
 
 import type { BunnerRequest } from './bunner-request';
 import type { BunnerResponse } from './bunner-response';
 import type { RouteHandlerParamType } from './decorators';
 import type {
+  ClassMetadata,
   ControllerConstructor,
+  HttpMiddlewareRegistration,
+  HttpMiddlewareToken,
+  RouteHandlerArgument,
+  RouteHandlerResult,
   HttpWorkerResponseBody,
+  MetadataRegistryKey,
   MiddlewareOptions,
   RouteHandlerFunction,
   RouteParamType,
   RouteParamValue,
+  SystemError,
 } from './types';
 
 export enum HttpMiddlewareLifecycle {
@@ -31,19 +38,19 @@ export enum HttpMiddlewareLifecycle {
 }
 
 export type MiddlewareRegistrationInput<TOptions = MiddlewareOptions> =
-  | MiddlewareRegistration<TOptions>
-  | MiddlewareToken<TOptions>;
+  | HttpMiddlewareRegistration<TOptions>
+  | HttpMiddlewareToken<TOptions>;
 
-export type HttpMiddlewareRegistry = Partial<Record<HttpMiddlewareLifecycle, readonly MiddlewareRegistrationInput[]>>;
+export type HttpMiddlewareRegistry = Partial<Record<string, readonly MiddlewareRegistrationInput[]>>;
 
 export interface BunnerHttpServerOptions extends BunnerApplicationOptions {
-  port?: number;
-  bodyLimit?: number;
-  trustProxy?: boolean;
-  workers?: number;
-  reusePort?: boolean;
-  middlewares?: HttpMiddlewareRegistry;
-  errorFilters?: readonly ErrorFilterToken[];
+  readonly port?: number;
+  readonly bodyLimit?: number;
+  readonly trustProxy?: boolean;
+  readonly workers?: number;
+  readonly reusePort?: boolean;
+  readonly middlewares?: HttpMiddlewareRegistry;
+  readonly errorFilters?: readonly ErrorFilterToken[];
 }
 
 export type InternalRouteMethod = 'GET';
@@ -58,12 +65,15 @@ export interface InternalRouteEntry {
 
 export interface BunnerHttpServerBootOptions extends BunnerHttpServerOptions {
   readonly options?: BunnerHttpServerOptions;
-  readonly metadata?: RuntimeContext['metadataRegistry'];
-  readonly scopedKeys?: RuntimeContext['scopedKeys'];
+  readonly metadata?: Map<MetadataRegistryKey, ClassMetadata>;
+  readonly scopedKeys?: Map<ProviderToken, string>;
   readonly internalRoutes?: readonly InternalRouteEntry[];
+  readonly middlewares?: HttpMiddlewareRegistry;
+  readonly errorFilters?: readonly ErrorFilterToken[];
+  readonly logger?: BunnerValue;
 }
 
-export interface HttpAdapterStartContext {
+export interface HttpAdapterStartContext extends Context {
   readonly container: BunnerContainer;
   readonly entryModule?: Class;
 }
@@ -85,11 +95,19 @@ export interface HttpWorkerEntryModule {
   readonly path?: string;
   readonly className: string;
   readonly manifestPath?: string;
+  readonly manifest?: HttpWorkerManifest;
 }
 
 export interface HttpWorkerInitParams {
   readonly entryModule: HttpWorkerEntryModule;
   readonly options: BunnerHttpServerOptions;
+}
+
+export interface HttpWorkerManifest {
+  createContainer(): BunnerContainer;
+  createMetadataRegistry?(): Map<ControllerConstructor, ClassMetadata>;
+  createScopedKeysMap?(): Map<ProviderToken, string>;
+  registerDynamicModules?(container: BunnerContainer): Promise<void> | void;
 }
 
 export interface HttpWorkerResponse {
@@ -104,7 +122,7 @@ export interface RouteHandlerEntry {
   readonly controllerClass: ControllerConstructor | null;
   readonly methodName: string;
   readonly middlewares: BunnerMiddleware[];
-  readonly errorFilters: BunnerErrorFilter[];
+  readonly errorFilters: Array<BunnerErrorFilter<SystemError>>;
   readonly paramFactory: (req: BunnerRequest, res: BunnerResponse) => Promise<readonly RouteParamValue[]>;
 }
 

@@ -1,5 +1,7 @@
 import { Injectable } from '@bunner/common';
 
+import type { CreatePostDto } from './dto/create-post.dto';
+import type { UpdatePostDto } from './dto/update-post.dto';
 import type { Post } from './interfaces';
 
 @Injectable()
@@ -25,18 +27,49 @@ export class PostsRepository {
     return this.posts.find(post => post.id === id);
   }
 
-  create(body: Post): number {
-    return this.posts.push(body);
+  create(body: CreatePostDto): number {
+    const lastPost = this.posts.at(-1);
+    const nextId = lastPost ? lastPost.id + 1 : 1;
+    const post: Post = {
+      id: nextId,
+      title: body.title,
+      content: body.content,
+    };
+
+    return this.posts.push(post);
   }
 
-  update(id: number, data: Post): Post {
-    return (this.posts[this.posts.findIndex(post => post.id === id)] = data);
+  update(id: number, data: UpdatePostDto): Post {
+    const index = this.posts.findIndex(post => post.id === id);
+
+    if (index < 0) {
+      throw new Error(`Post not found: ${id}`);
+    }
+
+    const current = this.posts[index];
+
+    if (!current) {
+      throw new Error(`Post not found: ${id}`);
+    }
+
+    const updated: Post = {
+      id: current.id,
+      title: data.title ?? current.title,
+      content: data.content ?? current.content,
+    };
+
+    this.posts[index] = updated;
+
+    return updated;
   }
 
   delete(id: number): Post[] {
-    return this.posts.splice(
-      this.posts.findIndex(post => post.id === id),
-      1,
-    );
+    const index = this.posts.findIndex(post => post.id === id);
+
+    if (index < 0) {
+      throw new Error(`Post not found: ${id}`);
+    }
+
+    return this.posts.splice(index, 1);
   }
 }

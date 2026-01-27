@@ -3,9 +3,17 @@ import { dirname, resolve } from 'path';
 
 import type { ClassMetadata, DecoratorMetadata, ImportEntry } from './interfaces';
 import type { ModuleDefinition, ParseResult, ReExport } from './parser-models';
-import type { AnalyzerValue, AnalyzerValueRecord, ExtractedParam, FactoryDependency, NodeRecord, ReExportName } from './types';
+import type {
+  AnalyzerValue,
+  AnalyzerValueRecord,
+  ExtractedParam,
+  FactoryDependency,
+  NodeRecord,
+  ReExportName,
+  TypeInfo,
+} from './types';
 
-import { AstTypeResolver, type TypeInfo } from './ast-type-resolver';
+import { AstTypeResolver } from './ast-type-resolver';
 
 const UNKNOWN_TYPE_NAME = 'Unknown';
 const UNKNOWN_CALLEE_NAME = 'unknown';
@@ -128,7 +136,7 @@ export class AstParser {
       }
 
       if (node.type === 'ExportNamedDeclaration') {
-        if (node.source !== undefined) {
+        if (node.source !== undefined && node.source !== null) {
           const sourceValue = this.getNodeStringValue(node, 'source');
 
           if (!isNonEmptyString(sourceValue)) {

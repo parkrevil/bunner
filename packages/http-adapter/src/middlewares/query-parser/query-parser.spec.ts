@@ -1,3 +1,5 @@
+/* oxlint-disable typescript-eslint/no-unsafe-assignment, typescript-eslint/no-unsafe-member-access, typescript-eslint/no-unsafe-argument, typescript-eslint/no-unsafe-return, typescript-eslint/no-unsafe-type-assertion */
+
 import { describe, expect, it } from 'bun:test';
 
 import type { QueryArray, QueryValue, QueryValueRecord } from './types';
@@ -8,10 +10,20 @@ const parseRecord = (parser: QueryParser, input: string): QueryValueRecord => {
   return parser.parse(input);
 };
 
-const expectQueryArray = (value: QueryValue): QueryArray => {
-  expect(Array.isArray(value)).toBe(true);
+const expectQueryArray = (value: QueryValue | undefined): QueryArray => {
+  if (!Array.isArray(value)) {
+    throw new Error('Expected array');
+  }
 
-  return value as QueryArray;
+  return value;
+};
+
+const expectQueryRecord = (value: QueryValue | undefined): QueryValueRecord => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error('Expected record');
+  }
+
+  return value;
 };
 
 describe('query-parser', () => {
@@ -229,9 +241,10 @@ describe('query-parser', () => {
       const input = 'arr[0]=a&arr[1]=b';
       // Act
       const res = parseRecord(parser, input);
-
       // Assert
-      expect(res).toEqual({ arr: ['a', 'b'] });
+      const arrValue = expectQueryArray(res.arr);
+
+      expect(arrValue).toEqual(['a', 'b']);
     });
 
     it('should parse array with empty brackets when push-style syntax used', () => {
@@ -239,9 +252,10 @@ describe('query-parser', () => {
       const input = 'arr[]=a&arr[]=b';
       // Act
       const res = parseRecord(parser, input);
-
       // Assert
-      expect(res).toEqual({ arr: ['a', 'b'] });
+      const arrValue = expectQueryArray(res.arr);
+
+      expect(arrValue).toEqual(['a', 'b']);
     });
 
     it('should handle mixed array in object when nested arrays appear', () => {
@@ -459,10 +473,12 @@ describe('query-parser', () => {
       // Act
       const allowed = parseRecord(parser, 'arr[20]=ok');
       const blocked = parseRecord(parser, 'arr[21]=blocked');
-
       // Assert
-      expect(allowed).toEqual({ arr: expectedArr });
-      expect(blocked).toEqual({ arr: { '21': 'blocked' } });
+      const allowedArr = expectQueryArray(allowed.arr);
+      const blockedRecord = expectQueryRecord(blocked.arr);
+
+      expect(allowedArr).toEqual(expectedArr);
+      expect(blockedRecord).toEqual({ '21': 'blocked' });
     });
 
     it('should enforce arrayLimit 0 when limit is set', () => {
@@ -472,11 +488,14 @@ describe('query-parser', () => {
       const first = parseRecord(parser, 'arr[0]=a');
       const filtered = parseRecord(parser, 'arr[0]=a&arr[1]=b');
       const fallback = parseRecord(parser, 'arr[1]=b');
-
       // Assert
-      expect(first).toEqual({ arr: ['a'] });
-      expect(filtered).toEqual({ arr: ['a'] });
-      expect(fallback).toEqual({ arr: { '1': 'b' } });
+      const firstArr = expectQueryArray(first.arr);
+      const filteredArr = expectQueryArray(filtered.arr);
+      const fallbackRecord = expectQueryRecord(fallback.arr);
+
+      expect(firstArr).toEqual(['a']);
+      expect(filteredArr).toEqual(['a']);
+      expect(fallbackRecord).toEqual({ '1': 'b' });
     });
 
     it('should enforce arrayLimit 10 when limit is set', () => {
@@ -489,10 +508,12 @@ describe('query-parser', () => {
       // Act
       const allowed = parseRecord(parser, 'arr[0]=a&arr[10]=b');
       const blocked = parseRecord(parser, 'arr[0]=a&arr[11]=blocked');
-
       // Assert
-      expect(allowed).toEqual({ arr: expectedArr });
-      expect(blocked).toEqual({ arr: ['a'] });
+      const allowedArr = expectQueryArray(allowed.arr);
+      const blockedArr = expectQueryArray(blocked.arr);
+
+      expect(allowedArr).toEqual(expectedArr);
+      expect(blockedArr).toEqual(['a']);
     });
 
     it('should enforce arrayLimit 5 when limit is set', () => {
@@ -505,10 +526,12 @@ describe('query-parser', () => {
       // Act
       const allowed = parseRecord(parser, 'arr[5]=ok');
       const blocked = parseRecord(parser, 'arr[6]=blocked');
-
       // Assert
-      expect(allowed).toEqual({ arr: expectedArr });
-      expect(blocked).toEqual({ arr: { '6': 'blocked' } });
+      const allowedArr = expectQueryArray(allowed.arr);
+      const blockedRecord = expectQueryRecord(blocked.arr);
+
+      expect(allowedArr).toEqual(expectedArr);
+      expect(blockedRecord).toEqual({ '6': 'blocked' });
     });
   });
 
@@ -556,10 +579,12 @@ describe('query-parser', () => {
       // Act
       const two = parseRecord(parser, 'id=1&id=2');
       const many = parseRecord(parser, 'id=1&id=2&id=3&id=4');
-
       // Assert
-      expect(two).toEqual({ id: ['1', '2'] });
-      expect(many).toEqual({ id: ['1', '2', '3', '4'] });
+      const twoIds = expectQueryArray(two.id);
+      const manyIds = expectQueryArray(many.id);
+
+      expect(twoIds).toEqual(['1', '2']);
+      expect(manyIds).toEqual(['1', '2', '3', '4']);
     });
 
     it('should not wrap single value when hppMode is array', () => {
@@ -577,9 +602,10 @@ describe('query-parser', () => {
       const parser = new QueryParser({ hppMode: 'first', parseArrays: true });
       // Act
       const res = parseRecord(parser, 'arr[]=1&arr[]=2');
-
       // Assert
-      expect(res).toEqual({ arr: ['1', '2'] });
+      const arrValue = expectQueryArray(res.arr);
+
+      expect(arrValue).toEqual(['1', '2']);
     });
 
     it('should handle mixed keys and array brackets when hppMode is array', () => {
@@ -658,7 +684,7 @@ describe('query-parser', () => {
       const res = parseRecord(parser, 'toString=hacked');
 
       // Assert
-      expect(res.toString).toBe('hacked');
+      expect(Object.getOwnPropertyDescriptor(res, 'toString')?.value).toBe('hacked');
     });
 
     it('should block __defineGetter__ and __defineSetter__ when provided', () => {
@@ -668,7 +694,7 @@ describe('query-parser', () => {
       const res = parseRecord(parser, '__defineGetter__=bad');
 
       // Assert
-      expect(res.__defineGetter__).not.toBe('bad');
+      expect(Object.prototype.hasOwnProperty.call(res, '__defineGetter__')).toBe(false);
       // It is blocked, so it remains the inherited function from Object.prototype
       expect(typeof res.__defineGetter__).toBe('function');
     });
@@ -955,12 +981,12 @@ describe('query-parser', () => {
       });
       // Act
       const res = parseRecord(parser, 'a=1&a=2&b[]=x&b[]=y');
-
       // Assert
-      expect(res).toEqual({
-        a: ['1', '2'],
-        b: ['x', 'y'],
-      });
+      const arrA = expectQueryArray(res.a);
+      const arrB = expectQueryArray(res.b);
+
+      expect(arrA).toEqual(['1', '2']);
+      expect(arrB).toEqual(['x', 'y']);
     });
 
     it('should handle depth with parseArrays when depth is set', () => {
@@ -978,9 +1004,12 @@ describe('query-parser', () => {
       const parser = new QueryParser({ arrayLimit: 2, parseArrays: true });
       // Act
       const res = parseRecord(parser, 'arr[0]=a&arr[2]=b&arr[3]=blocked');
-
       // Assert
-      expect(res).toEqual({ arr: ['a', undefined, 'b'] });
+      const arrValue = expectQueryArray(res.arr);
+
+      expect(arrValue[0]).toBe('a');
+      expect(arrValue[1]).toBeUndefined();
+      expect(arrValue[2]).toBe('b');
     });
   });
 
@@ -1062,7 +1091,7 @@ describe('query-parser', () => {
       const res = parseRecord(parser, 'hasOwnProperty=value');
 
       // Assert
-      expect(res.hasOwnProperty).toBe('value');
+      expect(Object.getOwnPropertyDescriptor(res, 'hasOwnProperty')?.value).toBe('value');
       expect(Object.prototype.hasOwnProperty.call(res, 'hasOwnProperty')).toBe(true);
     });
 
@@ -1073,7 +1102,7 @@ describe('query-parser', () => {
       const res = parseRecord(parser, 'valueOf=custom');
 
       // Assert
-      expect(res.valueOf).toBe('custom');
+      expect(Object.getOwnPropertyDescriptor(res, 'valueOf')?.value).toBe('custom');
     });
 
     it('should handle toJSON as key when provided', () => {
@@ -1122,9 +1151,13 @@ describe('query-parser', () => {
       const parser = new QueryParser({ strictMode: true });
 
       // Act
-      const unclosed = () => parser.parse('a[b=1');
+      const unclosed = (): void => {
+        parser.parse('a[b=1');
+      };
 
-      const unbalanced = () => parser.parse('a]b=1');
+      const unbalanced = (): void => {
+        parser.parse('a]b=1');
+      };
 
       // Assert
       expect(unclosed).toThrow(/unclosed bracket/);
@@ -1136,7 +1169,9 @@ describe('query-parser', () => {
       const parser = new QueryParser({ strictMode: true });
 
       // Act
-      const act = () => parser.parse('a[[b]]=1');
+      const act = (): void => {
+        parser.parse('a[[b]]=1');
+      };
 
       // Assert
       expect(act).toThrow(/nested brackets/);
@@ -1147,9 +1182,13 @@ describe('query-parser', () => {
       const parser = new QueryParser({ strictMode: true, parseArrays: true });
 
       // Act
-      const scalarFirst = () => parser.parse('a=1&a[b]=2');
+      const scalarFirst = (): void => {
+        parser.parse('a=1&a[b]=2');
+      };
 
-      const arrayFirst = () => parser.parse('b[0]=1&b=2');
+      const arrayFirst = (): void => {
+        parser.parse('b[0]=1&b=2');
+      };
 
       // Assert
       expect(scalarFirst).toThrow(/Conflict/);
@@ -1172,7 +1211,9 @@ describe('query-parser', () => {
       const parser = new QueryParser({ parseArrays: true, strictMode: true });
 
       // Act
-      const act = () => parser.parse('a[0]=1&a[foo]=2');
+      const act = (): void => {
+        parser.parse('a[0]=1&a[foo]=2');
+      };
 
       // Assert
       expect(act).toThrow(/non-numeric key/);
@@ -1183,9 +1224,11 @@ describe('query-parser', () => {
       const parser = new QueryParser({ parseArrays: true });
       // Act
       const res = parseRecord(parser, 'user[roles][0]=admin&user[roles][name]=editor');
-
       // Assert
-      expect(res.user.roles).toEqual({ '0': 'admin', name: 'editor' });
+      const user = expectQueryRecord(res.user);
+      const roles = expectQueryRecord(user.roles);
+
+      expect(roles).toEqual({ '0': 'admin', name: 'editor' });
     });
   });
 });

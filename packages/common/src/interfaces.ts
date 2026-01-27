@@ -1,20 +1,19 @@
-import type { BunnerErrorFilter } from './bunner-error-filter';
 import type { BunnerMiddleware } from './bunner-middleware';
-import type { BunnerFunction, BunnerValue, Class } from './types';
+import type { BunnerFunction, BunnerValue, Class, ClassToken, ValueLike } from './types';
 
 export interface BunnerAdapter {
-  start(context: BunnerValue): Promise<void>;
+  start(context: Context): Promise<void>;
   stop(): Promise<void>;
 }
 
 export interface Context {
   getType(): string;
-  get<T = BunnerValue>(key: string): T | undefined;
-  to<TContext>(ctor: Class<TContext>): TContext;
+  get(key: string): BunnerValue | undefined;
+  to<TContext extends BunnerValue>(ctor: ClassToken<TContext>): TContext;
 }
 
 // DI Interfaces
-export type ProviderToken = string | symbol | Class;
+export type ProviderToken = string | symbol | ClassToken | Class;
 
 export type ProviderScope = 'singleton' | 'request-context' | 'transient';
 
@@ -25,7 +24,7 @@ export interface ProviderBase {
 }
 
 export interface ProviderUseValue extends ProviderBase {
-  useValue: BunnerValue;
+  useValue: BunnerValue | EnvService | ConfigService;
 }
 
 export interface ProviderUseClass extends ProviderBase {
@@ -73,22 +72,21 @@ export interface AdapterGroup<T> {
 }
 
 export interface AdapterCollection {
-  [protocol: string]: AdapterGroup<BunnerValue>;
+  [protocol: string]: AdapterGroup<BunnerAdapter>;
 }
 
 export interface Configurer {
-  configure(app: BunnerValue, adapters: AdapterCollection): void;
+  configure(app: Context, adapters: AdapterCollection): void;
 }
 
 export interface BunnerApplicationOptions {
   name?: string;
   logLevel?: string | number;
   logger?: BunnerValue;
-  [key: string]: BunnerValue;
 }
 
 export interface ConfigService {
-  get(namespace: string | symbol): BunnerValue;
+  get(namespace: string | symbol): ValueLike;
 }
 
 export interface EnvService {
@@ -110,15 +108,17 @@ export interface MiddlewareRegistration<TOptions = BunnerValue> {
   options?: TOptions;
 }
 
+export type BunnerFactory<TValue = BunnerValue> = (container: BunnerContainer) => TValue;
+
 export interface BunnerContainer {
   get(token: ProviderToken): BunnerValue;
-  set(token: ProviderToken, factory: BunnerFunction): void;
+  set<TValue = BunnerValue>(token: ProviderToken, factory: BunnerFactory<TValue>): void;
   has(token: ProviderToken): boolean;
   getInstances(): IterableIterator<BunnerValue>;
   keys(): IterableIterator<ProviderToken>;
 }
 
-export type ErrorFilterToken = Class<BunnerErrorFilter>;
+export type ErrorFilterToken = ProviderToken;
 
 // Module Interface (Strict Schema Enforcement)
 export interface BunnerModule {
@@ -138,7 +138,7 @@ export interface AdapterProtocolConfig {
 export interface AdapterInstanceConfig {
   middlewares?: MiddlewareConfig;
   errorFilters?: ErrorFilterConfig[];
-  [key: string]: BunnerValue;
+  [key: string]: BunnerValue | MiddlewareConfig | ErrorFilterConfig[];
 }
 
 export interface MiddlewareConfig {

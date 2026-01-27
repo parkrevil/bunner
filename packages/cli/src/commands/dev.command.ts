@@ -33,18 +33,34 @@ export async function dev(commandOptions?: CommandOptions) {
       try {
         const fileContent = await Bun.file(filePath).text();
         const parseResult = parser.parse(filePath, fileContent);
-
-        fileCache.set(filePath, {
+        const analysis: FileAnalysis = {
           filePath,
           classes: parseResult.classes,
           reExports: parseResult.reExports,
           exports: parseResult.exports,
-          imports: parseResult.imports,
-          importEntries: parseResult.importEntries,
-          exportedValues: parseResult.exportedValues,
-          localValues: parseResult.localValues,
-          moduleDefinition: parseResult.moduleDefinition,
-        });
+        };
+
+        if (parseResult.imports !== undefined) {
+          analysis.imports = parseResult.imports;
+        }
+
+        if (parseResult.importEntries !== undefined) {
+          analysis.importEntries = parseResult.importEntries;
+        }
+
+        if (parseResult.exportedValues !== undefined) {
+          analysis.exportedValues = parseResult.exportedValues;
+        }
+
+        if (parseResult.localValues !== undefined) {
+          analysis.localValues = parseResult.localValues;
+        }
+
+        if (parseResult.moduleDefinition !== undefined) {
+          analysis.moduleDefinition = parseResult.moduleDefinition;
+        }
+
+        fileCache.set(filePath, analysis);
 
         return true;
       } catch (error) {
@@ -180,7 +196,7 @@ export async function dev(commandOptions?: CommandOptions) {
       void (async () => {
         const filename = event.filename;
 
-        if (!filename) {
+        if (typeof filename !== 'string' || filename.length === 0) {
           return;
         }
 
@@ -208,7 +224,8 @@ export async function dev(commandOptions?: CommandOptions) {
 
     process.on('SIGINT', onSigint);
   } catch (error) {
-    const file = error instanceof ConfigLoadError && error.sourcePath ? error.sourcePath : '.';
+    const sourcePath = error instanceof ConfigLoadError ? error.sourcePath : undefined;
+    const file = typeof sourcePath === 'string' && sourcePath.length > 0 ? sourcePath : '.';
     const reason = error instanceof Error ? error.message : 'Unknown dev error.';
     const diagnostic = buildDiagnostic({
       code: 'DEV_FAILED',

@@ -1,13 +1,21 @@
-export class SomeConfig {
-  constructor(private readonly values: Record<string, unknown>) {}
+import type { SomeConfigValue } from './types';
 
-  public get<T>(key: string, fallback: T): T {
+export class SomeConfig {
+  constructor(private readonly values: Record<string, SomeConfigValue>) {}
+
+  public get(key: string, fallback: string): string;
+  public get(key: string, fallback: number): number;
+  public get(key: string, fallback: SomeConfigValue): SomeConfigValue {
     const value = this.values[key];
 
     if (value === undefined) {
       return fallback;
     }
 
-    return value as T;
+    if (typeof value === typeof fallback) {
+      return value;
+    }
+
+    return fallback;
   }
 }

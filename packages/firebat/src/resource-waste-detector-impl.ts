@@ -1,6 +1,6 @@
 import * as ts from 'typescript';
 
-import type { ControlFlowStateBucket, FunctionWithBodyNode, ResourceWasteFinding } from './types';
+import type { ControlFlowStateBucket, FunctionWithBodyNode, ResourceWasteFinding, StaticSourceKey } from './types';
 
 import { getNodeHeader } from './node-header';
 import { toSpan } from './source-span';
@@ -16,27 +16,24 @@ const isFunctionWithBody = (node: ts.Node): node is FunctionWithBodyNode =>
   node.body !== undefined;
 
 const isAssignmentOperator = (operator: ts.SyntaxKind): boolean => {
-  switch (operator) {
-    case ts.SyntaxKind.EqualsToken:
-    case ts.SyntaxKind.PlusEqualsToken:
-    case ts.SyntaxKind.MinusEqualsToken:
-    case ts.SyntaxKind.AsteriskEqualsToken:
-    case ts.SyntaxKind.AsteriskAsteriskEqualsToken:
-    case ts.SyntaxKind.SlashEqualsToken:
-    case ts.SyntaxKind.PercentEqualsToken:
-    case ts.SyntaxKind.AmpersandEqualsToken:
-    case ts.SyntaxKind.BarEqualsToken:
-    case ts.SyntaxKind.CaretEqualsToken:
-    case ts.SyntaxKind.LessThanLessThanEqualsToken:
-    case ts.SyntaxKind.GreaterThanGreaterThanEqualsToken:
-    case ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken:
-    case ts.SyntaxKind.BarBarEqualsToken:
-    case ts.SyntaxKind.AmpersandAmpersandEqualsToken:
-    case ts.SyntaxKind.QuestionQuestionEqualsToken:
-      return true;
-    default:
-      return false;
-  }
+  return (
+    operator === ts.SyntaxKind.EqualsToken ||
+    operator === ts.SyntaxKind.PlusEqualsToken ||
+    operator === ts.SyntaxKind.MinusEqualsToken ||
+    operator === ts.SyntaxKind.AsteriskEqualsToken ||
+    operator === ts.SyntaxKind.AsteriskAsteriskEqualsToken ||
+    operator === ts.SyntaxKind.SlashEqualsToken ||
+    operator === ts.SyntaxKind.PercentEqualsToken ||
+    operator === ts.SyntaxKind.AmpersandEqualsToken ||
+    operator === ts.SyntaxKind.BarEqualsToken ||
+    operator === ts.SyntaxKind.CaretEqualsToken ||
+    operator === ts.SyntaxKind.LessThanLessThanEqualsToken ||
+    operator === ts.SyntaxKind.GreaterThanGreaterThanEqualsToken ||
+    operator === ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken ||
+    operator === ts.SyntaxKind.BarBarEqualsToken ||
+    operator === ts.SyntaxKind.AmpersandAmpersandEqualsToken ||
+    operator === ts.SyntaxKind.QuestionQuestionEqualsToken
+  );
 };
 
 const isCompoundAssignmentOperator = (operator: ts.SyntaxKind): boolean => operator !== ts.SyntaxKind.EqualsToken;
@@ -44,7 +41,7 @@ const isCompoundAssignmentOperator = (operator: ts.SyntaxKind): boolean => opera
 const isNodeWithin = (node: ts.Node, ancestor: ts.Node): boolean => {
   let current: ts.Node | undefined = node;
 
-  while (current) {
+  while (current !== undefined) {
     if (current === ancestor) {
       return true;
     }
@@ -58,7 +55,7 @@ const isNodeWithin = (node: ts.Node, ancestor: ts.Node): boolean => {
 const getNearestFunctionLikeAncestor = (node: ts.Node): ts.Node | null => {
   let current: ts.Node | undefined = node;
 
-  while (current) {
+  while (current !== undefined) {
     if (ts.isFunctionLike(current)) {
       return current;
     }
@@ -72,7 +69,7 @@ const getNearestFunctionLikeAncestor = (node: ts.Node): ts.Node | null => {
 const isLocalToFunction = (symbol: ts.Symbol, functionNode: FunctionWithBodyNode): boolean => {
   const declarations = symbol.declarations;
 
-  if (!declarations || declarations.length === 0) {
+  if (declarations === undefined || declarations.length === 0) {
     return false;
   }
 
@@ -270,7 +267,7 @@ const recordDeadStoreFindings = (
     for (let index = stack.length - 1; index >= 0; index -= 1) {
       const bucket = stack[index];
 
-      if (!bucket) {
+      if (bucket === undefined) {
         continue;
       }
 
@@ -289,7 +286,7 @@ const recordDeadStoreFindings = (
     for (let index = stack.length - 1; index >= 0; index -= 1) {
       const bucket = stack[index];
 
-      if (!bucket) {
+      if (bucket === undefined) {
         continue;
       }
 
@@ -302,11 +299,10 @@ const recordDeadStoreFindings = (
   };
 
   const recordBreakState = (state: Map<ts.Symbol, Map<number, ts.Identifier>>, labelText: string | null): void => {
-    const bucket = labelText
-      ? findNearestLabeledBucket(breakStatesStack, labelText)
-      : findNearestUnlabeledBucket(breakStatesStack);
+    const bucket =
+      labelText !== null ? findNearestLabeledBucket(breakStatesStack, labelText) : findNearestUnlabeledBucket(breakStatesStack);
 
-    if (!bucket) {
+    if (bucket === null) {
       return;
     }
 
@@ -314,11 +310,12 @@ const recordDeadStoreFindings = (
   };
 
   const recordContinueState = (state: Map<ts.Symbol, Map<number, ts.Identifier>>, labelText: string | null): void => {
-    const bucket = labelText
-      ? findNearestLabeledBucket(continueStatesStack, labelText)
-      : findNearestUnlabeledBucket(continueStatesStack);
+    const bucket =
+      labelText !== null
+        ? findNearestLabeledBucket(continueStatesStack, labelText)
+        : findNearestUnlabeledBucket(continueStatesStack);
 
-    if (!bucket) {
+    if (bucket === null) {
       return;
     }
 
@@ -428,24 +425,28 @@ const recordDeadStoreFindings = (
 
     const existing = state.get(symbol);
 
-    if (existing?.size > 0) {
-      for (const previousWrite of existing.values()) {
-        const declarationPositions = declarationWritePositionsBySymbol.get(symbol);
-        const wasDeclarationInitializer = declarationPositions?.has(previousWrite.pos) ?? false;
+    if ((existing?.size ?? 0) > 0) {
+      const existingValues = existing?.values();
 
-        if (wasDeclarationInitializer) {
-          continue;
+      if (existingValues !== undefined) {
+        for (const previousWrite of existingValues) {
+          const declarationPositions = declarationWritePositionsBySymbol.get(symbol);
+          const wasDeclarationInitializer = declarationPositions?.has(previousWrite.pos) ?? false;
+
+          if (wasDeclarationInitializer) {
+            continue;
+          }
+
+          pushUniqueFinding(
+            {
+              kind: 'dead-store-overwrite',
+              label: `${previousWrite.text} in ${fnHeader.header}`,
+              filePath: sourceFile.fileName,
+              span: toSpan(sourceFile, previousWrite),
+            },
+            `dead-store-overwrite:${sourceFile.fileName}:${functionNode.pos}:${previousWrite.pos}`,
+          );
         }
-
-        pushUniqueFinding(
-          {
-            kind: 'dead-store-overwrite',
-            label: `${previousWrite.text} in ${fnHeader.header}`,
-            filePath: sourceFile.fileName,
-            span: toSpan(sourceFile, previousWrite),
-          },
-          `dead-store-overwrite:${sourceFile.fileName}:${functionNode.pos}:${previousWrite.pos}`,
-        );
       }
     }
 
@@ -471,7 +472,7 @@ const recordDeadStoreFindings = (
 
         const argument = node.argumentExpression;
 
-        if (argument) {
+        if (argument !== undefined) {
           visit(argument);
         }
 
@@ -629,7 +630,7 @@ const recordDeadStoreFindings = (
 
   const shouldEvaluateDestructuringDefaultInitializer = (
     sourceExpression: ts.Expression,
-    sourceKey: { kind: 'object'; propertyKey: string } | { kind: 'array'; index: number },
+    sourceKey: StaticSourceKey,
   ): boolean => {
     const sourceUnwrapped = unwrapExpression(sourceExpression);
 
@@ -706,7 +707,7 @@ const recordDeadStoreFindings = (
             propertyKey = element.name.text;
           }
 
-          if (initializer && propertyKey) {
+          if (initializer !== undefined && propertyKey !== null) {
             const shouldEvaluate = shouldEvaluateDestructuringDefaultInitializer(source, {
               kind: 'object',
               propertyKey,
@@ -715,16 +716,16 @@ const recordDeadStoreFindings = (
             if (shouldEvaluate) {
               visitExpression(state, initializer);
             }
-          } else if (initializer) {
+          } else if (initializer !== undefined) {
             visitExpression(state, initializer);
           }
 
           const sourceUnwrapped = unwrapExpression(source);
 
-          if (ts.isObjectLiteralExpression(sourceUnwrapped) && propertyKey) {
+          if (ts.isObjectLiteralExpression(sourceUnwrapped) && propertyKey !== null) {
             const nestedSource = tryGetStaticObjectLiteralPropertyValue(sourceUnwrapped, propertyKey);
 
-            if (nestedSource && ts.isExpression(nestedSource)) {
+            if (nestedSource !== undefined && nestedSource !== null && ts.isExpression(nestedSource)) {
               visitBinding(element.name, nestedSource);
 
               continue;
@@ -749,7 +750,7 @@ const recordDeadStoreFindings = (
 
           const initializer = element.initializer;
 
-          if (initializer) {
+          if (initializer !== undefined) {
             const shouldEvaluate = shouldEvaluateDestructuringDefaultInitializer(source, {
               kind: 'array',
               index: elementIndex,
@@ -822,7 +823,7 @@ const recordDeadStoreFindings = (
             const valueUnwrapped = unwrapExpression(valueTarget);
 
             if (ts.isBinaryExpression(valueUnwrapped) && valueUnwrapped.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
-              if (valueUnwrapped.right && propertyKey) {
+              if (valueUnwrapped.right !== undefined && propertyKey !== null) {
                 const shouldEvaluate = shouldEvaluateDestructuringDefaultInitializer(source, {
                   kind: 'object',
                   propertyKey,
@@ -831,14 +832,14 @@ const recordDeadStoreFindings = (
                 if (shouldEvaluate) {
                   visitExpression(state, valueUnwrapped.right);
                 }
-              } else if (valueUnwrapped.right) {
+              } else if (valueUnwrapped.right !== undefined) {
                 visitExpression(state, valueUnwrapped.right);
               }
 
-              if (ts.isObjectLiteralExpression(sourceUnwrapped) && propertyKey) {
+              if (ts.isObjectLiteralExpression(sourceUnwrapped) && propertyKey !== null) {
                 const nestedSource = tryGetStaticObjectLiteralPropertyValue(sourceUnwrapped, propertyKey);
 
-                if (nestedSource && ts.isExpression(nestedSource)) {
+                if (nestedSource !== undefined && nestedSource !== null && ts.isExpression(nestedSource)) {
                   visitTarget(valueUnwrapped.left, nestedSource);
 
                   continue;
@@ -855,10 +856,10 @@ const recordDeadStoreFindings = (
               ts.isArrayLiteralExpression(valueUnwrapped) ||
               ts.isBinaryExpression(valueUnwrapped)
             ) {
-              if (ts.isObjectLiteralExpression(sourceUnwrapped) && propertyKey) {
+              if (ts.isObjectLiteralExpression(sourceUnwrapped) && propertyKey !== null) {
                 const nestedSource = tryGetStaticObjectLiteralPropertyValue(sourceUnwrapped, propertyKey);
 
-                if (nestedSource && ts.isExpression(nestedSource)) {
+                if (nestedSource !== undefined && nestedSource !== null && ts.isExpression(nestedSource)) {
                   visitTarget(valueUnwrapped, nestedSource);
 
                   continue;
@@ -1168,13 +1169,16 @@ const recordDeadStoreFindings = (
         let lastWriteTruthiness: boolean | null = null;
         let lastWriteNullish: boolean | null = null;
 
-        if (symbol && pendingWrites?.size > 0) {
-          const iterator = pendingWrites.keys();
-          const firstPos = iterator.next().value;
+        if (symbol !== null && (pendingWrites?.size ?? 0) > 0) {
+          const iterator = pendingWrites?.keys();
 
-          if (typeof firstPos === 'number') {
-            lastWriteTruthiness = writeTruthinessBySymbolAndPos.get(symbol)?.get(firstPos) ?? null;
-            lastWriteNullish = writeNullishBySymbolAndPos.get(symbol)?.get(firstPos) ?? null;
+          if (iterator !== undefined) {
+            const firstPos = iterator.next().value;
+
+            if (typeof firstPos === 'number') {
+              lastWriteTruthiness = writeTruthinessBySymbolAndPos.get(symbol)?.get(firstPos) ?? null;
+              lastWriteNullish = writeNullishBySymbolAndPos.get(symbol)?.get(firstPos) ?? null;
+            }
           }
         }
 
@@ -1383,7 +1387,7 @@ const recordDeadStoreFindings = (
     if (ts.isReturnStatement(statement) || ts.isThrowStatement(statement)) {
       const nextState = cloneState(state);
 
-      if ('expression' in statement && statement.expression) {
+      if ('expression' in statement && statement.expression !== undefined) {
         visitExpression(nextState, statement.expression);
       }
 
@@ -1409,7 +1413,7 @@ const recordDeadStoreFindings = (
       continueStatesStack.push(loopContinueBucket);
 
       if (ts.isForStatement(statement)) {
-        if (statement.initializer) {
+        if (statement.initializer !== undefined) {
           visitExpression(entry, statement.initializer);
         }
       }
@@ -1420,7 +1424,7 @@ const recordDeadStoreFindings = (
         const loopBreakStates = breakStatesStack.pop()?.states ?? [];
         const bodyMerged = bodyOutOnce.concat(loopContinueStates).reduce((acc, s) => unionStates(acc, s), createState());
 
-        if (statement.expression) {
+        if (statement.expression !== undefined) {
           visitExpression(bodyMerged, statement.expression);
         }
 
@@ -1430,14 +1434,14 @@ const recordDeadStoreFindings = (
       let conditionTruthiness: boolean | null = null;
 
       if (ts.isForStatement(statement)) {
-        if (statement.condition) {
+        if (statement.condition !== undefined) {
           visitExpression(entry, statement.condition);
 
           conditionTruthiness = tryEvaluateStaticTruthiness(statement.condition);
         } else {
           conditionTruthiness = true;
         }
-      } else if (statement.expression) {
+      } else if (statement.expression !== undefined) {
         visitExpression(entry, statement.expression);
 
         conditionTruthiness = tryEvaluateStaticTruthiness(statement.expression);
@@ -1455,7 +1459,7 @@ const recordDeadStoreFindings = (
       const loopBreakStates = breakStatesStack.pop()?.states ?? [];
       const bodyMerged = bodyOutOnce.concat(loopContinueStates).reduce((acc, s) => unionStates(acc, s), createState());
 
-      if (ts.isForStatement(statement) && statement.incrementor) {
+      if (ts.isForStatement(statement) && statement.incrementor !== undefined) {
         visitExpression(bodyMerged, statement.incrementor);
       }
 
@@ -1541,7 +1545,7 @@ const recordDeadStoreFindings = (
         for (let clauseIndex = startIndex; clauseIndex < clauses.length; clauseIndex += 1) {
           const clause = clauses[clauseIndex];
 
-          if (!clause) {
+          if (clause === undefined) {
             continue;
           }
 
@@ -1557,20 +1561,20 @@ const recordDeadStoreFindings = (
 
       const discriminantKey = tryEvaluateStaticSwitchValueKey(statement.expression);
 
-      if (discriminantKey) {
+      if (discriminantKey !== null) {
         let matchedIndex: number | null = null;
         let hitUnknownCaseBeforeMatch = false;
 
         for (let clauseIndex = 0; clauseIndex < clauses.length; clauseIndex += 1) {
           const clause = clauses[clauseIndex];
 
-          if (!clause || !ts.isCaseClause(clause)) {
+          if (clause === undefined || !ts.isCaseClause(clause)) {
             continue;
           }
 
           const caseKey = tryEvaluateStaticSwitchValueKey(clause.expression);
 
-          if (!caseKey) {
+          if (caseKey === null) {
             hitUnknownCaseBeforeMatch = true;
 
             break;
@@ -1590,7 +1594,7 @@ const recordDeadStoreFindings = (
             for (let clauseIndex = 0; clauseIndex <= matchedIndex; clauseIndex += 1) {
               const clause = clauses[clauseIndex];
 
-              if (clause && ts.isCaseClause(clause)) {
+              if (clause !== undefined && ts.isCaseClause(clause)) {
                 visitExpression(selectorState, clause.expression);
               }
             }
@@ -1600,7 +1604,7 @@ const recordDeadStoreFindings = (
             const selectorState = cloneState(entry);
 
             for (const clause of clauses) {
-              if (clause && ts.isCaseClause(clause)) {
+              if (clause !== undefined && ts.isCaseClause(clause)) {
                 visitExpression(selectorState, clause.expression);
               }
             }
@@ -1608,7 +1612,7 @@ const recordDeadStoreFindings = (
             analyzeFallthroughFromIndex(defaultIndex, selectorState);
           } else {
             for (const clause of clauses) {
-              if (clause && ts.isCaseClause(clause)) {
+              if (clause !== undefined && ts.isCaseClause(clause)) {
                 visitExpression(entry, clause.expression);
               }
             }
@@ -1626,7 +1630,7 @@ const recordDeadStoreFindings = (
       for (let startIndex = 0; startIndex < clauses.length; startIndex += 1) {
         const clause = clauses[startIndex];
 
-        if (!clause) {
+        if (clause === undefined) {
           continue;
         }
 
@@ -1634,7 +1638,7 @@ const recordDeadStoreFindings = (
 
         if (ts.isDefaultClause(clause)) {
           for (const candidate of clauses) {
-            if (candidate && ts.isCaseClause(candidate)) {
+            if (candidate !== undefined && ts.isCaseClause(candidate)) {
               visitExpression(selectorState, candidate.expression);
             }
           }
@@ -1642,7 +1646,7 @@ const recordDeadStoreFindings = (
           for (let clauseIndex = 0; clauseIndex <= startIndex; clauseIndex += 1) {
             const candidate = clauses[clauseIndex];
 
-            if (candidate && ts.isCaseClause(candidate)) {
+            if (candidate !== undefined && ts.isCaseClause(candidate)) {
               visitExpression(selectorState, candidate.expression);
             }
           }
@@ -1657,7 +1661,7 @@ const recordDeadStoreFindings = (
         const noMatchState = cloneState(entry);
 
         for (const clause of clauses) {
-          if (clause && ts.isCaseClause(clause)) {
+          if (clause !== undefined && ts.isCaseClause(clause)) {
             visitExpression(noMatchState, clause.expression);
           }
         }
@@ -1744,7 +1748,7 @@ const recordDeadStoreFindings = (
 
   const body = functionNode.body;
 
-  if (!body) {
+  if (body === undefined) {
     return [];
   }
 
@@ -1753,7 +1757,7 @@ const recordDeadStoreFindings = (
     : (() => {
         const entry = createState();
 
-        if (body) {
+        if (body !== undefined) {
           visitExpression(entry, body);
         }
 
@@ -1767,7 +1771,7 @@ const recordDeadStoreFindings = (
 
   const firstState = allEndStates[0];
 
-  if (!firstState) {
+  if (firstState === undefined) {
     return findings;
   }
 

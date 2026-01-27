@@ -11,6 +11,8 @@ type DuplicateTarget = OxcNode;
 const isOxcNode = (value: OxcNodeValue | undefined): value is OxcNode =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
+const isOxcNodeArray = (value: OxcNodeValue | undefined): value is ReadonlyArray<OxcNodeValue> => Array.isArray(value);
+
 const getNodeType = (node: OxcNode): string | null => {
   return typeof node.type === 'string' ? node.type : null;
 };
@@ -35,7 +37,7 @@ const collectDuplicateTargets = (program: OxcNodeValue | undefined): DuplicateTa
   const targets: DuplicateTarget[] = [];
 
   const visit = (node: OxcNodeValue | undefined) => {
-    if (Array.isArray(node)) {
+    if (isOxcNodeArray(node)) {
       for (const child of node) {
         visit(child);
       }
@@ -77,7 +79,7 @@ const getNodeHeader = (node: OxcNode): string => {
 
   const key = node.key;
 
-  if (key) {
+  if (key !== undefined && key !== null) {
     const keyName = isOxcNode(key) && typeof key.name === 'string' ? key.name : null;
 
     if (typeof keyName === 'string' && keyName.length > 0) {
@@ -95,23 +97,25 @@ const getNodeHeader = (node: OxcNode): string => {
 };
 
 const getItemKind = (node: OxcNode): DuplicateItem['kind'] => {
-  switch (getNodeType(node)) {
-    case 'FunctionDeclaration':
-    case 'FunctionExpression':
-    case 'ArrowFunctionExpression':
-      return 'function';
-    case 'MethodDefinition':
-      return 'method';
-    case 'ClassDeclaration':
-    case 'ClassExpression':
-      return 'type';
-    case 'TSTypeAliasDeclaration':
-      return 'type';
-    case 'TSInterfaceDeclaration':
-      return 'interface';
-    default:
-      return 'node';
+  const nodeType = getNodeType(node);
+
+  if (nodeType === 'FunctionDeclaration' || nodeType === 'FunctionExpression' || nodeType === 'ArrowFunctionExpression') {
+    return 'function';
   }
+
+  if (nodeType === 'MethodDefinition') {
+    return 'method';
+  }
+
+  if (nodeType === 'ClassDeclaration' || nodeType === 'ClassExpression' || nodeType === 'TSTypeAliasDeclaration') {
+    return 'type';
+  }
+
+  if (nodeType === 'TSInterfaceDeclaration') {
+    return 'interface';
+  }
+
+  return 'node';
 };
 
 export const detectDuplicatesOxc = (files: ParsedFile[], minTokens: number): DuplicateGroup[] => {

@@ -1,5 +1,5 @@
 import { Injectable } from '@bunner/common';
-import { Logger } from '@bunner/logger';
+import { Logger, type LogMetadataValue } from '@bunner/logger';
 
 import type { User } from './interfaces';
 
@@ -9,12 +9,8 @@ import { UserRepository } from './users.repository';
   visibility: 'exported',
 })
 export class UsersService {
-  constructor(
-    private readonly userRepository: UserRepository,
-    private readonly logger: Logger,
-  ) {
-    this.logger.debug('UsersService initialized');
-  }
+  private readonly userRepository = new UserRepository();
+  private readonly logger = new Logger('UsersService');
 
   findAll(): ReadonlyArray<User> {
     return this.userRepository.findAll();
@@ -25,7 +21,12 @@ export class UsersService {
   }
 
   create(body: User): void {
-    this.logger.info('Creating user', body);
+    const metadata: Record<string, LogMetadataValue> = {
+      id: body.id,
+      name: body.name,
+    };
+
+    this.logger.info('Creating user', metadata);
 
     this.userRepository.create(body);
   }

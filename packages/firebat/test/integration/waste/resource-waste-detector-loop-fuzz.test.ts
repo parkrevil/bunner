@@ -29,6 +29,17 @@ const createBreakThenNoRead = (functionName: string, literal: number): string =>
   ].join('\n');
 };
 
+const getLoopGenerator = (shouldRead: boolean) => {
+  const generators = [createBreakThenNoRead, createBreakThenRead];
+  const generator = generators[Number(shouldRead)];
+
+  if (generator === undefined) {
+    throw new Error('Expected generator for loop case');
+  }
+
+  return generator;
+};
+
 describe('waste (integration fuzz)', () => {
   it('should report dead-store only when a loop breaks without reading the value (seeded)', () => {
     // Arrange
@@ -42,8 +53,7 @@ describe('waste (integration fuzz)', () => {
       const shouldRead = prng.nextBool();
       const filePath = `/virtual/fuzz/loop-${seed}-${iteration}.ts`;
       const sources = new Map<string, string>();
-      const generators = [createBreakThenNoRead, createBreakThenRead];
-      const generator = generators[Number(shouldRead)];
+      const generator = getLoopGenerator(shouldRead);
 
       sources.set(filePath, generator(`loop${iteration}`, literal));
 

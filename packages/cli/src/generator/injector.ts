@@ -1,11 +1,28 @@
+import type { AnalyzerValue, AnalyzerValueRecord } from '../analyzer/types';
 import type { ImportRegistry } from './import-registry';
 
 import { type ClassMetadata, ModuleGraph, type ModuleNode } from '../analyzer';
 import { compareCodePoint } from '../common';
 
-type RecordUnknown = Record<string, unknown>;
+type RecordValue = AnalyzerValueRecord;
 
-const stableKey = (value: unknown, visited = new WeakSet<object>()): string => {
+interface Replacement {
+  start: number;
+  end: number;
+  content: string;
+}
+
+type GeneratorValue = AnalyzerValue | symbol | ((...args: readonly AnalyzerValue[]) => AnalyzerValue);
+
+const isAnalyzerValueArray = (value: AnalyzerValue): value is AnalyzerValue[] => {
+  return Array.isArray(value);
+};
+
+const isRecordValue = (value: GeneratorValue | ClassMetadata): value is AnalyzerValueRecord => {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+};
+
+const stableKey = (value: GeneratorValue, visited = new WeakSet<AnalyzerValueRecord>()): string => {
   if (value === null) {
     return 'null';
   }
@@ -30,13 +47,17 @@ const stableKey = (value: unknown, visited = new WeakSet<object>()): string => {
     return `function:${value.name}`;
   }
 
-  if (Array.isArray(value)) {
+  if (isAnalyzerValueArray(value)) {
     const parts = value.map(v => stableKey(v, visited));
 
     return `[${parts.join(',')}]`;
   }
 
-  if (typeof value !== 'object' || !value) {
+  if (typeof value !== 'object' || value === null) {
+    return 'unknown';
+  }
+
+  if (!isRecordValue(value)) {
     return 'unknown';
   }
 
@@ -46,14 +67,14 @@ const stableKey = (value: unknown, visited = new WeakSet<object>()): string => {
 
   visited.add(value);
 
-  const record = value as Record<string, unknown>;
+  const record: AnalyzerValueRecord = value;
   const entries = Object.entries(record).sort(([a], [b]) => compareCodePoint(a, b));
   const parts = entries.map(([k, v]) => `${k}:${stableKey(v, visited)}`);
 
   return `{${parts.join(',')}}`;
 };
 
-const asString = (value: unknown): string | undefined => {
+const asString = (value: AnalyzerValue): string | undefined => {
   if (typeof value !== 'string') {
     return undefined;
   }
@@ -61,22 +82,22 @@ const asString = (value: unknown): string | undefined => {
   return value;
 };
 
-const asRecord = (value: unknown): RecordUnknown | null => {
-  if (!value || typeof value !== 'object') {
+const asRecord = (value: GeneratorValue | ClassMetadata): RecordValue | null => {
+  if (!isRecordValue(value)) {
     return null;
   }
 
-  return value as RecordUnknown;
+  return value;
 };
 
-const getRefName = (value: unknown): string | null => {
+const getRefName = (value: AnalyzerValue): string | null => {
   if (typeof value === 'string') {
     return value;
   }
 
   const record = asRecord(value);
 
-  if (!record) {
+  if (record === null) {
     return null;
   }
 
@@ -87,10 +108,10 @@ const getRefName = (value: unknown): string | null => {
   return null;
 };
 
-const getForwardRefName = (value: unknown): string | null => {
+const getForwardRefName = (value: AnalyzerValue): string | null => {
   const record = asRecord(value);
 
-  if (!record) {
+  if (record === null) {
     return null;
   }
 
@@ -101,10 +122,14 @@ const getForwardRefName = (value: unknown): string | null => {
   return null;
 };
 
-const isClassMetadata = (value: unknown): value is ClassMetadata => {
+const isNonEmptyString = (value: string | null | undefined): value is string => {
+  return typeof value === 'string' && value.length > 0;
+};
+
+const isClassMetadata = (value: AnalyzerValue | ClassMetadata): value is ClassMetadata => {
   const record = asRecord(value);
 
-  if (!record) {
+  if (record === null) {
     return false;
   }
 
@@ -128,7 +153,7 @@ const isClassMetadata = (value: unknown): value is ClassMetadata => {
     return false;
   }
 
-  if (!record.imports || typeof record.imports !== 'object') {
+  if (record.imports === undefined || typeof record.imports !== 'object') {
     return false;
   }
 
@@ -141,7 +166,7 @@ export class InjectorGenerator {
     const adapterConfigs: string[] = [];
 
     const getAlias = (name: string, path?: string): string => {
-      if (!path) {
+      if (path === undefined || path.length === 0) {
         return name;
       }
 
@@ -156,7 +181,7 @@ export class InjectorGenerator {
       providerTokens.forEach((token: string) => {
         const ref = node.providers.get(token);
 
-        if (!ref) {
+        if (ref === undefined) {
           return;
         }
 
@@ -174,16 +199,16 @@ export class InjectorGenerator {
           if (providerRecord.useClass !== undefined) {
             const useClass = providerRecord.useClass;
             const classes = Array.isArray(useClass) ? useClass : [useClass];
-            const instances = classes.map((clsItem: unknown) => {
+            const instances = classes.map((clsItem: AnalyzerValue) => {
               const className = getRefName(clsItem);
 
-              if (!className) {
+              if (className === null || className.length === 0) {
                 return 'undefined';
               }
 
               const clsDef = graph.classDefinitions.get(className);
 
-              if (!clsDef) {
+              if (clsDef === undefined) {
                 return 'undefined';
               }
 
@@ -208,15 +233,18 @@ export class InjectorGenerator {
           }
 
           if (providerRecord.useFactory !== undefined) {
-            const factoryRecord = asRecord(providerRecord.useFactory);
+            const factoryRecord = asRecord(providerRecord.useFactory as AnalyzerValue);
             let factoryFn = typeof factoryRecord?.__bunner_factory_code === 'string' ? factoryRecord.__bunner_factory_code : '';
-            const deps = Array.isArray(factoryRecord?.__bunner_factory_deps) ? factoryRecord.__bunner_factory_deps : [];
+            const deps =
+              factoryRecord && isAnalyzerValueArray(factoryRecord.__bunner_factory_deps)
+                ? factoryRecord.__bunner_factory_deps
+                : [];
 
-            if (!factoryFn) {
+            if (factoryFn.length === 0) {
               return;
             }
 
-            const replacements: Array<{ start: number; end: number; content: string }> = [];
+            const replacements: Replacement[] = [];
             const orderedDeps = [...deps].sort((a, b) => {
               const left = asRecord(a);
               const right = asRecord(b);
@@ -250,10 +278,10 @@ export class InjectorGenerator {
               return leftEnd - rightEnd;
             });
 
-            orderedDeps.forEach((dep: unknown) => {
+            orderedDeps.forEach(dep => {
               const depRecord = asRecord(dep);
 
-              if (!depRecord) {
+              if (depRecord === null) {
                 return;
               }
 
@@ -262,7 +290,7 @@ export class InjectorGenerator {
               const start = typeof depRecord.start === 'number' ? depRecord.start : null;
               const end = typeof depRecord.end === 'number' ? depRecord.end : null;
 
-              if (!name || !path || start === null || end === null) {
+              if (name === null || name.length === 0 || path === null || path.length === 0 || start === null || end === null) {
                 return;
               }
 
@@ -279,10 +307,10 @@ export class InjectorGenerator {
               });
 
             const injectList = Array.isArray(providerRecord.inject) ? providerRecord.inject : [];
-            const injectedArgs = injectList.map((injectItem: unknown) => {
+            const injectedArgs = injectList.map((injectItem: AnalyzerValue) => {
               const tokenName = getRefName(injectItem);
 
-              if (!tokenName) {
+              if (tokenName === null || tokenName.length === 0) {
                 return 'undefined';
               }
 
@@ -335,7 +363,7 @@ export class InjectorGenerator {
         factoryEntries.push('  });');
       });
 
-      if (node.moduleDefinition?.adapters) {
+      if (node.moduleDefinition?.adapters !== undefined) {
         const config = this.serializeValue(node.moduleDefinition.adapters, registry);
 
         adapterConfigs.push(`  '${node.name}': ${config},`);
@@ -350,7 +378,7 @@ export class InjectorGenerator {
       dynamicImports.forEach(imp => {
         const impRecord = asRecord(imp);
 
-        if (!impRecord || typeof impRecord.__bunner_call !== 'string') {
+        if (impRecord === null || typeof impRecord.__bunner_call !== 'string') {
           return;
         }
 
@@ -358,7 +386,7 @@ export class InjectorGenerator {
         const className = parts[0];
         const methodName = parts[1];
 
-        if (!className) {
+        if (className === undefined || className.length === 0) {
           return;
         }
 
@@ -372,14 +400,14 @@ export class InjectorGenerator {
         {
           const alias = registry.getAlias(className, importSource);
 
-          if (methodName) {
+          if (isNonEmptyString(methodName)) {
             callExpression = `${alias}.${methodName}`;
           } else {
             callExpression = alias;
           }
         }
 
-        const argList = Array.isArray(impRecord.args) ? impRecord.args : [];
+        const argList = isAnalyzerValueArray(impRecord.args) ? impRecord.args : [];
         const args = argList.map(a => this.serializeValue(a, registry)).join(', ');
 
         dynamicEntries.push(`  const mod_${node.name}_${className} = await ${callExpression}(${args});`);
@@ -406,7 +434,7 @@ ${dynamicEntries.join('\n')}
 `;
   }
 
-  private serializeValue(value: unknown, registry: ImportRegistry): string {
+  private serializeValue(value: AnalyzerValue, registry: ImportRegistry): string {
     if (value === undefined) {
       return 'undefined';
     }
@@ -423,13 +451,13 @@ ${dynamicEntries.join('\n')}
       return String(value);
     }
 
-    if (Array.isArray(value)) {
+    if (isAnalyzerValueArray(value)) {
       return `[${value.map(v => this.serializeValue(v, registry)).join(', ')}]`;
     }
 
     const record = asRecord(value);
 
-    if (!record) {
+    if (record === null) {
       return 'undefined';
     }
 
@@ -442,7 +470,7 @@ ${dynamicEntries.join('\n')}
       const className = parts[0];
       const methodName = parts[1];
 
-      if (!className) {
+      if (className === undefined || className.length === 0) {
         return 'undefined';
       }
 
@@ -452,14 +480,14 @@ ${dynamicEntries.join('\n')}
       if (importSource !== undefined) {
         const alias = registry.getAlias(className, importSource);
 
-        if (methodName) {
+        if (isNonEmptyString(methodName)) {
           callName = `${alias}.${methodName}`;
         } else {
           callName = alias;
         }
       }
 
-      const args = (Array.isArray(record.args) ? record.args : []).map(a => this.serializeValue(a, registry)).join(', ');
+      const args = (isAnalyzerValueArray(record.args) ? record.args : []).map(a => this.serializeValue(a, registry)).join(', ');
 
       return `${callName}(${args})`;
     }
@@ -482,20 +510,21 @@ ${dynamicEntries.join('\n')}
 
   private resolveConstructorDeps(meta: ClassMetadata, node: ModuleNode, graph: ModuleGraph): string[] {
     return meta.constructorParams.map(param => {
-      let token: unknown = param.type;
+      let token: AnalyzerValue = param.type;
       const refName = getRefName(token);
       const forwardRefName = getForwardRefName(token);
 
-      if (refName) {
+      if (isNonEmptyString(refName)) {
         token = refName;
-      } else if (forwardRefName) {
+      } else if (isNonEmptyString(forwardRefName)) {
         token = forwardRefName;
       }
 
       const injectDec = param.decorators.find(d => d.name === 'Inject');
+      const injectArgs = injectDec?.arguments;
 
-      if (injectDec?.arguments.length > 0) {
-        const arg = injectDec.arguments[0];
+      if (Array.isArray(injectArgs) && injectArgs.length > 0) {
+        const arg = injectArgs[0];
 
         if (typeof arg === 'string') {
           token = arg;
@@ -503,9 +532,9 @@ ${dynamicEntries.join('\n')}
           const argRefName = getRefName(arg);
           const argForwardRefName = getForwardRefName(arg);
 
-          if (argRefName) {
+          if (isNonEmptyString(argRefName)) {
             token = argRefName;
-          } else if (argForwardRefName) {
+          } else if (isNonEmptyString(argForwardRefName)) {
             token = argForwardRefName;
           }
         }
@@ -517,7 +546,7 @@ ${dynamicEntries.join('\n')}
 
       const resolvedToken = graph.resolveToken(node.name, token);
 
-      if (resolvedToken) {
+      if (isNonEmptyString(resolvedToken)) {
         return `c.get('${resolvedToken}')`;
       }
 

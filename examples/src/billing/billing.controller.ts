@@ -29,7 +29,7 @@ export class BillingController {
 
     return {
       success: true,
-      transactionId: 'txn_' + Math.random().toString(36).substr(2, 9),
+      transactionId: `txn_${Math.random().toString(36).slice(2, 11)}`,
       amount,
       status: 'COMPLETED',
     };

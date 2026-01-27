@@ -13,8 +13,9 @@ export class AuditMiddleware extends BunnerMiddleware {
 
     // Simulate auditing check
     const headers = http.request.headers;
+    const transactionId = headers.get('x-transaction-id');
 
-    if (!headers.get('x-transaction-id')) {
+    if (transactionId === null || transactionId.trim().length === 0) {
       this.logger.warn('[AUDIT] Missing Transaction ID');
     }
   }

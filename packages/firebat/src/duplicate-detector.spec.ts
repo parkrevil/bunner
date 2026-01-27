@@ -5,7 +5,7 @@ import type { DuplicateGroup } from './types';
 import { detectDuplicates } from './duplicate-detector';
 import { parseSource, type ParsedFile } from './engine/oxc-wrapper';
 
-describe('detectDuplicates', () => {
+describe('duplicate-detector', () => {
   it('should report at least one duplicate group when identical functions exist', () => {
     // Arrange
     let sources = new Map<string, string>();
@@ -28,11 +28,12 @@ describe('detectDuplicates', () => {
     // Act
     let groups = detectDuplicates(program, 10);
     let functionGroup = findGroupByKind(groups, 'function');
+    let functionGroupItems = getGroupItems(functionGroup);
 
     // Assert
     expect(groups.length).toBeGreaterThan(0);
     expect(functionGroup).not.toBeNull();
-    expect(functionGroup?.items.length ?? 0).toBeGreaterThanOrEqual(2);
+    expect(functionGroupItems.length).toBeGreaterThanOrEqual(2);
   });
 
   it('should report a duplicate group spanning files when the same structure appears across files', () => {
@@ -47,7 +48,7 @@ describe('detectDuplicates', () => {
     // Act
     let groups = detectDuplicates(program, 10);
     let functionGroup = findGroupByKind(groups, 'function');
-    let files = functionGroup ? functionGroup.items.map(item => item.filePath) : [];
+    let files = getGroupFilePaths(functionGroup);
 
     // Assert
     expect(functionGroup).not.toBeNull();
@@ -81,10 +82,11 @@ describe('detectDuplicates', () => {
     // Act
     let groups = detectDuplicates(program, 10);
     let blockGroup = findGroupByKind(groups, 'node');
+    let blockGroupItems = getGroupItems(blockGroup);
 
     // Assert
     expect(blockGroup).not.toBeNull();
-    expect(blockGroup?.items.length ?? 0).toBeGreaterThanOrEqual(2);
+    expect(blockGroupItems.length).toBeGreaterThanOrEqual(2);
   });
 
   it('should report duplicate groups for type shapes when identical type aliases and interfaces exist', () => {
@@ -166,4 +168,16 @@ const createProgram = (sources: Map<string, string>): ParsedFile[] => {
 
 const findGroupByKind = (groups: ReadonlyArray<DuplicateGroup>, kind: string) => {
   return groups.find(group => group.items.some(item => item.kind === kind)) ?? null;
+};
+
+const getGroupItems = (group: DuplicateGroup | null): ReadonlyArray<DuplicateGroup['items'][number]> => {
+  if (!group) {
+    throw new Error('Expected duplicate group');
+  }
+
+  return group.items;
+};
+
+const getGroupFilePaths = (group: DuplicateGroup | null): string[] => {
+  return getGroupItems(group).map(item => item.filePath);
 };

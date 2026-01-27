@@ -1,35 +1,32 @@
-import type { ConfigService } from '@bunner/common';
+import type { ConfigService, ValueLike } from '@bunner/common';
 
-import { SomeConfig } from './some-config';
+import type { HttpConfig, HttpDefaultsParams } from './types';
 
 export class ExampleConfigService implements ConfigService {
-  private readonly namespaces: Map<string | symbol, unknown>;
+  private readonly namespaces: Map<string | symbol, ValueLike>;
 
-  constructor(namespaces: ReadonlyMap<string | symbol, unknown>) {
+  constructor(namespaces: ReadonlyMap<string | symbol, ValueLike>) {
     this.namespaces = new Map(namespaces);
   }
 
-  public static withHttpDefaults(params: {
-    readonly userHttp: { readonly port: number; readonly host: string };
-    readonly adminHttp: { readonly port: number; readonly host: string };
-  }): ExampleConfigService {
+  public static withHttpDefaults(params: HttpDefaultsParams): ExampleConfigService {
     const { userHttp, adminHttp } = params;
 
     return new ExampleConfigService(
-      new Map<string, unknown>([
-        ['user.http', new SomeConfig({ port: userHttp.port, host: userHttp.host })],
-        ['admin.http', new SomeConfig({ port: adminHttp.port, host: adminHttp.host })],
+      new Map<string, ValueLike>([
+        ['user.http', { port: userHttp.port, host: userHttp.host } satisfies HttpConfig],
+        ['admin.http', { port: adminHttp.port, host: adminHttp.host } satisfies HttpConfig],
       ]),
     );
   }
 
-  public get<T = unknown>(namespace: string | symbol): T {
+  public get(namespace: string | symbol): ValueLike {
     const value = this.namespaces.get(namespace);
 
     if (value === undefined) {
       throw new Error(`Config namespace not found: ${String(namespace)}`);
     }
 
-    return value as T;
+    return value;
   }
 }

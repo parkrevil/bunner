@@ -153,7 +153,11 @@ const buildImportCase = (rng: Rng) => {
     specifiers.push({
       type: 'ImportSpecifier',
       range: [start, end],
-      local: { type: 'Identifier', name, range: [start, end] },
+      local: {
+        type: 'Identifier',
+        name: name ?? 'unknown',
+        range: [start, end],
+      },
     });
 
     if (i < names.length - 1) {

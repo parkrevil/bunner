@@ -1,8 +1,8 @@
 export type {
-	BunnerConfigSource,
-	BunnerConfigSourceFormat,
-	ConfigLoadResult,
-	ConfigModule,
-	ResolvedBunnerConfig,
-	ResolvedBunnerConfigModule,
+  BunnerConfigSource,
+  BunnerConfigSourceFormat,
+  ConfigLoadResult,
+  ConfigModule,
+  ResolvedBunnerConfig,
+  ResolvedBunnerConfigModule,
 } from './interfaces';

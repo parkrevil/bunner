@@ -1,48 +1,65 @@
 import { describe, expect, it } from 'bun:test';
 
-import type { AdapterCollectionLike } from './types';
+import type { AdapterCollectionLike, ScalarInput } from './types';
 
 import { resolveHttpNamesForDocuments, resolveHttpNamesForHosting } from './adapter-names';
 
 function makeAdapters(names: string[]): AdapterCollectionLike {
-  const group = new Map<string, unknown>();
+  const group = new Map<string, ScalarInput>();
 
   for (const name of names) {
     group.set(name, {});
   }
 
-  return { http: group } as unknown as AdapterCollectionLike;
+  return { http: group };
 }
 
-describe('resolveHttpNamesForDocuments', () => {
-  it('should return all http adapter names when documentTargets is all', () => {
-    const adapters = makeAdapters(['a', 'b']);
+describe('adapter-names', () => {
+  describe('resolveHttpNamesForDocuments', () => {
+    it('should return all http adapter names when documentTargets is all', () => {
+      // Arrange
+      const adapters = makeAdapters(['a', 'b']);
+      // Act
+      const result = resolveHttpNamesForDocuments(adapters, 'all');
 
-    expect(resolveHttpNamesForDocuments(adapters, 'all')).toEqual(['a', 'b']);
-  });
+      // Assert
+      expect(result).toEqual(['a', 'b']);
+    });
 
-  it('should filter targets by protocol=http', () => {
-    const adapters = makeAdapters(['a', 'b']);
-
-    expect(
-      resolveHttpNamesForDocuments(adapters, [
+    it('should return only http protocol targets when non-http protocols exist', () => {
+      // Arrange
+      const adapters = makeAdapters(['a', 'b']);
+      // Act
+      const result = resolveHttpNamesForDocuments(adapters, [
         { protocol: 'tcp', names: ['x'] },
         { protocol: 'http', names: ['b'] },
-      ]),
-    ).toEqual(['b']);
-  });
-});
+      ]);
 
-describe('resolveHttpNamesForHosting', () => {
-  it('should return only selected names when httpTargets are valid', () => {
-    const adapters = makeAdapters(['a', 'b']);
-
-    expect(resolveHttpNamesForHosting(adapters, ['b'])).toEqual(['b']);
+      // Assert
+      expect(result).toEqual(['b']);
+    });
   });
 
-  it('should throw when httpTargets contains a missing name', () => {
-    const adapters = makeAdapters(['a']);
+  describe('resolveHttpNamesForHosting', () => {
+    it('should return only selected names when httpTargets are valid', () => {
+      // Arrange
+      const adapters = makeAdapters(['a', 'b']);
+      // Act
+      const result = resolveHttpNamesForHosting(adapters, ['b']);
 
-    expect(() => resolveHttpNamesForHosting(adapters, ['a', 'missing'])).toThrow();
+      // Assert
+      expect(result).toEqual(['b']);
+    });
+
+    it('should throw when httpTargets includes a missing name', () => {
+      // Arrange
+      const adapters = makeAdapters(['a']);
+
+      // Act
+      const act = () => resolveHttpNamesForHosting(adapters, ['a', 'missing']);
+
+      // Assert
+      expect(act).toThrow();
+    });
   });
 });

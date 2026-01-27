@@ -179,6 +179,51 @@ const listChangedCodeFiles = (files: readonly string[]): string[] =>
     return !VERIFY_OXLINT_EXCLUDE.has(normalized);
   });
 
+interface ForbiddenPattern {
+  readonly name: string;
+  readonly re: RegExp;
+}
+
+const assertNoForbiddenSourcePatterns = async (changedCodeFiles: readonly string[]): Promise<void> => {
+  const forbiddenPatterns: ReadonlyArray<ForbiddenPattern> = [
+    { name: 'dynamic-import', re: /\bimport\s*\(/g },
+    { name: 'hardcoded-node_modules-path', re: /\bnode_modules\b/g },
+    { name: 'process-cwd-node_modules', re: /process\.cwd\(\)\s*,\s*['"][^'"]*node_modules/gi },
+  ];
+  const violations: string[] = [];
+
+  for (const filePath of changedCodeFiles) {
+    const file = Bun.file(filePath);
+    const exists = await file.exists();
+
+    if (!exists) {
+      continue;
+    }
+
+    const contents = await file.text();
+
+    for (const entry of forbiddenPatterns) {
+      if (entry.re.test(contents)) {
+        violations.push(`[verify] ❌ Forbidden source pattern (${entry.name}) found in: ${filePath}`);
+      }
+
+      entry.re.lastIndex = 0;
+    }
+  }
+
+  if (violations.length > 0) {
+    for (const line of violations.slice(0, 20)) {
+      console.error(line);
+    }
+
+    if (violations.length > 20) {
+      console.error(`[verify]    ...and ${violations.length - 20} more`);
+    }
+
+    process.exit(1);
+  }
+};
+
 const runVerify = async (): Promise<void> => {
   const files = getChangedFiles();
   const didRunDocVerify = hasMarkdownChanges(files) ? await runDocVerify(files) : false;
@@ -209,6 +254,8 @@ const runVerify = async (): Promise<void> => {
   }
 
   await assertAllowedPaths(files, changedTaskFiles);
+
+  await assertNoForbiddenSourcePatterns(listChangedCodeFiles(files).map(normalizePath));
 
   console.log(`[verify] ✅ ${listExtensions()} changes detected. Running quality gate...`);
 

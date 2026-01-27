@@ -1,20 +1,50 @@
 import { getRuntimeContext } from '@bunner/core';
 
 import type { Doc } from './interfaces';
-import type { ScalarMetadataRegistry } from './types';
+import type { ScalarMetadataRegistry, ScalarRecord, ScalarRegistryKey } from './types';
 
-import { isMap, isRecord } from '../common';
+import { isMap } from '../common';
 import { OpenApiFactory } from '../spec-factory';
 
-export function buildDocsForHttpAdapters(httpAdapterNames: string[], registry?: ScalarMetadataRegistry): Doc[] {
-  const registryValue = registry ?? (getRuntimeContext().metadataRegistry as ScalarMetadataRegistry | undefined);
+type RuntimeMetadataRegistry = ReturnType<typeof getRuntimeContext>['metadataRegistry'];
 
-  if (!registryValue) {
+type RuntimeRegistryValue = NonNullable<RuntimeMetadataRegistry> extends Map<infer _K, infer V> ? V : never;
+
+function isScalarRecord(value: ScalarRecord | RuntimeRegistryValue): value is ScalarRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function resolveRegistry(registry: ScalarMetadataRegistry | undefined): ScalarMetadataRegistry | undefined {
+  if (registry !== undefined) {
+    return registry;
+  }
+
+  const runtimeRegistry: RuntimeMetadataRegistry | ScalarMetadataRegistry = getRuntimeContext().metadataRegistry;
+
+  if (!runtimeRegistry) {
+    return undefined;
+  }
+
+  const converted = new Map<ScalarRegistryKey, ScalarRecord>();
+
+  for (const [key, meta] of runtimeRegistry.entries()) {
+    if (isScalarRecord(meta)) {
+      converted.set(key, meta);
+    }
+  }
+
+  return converted;
+}
+
+export function buildDocsForHttpAdapters(httpAdapterNames: string[], registry?: ScalarMetadataRegistry): Doc[] {
+  const registryValue = resolveRegistry(registry);
+
+  if (registryValue === undefined) {
     throw new Error('Scalar: No Metadata Registry found. Ensure app.init() completes before Scalar binding.');
   }
 
   if (!isMap(registryValue)) {
-    const found = isRecord(registryValue) ? 'object' : typeof registryValue;
+    const found = typeof registryValue;
 
     throw new Error(`Scalar: Invalid Metadata Registry. Expected Map, got: ${found}`);
   }

@@ -1,4 +1,4 @@
-import type { ScalarInput, ScalarList, ScalarNode, ScalarObjectList, ScalarShallowRecord, ScalarValue } from '../scalar/types';
+import type { ScalarInput, ScalarList, ScalarNode, ScalarRecord, ScalarValue } from '../scalar/types';
 
 export interface OpenApiInfo {
   title: string;
@@ -43,11 +43,9 @@ export interface OpenApiDocument {
   components: OpenApiComponents;
 }
 
-export interface OpenApiRecord {
-  [key: string]: ScalarValue | ScalarList | ScalarObjectList | ScalarShallowRecord | OpenApiRecord;
-}
+export interface OpenApiRecord extends ScalarRecord {}
 
-export type OpenApiValue = ScalarValue | ScalarList | ScalarObjectList | ScalarShallowRecord | OpenApiRecord;
+export type OpenApiValue = ScalarValue | ScalarList | OpenApiRecord;
 
 export type OpenApiSchema = OpenApiRecord;
 

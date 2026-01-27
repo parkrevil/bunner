@@ -1,20 +1,17 @@
 import { Injectable } from '@bunner/common';
-import { Logger } from '@bunner/logger';
+
+import type { PostCommentInput } from './comments/interfaces';
+import type { CreatePostDto } from './dto/create-post.dto';
+import type { UpdatePostDto } from './dto/update-post.dto';
+import type { Post } from './interfaces';
 
 import { CommentsService } from './comments';
 import { PostsRepository } from './posts.repository';
-import type { Post } from './interfaces';
-import type { PostCommentInput } from './comments/interfaces';
 
 @Injectable()
 export class PostsService {
-  constructor(
-    private readonly postRepo: PostsRepository,
-    private readonly commentsService: CommentsService,
-    private readonly logger: Logger,
-  ) {
-    this.logger.debug('PostsService initialized');
-  }
+  private readonly postRepo = new PostsRepository();
+  private readonly commentsService = new CommentsService();
 
   findAll(): ReadonlyArray<Post> {
     return this.postRepo.findAll();
@@ -24,11 +21,11 @@ export class PostsService {
     return this.postRepo.findOneById(id);
   }
 
-  create(body: Post): number {
+  create(body: CreatePostDto): number {
     return this.postRepo.create(body);
   }
 
-  update(id: number, data: Post): Post {
+  update(id: number, data: UpdatePostDto): Post {
     return this.postRepo.update(id, data);
   }
 

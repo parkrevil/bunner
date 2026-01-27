@@ -1,5 +1,6 @@
 import type {
   BunnerContainer,
+  BunnerFactory,
   Class,
   Provider,
   ProviderToken,
@@ -14,15 +15,13 @@ import type {
   ConstructorParamMetadata,
   DecoratorArgument,
   DecoratorMetadata,
+  FactoryFn,
   ModuleObject,
+  Token,
   TokenRecord,
 } from './types';
 
 import { getRuntimeContext } from '../runtime/runtime-context';
-
-export type FactoryFn<T = ContainerValue> = (container: Container) => T;
-
-export type Token = ProviderToken;
 
 export class Container implements BunnerContainer {
   private factories = new Map<Token, FactoryFn>();
@@ -34,8 +33,12 @@ export class Container implements BunnerContainer {
     }
   }
 
-  set(token: Token, factory: FactoryFn): void {
-    this.factories.set(token, factory);
+  set<TValue extends ContainerValue = ContainerValue>(token: Token, factory: BunnerFactory<TValue>): void;
+  set(token: Token, factory: FactoryFn): void;
+  set<TValue extends ContainerValue = ContainerValue>(token: Token, factory: BunnerFactory<TValue> | FactoryFn): void {
+    const wrapped: FactoryFn = c => factory(c);
+
+    this.factories.set(token, wrapped);
   }
 
   get(token: Token): ContainerValue {
@@ -114,8 +117,13 @@ export class Container implements BunnerContainer {
         } else if (this.isProviderUseFactory(provider)) {
           factory = c => {
             const args = Array.isArray(provider.inject) ? provider.inject.map((dep: ProviderToken) => c.get(dep)) : [];
+            const result = provider.useFactory(...args);
 
-            return provider.useFactory(...args);
+            if (result === undefined) {
+              return undefined;
+            }
+
+            return result;
           };
         }
       }

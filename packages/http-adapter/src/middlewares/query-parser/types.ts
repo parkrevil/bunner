@@ -1,9 +1,11 @@
 export type QueryValue = string | QueryArray | QueryValueRecord;
 
-export type QueryArray = QueryValue[];
+export interface QueryArray extends Array<QueryValue> {}
 
-export type QueryValueRecord = Record<string, QueryValue>;
+export interface QueryValueRecord {
+  [key: string]: QueryValue;
+}
 
 export type QueryContainer = QueryValueRecord | QueryArray;
 
-export type QueryArrayRecord = QueryArray & Record<string, QueryValue>;
+export type QueryArrayRecord = QueryArray & QueryValueRecord;

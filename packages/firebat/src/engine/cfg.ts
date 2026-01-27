@@ -1,4 +1,4 @@
-import type { EdgeType, NodeId } from './types';
+import { EdgeType, type NodeId } from './types';
 
 const INITIAL_CAPACITY = 1024;
 
@@ -37,14 +37,6 @@ class IntegerCFG {
     this.edgeCursor++;
   }
 
-  private grow(): void {
-    const newEdges = new Int32Array(this.edges.length * 2);
-
-    newEdges.set(this.edges);
-
-    this.edges = newEdges;
-  }
-
   // Iterators or accessors for analysis
   public getEdges(): Int32Array {
     return this.edges.subarray(0, this.edgeCursor * 3);
@@ -61,6 +53,10 @@ class IntegerCFG {
       const from = this.edges[offset];
       const to = this.edges[offset + 1];
 
+      if (from === undefined || to === undefined) {
+        continue;
+      }
+
       if (from < 0 || from >= this.nodeCount) {
         continue;
       }
@@ -72,13 +68,13 @@ class IntegerCFG {
       if (direction === 'forward') {
         const bucket = adj[from];
 
-        if (bucket) {
+        if (bucket !== undefined) {
           bucket.push(to);
         }
       } else {
         const bucket = adj[to];
 
-        if (bucket) {
+        if (bucket !== undefined) {
           bucket.push(from);
         }
       }
@@ -88,6 +84,14 @@ class IntegerCFG {
     // number[][] is fine for iteration, but the prompt stressed "Ad-hoc Integer".
     // Let's return Int32Array[] for "Hyper-Strict".
     return adj.map(arr => new Int32Array(arr));
+  }
+
+  private grow(): void {
+    const newEdges = new Int32Array(this.edges.length * 2);
+
+    newEdges.set(this.edges);
+
+    this.edges = newEdges;
   }
 }
 

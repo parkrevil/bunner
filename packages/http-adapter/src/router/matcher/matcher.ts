@@ -52,9 +52,9 @@ export class Matcher {
   private readonly failFastOnBadEncoding: boolean;
 
   private readonly stack: Int32Array;
-  private paramNames: string[] = new Array(MAX_PARAMS);
-  private paramValues: string[] = new Array(MAX_PARAMS);
-  private paramCache: Array<string | undefined> = new Array(MAX_STACK_DEPTH);
+  private paramNames: string[] = new Array<string>(MAX_PARAMS).fill('');
+  private paramValues: string[] = new Array<string>(MAX_PARAMS).fill('');
+  private paramCache: Array<string | undefined> = new Array<string | undefined>(MAX_STACK_DEPTH).fill(undefined);
   private paramCount = 0;
 
   private readonly decoder = new TextDecoder();
@@ -200,6 +200,10 @@ export class Matcher {
 
     const offset = this.suffixOffsets[segIdx];
 
+    if (offset === undefined) {
+      return this.normalizedPath;
+    }
+
     return this.normalizedPath.substring(offset);
   }
 
@@ -248,26 +252,32 @@ export class Matcher {
 
     while (sp > 0) {
       const framePtr = sp - FRAME_SIZE;
-      const stage = this.stack[framePtr + FRAME_OFFSET_STAGE];
-      const nodeIdx = this.stack[framePtr + FRAME_OFFSET_NODE];
-      const segIdx = this.stack[framePtr + FRAME_OFFSET_SEGMENT];
+      const stage = this.stack[framePtr + FRAME_OFFSET_STAGE] ?? STAGE_ENTER;
+      const nodeIdx = this.stack[framePtr + FRAME_OFFSET_NODE] ?? 0;
+      const segIdx = this.stack[framePtr + FRAME_OFFSET_SEGMENT] ?? 0;
 
       if (stage === STAGE_ENTER) {
         if (segIdx === this.segments.length) {
           const base = nodeIdx * NODE_STRIDE;
-          const methodsPtr = this.nodeBuffer[base + NODE_OFFSET_METHODS_PTR];
+          const methodsPtr = this.nodeBuffer[base + NODE_OFFSET_METHODS_PTR] ?? 0;
 
           if (methodsPtr > 0) {
-            const mask = this.nodeBuffer[base + NODE_OFFSET_METHOD_MASK];
+            const mask = this.nodeBuffer[base + NODE_OFFSET_METHOD_MASK] ?? 0;
 
             if (this.methodCode < 31 && mask & (1 << this.methodCode)) {
-              const meta = this.nodeBuffer[base + NODE_OFFSET_META];
+              const meta = this.nodeBuffer[base + NODE_OFFSET_META] ?? 0;
               const methodCount = (meta & NODE_MASK_METHOD_COUNT) >>> NODE_SHIFT_METHOD_COUNT;
               let ptr = methodsPtr;
 
               for (let i = 0; i < methodCount; i++) {
                 if (this.methodsBuffer[ptr] === this.methodCode) {
-                  return this.methodsBuffer[ptr + 1];
+                  const handlerIndex = this.methodsBuffer[ptr + 1];
+
+                  if (handlerIndex !== undefined) {
+                    return handlerIndex;
+                  }
+
+                  return null;
                 }
 
                 ptr += 2;
@@ -285,7 +295,7 @@ export class Matcher {
         continue;
       } else if (stage === STAGE_STATIC) {
         const base = nodeIdx * NODE_STRIDE;
-        const stateIter = this.stack[framePtr + FRAME_OFFSET_ITERATOR];
+        const stateIter = this.stack[framePtr + FRAME_OFFSET_ITERATOR] ?? 0;
 
         if (stateIter > 0) {
           this.stack[framePtr + FRAME_OFFSET_STAGE] = STAGE_PARAM;
@@ -296,10 +306,10 @@ export class Matcher {
 
         this.stack[framePtr + FRAME_OFFSET_ITERATOR] = 1;
 
-        const staticCount = this.nodeBuffer[base + NODE_OFFSET_STATIC_CHILD_COUNT];
+        const staticCount = this.nodeBuffer[base + NODE_OFFSET_STATIC_CHILD_COUNT] ?? 0;
 
         if (staticCount > 0) {
-          const staticPtr = this.nodeBuffer[base + NODE_OFFSET_STATIC_CHILD_PTR];
+          const staticPtr = this.nodeBuffer[base + NODE_OFFSET_STATIC_CHILD_PTR] ?? 0;
           const segment = this.segments[segIdx];
 
           if (segment === undefined) {
@@ -330,9 +340,9 @@ export class Matcher {
         continue;
       } else if (stage === STAGE_PARAM) {
         const base = nodeIdx * NODE_STRIDE;
-        const meta = this.nodeBuffer[base + NODE_OFFSET_META];
+        const meta = this.nodeBuffer[base + NODE_OFFSET_META] ?? 0;
         const paramCount = (meta & NODE_MASK_PARAM_COUNT) >>> NODE_SHIFT_PARAM_COUNT;
-        const iter = this.stack[framePtr + FRAME_OFFSET_ITERATOR];
+        const iter = this.stack[framePtr + FRAME_OFFSET_ITERATOR] ?? 0;
 
         if (iter >= paramCount) {
           this.stack[framePtr + FRAME_OFFSET_STAGE] = STAGE_WILDCARD;
@@ -342,13 +352,28 @@ export class Matcher {
 
         this.stack[framePtr + FRAME_OFFSET_ITERATOR] = iter + 1;
 
-        const paramPtr = this.nodeBuffer[base + NODE_OFFSET_PARAM_CHILD_PTR];
+        const paramPtr = this.nodeBuffer[base + NODE_OFFSET_PARAM_CHILD_PTR] ?? 0;
         const childIdx = this.paramChildrenBuffer[paramPtr + iter];
+
+        if (childIdx === undefined) {
+          continue;
+        }
+
         const childBase = childIdx * NODE_STRIDE;
         const paramInfoIdx = this.nodeBuffer[childBase + NODE_OFFSET_MATCH_FUNC];
+
+        if (paramInfoIdx === undefined) {
+          continue;
+        }
+
         const pBase = paramInfoIdx * PARAM_ENTRY_STRIDE;
         const nameID = this.paramsBuffer[pBase];
-        const patternID = this.paramsBuffer[pBase + 1];
+
+        if (nameID === undefined) {
+          continue;
+        }
+
+        const patternID = this.paramsBuffer[pBase + 1] ?? 0xffffffff;
         const name = this.getString(nameID);
         const value = this.decodeAndCache(segIdx, decodeParams);
 
@@ -359,7 +384,7 @@ export class Matcher {
         if (patternID !== 0xffffffff) {
           const tester = this.patternTesters[patternID];
 
-          if (tester && !tester(value)) {
+          if (tester?.(value) === false) {
             continue;
           }
         }
@@ -380,11 +405,22 @@ export class Matcher {
         continue;
       } else if (stage === STAGE_WILDCARD) {
         const base = nodeIdx * NODE_STRIDE;
-        const wildcardPtr = this.nodeBuffer[base + NODE_OFFSET_WILDCARD_CHILD_PTR];
+        const wildcardPtr = this.nodeBuffer[base + NODE_OFFSET_WILDCARD_CHILD_PTR] ?? 0;
 
         if (wildcardPtr !== 0) {
           const childBase = wildcardPtr * NODE_STRIDE;
           const nameID = this.nodeBuffer[childBase + NODE_OFFSET_MATCH_FUNC];
+
+          if (nameID === undefined) {
+            sp -= FRAME_SIZE;
+
+            if (sp > 0) {
+              this.paramCount = this.stack[sp - FRAME_SIZE + FRAME_OFFSET_PARAM_BASE] ?? 0;
+            }
+
+            continue;
+          }
+
           const name = this.getString(nameID);
           const value = this.getSuffixValue(segIdx);
 
@@ -393,20 +429,20 @@ export class Matcher {
 
           this.paramCount++;
 
-          const childMethodsPtr = this.nodeBuffer[childBase + NODE_OFFSET_METHODS_PTR];
+          const childMethodsPtr = this.nodeBuffer[childBase + NODE_OFFSET_METHODS_PTR] ?? 0;
 
           if (childMethodsPtr > 0) {
-            const mask = this.nodeBuffer[childBase + NODE_OFFSET_METHOD_MASK];
+            const mask = this.nodeBuffer[childBase + NODE_OFFSET_METHOD_MASK] ?? 0;
 
             if (this.methodCode < 31 && mask & (1 << this.methodCode)) {
-              const meta = this.nodeBuffer[childBase + NODE_OFFSET_META];
+              const meta = this.nodeBuffer[childBase + NODE_OFFSET_META] ?? 0;
               const origin = (meta & NODE_MASK_WILDCARD_ORIGIN) >>> NODE_SHIFT_WILDCARD_ORIGIN;
 
               if (origin === 1 && value.length === 0) {
                 sp -= FRAME_SIZE;
 
                 if (sp > 0) {
-                  this.paramCount = this.stack[sp - FRAME_SIZE + FRAME_OFFSET_PARAM_BASE];
+                  this.paramCount = this.stack[sp - FRAME_SIZE + FRAME_OFFSET_PARAM_BASE] ?? 0;
                 }
 
                 continue;
@@ -417,7 +453,13 @@ export class Matcher {
 
               for (let i = 0; i < count; i++) {
                 if (this.methodsBuffer[ptr] === this.methodCode) {
-                  return this.methodsBuffer[ptr + 1];
+                  const handlerIndex = this.methodsBuffer[ptr + 1];
+
+                  if (handlerIndex !== undefined) {
+                    return handlerIndex;
+                  }
+
+                  return null;
                 }
 
                 ptr += 2;
@@ -429,7 +471,7 @@ export class Matcher {
         sp -= FRAME_SIZE;
 
         if (sp > 0) {
-          this.paramCount = this.stack[sp - FRAME_SIZE + FRAME_OFFSET_PARAM_BASE];
+          this.paramCount = this.stack[sp - FRAME_SIZE + FRAME_OFFSET_PARAM_BASE] ?? 0;
         }
       }
     }
@@ -444,8 +486,14 @@ export class Matcher {
       for (let i = 0; i < staticCount; i++) {
         const sID = this.staticChildrenBuffer[ptr];
 
+        if (sID === undefined) {
+          ptr += 2;
+
+          continue;
+        }
+
         if (this.getString(sID) === segment) {
-          return this.staticChildrenBuffer[ptr + 1];
+          return this.staticChildrenBuffer[ptr + 1] ?? -1;
         }
 
         ptr += 2;
@@ -458,10 +506,15 @@ export class Matcher {
         const mid = (low + high) >>> 1;
         const ptr = staticPtr + (mid << 1);
         const sID = this.staticChildrenBuffer[ptr];
+
+        if (sID === undefined) {
+          return -1;
+        }
+
         const midVal = this.getString(sID);
 
         if (midVal === segment) {
-          return this.staticChildrenBuffer[ptr + 1];
+          return this.staticChildrenBuffer[ptr + 1] ?? -1;
         }
 
         if (midVal < segment) {

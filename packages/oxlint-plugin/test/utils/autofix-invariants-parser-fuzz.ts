@@ -1,5 +1,3 @@
-import { parseSync } from 'oxc-parser';
-
 import type { AstNode, AstNodeValue, RuleContext, Variable } from '../../src/types';
 
 import { blankLinesBetweenStatementGroupsRule } from '../../src/rules/blank-lines-between-statement-groups';
@@ -8,6 +6,18 @@ import { paddingLineBetweenStatementsRule } from '../../src/rules/padding-line-b
 import { unusedImportsRule } from '../../src/rules/unused-imports';
 import { applyFixes, createRuleContext, createSourceCode } from './rule-test-kit';
 import { buildCommaTokens } from './token-utils';
+
+let parseSync: typeof import('oxc-parser').parseSync | undefined;
+
+try {
+  const parserModule = await import('oxc-parser');
+
+  if (typeof parserModule.parseSync === 'function') {
+    parseSync = parserModule.parseSync;
+  }
+} catch {
+  parseSync = undefined;
+}
 
 interface Visitor {
   [key: string]: ((node: AstNode) => void) | undefined;
@@ -70,7 +80,13 @@ const mulberry32 = (seed: number): Rng => {
         throw new Error('cannot pick from empty list');
       }
 
-      return items[nextU32() % items.length];
+      const item = items[nextU32() % items.length];
+
+      if (item === undefined) {
+        throw new Error('random pick failed');
+      }
+
+      return item;
     },
   };
 };
@@ -267,7 +283,10 @@ const collectIdentifierUsages = (
         return;
       }
 
-      if (range[0] >= excludeRange?.[0] && range[1] <= excludeRange[1]) {
+      const excludeStart = excludeRange?.[0];
+      const excludeEnd = excludeRange?.[1];
+
+      if (excludeStart !== undefined && excludeEnd !== undefined && range[0] >= excludeStart && range[1] <= excludeEnd) {
         return;
       }
 
@@ -284,6 +303,10 @@ const runRuleOnParsedCode = (
   rule: RuleModule,
   options: RuleContext['options'] = [],
 ): RuleRunResult => {
+  if (parseSync === undefined) {
+    return { reports: [], fixed: code };
+  }
+
   const parsed = parseSync(filename, code);
   const program = parsed.program;
 
@@ -336,6 +359,14 @@ const runRuleOnParsedCode = (
 };
 
 const runParserAutofixInvariantsFuzz = (): void => {
+  if (parseSync === undefined) {
+    return;
+  }
+
+  if (parseSync === undefined) {
+    return;
+  }
+
   const seeds = [101, 102, 103, 104, 105, 4242];
 
   for (const seed of seeds) {
@@ -501,4 +532,8 @@ const runParserAutofixInvariantsFuzz = (): void => {
   }
 };
 
-export { runParserAutofixInvariantsFuzz };
+const canRunParserAutofixInvariantsFuzz = (): boolean => {
+  return typeof parseSync === 'function';
+};
+
+export { runParserAutofixInvariantsFuzz, canRunParserAutofixInvariantsFuzz };

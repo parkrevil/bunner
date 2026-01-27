@@ -9,15 +9,15 @@ export class Node {
 
   staticChildren: StaticChildMap = new StaticChildMap();
   paramChildren: Node[] = [];
-  wildcardChild?: Node;
+  wildcardChild: Node | undefined;
   methods: RouteMethods = { byMethod: new Map() };
 
-  pattern?: RegExp;
-  patternSource?: string;
-  patternTester?: (value: string) => boolean;
-  segmentParts?: string[];
-  wildcardOrigin?: 'star' | 'multi' | 'zero';
-  paramSortScore?: number;
+  pattern: RegExp | undefined;
+  patternSource: string | undefined;
+  patternTester: ((value: string) => boolean) | undefined;
+  segmentParts: string[] | undefined;
+  wildcardOrigin: 'star' | 'multi' | 'zero' | undefined;
+  paramSortScore: number | undefined;
 
   constructor(kind: NodeKind, segment: string) {
     this.kind = kind;

@@ -1,20 +1,15 @@
-export interface TypeInfo {
-  typeName: string;
-  typeArgs?: string[];
-  isUnion?: boolean;
-  unionTypes?: TypeInfo[];
-  isArray?: boolean;
-  isEnum?: boolean;
-  literals?: (string | number | boolean)[];
-  items?: TypeInfo;
-}
+import type { AnalyzerProgram, AnalyzerValue, AnalyzerValueRecord, NodeRecord, TypeInfo } from './types';
 
-type NodeRecord = Record<string, unknown> & {
-  readonly type: string;
+const isAnalyzerValueArray = (value: AnalyzerValue): value is AnalyzerValue[] => {
+  return Array.isArray(value);
+};
+
+const isRecordCandidate = (value: AnalyzerValue): value is AnalyzerValueRecord | AnalyzerProgram => {
+  return typeof value === 'object' && value !== null && !isAnalyzerValueArray(value);
 };
 
 export class AstTypeResolver {
-  resolve(typeNode: unknown): TypeInfo {
+  resolve(typeNode: AnalyzerValue): TypeInfo {
     const node = this.asNode(typeNode);
 
     if (!node) {
@@ -33,7 +28,13 @@ export class AstTypeResolver {
         typeArgs.push(resolved.typeName);
       }
 
-      return { typeName, typeArgs: typeArgs.length > 0 ? typeArgs : undefined };
+      const info: TypeInfo = { typeName };
+
+      if (typeArgs.length > 0) {
+        info.typeArgs = typeArgs;
+      }
+
+      return info;
     }
 
     if (node.type === 'TSArrayType') {
@@ -84,11 +85,17 @@ export class AstTypeResolver {
     if (node.type === 'TSUnionType') {
       const typeNodes = this.getArray(node, 'types');
       const types = typeNodes.map(t => this.resolve(t));
-      const allLiterals = types.length > 0 && types.every(t => t.literals?.length > 0);
+      const allLiterals = types.length > 0 && types.every(t => Array.isArray(t.literals) && t.literals.length > 0);
 
       if (allLiterals) {
+        const firstType = types[0];
+
+        if (!firstType) {
+          return { typeName: 'any' };
+        }
+
         return {
-          typeName: types[0]!.typeName,
+          typeName: firstType.typeName,
           isUnion: true,
           literals: types.flatMap((t: TypeInfo) => t.literals ?? []),
         };
@@ -106,7 +113,7 @@ export class AstTypeResolver {
     return { typeName: 'any' };
   }
 
-  private extractEntityName(nodeValue: unknown): string {
+  private extractEntityName(nodeValue: AnalyzerValue): string {
     const node = this.asNode(nodeValue);
 
     if (!node) {
@@ -122,7 +129,7 @@ export class AstTypeResolver {
       const rightNode = this.asNode(node.right);
       const right = rightNode ? this.getString(rightNode, 'name') : null;
 
-      if (!right) {
+      if (right === null || right.length === 0) {
         return 'unknown';
       }
 
@@ -132,10 +139,10 @@ export class AstTypeResolver {
     return 'unknown';
   }
 
-  private asNode(value: unknown): NodeRecord | null {
+  private asNode(value: AnalyzerValue): NodeRecord | null {
     const record = this.getRecord(value);
 
-    if (!record) {
+    if (record === null) {
       return null;
     }
 
@@ -145,18 +152,28 @@ export class AstTypeResolver {
       return null;
     }
 
-    return record as NodeRecord;
+    return { ...record, type };
   }
 
-  private getRecord(value: unknown): Record<string, unknown> | null {
-    if (!value || typeof value !== 'object') {
+  private getRecord(value: AnalyzerValue): AnalyzerValueRecord | null {
+    if (!isRecordCandidate(value)) {
       return null;
     }
 
-    return value as Record<string, unknown>;
+    if (this.isProgram(value)) {
+      return null;
+    }
+
+    return value;
   }
 
-  private getString(node: Record<string, unknown>, key: string): string | null {
+  private isProgram(value: AnalyzerValueRecord | AnalyzerProgram): value is AnalyzerProgram {
+    const typeValue = value.type;
+
+    return typeof typeValue === 'string' && typeValue === 'Program';
+  }
+
+  private getString(node: AnalyzerValueRecord, key: string): string | null {
     const value = node[key];
 
     if (typeof value !== 'string') {
@@ -166,10 +183,10 @@ export class AstTypeResolver {
     return value;
   }
 
-  private getArray(node: Record<string, unknown>, key: string): unknown[] {
+  private getArray(node: AnalyzerValueRecord, key: string): AnalyzerValue[] {
     const value = node[key];
 
-    if (!Array.isArray(value)) {
+    if (!isAnalyzerValueArray(value)) {
       return [];
     }
 

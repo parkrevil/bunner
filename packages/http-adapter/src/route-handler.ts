@@ -1,4 +1,4 @@
-import type { BunnerContainer, ProviderToken } from '@bunner/common';
+import type { BunnerContainer, BunnerValue, ProviderToken } from '@bunner/common';
 
 import { BunnerErrorFilter, BunnerMiddleware } from '@bunner/common';
 import { Logger } from '@bunner/logger';
@@ -19,6 +19,7 @@ import type {
   InternalRouteDefinition,
   LazyParamTypeFactory,
   MatchResult,
+  MetadataRegistryKey,
   MethodMetadata,
   ParamTypeReference,
   RouteHandlerArgument,
@@ -27,6 +28,7 @@ import type {
   RouteParamKind,
   RouteParamType,
   RouteParamValue,
+  SystemError,
   TokenCarrier,
   TokenRecord,
 } from './types';
@@ -36,7 +38,7 @@ import { Router } from './router';
 
 export class RouteHandler {
   private container: BunnerContainer;
-  private metadataRegistry: Map<ControllerConstructor, ClassMetadata>;
+  private metadataRegistry: Map<MetadataRegistryKey, ClassMetadata>;
   private scopedKeys: Map<ProviderToken, string>;
   private router: Router;
   private readonly logger = new Logger(RouteHandler.name);
@@ -44,7 +46,7 @@ export class RouteHandler {
 
   constructor(
     container: BunnerContainer,
-    metadataRegistry: Map<ControllerConstructor, ClassMetadata>,
+    metadataRegistry: Map<MetadataRegistryKey, ClassMetadata>,
     scopedKeys: Map<ProviderToken, string> = new Map(),
     routerOptions?: RouterOptions,
   ) {
@@ -72,7 +74,13 @@ export class RouteHandler {
     this.logger.debug('🔍 Registering routes from metadata...');
 
     for (const [targetClass, meta] of this.metadataRegistry.entries()) {
-      const controllerDec = (meta.decorators ?? []).find(d => d.name === 'RestController');
+      if (!this.isControllerConstructor(targetClass)) {
+        continue;
+      }
+
+      const controllerDec = (meta.decorators ?? []).find(
+        d => d.name === 'RestController',
+      );
 
       if (controllerDec) {
         this.logger.debug(`FOUND Controller: ${meta.className}`);
@@ -282,8 +290,8 @@ export class RouteHandler {
     return typeof value === 'object' && value !== null;
   }
 
-  private isControllerConstructor(value: ProviderToken): value is ControllerConstructor {
-    return typeof value === 'function';
+  private isControllerConstructor(value: DecoratorArgument | MetadataRegistryKey): value is ControllerConstructor {
+    return typeof value === 'function' && !this.isErrorConstructor(value);
   }
 
   private resolveHandler(instance: ContainerInstance, methodName: string): RouteHandlerFunction {
@@ -297,8 +305,10 @@ export class RouteHandler {
       throw new Error(`[RouteHandler] Controller method not found: ${methodName}`);
     }
 
+    const handler = candidate;
+
     return (...args: readonly RouteHandlerArgument[]): RouteHandlerResult | Promise<RouteHandlerResult> =>
-      candidate.call(instance, ...args);
+      handler.apply(instance, [...args]);
   }
 
   private isTokenCarrier(value: DecoratorArgument): value is TokenCarrier {
@@ -342,7 +352,11 @@ export class RouteHandler {
       return token.token;
     }
 
-    if (typeof token === 'string' || typeof token === 'symbol' || typeof token === 'function') {
+    if (typeof token === 'string' || typeof token === 'symbol') {
+      return token;
+    }
+
+    if (typeof token === 'function' && !this.isErrorConstructor(token)) {
       return token;
     }
 
@@ -360,7 +374,7 @@ export class RouteHandler {
   }
 
   private resolveControllerConstructor(token: DecoratorArgument): ControllerConstructor | undefined {
-    if (typeof token === 'function' && this.isControllerConstructor(token)) {
+    if (this.isControllerConstructor(token)) {
       return token;
     }
 
@@ -410,12 +424,39 @@ export class RouteHandler {
 
       return this.tryGetFromContainer(token);
     });
+    const ctorArgs = deps.map(dep => (this.isBunnerValue(dep) ? dep : undefined));
 
     try {
-      return new constructor(...deps);
+      return new constructor(...ctorArgs);
     } catch {
       return undefined;
     }
+  }
+
+  private isBunnerValue(value: BunnerValue | ContainerInstance): value is BunnerValue {
+    return (
+      value === null ||
+      value === undefined ||
+      typeof value === 'string' ||
+      typeof value === 'number' ||
+      typeof value === 'boolean' ||
+      typeof value === 'bigint' ||
+      typeof value === 'symbol' ||
+      typeof value === 'function' ||
+      typeof value === 'object'
+    );
+  }
+
+  private isErrorConstructor(value: DecoratorArgument): value is ErrorConstructor {
+    if (typeof value !== 'function') {
+      return false;
+    }
+
+    if (!('prototype' in value)) {
+      return false;
+    }
+
+    return value.prototype instanceof Error;
   }
 
   private tryGetFromContainer(token: DecoratorArgument): ContainerInstance {
@@ -524,7 +565,7 @@ export class RouteHandler {
     return value instanceof BunnerMiddleware;
   }
 
-  private isBunnerErrorFilter(value: ContainerInstance): value is BunnerErrorFilter {
+  private isBunnerErrorFilter(value: ContainerInstance): value is BunnerErrorFilter<SystemError> {
     return value instanceof BunnerErrorFilter;
   }
 
@@ -659,7 +700,7 @@ export class RouteHandler {
     targetClass: ControllerConstructor,
     method: MethodMetadata,
     classMeta: ClassMetadata,
-  ): BunnerErrorFilter[] {
+  ): Array<BunnerErrorFilter<SystemError>> {
     const tokens: DecoratorArgument[] = [];
     const methodDecs = (method.decorators ?? []).filter((decorator: DecoratorMetadata) => decorator.name === 'UseErrorFilters');
 
@@ -691,7 +732,7 @@ export class RouteHandler {
 
       return true;
     });
-    const resolved: BunnerErrorFilter[] = [];
+    const resolved: Array<BunnerErrorFilter<SystemError>> = [];
 
     for (const token of dedupedTokens) {
       if (token === null || token === undefined) {

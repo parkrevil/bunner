@@ -18,13 +18,19 @@ export function matchStaticParts(parts: readonly string[], segments: readonly st
 export function splitStaticChain(node: Node, splitIndex: number): void {
   const parts = node.segmentParts;
 
-  if (!parts || splitIndex <= 0 || splitIndex >= parts.length) {
+  if (parts === undefined || splitIndex <= 0 || splitIndex >= parts.length) {
     return;
   }
 
   const prefixParts = parts.slice(0, splitIndex);
   const suffixParts = parts.slice(splitIndex);
-  const suffixNode = acquireNode(NodeKind.Static, suffixParts.length > 1 ? suffixParts.join('/') : suffixParts[0]!);
+  const firstSuffix = suffixParts[0];
+
+  if (firstSuffix === undefined || firstSuffix.length === 0) {
+    return;
+  }
+
+  const suffixNode = acquireNode(NodeKind.Static, suffixParts.length > 1 ? suffixParts.join('/') : firstSuffix);
 
   if (suffixParts.length > 1) {
     suffixNode.segmentParts = [...suffixParts];
@@ -34,11 +40,18 @@ export function splitStaticChain(node: Node, splitIndex: number): void {
   suffixNode.paramChildren = node.paramChildren;
   suffixNode.wildcardChild = node.wildcardChild;
   suffixNode.methods = node.methods;
-  node.staticChildren = StaticChildMap.fromEntries([[suffixParts[0]!, suffixNode]]);
+  node.staticChildren = StaticChildMap.fromEntries([[firstSuffix, suffixNode]]);
   node.paramChildren = [];
   node.wildcardChild = undefined;
   node.methods = { byMethod: new Map() };
-  node.segment = prefixParts.length > 1 ? prefixParts.join('/') : prefixParts[0]!;
+
+  const firstPrefix = prefixParts[0];
+
+  if (firstPrefix === undefined || firstPrefix.length === 0) {
+    return;
+  }
+
+  node.segment = prefixParts.length > 1 ? prefixParts.join('/') : firstPrefix;
   node.segmentParts = prefixParts.length > 1 ? prefixParts : undefined;
 }
 

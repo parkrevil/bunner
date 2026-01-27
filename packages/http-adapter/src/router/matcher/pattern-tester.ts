@@ -16,11 +16,13 @@ function buildPatternTester(
   const raw = source ?? '<anonymous>';
 
   const wrap = (tester: (value: string) => boolean): ((value: string) => boolean) => {
-    if (!options?.maxExecutionMs || options.maxExecutionMs <= 0) {
+    const maxExecutionMs = options?.maxExecutionMs;
+
+    if (maxExecutionMs === undefined || maxExecutionMs <= 0) {
       return tester;
     }
 
-    const limit = options.maxExecutionMs;
+    const limit = maxExecutionMs;
 
     return value => {
       const start = now();
@@ -28,17 +30,20 @@ function buildPatternTester(
       const duration = now() - start;
 
       if (duration > limit) {
-        const shouldThrow = options.onTimeout?.(raw, duration);
+        const shouldThrow = options?.onTimeout?.(raw, duration);
 
         if (shouldThrow === false) {
           return false;
         }
 
-        const timeoutError: RouteRegexTimeoutError = new Error(
+        const timeoutError = new Error(
           `Route parameter regex '${raw}' exceeded ${limit} ms(took ${duration.toFixed(3)}ms)`,
-        );
+        ) as RouteRegexTimeoutError;
 
-        (timeoutError as any)[ROUTE_REGEX_TIMEOUT] = true;
+        Object.defineProperty(timeoutError, ROUTE_REGEX_TIMEOUT, {
+          value: true,
+          configurable: true,
+        });
 
         throw timeoutError;
       }
@@ -47,7 +52,7 @@ function buildPatternTester(
     };
   };
 
-  if (!source) {
+  if (source === undefined || source.length === 0) {
     return wrap(value => compiled.test(value));
   }
 
@@ -71,7 +76,7 @@ function buildPatternTester(
 }
 
 function isAllDigits(value: string): boolean {
-  if (!value.length) {
+  if (value.length === 0) {
     return false;
   }
 

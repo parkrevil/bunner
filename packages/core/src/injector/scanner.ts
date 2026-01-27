@@ -113,8 +113,13 @@ export class BunnerScanner {
       } else if (this.isProviderUseFactory(provider)) {
         factory = (c: Container) => {
           const args = Array.isArray(provider.inject) ? provider.inject.map(dep => c.get(dep)) : [];
+          const result = provider.useFactory(...args);
 
-          return provider.useFactory(...args);
+          if (result === undefined) {
+            return undefined;
+          }
+
+          return result;
         };
       } else if (this.isProviderUseClass(provider)) {
         factory = (c: Container) => new provider.useClass(...this.resolveDepsFor(provider.useClass, c));

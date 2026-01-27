@@ -1,6 +1,14 @@
 import { dirname, relative } from 'path';
 
-import type { ManifestJsonParams } from './interfaces';
+import type { AnalyzerValue, AnalyzerValueRecord } from '../analyzer/types';
+import type {
+  ManifestDiNode,
+  ManifestJsonModel,
+  ManifestJsonParams,
+  ManifestModuleDescriptor,
+  ManifestProviderToken,
+  MetadataClassEntry,
+} from './interfaces';
 
 import { type AdapterStaticSpec, type ClassMetadata, ModuleGraph, type ModuleNode } from '../analyzer';
 import { compareCodePoint, PathResolver } from '../common';
@@ -13,7 +21,7 @@ export class ManifestGenerator {
 
   private metadataGen = new MetadataGenerator();
 
-  generate(graph: ModuleGraph, classes: { metadata: ClassMetadata; filePath: string }[], outputDir: string): string {
+  generate(graph: ModuleGraph, classes: MetadataClassEntry[], outputDir: string): string {
     const registry = new ImportRegistry(outputDir);
     const sortedClasses = [...classes].sort((a, b) => {
       const nameDiff = compareCodePoint(a.metadata.className, b.metadata.className);
@@ -146,7 +154,7 @@ export const scopedKeysMap = createScopedKeysMap();
     return JSON.stringify(manifestModel, null, 2);
   }
 
-  private buildJsonModel(params: ManifestJsonParams): Record<string, unknown> {
+  private buildJsonModel(params: ManifestJsonParams): ManifestJsonModel {
     const { graph, projectRoot, source, resolvedConfig, adapterStaticSpecs, handlerIndex } = params;
     const sortedModules = Array.from(graph.modules.values()).sort((a, b) => compareCodePoint(a.filePath, b.filePath));
     const moduleDescriptors = sortedModules.map(node => {
@@ -161,27 +169,37 @@ export const scopedKeysMap = createScopedKeysMap();
         file,
       };
     });
-    const sortedModuleDescriptors = moduleDescriptors.sort((left, right) => compareCodePoint(left.id, right.id));
-    const diNodes: Array<Record<string, unknown>> = [];
+    const sortedModuleDescriptors: ManifestModuleDescriptor[] = moduleDescriptors.sort((left, right) =>
+      compareCodePoint(left.id, right.id),
+    );
+    const diNodes: ManifestDiNode[] = [];
 
-    const extractTokenName = (token: unknown): string | undefined => {
+    const isRecordValue = (value: AnalyzerValue | ClassMetadata): value is AnalyzerValueRecord => {
+      return typeof value === 'object' && value !== null && !Array.isArray(value);
+    };
+
+    const isAnalyzerValueArray = (value: AnalyzerValue | undefined): value is AnalyzerValue[] => {
+      return Array.isArray(value);
+    };
+
+    const extractTokenName = (token: ManifestProviderToken): string | undefined => {
       if (typeof token === 'string') {
         return token;
       }
 
       if (typeof token === 'function') {
-        return token.name;
+        return token.name.length > 0 ? token.name : undefined;
       }
 
       if (typeof token === 'symbol') {
         return token.description ?? token.toString();
       }
 
-      if (!token || typeof token !== 'object') {
+      if (!isRecordValue(token)) {
         return undefined;
       }
 
-      const record = token as Record<string, unknown>;
+      const record = token;
 
       if (typeof record.__bunner_ref === 'string') {
         return record.__bunner_ref;
@@ -194,20 +212,18 @@ export const scopedKeysMap = createScopedKeysMap();
       return undefined;
     };
 
-    const isClassMetadata = (value: unknown): value is ClassMetadata => {
-      const record = value as Record<string, unknown> | null;
-
-      if (!record) {
+    const isClassMetadata = (value: AnalyzerValue | ClassMetadata): value is ClassMetadata => {
+      if (!isRecordValue(value)) {
         return false;
       }
 
-      const constructorParams = record.constructorParams;
+      const constructorParams = value.constructorParams;
 
       return Array.isArray(constructorParams);
     };
 
-    const extractDeps = (metadata: unknown): string[] => {
-      if (!metadata) {
+    const extractDeps = (metadata: AnalyzerValue | ClassMetadata | undefined): string[] => {
+      if (metadata === undefined) {
         return [];
       }
 
@@ -215,9 +231,10 @@ export const scopedKeysMap = createScopedKeysMap();
         return metadata.constructorParams
           .map(param => {
             const injectDec = param.decorators.find(d => d.name === 'Inject');
+            const injectArgs = injectDec?.arguments;
 
-            if (injectDec?.arguments.length > 0) {
-              return extractTokenName(injectDec.arguments[0]);
+            if (Array.isArray(injectArgs) && injectArgs.length > 0) {
+              return extractTokenName(injectArgs[0]);
             }
 
             return extractTokenName(param.type);
@@ -225,9 +242,9 @@ export const scopedKeysMap = createScopedKeysMap();
           .filter((value): value is string => typeof value === 'string');
       }
 
-      const record = metadata as Record<string, unknown> | null;
+      const record = isRecordValue(metadata) ? metadata : null;
 
-      if (record && Array.isArray(record.inject)) {
+      if (record && isAnalyzerValueArray(record.inject)) {
         return record.inject.map(entry => extractTokenName(entry)).filter((value): value is string => typeof value === 'string');
       }
 
@@ -268,12 +285,16 @@ export const scopedKeysMap = createScopedKeysMap();
       });
     });
 
-    const sortedDiNodes = diNodes.sort((a, b) => compareCodePoint(String(a.id), String(b.id)));
+    const sortedDiNodes = diNodes.sort((a, b) => compareCodePoint(a.id, b.id));
     const sortedAdapterStaticSpecs: Record<string, AdapterStaticSpec> = {};
     const sortedAdapterIds = Object.keys(adapterStaticSpecs).sort(compareCodePoint);
 
     sortedAdapterIds.forEach(adapterId => {
-      sortedAdapterStaticSpecs[adapterId] = adapterStaticSpecs[adapterId]!;
+      const spec = adapterStaticSpecs[adapterId];
+
+      if (spec) {
+        sortedAdapterStaticSpecs[adapterId] = spec;
+      }
     });
 
     const sortedHandlerIndex = [...handlerIndex].sort((a, b) => compareCodePoint(a.id, b.id));

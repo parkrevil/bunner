@@ -12,14 +12,10 @@ import type {
   Provider,
   ProviderToken,
 } from '@bunner/common';
+
 import type { Container } from '../injector/container';
 import type { BunnerApplication } from './bunner-application';
-import type {
-  ApplicationOptionValue,
-  BootstrapConfigLoader,
-  EntryModule,
-  ModuleMetadataValue,
-} from './types';
+import type { ApplicationOptionValue, BootstrapConfigLoader, EntryModule, ModuleMetadataValue } from './types';
 
 export type { BunnerApplicationNormalizedOptions } from './types';
 
@@ -66,6 +62,7 @@ export interface ConfigurableAdapter extends BunnerAdapter {
 }
 
 export interface BunnerApplicationContext extends Context {
+  container: Container;
   entryModule: EntryModule;
 }
 

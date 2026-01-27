@@ -1,21 +1,43 @@
 import { basename, dirname } from 'path';
 
 import type { ClassMetadata } from '../interfaces';
+import type { AnalyzerValue, AnalyzerValueRecord } from '../types';
 import type { CyclePath, ProviderRef, FileAnalysis } from './interfaces';
 
 import { compareCodePoint } from '../../common';
 import { ModuleDiscovery } from '../module-discovery';
 import { ModuleNode } from './module-node';
 
-type InjectableOptions = {
-  readonly visibility?: string;
-  readonly lifetime?: string;
+type ProviderMetadata = AnalyzerValue | ClassMetadata;
+
+interface InjectableOptions {
+  visibility?: string;
+  lifetime?: string;
+}
+
+interface ClassDefinition {
+  metadata: ClassMetadata;
+  filePath: string;
+}
+
+type ProviderTokenValue = AnalyzerValue | ClassMetadata | CallableFunction | symbol;
+
+const isRecordValue = (value: ProviderTokenValue | ProviderMetadata): value is AnalyzerValueRecord => {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+};
+
+const isAnalyzerValueArray = (value: AnalyzerValue): value is AnalyzerValue[] => {
+  return Array.isArray(value);
+};
+
+const isNonEmptyString = (value: string | undefined): value is string => {
+  return typeof value === 'string' && value.length > 0;
 };
 
 export class ModuleGraph {
   public modules: Map<string, ModuleNode> = new Map();
   public classMap: Map<string, ModuleNode> = new Map();
-  public classDefinitions: Map<string, { metadata: ClassMetadata; filePath: string }> = new Map();
+  public classDefinitions: Map<string, ClassDefinition> = new Map();
 
   constructor(
     private fileMap: Map<string, FileAnalysis>,
@@ -41,7 +63,7 @@ export class ModuleGraph {
       const moduleFile = this.fileMap.get(modulePath);
       const rawDef = moduleFile?.moduleDefinition;
 
-      if (rawDef?.nameDeclared && !rawDef?.name) {
+      if (rawDef?.nameDeclared === true && !isNonEmptyString(rawDef.name)) {
         throw new Error(`[Bunner AOT] Module name must be a statically determinable string literal (${modulePath}).`);
       }
 
@@ -64,7 +86,10 @@ export class ModuleGraph {
 
       node.filePath = modulePath;
       node.name = moduleName;
-      node.moduleDefinition = rawDef;
+
+      if (rawDef !== undefined) {
+        node.moduleDefinition = rawDef;
+      }
 
       this.modules.set(modulePath, node);
 
@@ -107,7 +132,7 @@ export class ModuleGraph {
       });
 
       if (rawDef?.providers) {
-        rawDef.providers.forEach((p: unknown) => {
+        rawDef.providers.forEach((p: ProviderTokenValue) => {
           const record = this.asRecord(p);
 
           if (record && typeof record.__bunner_spread === 'string') {
@@ -131,12 +156,23 @@ export class ModuleGraph {
               const metaRecord = this.asRecord(ref.metadata);
 
               if (metaRecord && typeof metaRecord.__bunner_ref === 'string') {
-                ref.metadata = prev?.metadata;
-                ref.filePath = prev?.filePath;
+                const prevMeta = prev?.metadata;
+                const prevFilePath = prev?.filePath;
+                const prevScope = prev?.scope;
 
-                ref.scope ??= prev?.scope;
+                if (prevMeta !== undefined) {
+                  ref.metadata = prevMeta;
+                }
 
-                if (prev?.isExported) {
+                if (prevFilePath !== undefined) {
+                  ref.filePath = prevFilePath;
+                }
+
+                if (ref.scope === undefined && prevScope !== undefined) {
+                  ref.scope = prevScope;
+                }
+
+                if (prev?.isExported === true) {
                   ref.isExported = true;
                 }
               }
@@ -264,7 +300,7 @@ export class ModuleGraph {
   private validateVisibilityAndScope() {
     this.modules.forEach(node => {
       node.providers.forEach(provider => {
-        if (!provider.metadata) {
+        if (provider.metadata === undefined) {
           return;
         }
 
@@ -307,7 +343,7 @@ export class ModuleGraph {
   }
 
   private extractDeps(provider: ProviderRef): string[] {
-    if (!provider.metadata) {
+    if (provider.metadata === undefined) {
       return [];
     }
 
@@ -316,7 +352,7 @@ export class ModuleGraph {
         .map(p => {
           const injectDec = p.decorators.find(d => d.name === 'Inject');
 
-          if (injectDec) {
+          if (injectDec !== undefined) {
             const token = injectDec.arguments[0];
 
             if (typeof token === 'string') {
@@ -337,14 +373,14 @@ export class ModuleGraph {
 
     const record = this.asRecord(provider.metadata);
 
-    if (record && Array.isArray(record.inject)) {
+    if (record && isAnalyzerValueArray(record.inject)) {
       return record.inject.map(v => this.extractTokenName(v)).filter(v => v !== 'UNKNOWN');
     }
 
     return [];
   }
 
-  private normalizeProvider(p: unknown): ProviderRef {
+  private normalizeProvider(p: ProviderTokenValue): ProviderRef {
     let token = 'UNKNOWN';
     const isExported = false;
     const scope = 'singleton';
@@ -358,10 +394,12 @@ export class ModuleGraph {
       token = record.__bunner_ref;
     }
 
-    return { token, metadata: p, isExported, scope };
+    const metadata = this.isClassMetadata(p) ? p : (record ?? undefined);
+
+    return { token, metadata, isExported, scope };
   }
 
-  private extractTokenName(t: unknown): string {
+  private extractTokenName(t: ProviderTokenValue): string {
     if (typeof t === 'string') {
       return t;
     }
@@ -428,12 +466,12 @@ export class ModuleGraph {
     return a.length - b.length;
   }
 
-  private isClassMetadata(value: unknown): value is ClassMetadata {
-    if (!value || typeof value !== 'object') {
+  private isClassMetadata(value: ProviderMetadata | ProviderTokenValue): value is ClassMetadata {
+    if (!isRecordValue(value)) {
       return false;
     }
 
-    const record = value as Record<string, unknown>;
+    const record = value;
 
     return (
       typeof record.className === 'string' &&
@@ -445,24 +483,33 @@ export class ModuleGraph {
     );
   }
 
-  private parseInjectableOptions(value: unknown): InjectableOptions {
-    const record = this.asRecord(value);
+  private parseInjectableOptions(value: ProviderMetadata | undefined): InjectableOptions {
+    const record = value === undefined ? null : this.asRecord(value);
 
-    if (!record) {
+    if (record === null) {
       return {};
     }
 
     const visibility = typeof record.visibility === 'string' ? record.visibility : undefined;
     const lifetime = typeof record.lifetime === 'string' ? record.lifetime : undefined;
+    const options: InjectableOptions = {};
 
-    return { visibility, lifetime };
+    if (visibility !== undefined) {
+      options.visibility = visibility;
+    }
+
+    if (lifetime !== undefined) {
+      options.lifetime = lifetime;
+    }
+
+    return options;
   }
 
-  private asRecord(value: unknown): Record<string, unknown> | null {
-    if (!value || typeof value !== 'object') {
+  private asRecord(value: ProviderMetadata | ProviderTokenValue): AnalyzerValueRecord | null {
+    if (!isRecordValue(value)) {
       return null;
     }
 
-    return value as Record<string, unknown>;
+    return value;
   }
 }

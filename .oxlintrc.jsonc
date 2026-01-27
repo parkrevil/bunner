@@ -298,5 +298,14 @@
     "builtin": true,
   },
   "globals": {},
-  "ignorePatterns": ["node_modules", "**/node_modules/**", "**/*.d.ts", ".bunner", "**/.bunner/**", "dist", "**/dist/**", ".dependency-cruiser.cjs"],
+  "ignorePatterns": [
+    "node_modules",
+    "**/node_modules/**",
+    "**/*.d.ts",
+    ".bunner",
+    "**/.bunner/**",
+    "dist",
+    "**/dist/**",
+    ".dependency-cruiser.cjs",
+  ],
 }

@@ -1,36 +1,12 @@
 import { describe, expect, it } from 'bun:test';
 
-import { isRecord } from './common/guards';
+import type { OpenApiDocument, OpenApiOperation, OpenApiPathItem, OpenApiRecord } from './openapi';
+import type { ScalarMetadataRegistry, ScalarNode, ScalarRecord, ScalarRegistryKey } from './scalar/types';
+
 import { OpenApiFactory } from './spec-factory';
 
-type DecoratorMeta = { name: string; arguments: unknown[] };
-
-type RegistryMeta = {
-  className: string;
-  decorators: DecoratorMeta[];
-  methods: Array<{
-    name: string;
-    decorators: DecoratorMeta[];
-    parameters: Array<{
-      name: string;
-      type?: unknown;
-      decorators: DecoratorMeta[];
-    }>;
-  }>;
-  properties?: Array<{
-    name: string;
-    type?: unknown;
-    isClass?: boolean;
-    isArray?: boolean;
-    items?: { typeName?: unknown };
-    decorators?: DecoratorMeta[];
-  }>;
-};
-
-function createRegistryForUsersController(): Map<unknown, unknown> {
-  class CreateUserDto {}
-
-  const controllerMeta: RegistryMeta = {
+function createRegistryForUsersController(): ScalarMetadataRegistry {
+  const controllerMeta: ScalarRecord = {
     className: 'UsersController',
     decorators: [
       { name: 'Controller', arguments: ['/users'] },
@@ -53,13 +29,13 @@ function createRegistryForUsersController(): Map<unknown, unknown> {
         name: 'create',
         decorators: [
           { name: 'Post', arguments: ['/'] },
-          { name: 'ApiCreatedResponse', arguments: [{ description: 'Created', type: CreateUserDto }] },
+          { name: 'ApiCreatedResponse', arguments: [{ description: 'Created', type: 'CreateUserDto' }] },
         ],
-        parameters: [{ name: 'body', type: CreateUserDto, decorators: [{ name: 'Body', arguments: [] }] }],
+        parameters: [{ name: 'body', type: 'CreateUserDto', decorators: [{ name: 'Body', arguments: [] }] }],
       },
     ],
   };
-  const dtoMeta: RegistryMeta = {
+  const dtoMeta: ScalarRecord = {
     className: 'CreateUserDto',
     decorators: [],
     methods: [],
@@ -72,188 +48,200 @@ function createRegistryForUsersController(): Map<unknown, unknown> {
     ],
   };
 
-  return new Map<unknown, unknown>([
-    [class UsersController {}, controllerMeta],
-    [CreateUserDto, dtoMeta],
+  return new Map<ScalarRegistryKey, ScalarRecord>([
+    ['UsersController', controllerMeta],
+    ['CreateUserDto', dtoMeta],
   ]);
 }
 
-function createRegistryForNestedSchemaShapes(): Map<unknown, unknown> {
-  class ChildDto {}
-
-  class ParentDto {}
-
-  const childMeta: RegistryMeta = {
+function createRegistryForNestedSchemaShapes(): ScalarMetadataRegistry {
+  const childMeta: ScalarRecord = {
     className: 'ChildDto',
     decorators: [],
     methods: [],
     properties: [{ name: 'age', type: 'number', decorators: [] }],
   };
-  const parentMeta: RegistryMeta = {
+  const parentMeta: ScalarRecord = {
     className: 'ParentDto',
     decorators: [],
     methods: [],
     properties: [
-      { name: 'child', type: ChildDto, isClass: true, decorators: [] },
-      { name: 'children', isArray: true, items: { typeName: ChildDto }, decorators: [] },
+      { name: 'child', type: 'ChildDto', isClass: true, decorators: [] },
+      { name: 'children', isArray: true, items: { typeName: 'ChildDto' }, decorators: [] },
     ],
   };
-  const controllerMeta: RegistryMeta = {
+  const controllerMeta: ScalarRecord = {
     className: 'TestController',
     decorators: [{ name: 'Controller', arguments: ['/t'] }],
     methods: [
       {
         name: 'create',
         decorators: [{ name: 'Post', arguments: ['/'] }],
-        parameters: [{ name: 'body', type: ParentDto, decorators: [{ name: 'Body', arguments: [] }] }],
+        parameters: [{ name: 'body', type: 'ParentDto', decorators: [{ name: 'Body', arguments: [] }] }],
       },
     ],
   };
 
-  return new Map<unknown, unknown>([
-    [class TestController {}, controllerMeta],
-    [ChildDto, childMeta],
-    [ParentDto, parentMeta],
+  return new Map<ScalarRegistryKey, ScalarRecord>([
+    ['TestController', controllerMeta],
+    ['ChildDto', childMeta],
+    ['ParentDto', parentMeta],
   ]);
 }
 
-describe('OpenApiFactory.create', () => {
-  it('should return a minimal OpenAPI document when the registry is empty', () => {
-    const registry = new Map<unknown, unknown>();
-    const doc = OpenApiFactory.create(registry, { title: 'T', version: 'V' });
+function getPathItemOrThrow(paths: Record<string, OpenApiPathItem>, path: string): OpenApiPathItem {
+  const entry = Object.entries(paths).find(([key]) => key === path);
 
-    expect(doc.openapi).toBe('3.0.0');
-    expect(doc.info).toEqual({ title: 'T', version: 'V' });
-    expect(doc.paths).toEqual({});
-    expect(doc.components).toEqual({ schemas: {} });
-  });
+  if (!entry) {
+    throw new Error(`Expected ${path} path to exist`);
+  }
 
-  it('should normalize route paths and convert params to {param}', () => {
-    const registry = createRegistryForUsersController();
-    const doc = OpenApiFactory.create(registry, { title: 'API Docs', version: '1.0.0' });
+  return entry[1];
+}
 
-    expect(doc.paths['/users/{id}']).toBeDefined();
-    expect(doc.paths['/users']).toBeDefined();
-  });
+function getSchemaOrThrow(doc: OpenApiDocument, name: string): OpenApiRecord {
+  const entry = Object.entries(doc.components.schemas).find(([key]) => key === name);
 
-  it('should apply ApiOperation metadata to the generated operation', () => {
-    const registry = createRegistryForUsersController();
-    const doc = OpenApiFactory.create(registry, { title: 'API Docs', version: '1.0.0' });
-    const pathItem = doc.paths['/users/{id}'];
+  if (!entry) {
+    throw new Error(`Expected ${name} schema to exist`);
+  }
 
-    if (!pathItem) {
-      throw new Error('Expected /users/{id} path to exist');
-    }
+  return entry[1];
+}
 
-    const operationValue = pathItem.get;
+function getRecordEntryOrThrow(record: OpenApiRecord, key: string): OpenApiRecord {
+  const entry = Object.entries(record).find(([entryKey]) => entryKey === key);
 
-    if (!isRecord(operationValue)) {
-      throw new Error('Expected get operation to be a record');
-    }
+  if (!entry) {
+    throw new Error(`Expected record entry to exist: ${key}`);
+  }
 
-    expect(operationValue.summary).toBe('Get one');
-    expect(operationValue.description).toBe('Get by id');
-  });
+  const value = entry[1];
 
-  it('should generate path and query parameters from Param and Query decorators', () => {
-    const registry = createRegistryForUsersController();
-    const doc = OpenApiFactory.create(registry, { title: 'API Docs', version: '1.0.0' });
-    const pathItem = doc.paths['/users/{id}'];
+  if (!isOpenApiRecord(value)) {
+    throw new Error(`Expected record entry to be a record: ${key}`);
+  }
 
-    if (!pathItem) {
-      throw new Error('Expected /users/{id} path to exist');
-    }
+  return value;
+}
 
-    const operationValue = pathItem.get;
+function getOperationRecordOrThrow(pathItem: OpenApiPathItem, method: 'get' | 'post'): OpenApiRecord {
+  const value = method === 'get' ? pathItem.get : pathItem.post;
 
-    if (!isRecord(operationValue)) {
-      throw new Error('Expected get operation to be a record');
-    }
+  if (!isOpenApiRecord(value)) {
+    throw new Error(`Expected ${method} operation to be a record`);
+  }
 
-    expect(operationValue.parameters).toEqual([
-      { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
-      { name: 'verbose', in: 'query', required: false, schema: { type: 'string' } },
-    ]);
-  });
+  return value;
+}
 
-  it('should generate requestBody schema when a Body parameter exists', () => {
-    const registry = createRegistryForUsersController();
-    const doc = OpenApiFactory.create(registry, { title: 'API Docs', version: '1.0.0' });
-    const pathItem = doc.paths['/users'];
+function isOpenApiRecord(value: OpenApiOperation | OpenApiRecord | ScalarNode | undefined): value is OpenApiRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
 
-    if (!pathItem) {
-      throw new Error('Expected /users path to exist');
-    }
+describe('spec-factory', () => {
+  describe('OpenApiFactory.create', () => {
+    it('should return a minimal OpenAPI document when the registry is empty', () => {
+      // Arrange
+      const registry = new Map<ScalarRegistryKey, ScalarRecord>();
+      // Act
+      const doc = OpenApiFactory.create(registry, { title: 'T', version: 'V' });
 
-    const operationValue = pathItem.post;
-
-    if (!isRecord(operationValue)) {
-      throw new Error('Expected post operation to be a record');
-    }
-
-    const requestBodyValue = operationValue.requestBody;
-
-    if (!isRecord(requestBodyValue)) {
-      throw new Error('Expected requestBody to be a record');
-    }
-
-    const contentValue = requestBodyValue.content;
-
-    if (!isRecord(contentValue)) {
-      throw new Error('Expected requestBody.content to be a record');
-    }
-
-    const jsonContentValue = contentValue['application/json'];
-
-    if (!isRecord(jsonContentValue)) {
-      throw new Error('Expected requestBody.content[application/json] to be a record');
-    }
-
-    expect(jsonContentValue.schema).toEqual({ $ref: '#/components/schemas/CreateUserDto' });
-  });
-
-  it('should create a component schema for ApiProperty metadata', () => {
-    const registry = createRegistryForUsersController();
-    const doc = OpenApiFactory.create(registry, { title: 'API Docs', version: '1.0.0' });
-    const schemaValue = doc.components.schemas['CreateUserDto'];
-
-    if (!isRecord(schemaValue)) {
-      throw new Error('Expected CreateUserDto schema to be a record');
-    }
-
-    const propsValue = schemaValue.properties;
-
-    if (!isRecord(propsValue)) {
-      throw new Error('Expected CreateUserDto properties to be a record');
-    }
-
-    expect(propsValue.email).toEqual({
-      type: 'string',
-      description: 'email',
-      example: 'a@b.com',
+      // Assert
+      expect(doc.openapi).toBe('3.0.0');
+      expect(doc.info).toEqual({ title: 'T', version: 'V' });
+      expect(doc.paths).toEqual({});
+      expect(doc.components).toEqual({ schemas: {} });
     });
-  });
 
-  it('should create component schemas for nested objects and arrays', () => {
-    const registry = createRegistryForNestedSchemaShapes();
-    const doc = OpenApiFactory.create(registry, { title: 'T', version: 'V' });
-    const parentSchemaValue = doc.components.schemas['ParentDto'];
-    const childSchemaValue = doc.components.schemas['ChildDto'];
+    it('should normalize route paths when controller metadata is present', () => {
+      // Arrange
+      const registry = createRegistryForUsersController();
+      // Act
+      const doc = OpenApiFactory.create(registry, { title: 'API Docs', version: '1.0.0' });
+      const usersPath = getPathItemOrThrow(doc.paths, '/users/{id}');
+      const basePath = getPathItemOrThrow(doc.paths, '/users');
 
-    if (!isRecord(parentSchemaValue) || !isRecord(childSchemaValue)) {
-      throw new Error('Expected ParentDto and ChildDto schemas to exist');
-    }
+      // Assert
+      expect(usersPath).toBeDefined();
+      expect(basePath).toBeDefined();
+    });
 
-    const parentProps = parentSchemaValue.properties;
+    it('should apply ApiOperation metadata when the decorator is present', () => {
+      // Arrange
+      const registry = createRegistryForUsersController();
+      const doc = OpenApiFactory.create(registry, { title: 'API Docs', version: '1.0.0' });
+      // Act
+      const pathItem = getPathItemOrThrow(doc.paths, '/users/{id}');
+      const operationValue = getOperationRecordOrThrow(pathItem, 'get');
 
-    if (!isRecord(parentProps)) {
-      throw new Error('Expected ParentDto properties to be a record');
-    }
+      // Assert
+      expect(operationValue.summary).toBe('Get one');
+      expect(operationValue.description).toBe('Get by id');
+    });
 
-    expect(parentProps.child).toEqual({ $ref: '#/components/schemas/ChildDto' });
-    expect(parentProps.children).toEqual({
-      type: 'array',
-      items: { $ref: '#/components/schemas/ChildDto' },
+    it('should generate parameters when Param and Query decorators are present', () => {
+      // Arrange
+      const registry = createRegistryForUsersController();
+      const doc = OpenApiFactory.create(registry, { title: 'API Docs', version: '1.0.0' });
+      // Act
+      const pathItem = getPathItemOrThrow(doc.paths, '/users/{id}');
+      const operationValue = getOperationRecordOrThrow(pathItem, 'get');
+
+      // Assert
+      expect(operationValue.parameters).toEqual([
+        { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+        { name: 'verbose', in: 'query', required: false, schema: { type: 'string' } },
+      ]);
+    });
+
+    it('should generate requestBody schema when Body parameters are present', () => {
+      // Arrange
+      const registry = createRegistryForUsersController();
+      const doc = OpenApiFactory.create(registry, { title: 'API Docs', version: '1.0.0' });
+      // Act
+      const pathItem = getPathItemOrThrow(doc.paths, '/users');
+      const operationValue = getOperationRecordOrThrow(pathItem, 'post');
+      const requestBodyValue = getRecordEntryOrThrow(operationValue, 'requestBody');
+      const contentValue = getRecordEntryOrThrow(requestBodyValue, 'content');
+      const jsonContentValue = getRecordEntryOrThrow(contentValue, 'application/json');
+
+      // Assert
+      expect(jsonContentValue.schema).toEqual({ $ref: '#/components/schemas/CreateUserDto' });
+    });
+
+    it('should create a component schema when ApiProperty metadata is present', () => {
+      // Arrange
+      const registry = createRegistryForUsersController();
+      const doc = OpenApiFactory.create(registry, { title: 'API Docs', version: '1.0.0' });
+      // Act
+      const schemaValue = getSchemaOrThrow(doc, 'CreateUserDto');
+      const propsValue = getRecordEntryOrThrow(schemaValue, 'properties');
+
+      // Assert
+      expect(propsValue.email).toEqual({
+        type: 'string',
+        description: 'email',
+        example: 'a@b.com',
+      });
+    });
+
+    it('should create component schemas when nested objects and arrays are present', () => {
+      // Arrange
+      const registry = createRegistryForNestedSchemaShapes();
+      const doc = OpenApiFactory.create(registry, { title: 'T', version: 'V' });
+      // Act
+      const parentSchemaValue = getSchemaOrThrow(doc, 'ParentDto');
+      const childSchemaValue = getSchemaOrThrow(doc, 'ChildDto');
+      const parentProps = getRecordEntryOrThrow(parentSchemaValue, 'properties');
+
+      // Assert
+      expect(childSchemaValue).toBeDefined();
+      expect(parentProps.child).toEqual({ $ref: '#/components/schemas/ChildDto' });
+      expect(parentProps.children).toEqual({
+        type: 'array',
+        items: { $ref: '#/components/schemas/ChildDto' },
+      });
     });
   });
 });

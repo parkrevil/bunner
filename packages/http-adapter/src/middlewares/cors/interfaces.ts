@@ -1,5 +1,6 @@
+import type { OriginOptions } from './types';
+
 import { HttpMethod } from '../../enums';
-import { OriginOptions } from './types';
 
 /**
  * Configuration options for CORS Middleware.

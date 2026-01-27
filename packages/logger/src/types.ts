@@ -4,19 +4,16 @@ export type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 
 export type Color = 'black' | 'red' | 'green' | 'yellow' | 'blue' | 'magenta' | 'cyan' | 'white' | 'gray';
 
-export type LogMetadataValue =
-  | string
-  | number
-  | boolean
-  | null
-  | undefined
-  | Error
-  | Loggable
-  | LogMetadataRecord
-  | ReadonlyArray<LogMetadataValue>;
+export type LogMetadataPrimitive = string | number | boolean | null | undefined;
 
-export type LogMetadataRecord = Record<string, LogMetadataValue>;
+export type LogMetadataLeaf = LogMetadataPrimitive | Error | Loggable;
 
-export type LogMessage<T extends LogMetadataRecord = LogMetadataRecord> = BaseLogMessage & T;
+export interface LogMetadataRecord {
+  [key: string]: LogMetadataValue;
+}
 
-export type LogArgument = LogMetadataRecord | Error | Loggable;
+export type LogMetadataValue = LogMetadataLeaf | ReadonlyArray<LogMetadataLeaf> | LogMetadataRecord;
+
+export type LogMessage = BaseLogMessage & LogMetadataRecord;
+
+export type LogArgument = LogMetadataValue;

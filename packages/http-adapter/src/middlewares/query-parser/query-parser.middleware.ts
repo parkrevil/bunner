@@ -16,7 +16,7 @@ export class QueryParserMiddleware extends BunnerMiddleware<QueryParserOptions> 
   }
 
   public handle(context: Context): void {
-    const http = context.to(BunnerHttpContext);
+    const http = this.assertHttpContext(context);
     const req = http.request;
     const questionIndex = req.url.indexOf('?');
 
@@ -35,5 +35,13 @@ export class QueryParserMiddleware extends BunnerMiddleware<QueryParserOptions> 
     }
 
     req.query = this.parser.parse(queryString);
+  }
+
+  private assertHttpContext(context: Context): BunnerHttpContext {
+    if (context instanceof BunnerHttpContext) {
+      return context;
+    }
+
+    throw new Error('Expected BunnerHttpContext');
   }
 }

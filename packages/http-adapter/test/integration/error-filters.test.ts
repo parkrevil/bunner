@@ -1,14 +1,13 @@
-import type { Context } from '@bunner/common';
+import type { BunnerContainer, Context } from '@bunner/common';
 
 import { BunnerErrorFilter } from '@bunner/common';
-import { Container, registerRuntimeContext } from '@bunner/core';
+import { Container } from '@bunner/core';
 import { describe, expect, it, mock } from 'bun:test';
 import { StatusCodes } from 'http-status-codes';
 
+import type { HttpAdapterStartContext } from '../../src/interfaces';
 import type {
   ClassMetadata,
-  ControllerConstructor,
-  DecoratorMetadata,
   MetadataRegistryKey,
   RouteHandlerArgument,
   RouteHandlerFunction,
@@ -21,6 +20,8 @@ import type { ErrorFilterRegistryParams } from './types';
 import { BunnerHttpAdapter } from '../../index';
 import { createHttpTestHarness, createRequest, createResponse, handleRequest, withGlobalMiddlewares } from '../http-test-kit';
 import { BunnerHttpContext, BunnerResponse, HttpMethod, RequestHandler, RouteHandler } from '../index';
+
+abstract class ErrorFilterBase extends BunnerErrorFilter<SystemError> {}
 
 class ErrorController {
   [key: string]: RouteHandlerValue | RouteHandlerFunction;
@@ -64,32 +65,6 @@ class ErrorController {
   }
 }
 
-function isControllerConstructor(token: MetadataRegistryKey, metadata: ClassMetadata): token is ControllerConstructor {
-  if (typeof token !== 'function') {
-    return false;
-  }
-
-  const decorators = metadata.decorators ?? [];
-
-  return decorators.some((decorator: DecoratorMetadata) => {
-    const decoratorName = decorator.name;
-
-    return decoratorName === 'Controller' || decoratorName === 'RestController';
-  });
-}
-
-function createControllerRegistry(registry: Map<MetadataRegistryKey, ClassMetadata>): Map<ControllerConstructor, ClassMetadata> {
-  const controllerRegistry = new Map<ControllerConstructor, ClassMetadata>();
-
-  for (const [token, metadata] of registry.entries()) {
-    if (isControllerConstructor(token, metadata)) {
-      controllerRegistry.set(token, metadata);
-    }
-  }
-
-  return controllerRegistry;
-}
-
 function assertHttpContext(ctx: Context): BunnerHttpContext {
   if (ctx instanceof BunnerHttpContext) {
     return ctx;
@@ -98,14 +73,25 @@ function assertHttpContext(ctx: Context): BunnerHttpContext {
   throw new Error('Expected BunnerHttpContext');
 }
 
-class SetStatusFilter extends BunnerErrorFilter {
+function createAdapterContext(container: BunnerContainer): HttpAdapterStartContext {
+  return {
+    container,
+    getType: () => 'test',
+    get: () => undefined,
+    to: () => {
+      throw new Error('Context cast failed');
+    },
+  };
+}
+
+class SetStatusFilter extends ErrorFilterBase {
   private onCall: (() => void) | undefined;
 
   setOnCall(onCall: () => void): void {
     this.onCall = onCall;
   }
 
-  catch(_error: Parameters<BunnerErrorFilter['catch']>[0], context: Context): void {
+  catch(_error: SystemError, context: Context): void {
     this.onCall?.();
 
     const http = assertHttpContext(context);
@@ -115,20 +101,20 @@ class SetStatusFilter extends BunnerErrorFilter {
   }
 }
 
-class RethrowFilter extends BunnerErrorFilter {
+class RethrowFilter extends ErrorFilterBase {
   catch(): void {
     throw new Error('next');
   }
 }
 
-class CatchStringFilter extends BunnerErrorFilter {
+class CatchStringFilter extends ErrorFilterBase {
   private onCall: (() => void) | undefined;
 
   setOnCall(onCall: () => void): void {
     this.onCall = onCall;
   }
 
-  catch(_error: Parameters<BunnerErrorFilter['catch']>[0], context: Context): void {
+  catch(_error: SystemError, context: Context): void {
     this.onCall?.();
 
     const http = assertHttpContext(context);
@@ -138,14 +124,14 @@ class CatchStringFilter extends BunnerErrorFilter {
   }
 }
 
-class CatchLiteralFilter extends BunnerErrorFilter {
+class CatchLiteralFilter extends ErrorFilterBase {
   private onCall: (() => void) | undefined;
 
   setOnCall(onCall: () => void): void {
     this.onCall = onCall;
   }
 
-  catch(_error: Parameters<BunnerErrorFilter['catch']>[0], context: Context): void {
+  catch(_error: SystemError, context: Context): void {
     this.onCall?.();
 
     const http = assertHttpContext(context);
@@ -155,14 +141,14 @@ class CatchLiteralFilter extends BunnerErrorFilter {
   }
 }
 
-class CatchNumberFilter extends BunnerErrorFilter {
+class CatchNumberFilter extends ErrorFilterBase {
   private onCall: (() => void) | undefined;
 
   setOnCall(onCall: () => void): void {
     this.onCall = onCall;
   }
 
-  catch(_error: Parameters<BunnerErrorFilter['catch']>[0], context: Context): void {
+  catch(_error: SystemError, context: Context): void {
     this.onCall?.();
 
     const http = assertHttpContext(context);
@@ -261,14 +247,14 @@ class AdapterController {
   }
 }
 
-class AdapterGlobalErrorFilter extends BunnerErrorFilter {
+class AdapterGlobalErrorFilter extends ErrorFilterBase {
   private onCall: (() => void) | undefined;
 
   setOnCall(onCall: () => void): void {
     this.onCall = onCall;
   }
 
-  catch(_error: Parameters<BunnerErrorFilter['catch']>[0], ctx: Context): void {
+  catch(_error: SystemError, ctx: Context): void {
     this.onCall?.();
 
     const http = assertHttpContext(ctx);
@@ -297,12 +283,10 @@ function createAdapterRegistry(): Map<MetadataRegistryKey, ClassMetadata> {
 }
 
 describe('BunnerHttpAdapter.addErrorFilters', () => {
-  it('should register global ErrorFilters via addErrorFilters', async () => {
+  it('should register global ErrorFilters when addErrorFilters is called', async () => {
+    // Arrange
     const onCall = mock(() => {});
     const metadataRegistry = createAdapterRegistry();
-
-    registerRuntimeContext({ metadataRegistry });
-
     const container = new Container();
     const adapterFilter = new AdapterGlobalErrorFilter();
 
@@ -345,17 +329,17 @@ describe('BunnerHttpAdapter.addErrorFilters', () => {
 
     Bun.serve = serveMock;
 
+    // Act
     try {
       const adapter = new BunnerHttpAdapter({ port: 0 });
 
       adapter.addErrorFilters([AdapterGlobalErrorFilter]);
-      await adapter.start({ container });
+      await adapter.start(createAdapterContext(container));
     } finally {
       Bun.serve = originalServe;
     }
 
-    const controllerRegistry = createControllerRegistry(metadataRegistry);
-    const routeHandler = new RouteHandler(container, controllerRegistry, new Map());
+    const routeHandler = new RouteHandler(container, metadataRegistry, new Map());
 
     routeHandler.register();
 
@@ -364,6 +348,7 @@ describe('BunnerHttpAdapter.addErrorFilters', () => {
     const res = createResponse(req);
     const workerResponse = await requestHandler.handle(req, res, HttpMethod.Get, '/adapter/boom');
 
+    // Assert
     expect(onCall).toHaveBeenCalledTimes(1);
     expect(serveCalls).toBe(1);
     expect(workerResponse.init.status).toBe(StatusCodes.IM_A_TEAPOT);
@@ -373,24 +358,30 @@ describe('BunnerHttpAdapter.addErrorFilters', () => {
 
 describe('RequestHandler.handle', () => {
   it('should throw during route registration when a UseErrorFilters token is not resolvable', () => {
-    class MissingFilterToken extends BunnerErrorFilter {
+    // Arrange
+    class MissingFilterToken extends ErrorFilterBase {
       catch(): void {}
     }
 
     const metadataRegistry = createRegistry({ useErrorFilters: [MissingFilterToken] });
 
-    expect(() => {
+    // Act
+    const act = () => {
       createHttpTestHarness({
         metadataRegistry,
         providers: [...withGlobalMiddlewares({}), { token: ErrorController, value: new ErrorController() }],
       });
-    }).toThrow();
+    };
+
+    // Assert
+    expect(act).toThrow();
   });
 
-  it('should call ErrorFilter.catch with exactly (error, ctx)', async () => {
+  it('should call ErrorFilter.catch with exactly (error, ctx) when a filter runs', async () => {
+    // Arrange
     const receivedArgs: Array<[SystemError, Context]> = [];
 
-    class ArityCaptureFilter extends BunnerErrorFilter {
+    class ArityCaptureFilter extends ErrorFilterBase {
       catch(error: SystemError, ctx: Context): void {
         receivedArgs.push([error, ctx]);
       }
@@ -405,28 +396,32 @@ describe('RequestHandler.handle', () => {
       ],
     });
 
+    // Act
     await handleRequest({
       harness,
       method: HttpMethod.Get,
       path: '/err/boom',
       url: 'http://localhost/err/boom',
     });
+
+    // Assert
     expect(receivedArgs).toHaveLength(1);
     expect(receivedArgs[0]).toHaveLength(2);
     expect(receivedArgs[0]?.[0]).toBeInstanceOf(Error);
     expect(typeof receivedArgs[0]?.[1]?.to).toBe('function');
   });
 
-  it('should combine @UseErrorFilters in method -> controller order', async () => {
+  it('should combine @UseErrorFilters in method -> controller order when resolving filters', async () => {
+    // Arrange
     const calls: string[] = [];
 
-    class MethodFilterToken extends BunnerErrorFilter {
+    class MethodFilterToken extends ErrorFilterBase {
       catch(): void {
         calls.push('method');
       }
     }
 
-    class ControllerFilterToken extends BunnerErrorFilter {
+    class ControllerFilterToken extends ErrorFilterBase {
       catch(): void {
         calls.push('controller');
       }
@@ -447,29 +442,33 @@ describe('RequestHandler.handle', () => {
       ],
     });
 
+    // Act
     await handleRequest({
       harness,
       method: HttpMethod.Get,
       path: '/err/boom',
       url: 'http://localhost/err/boom',
     });
+
+    // Assert
     expect(calls).toEqual(['method', 'controller']);
   });
 
-  it('should run route-level ErrorFilters before global ErrorFilters', async () => {
+  it('should run route-level ErrorFilters before global ErrorFilters when errors occur', async () => {
+    // Arrange
     const calledRoute = mock(() => {});
     const calledGlobal = mock(() => {});
 
-    class RouteFilterToken extends BunnerErrorFilter {
-      catch(_e: Parameters<BunnerErrorFilter['catch']>[0], _ctx: Context): void {
+    class RouteFilterToken extends ErrorFilterBase {
+      catch(_e: SystemError, _ctx: Context): void {
         calledRoute();
 
         throw new Error('next');
       }
     }
 
-    class GlobalFilterToken extends BunnerErrorFilter {
-      catch(_e: Parameters<BunnerErrorFilter['catch']>[0], ctx: Context): void {
+    class GlobalFilterToken extends ErrorFilterBase {
+      catch(_e: SystemError, ctx: Context): void {
         calledGlobal();
 
         const http = assertHttpContext(ctx);
@@ -498,6 +497,7 @@ describe('RequestHandler.handle', () => {
         { token: ErrorController, value: new ErrorController() },
       ],
     });
+    // Act
     const { workerResponse } = await handleRequest({
       harness,
       method: HttpMethod.Get,
@@ -505,13 +505,15 @@ describe('RequestHandler.handle', () => {
       url: 'http://localhost/err/boom',
     });
 
+    // Assert
     expect(calledRoute).toHaveBeenCalledTimes(1);
     expect(calledGlobal).toHaveBeenCalledTimes(1);
     expect(workerResponse.init.status).toBe(StatusCodes.BAD_GATEWAY);
     expect(workerResponse.body).toBe('global');
   });
 
-  it('should dedupe duplicate ErrorFilter tokens between method and controller level', async () => {
+  it('should dedupe duplicate ErrorFilter tokens when declared on method and controller', async () => {
+    // Arrange
     const onCall = mock(() => {});
     const setStatusFilter = new SetStatusFilter();
 
@@ -532,6 +534,7 @@ describe('RequestHandler.handle', () => {
         { token: ErrorController, value: new ErrorController() },
       ],
     });
+    // Act
     const { workerResponse } = await handleRequest({
       harness,
       method: HttpMethod.Get,
@@ -539,12 +542,14 @@ describe('RequestHandler.handle', () => {
       url: 'http://localhost/err/boom',
     });
 
+    // Assert
     expect(onCall).toHaveBeenCalledTimes(1);
     expect(workerResponse.init.status).toBe(StatusCodes.IM_A_TEAPOT);
     expect(workerResponse.body).toBe('{"filtered":true}');
   });
 
   it('should catch primitive string errors when @Catch(String) is used', async () => {
+    // Arrange
     const onCall = mock(() => {});
     const catchStringFilter = new CatchStringFilter();
 
@@ -565,6 +570,7 @@ describe('RequestHandler.handle', () => {
         { token: ErrorController, value: new ErrorController() },
       ],
     });
+    // Act
     const { workerResponse } = await handleRequest({
       harness,
       method: HttpMethod.Get,
@@ -572,12 +578,14 @@ describe('RequestHandler.handle', () => {
       url: 'http://localhost/err/boom-string',
     });
 
+    // Assert
     expect(onCall).toHaveBeenCalledTimes(1);
     expect(workerResponse.init.status).toBe(StatusCodes.BAD_REQUEST);
     expect(workerResponse.body).toBe('caught-string');
   });
 
   it('should catch literal string errors when @Catch("LITERAL") is used', async () => {
+    // Arrange
     const onCall = mock(() => {});
     const catchLiteralFilter = new CatchLiteralFilter();
 
@@ -598,6 +606,7 @@ describe('RequestHandler.handle', () => {
         { token: ErrorController, value: new ErrorController() },
       ],
     });
+    // Act
     const { workerResponse } = await handleRequest({
       harness,
       method: HttpMethod.Get,
@@ -605,12 +614,14 @@ describe('RequestHandler.handle', () => {
       url: 'http://localhost/err/boom-literal',
     });
 
+    // Assert
     expect(onCall).toHaveBeenCalledTimes(1);
     expect(workerResponse.init.status).toBe(StatusCodes.CONFLICT);
     expect(workerResponse.body).toBe('caught-literal');
   });
 
   it('should catch primitive number errors when @Catch(Number) is used', async () => {
+    // Arrange
     const onCall = mock(() => {});
     const catchNumberFilter = new CatchNumberFilter();
 
@@ -631,6 +642,7 @@ describe('RequestHandler.handle', () => {
         { token: ErrorController, value: new ErrorController() },
       ],
     });
+    // Act
     const { workerResponse } = await handleRequest({
       harness,
       method: HttpMethod.Get,
@@ -638,17 +650,20 @@ describe('RequestHandler.handle', () => {
       url: 'http://localhost/err/boom-number',
     });
 
+    // Assert
     expect(onCall).toHaveBeenCalledTimes(1);
     expect(workerResponse.init.status).toBe(StatusCodes.UNPROCESSABLE_ENTITY);
     expect(workerResponse.body).toBe('caught-number');
   });
 
   it('should return 500 when no ErrorFilter matches', async () => {
+    // Arrange
     const metadataRegistry = createRegistry({ includeOkRoute: true });
     const harness = createHttpTestHarness({
       metadataRegistry,
       providers: [...withGlobalMiddlewares({}), { token: ErrorController, value: new ErrorController() }],
     });
+    // Act
     const { workerResponse } = await handleRequest({
       harness,
       method: HttpMethod.Get,
@@ -656,11 +671,13 @@ describe('RequestHandler.handle', () => {
       url: 'http://localhost/err/boom',
     });
 
+    // Assert
     expect(workerResponse.init.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
     expect(workerResponse.body).toBe('Internal Server Error');
   });
 
   it('should fall back to DefaultErrorHandler when ErrorFilter engine fails', async () => {
+    // Arrange
     const onCall = mock(() => {});
     const setStatusFilter = new SetStatusFilter();
 
@@ -675,6 +692,7 @@ describe('RequestHandler.handle', () => {
         { token: ErrorController, value: new ErrorController() },
       ],
     });
+    // Act
     const { workerResponse } = await handleRequest({
       harness,
       method: HttpMethod.Get,
@@ -682,18 +700,20 @@ describe('RequestHandler.handle', () => {
       url: 'http://localhost/err/boom',
     });
 
+    // Assert
     expect(onCall).toHaveBeenCalledTimes(0);
     expect(workerResponse.init.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
     expect(workerResponse.body).toBe('Internal Server Error');
   });
 
   it('should continue to next ErrorFilter when current one throws', async () => {
+    // Arrange
     const metadataRegistry = createRegistry({ useErrorFilters: [RethrowFilter] });
 
     metadataRegistry.set(RethrowFilter, { className: 'RethrowFilter', decorators: [{ name: 'Catch', arguments: [Error] }] });
 
-    class NextFilterToken extends BunnerErrorFilter {
-      catch(_e: Parameters<BunnerErrorFilter['catch']>[0], ctx: Context): void {
+    class NextFilterToken extends ErrorFilterBase {
+      catch(_e: SystemError, ctx: Context): void {
         const http = assertHttpContext(ctx);
 
         http.response.setStatus(StatusCodes.SERVICE_UNAVAILABLE);
@@ -711,6 +731,7 @@ describe('RequestHandler.handle', () => {
         { token: ErrorController, value: new ErrorController() },
       ],
     });
+    // Act
     const { workerResponse } = await handleRequest({
       harness,
       method: HttpMethod.Get,
@@ -718,15 +739,17 @@ describe('RequestHandler.handle', () => {
       url: 'http://localhost/err/boom',
     });
 
+    // Assert
     expect(workerResponse.init.status).toBe(StatusCodes.SERVICE_UNAVAILABLE);
     expect(workerResponse.body).toBe('next');
   });
 
   it('should always run an ErrorFilter when it has no @Catch decorator', async () => {
+    // Arrange
     const onCall = mock(() => {});
 
-    class NoCatchDecoratorFilter extends BunnerErrorFilter {
-      catch(_e: Parameters<BunnerErrorFilter['catch']>[0], ctx: Context): void {
+    class NoCatchDecoratorFilter extends ErrorFilterBase {
+      catch(_e: SystemError, ctx: Context): void {
         onCall();
 
         const http = assertHttpContext(ctx);
@@ -745,6 +768,7 @@ describe('RequestHandler.handle', () => {
         { token: ErrorController, value: new ErrorController() },
       ],
     });
+    // Act
     const { workerResponse } = await handleRequest({
       harness,
       method: HttpMethod.Get,
@@ -752,16 +776,18 @@ describe('RequestHandler.handle', () => {
       url: 'http://localhost/err/boom',
     });
 
+    // Assert
     expect(onCall).toHaveBeenCalledTimes(1);
     expect(workerResponse.init.status).toBe(StatusCodes.NOT_IMPLEMENTED);
     expect(workerResponse.body).toBe('no-catch');
   });
 
   it('should run an ErrorFilter when @Catch() has no arguments', async () => {
+    // Arrange
     const onCall = mock(() => {});
 
-    class EmptyCatchArgsFilter extends BunnerErrorFilter {
-      catch(_e: Parameters<BunnerErrorFilter['catch']>[0], ctx: Context): void {
+    class EmptyCatchArgsFilter extends ErrorFilterBase {
+      catch(_e: SystemError, ctx: Context): void {
         onCall();
 
         const http = assertHttpContext(ctx);
@@ -786,6 +812,7 @@ describe('RequestHandler.handle', () => {
         { token: ErrorController, value: new ErrorController() },
       ],
     });
+    // Act
     const { workerResponse } = await handleRequest({
       harness,
       method: HttpMethod.Get,
@@ -793,16 +820,18 @@ describe('RequestHandler.handle', () => {
       url: 'http://localhost/err/boom',
     });
 
+    // Assert
     expect(onCall).toHaveBeenCalledTimes(1);
     expect(workerResponse.init.status).toBe(StatusCodes.GONE);
     expect(workerResponse.body).toBe('empty-catch-args');
   });
 
   it('should match when @Catch has multiple arguments and any matches', async () => {
+    // Arrange
     const onCall = mock(() => {});
 
-    class MultiCatchFilter extends BunnerErrorFilter {
-      catch(_e: Parameters<BunnerErrorFilter['catch']>[0], ctx: Context): void {
+    class MultiCatchFilter extends ErrorFilterBase {
+      catch(_e: SystemError, ctx: Context): void {
         onCall();
 
         const http = assertHttpContext(ctx);
@@ -827,6 +856,7 @@ describe('RequestHandler.handle', () => {
         { token: ErrorController, value: new ErrorController() },
       ],
     });
+    // Act
     const { workerResponse } = await handleRequest({
       harness,
       method: HttpMethod.Get,
@@ -834,16 +864,18 @@ describe('RequestHandler.handle', () => {
       url: 'http://localhost/err/boom-literal',
     });
 
+    // Assert
     expect(onCall).toHaveBeenCalledTimes(1);
     expect(workerResponse.init.status).toBe(StatusCodes.UNAUTHORIZED);
     expect(workerResponse.body).toBe('multi');
   });
 
   it('should catch boxed String errors when @Catch(String) is used', async () => {
+    // Arrange
     const onCall = mock(() => {});
 
-    class BoxedStringFilter extends BunnerErrorFilter {
-      catch(_e: Parameters<BunnerErrorFilter['catch']>[0], ctx: Context): void {
+    class BoxedStringFilter extends ErrorFilterBase {
+      catch(_e: SystemError, ctx: Context): void {
         onCall();
 
         const http = assertHttpContext(ctx);
@@ -868,6 +900,7 @@ describe('RequestHandler.handle', () => {
         { token: ErrorController, value: new ErrorController() },
       ],
     });
+    // Act
     const { workerResponse } = await handleRequest({
       harness,
       method: HttpMethod.Get,
@@ -875,16 +908,18 @@ describe('RequestHandler.handle', () => {
       url: 'http://localhost/err/boom-boxed-string',
     });
 
+    // Assert
     expect(onCall).toHaveBeenCalledTimes(1);
     expect(workerResponse.init.status).toBe(StatusCodes.BAD_REQUEST);
     expect(workerResponse.body).toBe('boxed-string');
   });
 
   it('should catch boxed Number errors when @Catch(Number) is used', async () => {
+    // Arrange
     const onCall = mock(() => {});
 
-    class BoxedNumberFilter extends BunnerErrorFilter {
-      catch(_e: Parameters<BunnerErrorFilter['catch']>[0], ctx: Context): void {
+    class BoxedNumberFilter extends ErrorFilterBase {
+      catch(_e: SystemError, ctx: Context): void {
         onCall();
 
         const http = assertHttpContext(ctx);
@@ -909,6 +944,7 @@ describe('RequestHandler.handle', () => {
         { token: ErrorController, value: new ErrorController() },
       ],
     });
+    // Act
     const { workerResponse } = await handleRequest({
       harness,
       method: HttpMethod.Get,
@@ -916,16 +952,18 @@ describe('RequestHandler.handle', () => {
       url: 'http://localhost/err/boom-boxed-number',
     });
 
+    // Assert
     expect(onCall).toHaveBeenCalledTimes(1);
     expect(workerResponse.init.status).toBe(StatusCodes.UNPROCESSABLE_ENTITY);
     expect(workerResponse.body).toBe('boxed-number');
   });
 
   it('should catch primitive boolean errors when @Catch(Boolean) is used', async () => {
+    // Arrange
     const onCall = mock(() => {});
 
-    class BooleanFilter extends BunnerErrorFilter {
-      catch(_e: Parameters<BunnerErrorFilter['catch']>[0], ctx: Context): void {
+    class BooleanFilter extends ErrorFilterBase {
+      catch(_e: SystemError, ctx: Context): void {
         onCall();
 
         const http = assertHttpContext(ctx);
@@ -947,6 +985,7 @@ describe('RequestHandler.handle', () => {
         { token: ErrorController, value: new ErrorController() },
       ],
     });
+    // Act
     const { workerResponse } = await handleRequest({
       harness,
       method: HttpMethod.Get,
@@ -954,17 +993,19 @@ describe('RequestHandler.handle', () => {
       url: 'http://localhost/err/boom-boolean',
     });
 
+    // Assert
     expect(onCall).toHaveBeenCalledTimes(1);
     expect(workerResponse.init.status).toBe(StatusCodes.PRECONDITION_FAILED);
     expect(workerResponse.body).toBe('boolean');
   });
 
   it('should call SystemErrorHandler when ErrorFilters set body but leave status unset', async () => {
+    // Arrange
     const onFilter = mock(() => {});
     const onSystem = mock(() => {});
 
-    class BodyOnlyFilter extends BunnerErrorFilter {
-      catch(_e: Parameters<BunnerErrorFilter['catch']>[0], ctx: Context): void {
+    class BodyOnlyFilter extends ErrorFilterBase {
+      catch(_e: SystemError, ctx: Context): void {
         onFilter();
 
         const http = assertHttpContext(ctx);
@@ -994,6 +1035,7 @@ describe('RequestHandler.handle', () => {
         { token: ErrorController, value: new ErrorController() },
       ],
     });
+    // Act
     const { workerResponse } = await handleRequest({
       harness,
       method: HttpMethod.Get,
@@ -1001,6 +1043,7 @@ describe('RequestHandler.handle', () => {
       url: 'http://localhost/err/boom',
     });
 
+    // Assert
     expect(onFilter).toHaveBeenCalledTimes(1);
     expect(onSystem).toHaveBeenCalledTimes(1);
     expect(workerResponse.init.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
@@ -1008,6 +1051,7 @@ describe('RequestHandler.handle', () => {
   });
 
   it('should not call SystemErrorHandler when ErrorFilters already set a status', async () => {
+    // Arrange
     const onSystem = mock(() => {});
     const systemErrorHandler = {
       handle(): void {
@@ -1034,6 +1078,7 @@ describe('RequestHandler.handle', () => {
         { token: ErrorController, value: new ErrorController() },
       ],
     });
+    // Act
     const { workerResponse } = await handleRequest({
       harness,
       method: HttpMethod.Get,
@@ -1041,6 +1086,7 @@ describe('RequestHandler.handle', () => {
       url: 'http://localhost/err/boom',
     });
 
+    // Assert
     expect(onCall).toHaveBeenCalledTimes(1);
     expect(onSystem).toHaveBeenCalledTimes(0);
     expect(workerResponse.init.status).toBe(StatusCodes.IM_A_TEAPOT);

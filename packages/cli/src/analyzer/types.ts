@@ -10,12 +10,25 @@ export interface AnalyzerValueRecord {
 
 export type AnalyzerValueArray = ReadonlyArray<AnalyzerValue>;
 
-export type AnalyzerValue = AnalyzerPrimitive | AnalyzerValueArray | AnalyzerValueRecord | Program;
+export type AnalyzerProgram = Program;
+
+export type AnalyzerValue = AnalyzerPrimitive | AnalyzerValueArray | AnalyzerValueRecord | AnalyzerProgram;
 
 export interface NodeRecord extends AnalyzerValueRecord {
   readonly type: string;
   readonly start?: number;
   readonly end?: number;
+}
+
+export interface TypeInfo {
+  typeName: string;
+  typeArgs?: string[];
+  isUnion?: boolean;
+  unionTypes?: TypeInfo[];
+  isArray?: boolean;
+  isEnum?: boolean;
+  literals?: (string | number | boolean)[];
+  items?: TypeInfo;
 }
 
 export interface ExtractedParam {

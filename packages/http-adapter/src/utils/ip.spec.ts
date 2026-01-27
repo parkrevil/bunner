@@ -1,6 +1,6 @@
-import type { Server } from 'bun';
-
 import { describe, it, expect } from 'bun:test';
+
+import type { MockServerCalls, MockServerResult } from './interfaces';
 
 import { HeaderField } from '../enums';
 import { getIps, __internals } from './ip';
@@ -13,223 +13,378 @@ function buildRequest(headers: Record<string, string | undefined>): Request {
   });
 }
 
-function mockServer(ip?: string | null): {
-  server: Server<unknown>;
-  calls: { request: number };
-} {
-  const calls = { request: 0 };
-  const server = {
+function mockServer(ip?: string | null): MockServerResult {
+  const calls: MockServerCalls = { request: 0 };
+  const server: MockServerResult['server'] = {
     requestIP: () => {
       calls.request += 1;
 
-      return ip
-        ? {
-            address: ip,
-            family: ip.includes(':') ? 'IPv6' : 'IPv4',
-            port: 0,
-          }
-        : null;
+      if (ip === null || ip === undefined || ip.length === 0) {
+        return null;
+      }
+
+      return {
+        address: ip,
+        family: ip.includes(':') ? 'IPv6' : 'IPv4',
+        port: 0,
+      };
     },
-  } as unknown as Server<unknown>;
+  };
 
   return { server, calls };
 }
 
-describe('getIps', () => {
-  it('prefers the socket IP when trustProxy is false', () => {
-    const request = buildRequest({
-      [HeaderField.Forwarded]: 'for=203.0.113.1',
-      [HeaderField.XForwardedFor]: '198.51.100.2',
-      [HeaderField.XRealIp]: '192.0.2.10',
+describe('ip', () => {
+  describe('getIps', () => {
+    it('should prefer the socket IP when trustProxy is false', () => {
+      // Arrange
+      const request = buildRequest({
+        [HeaderField.Forwarded]: 'for=203.0.113.1',
+        [HeaderField.XForwardedFor]: '198.51.100.2',
+        [HeaderField.XRealIp]: '192.0.2.10',
+      });
+      const { server, calls } = mockServer('198.51.100.10');
+      // Act
+      const result = getIps(request, server, false);
+
+      // Assert
+      expect(calls.request).toBe(1);
+      expect(result.ip).toBe('198.51.100.10');
+      expect(result.ips).toBeUndefined();
     });
-    const { server, calls } = mockServer('198.51.100.10');
-    const result = getIps(request, server, false);
 
-    expect(calls.request).toBe(1);
-    expect(result.ip).toBe('198.51.100.10');
-    expect(result.ips).toBeUndefined();
-  });
+    it('should return a deduplicated forwarded chain when trustProxy is true', () => {
+      // Arrange
+      const request = buildRequest({
+        [HeaderField.Forwarded]: 'for=198.51.100.1; proto=https, for="[2001:db8::abcd]:443"; host=example.com',
+        [HeaderField.XForwardedFor]: '198.51.100.1, 192.0.2.10',
+        [HeaderField.XRealIp]: '  "192.0.2.20:8080" ',
+      });
+      const { server } = mockServer('10.0.0.1');
+      // Act
+      const result = getIps(request, server, true);
 
-  it('returns a deduplicated forwarded chain when trustProxy is true', () => {
-    const request = buildRequest({
-      [HeaderField.Forwarded]: 'for=198.51.100.1; proto=https, for="[2001:db8::abcd]:443"; host=example.com',
-      [HeaderField.XForwardedFor]: '198.51.100.1, 192.0.2.10',
-      [HeaderField.XRealIp]: '  "192.0.2.20:8080" ',
+      // Assert
+      expect(result.ip).toBe('198.51.100.1');
+      expect(result.ips).toEqual(['198.51.100.1', '2001:db8::abcd', '192.0.2.10']);
     });
-    const { server } = mockServer('10.0.0.1');
-    const result = getIps(request, server, true);
 
-    expect(result.ip).toBe('198.51.100.1');
-    expect(result.ips).toEqual(['198.51.100.1', '2001:db8::abcd', '192.0.2.10']);
-  });
+    it('should fall back to x-real-ip when the forwarded chain is empty', () => {
+      // Arrange
+      const request = buildRequest({
+        [HeaderField.XRealIp]: ' "::ffff:198.51.100.25:1234" ',
+      });
+      const { server } = mockServer('203.0.113.50');
+      // Act
+      const result = getIps(request, server, true);
 
-  it('falls back to x-real-ip when the forwarded chain is empty', () => {
-    const request = buildRequest({
-      [HeaderField.XRealIp]: ' "::ffff:198.51.100.25:1234" ',
+      // Assert
+      expect(result.ip).toBe('198.51.100.25');
+      expect(result.ips).toBeUndefined();
     });
-    const { server } = mockServer('203.0.113.50');
-    const result = getIps(request, server, true);
 
-    expect(result.ip).toBe('198.51.100.25');
-    expect(result.ips).toBeUndefined();
-  });
+    it('should return undefined when all candidates are invalid', () => {
+      // Arrange
+      const request = buildRequest({
+        [HeaderField.Forwarded]: 'for=unknown; proto=https, for=_hidden',
+        [HeaderField.XForwardedFor]: 'unknown, none',
+        [HeaderField.XRealIp]: '_obfuscated',
+      });
+      const { server } = mockServer(null);
+      // Act
+      const result = getIps(request, server, true);
 
-  it('returns undefined when all candidates are invalid', () => {
-    const request = buildRequest({
-      [HeaderField.Forwarded]: 'for=unknown; proto=https, for=_hidden',
-      [HeaderField.XForwardedFor]: 'unknown, none',
-      [HeaderField.XRealIp]: '_obfuscated',
+      // Assert
+      expect(result.ip).toBeUndefined();
+      expect(result.ips).toBeUndefined();
     });
-    const { server } = mockServer(null);
-    const result = getIps(request, server, true);
-
-    expect(result.ip).toBeUndefined();
-    expect(result.ips).toBeUndefined();
-  });
-});
-
-describe('collectForwardedFor', () => {
-  it('extracts sanitized IPs from multiple forwarded entries', () => {
-    const header = 'for=198.51.100.1; proto=https, for="[2001:db8::1]:443";host=example.com';
-    const result = __internals.collectForwardedFor(header);
-
-    expect(result).toEqual(['198.51.100.1', '2001:db8::1']);
   });
 
-  it('ignores segments without a for key or invalid IP values', () => {
-    const header = 'for=unknown; host=example.com; for=_hidden, proto=https';
-    const result = __internals.collectForwardedFor(header);
+  describe('collectForwardedFor', () => {
+    it('should extract sanitized IPs when forwarded entries are provided', () => {
+      // Arrange
+      const header = 'for=198.51.100.1; proto=https, for="[2001:db8::1]:443";host=example.com';
+      // Act
+      const result = __internals.collectForwardedFor(header);
 
-    expect(result).toEqual([]);
+      // Assert
+      expect(result).toEqual(['198.51.100.1', '2001:db8::1']);
+    });
+
+    it('should ignore segments when for keys or IPs are invalid', () => {
+      // Arrange
+      const header = 'for=unknown; host=example.com; for=_hidden, proto=https';
+      // Act
+      const result = __internals.collectForwardedFor(header);
+
+      // Assert
+      expect(result).toEqual([]);
+    });
+
+    it('should handle uppercase FOR keys when sanitizing entries', () => {
+      // Arrange
+      const header = 'FOR="198.51.100.2"; proto=http, For= "[2001:db8::2]"; by=proxy';
+      // Act
+      const result = __internals.collectForwardedFor(header);
+
+      // Assert
+      expect(result).toEqual(['198.51.100.2', '2001:db8::2']);
+    });
+
+    it('should skip placeholders when mixed IPv4 and IPv6 entries exist', () => {
+      // Arrange
+      const header = 'for="_hidden"; proto=http, for="198.51.100.3";by=proxy, for="[2001:db8::3]:10443";host';
+      // Act
+      const result = __internals.collectForwardedFor(header);
+
+      // Assert
+      expect(result).toEqual(['198.51.100.3', '2001:db8::3']);
+    });
+
+    it('should unescape nested quotes when stripping proxy port suffixes', () => {
+      // Arrange
+      const header = String.raw`for="\"198.51.100.4:8443\"";proto=https,for="\"[2001:db8::4]:10443\""`;
+      // Act
+      const result = __internals.collectForwardedFor(header);
+
+      // Assert
+      expect(result).toEqual(['198.51.100.4', '2001:db8::4']);
+    });
   });
 
-  it('handles uppercase FOR keys and preserves sanitization', () => {
-    const header = 'FOR="198.51.100.2"; proto=http, For= "[2001:db8::2]"; by=proxy';
-    const result = __internals.collectForwardedFor(header);
+  describe('collectXForwardedFor', () => {
+    it('should return sanitized IPs when the header has comma-separated values', () => {
+      // Arrange
+      const header = ' 198.51.100.1 , "::ffff:192.0.2.10", invalid ';
+      // Act
+      const result = __internals.collectXForwardedFor(header);
 
-    expect(result).toEqual(['198.51.100.2', '2001:db8::2']);
+      // Assert
+      expect(result).toEqual(['198.51.100.1', '192.0.2.10']);
+    });
+
+    it('should return an empty array when the header is absent', () => {
+      // Arrange
+      const header = null;
+      // Act
+      const result = __internals.collectXForwardedFor(header);
+
+      // Assert
+      expect(result).toEqual([]);
+    });
+
+    it('should preserve duplicates when mixed IPv4 and IPv6 values are present', () => {
+      // Arrange
+      const header = '198.51.100.1, 2001:db8::4 , 198.51.100.1 , _hidden , "[2001:db8::4]"';
+      // Act
+      const result = __internals.collectXForwardedFor(header);
+
+      // Assert
+      expect(result).toEqual(['198.51.100.1', '2001:db8::4', '198.51.100.1', '2001:db8::4']);
+    });
   });
 
-  it('skips placeholders while keeping mixed IPv4 and IPv6 entries', () => {
-    const header = 'for="_hidden"; proto=http, for="198.51.100.3";by=proxy, for="[2001:db8::3]:10443";host';
-    const result = __internals.collectForwardedFor(header);
+  describe('dedupePreserveOrder', () => {
+    it('should remove duplicates when preserving order', () => {
+      // Arrange
+      const values = ['a', 'b', 'a', 'c', 'b'];
+      // Act
+      const result = __internals.dedupePreserveOrder(values);
 
-    expect(result).toEqual(['198.51.100.3', '2001:db8::3']);
+      // Assert
+      expect(result).toEqual(['a', 'b', 'c']);
+    });
   });
 
-  it('unescapes nested quotes and strips proxy port suffixes', () => {
-    const header = String.raw`for="\"198.51.100.4:8443\"";proto=https,for="\"[2001:db8::4]:10443\""`;
-    const result = __internals.collectForwardedFor(header);
+  describe('extractHeaderIp', () => {
+    it('should return sanitized IPs when valid values are provided', () => {
+      // Arrange
+      const valid = '"198.51.100.1"';
+      const invalid = 'unknown';
+      // Act
+      const validResult = __internals.extractHeaderIp(valid);
+      const invalidResult = __internals.extractHeaderIp(invalid);
+      const missingResult = __internals.extractHeaderIp(undefined);
 
-    expect(result).toEqual(['198.51.100.4', '2001:db8::4']);
-  });
-});
-
-describe('collectXForwardedFor', () => {
-  it('returns sanitized IPs split by commas', () => {
-    const header = ' 198.51.100.1 , "::ffff:192.0.2.10", invalid ';
-    const result = __internals.collectXForwardedFor(header);
-
-    expect(result).toEqual(['198.51.100.1', '192.0.2.10']);
-  });
-
-  it('returns an empty array when the header is absent', () => {
-    expect(__internals.collectXForwardedFor(null)).toEqual([]);
+      // Assert
+      expect(validResult).toBe('198.51.100.1');
+      expect(invalidResult).toBeUndefined();
+      expect(missingResult).toBeUndefined();
+    });
   });
 
-  it('preserves duplicate entries while keeping mixed IPv4 and IPv6 values', () => {
-    const header = '198.51.100.1, 2001:db8::4 , 198.51.100.1 , _hidden , "[2001:db8::4]"';
-    const result = __internals.collectXForwardedFor(header);
+  describe('sanitizeIpCandidate', () => {
+    it('should strip quotes and ports when sanitizing candidates', () => {
+      // Arrange
+      const ipv4 = ' "198.51.100.1:8080" ';
+      const ipv6 = '[2001:db8::1]:443';
+      const mapped = '::ffff:203.0.113.5';
+      const hidden = '_hidden';
+      // Act
+      const ipv4Result = __internals.sanitizeIpCandidate(ipv4);
+      const ipv6Result = __internals.sanitizeIpCandidate(ipv6);
+      const mappedResult = __internals.sanitizeIpCandidate(mapped);
+      const hiddenResult = __internals.sanitizeIpCandidate(hidden);
 
-    expect(result).toEqual(['198.51.100.1', '2001:db8::4', '198.51.100.1', '2001:db8::4']);
-  });
-});
+      // Assert
+      expect(ipv4Result).toBe('198.51.100.1');
+      expect(ipv6Result).toBe('2001:db8::1');
+      expect(mappedResult).toBe('203.0.113.5');
+      expect(hiddenResult).toBeUndefined();
+    });
 
-describe('dedupePreserveOrder', () => {
-  it('removes duplicates while preserving order', () => {
-    const values = ['a', 'b', 'a', 'c', 'b'];
+    it('should return undefined when tokens are blank or placeholders', () => {
+      // Arrange
+      const blank = '   ';
+      const obfuscated = ' Obfuscated ';
+      const prefixed = '_prefixed';
+      // Act
+      const blankResult = __internals.sanitizeIpCandidate(blank);
+      const obfuscatedResult = __internals.sanitizeIpCandidate(obfuscated);
+      const prefixedResult = __internals.sanitizeIpCandidate(prefixed);
 
-    expect(__internals.dedupePreserveOrder(values)).toEqual(['a', 'b', 'c']);
-  });
-});
+      // Assert
+      expect(blankResult).toBeUndefined();
+      expect(obfuscatedResult).toBeUndefined();
+      expect(prefixedResult).toBeUndefined();
+    });
 
-describe('extractHeaderIp', () => {
-  it('returns sanitized IPs and rejects invalid values', () => {
-    expect(__internals.extractHeaderIp('"198.51.100.1"')).toBe('198.51.100.1');
-    expect(__internals.extractHeaderIp('unknown')).toBeUndefined();
-    expect(__internals.extractHeaderIp(undefined)).toBeUndefined();
-  });
-});
+    it('should handle malformed mapped prefixes when IPv6 brackets are dangling', () => {
+      // Arrange
+      const invalidMapped = '::ffff:unknown';
+      const danglingBracket = '[2001:db8::5';
+      const quotedIpv4 = '" 198.51.100.5 "';
+      // Act
+      const invalidResult = __internals.sanitizeIpCandidate(invalidMapped);
+      const danglingResult = __internals.sanitizeIpCandidate(danglingBracket);
+      const quotedResult = __internals.sanitizeIpCandidate(quotedIpv4);
 
-describe('sanitizeIpCandidate', () => {
-  it('strips quotes, underscores, IPv6 brackets, port suffixes, and mapped prefixes', () => {
-    expect(__internals.sanitizeIpCandidate(' "198.51.100.1:8080" ')).toBe('198.51.100.1');
-    expect(__internals.sanitizeIpCandidate('[2001:db8::1]:443')).toBe('2001:db8::1');
-    expect(__internals.sanitizeIpCandidate('::ffff:203.0.113.5')).toBe('203.0.113.5');
-    expect(__internals.sanitizeIpCandidate('_hidden')).toBeUndefined();
-  });
-
-  it('returns undefined for blank or placeholder tokens after trimming', () => {
-    expect(__internals.sanitizeIpCandidate('   ')).toBeUndefined();
-    expect(__internals.sanitizeIpCandidate(' Obfuscated ')).toBeUndefined();
-    expect(__internals.sanitizeIpCandidate('_prefixed')).toBeUndefined();
-  });
-
-  it('handles malformed mapped prefixes and dangling IPv6 brackets', () => {
-    expect(__internals.sanitizeIpCandidate('::ffff:unknown')).toBeUndefined();
-    expect(__internals.sanitizeIpCandidate('[2001:db8::5')).toBe('2001:db8::5');
-    expect(__internals.sanitizeIpCandidate('" 198.51.100.5 "')).toBe('198.51.100.5');
-  });
-});
-
-describe('stripOptionalQuotes', () => {
-  it('removes matching quotes and unescapes characters', () => {
-    expect(__internals.stripOptionalQuotes('"value"')).toBe('value');
-    expect(__internals.stripOptionalQuotes("'va\\'lue'")).toBe("va'lue");
-    expect(__internals.stripOptionalQuotes('value')).toBe('value');
-  });
-});
-
-describe('stripPortSuffix', () => {
-  it('handles IPv4 ports while keeping legitimate IPv6 segments intact', () => {
-    expect(__internals.stripPortSuffix('198.51.100.1:8080')).toBe('198.51.100.1');
-    expect(__internals.stripPortSuffix('2001:db8::1:443')).toBe('2001:db8::1:443');
-    expect(__internals.stripPortSuffix('2001:db8::1')).toBe('2001:db8::1');
-    expect(__internals.stripPortSuffix('2001:db8::1:65536')).toBe('2001:db8::1');
-  });
-});
-
-describe('isIpAddress', () => {
-  it('validates IPv4 and IPv6 values', () => {
-    expect(__internals.isIpAddress('198.51.100.1')).toBe(true);
-    expect(__internals.isIpAddress('2001:db8::1')).toBe(true);
-    expect(__internals.isIpAddress('example.com')).toBe(false);
-  });
-});
-
-describe('isIpv4', () => {
-  it('validates dotted quad addresses and rejects invalid ones', () => {
-    expect(__internals.isIpv4('198.51.100.1')).toBe(true);
-    expect(__internals.isIpv4('256.0.0.1')).toBe(false);
-    expect(__internals.isIpv4('01.2.3.4')).toBe(false);
+      // Assert
+      expect(invalidResult).toBeUndefined();
+      expect(danglingResult).toBe('2001:db8::5');
+      expect(quotedResult).toBe('198.51.100.5');
+    });
   });
 
-  it('rejects empty and non-numeric octets', () => {
-    expect(__internals.isIpv4('198..100.1')).toBe(false);
-    expect(__internals.isIpv4('198.51a.100.1')).toBe(false);
-    expect(__internals.isIpv4('198.5123.100.1')).toBe(false);
-  });
-});
+  describe('stripOptionalQuotes', () => {
+    it('should remove matching quotes when unescaping characters', () => {
+      // Arrange
+      const doubleQuoted = '"value"';
+      const singleQuoted = "'va\\'lue'";
+      const plain = 'value';
+      // Act
+      const doubleResult = __internals.stripOptionalQuotes(doubleQuoted);
+      const singleResult = __internals.stripOptionalQuotes(singleQuoted);
+      const plainResult = __internals.stripOptionalQuotes(plain);
 
-describe('isIpv6', () => {
-  it('accepts shorthand and rejects malformed values', () => {
-    expect(__internals.isIpv6('2001:db8::1')).toBe(true);
-    expect(__internals.isIpv6('2001:db8:0000:0000:0000:0000:0000:0001')).toBe(true);
-    expect(__internals.isIpv6('2001:db8::g')).toBe(false);
-    expect(__internals.isIpv6('no-colons-here')).toBe(false);
+      // Assert
+      expect(doubleResult).toBe('value');
+      expect(singleResult).toBe("va'lue");
+      expect(plainResult).toBe('value');
+    });
   });
 
-  it('rejects addresses with more than eight segments', () => {
-    expect(__internals.isIpv6('1:2:3:4:5:6:7:8:9')).toBe(false);
+  describe('stripPortSuffix', () => {
+    it('should handle IPv4 ports when IPv6 segments are legitimate', () => {
+      // Arrange
+      const ipv4Port = '198.51.100.1:8080';
+      const ipv6WithPort = '2001:db8::1:443';
+      const ipv6Plain = '2001:db8::1';
+      const ipv6InvalidPort = '2001:db8::1:65536';
+      // Act
+      const ipv4Result = __internals.stripPortSuffix(ipv4Port);
+      const ipv6PortResult = __internals.stripPortSuffix(ipv6WithPort);
+      const ipv6PlainResult = __internals.stripPortSuffix(ipv6Plain);
+      const ipv6InvalidResult = __internals.stripPortSuffix(ipv6InvalidPort);
+
+      // Assert
+      expect(ipv4Result).toBe('198.51.100.1');
+      expect(ipv6PortResult).toBe('2001:db8::1:443');
+      expect(ipv6PlainResult).toBe('2001:db8::1');
+      expect(ipv6InvalidResult).toBe('2001:db8::1');
+    });
+  });
+
+  describe('isIpAddress', () => {
+    it('should validate IPv4 and IPv6 values when inputs vary', () => {
+      // Arrange
+      const ipv4 = '198.51.100.1';
+      const ipv6 = '2001:db8::1';
+      const host = 'example.com';
+      // Act
+      const ipv4Result = __internals.isIpAddress(ipv4);
+      const ipv6Result = __internals.isIpAddress(ipv6);
+      const hostResult = __internals.isIpAddress(host);
+
+      // Assert
+      expect(ipv4Result).toBe(true);
+      expect(ipv6Result).toBe(true);
+      expect(hostResult).toBe(false);
+    });
+  });
+
+  describe('isIpv4', () => {
+    it('should validate dotted quad addresses when values are checked', () => {
+      // Arrange
+      const valid = '198.51.100.1';
+      const overflow = '256.0.0.1';
+      const leadingZero = '01.2.3.4';
+      // Act
+      const validResult = __internals.isIpv4(valid);
+      const overflowResult = __internals.isIpv4(overflow);
+      const leadingZeroResult = __internals.isIpv4(leadingZero);
+
+      // Assert
+      expect(validResult).toBe(true);
+      expect(overflowResult).toBe(false);
+      expect(leadingZeroResult).toBe(false);
+    });
+
+    it('should reject empty and non-numeric octets when validating IPv4', () => {
+      // Arrange
+      const emptyOctet = '198..100.1';
+      const alphaOctet = '198.51a.100.1';
+      const overflowOctet = '198.5123.100.1';
+      // Act
+      const emptyResult = __internals.isIpv4(emptyOctet);
+      const alphaResult = __internals.isIpv4(alphaOctet);
+      const overflowResult = __internals.isIpv4(overflowOctet);
+
+      // Assert
+      expect(emptyResult).toBe(false);
+      expect(alphaResult).toBe(false);
+      expect(overflowResult).toBe(false);
+    });
+  });
+
+  describe('isIpv6', () => {
+    it('should accept shorthand when IPv6 values are valid', () => {
+      // Arrange
+      const shorthand = '2001:db8::1';
+      const full = '2001:db8:0000:0000:0000:0000:0000:0001';
+      const invalid = '2001:db8::g';
+      const noColons = 'no-colons-here';
+      // Act
+      const shorthandResult = __internals.isIpv6(shorthand);
+      const fullResult = __internals.isIpv6(full);
+      const invalidResult = __internals.isIpv6(invalid);
+      const noColonsResult = __internals.isIpv6(noColons);
+
+      // Assert
+      expect(shorthandResult).toBe(true);
+      expect(fullResult).toBe(true);
+      expect(invalidResult).toBe(false);
+      expect(noColonsResult).toBe(false);
+    });
+
+    it('should reject addresses when more than eight segments are present', () => {
+      // Arrange
+      const tooManySegments = '1:2:3:4:5:6:7:8:9';
+      // Act
+      const result = __internals.isIpv6(tooManySegments);
+
+      // Assert
+      expect(result).toBe(false);
+    });
   });
 });

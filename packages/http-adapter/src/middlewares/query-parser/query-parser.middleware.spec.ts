@@ -2,7 +2,6 @@ import { describe, expect, it } from 'bun:test';
 
 import type { HttpAdapter } from '../../adapter/http-adapter';
 import type { RequestQueryMap } from '../../types';
-import type { QueryValueRecord } from './types';
 
 import { BunnerHttpContext } from '../../adapter';
 import { BunnerRequest } from '../../bunner-request';
@@ -189,7 +188,7 @@ describe('query-parser.middleware', () => {
       // Act
       middleware.handle(ctx);
 
-      const query = ctx.request.query as QueryValueRecord;
+      const query = ctx.request.query;
 
       // Assert
       expect(Object.prototype.hasOwnProperty.call(query, '__proto__')).toBe(false);

@@ -25,6 +25,18 @@ export interface SourcePosition {
   readonly column: number;
 }
 
+export interface StaticObjectSourceKey {
+  kind: 'object';
+  propertyKey: string;
+}
+
+export interface StaticArraySourceKey {
+  kind: 'array';
+  index: number;
+}
+
+export type StaticSourceKey = StaticObjectSourceKey | StaticArraySourceKey;
+
 export interface SourceSpan {
   readonly start: SourcePosition;
   readonly end: SourcePosition;

@@ -3,11 +3,11 @@ import xxhash from 'xxhash-wasm';
 let hasherInstance: Awaited<ReturnType<typeof xxhash>> | null = null;
 const hasherPromise = xxhash();
 
-export const initHasher = async (): Promise<void> => {
+const initHasher = async (): Promise<void> => {
   hasherInstance ??= await hasherPromise;
 };
 
-export const hashString = (input: string): string => {
+const hashString = (input: string): string => {
   if (!hasherInstance) {
     throw new Error('Hasher not initialized. Call initHasher() first.');
   }
@@ -19,3 +19,5 @@ export const hashString = (input: string): string => {
 // Ensure the wasm hasher is initialized at module-load time so callers don't need
 // to remember to call initHasher().
 await initHasher();
+
+export { initHasher, hashString };

@@ -1,13 +1,23 @@
-import type { AdapterCollection, Configurer } from '@bunner/common';
+import type { AdapterCollection, Configurer, Context, PrimitiveArray } from '@bunner/common';
 
 import type { ScalarSetupOptions } from './interfaces';
 
 import { setupScalar } from './setup';
 
 export class ScalarConfigurer implements Configurer {
-  public constructor(private readonly options: ScalarSetupOptions) {}
+  private options: ScalarSetupOptions | undefined;
 
-  public configure(_app: unknown, adapters: AdapterCollection): void {
+  public constructor(..._args: PrimitiveArray) {}
+
+  public setOptions(options: ScalarSetupOptions): void {
+    this.options = options;
+  }
+
+  public configure(_app: Context, adapters: AdapterCollection): void {
+    if (this.options === undefined) {
+      throw new Error('Scalar: ScalarConfigurer options are required before configure().');
+    }
+
     setupScalar(adapters, this.options);
   }
 }

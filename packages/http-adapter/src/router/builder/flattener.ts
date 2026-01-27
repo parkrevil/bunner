@@ -1,5 +1,6 @@
 import type { BinaryRouterLayout, SerializedPattern } from '../schema';
 import type { Node } from './node';
+import type { MethodEntry } from './types';
 
 import {
   NodeKind,
@@ -30,7 +31,11 @@ export class Flattener {
     const queue: Node[] = [root];
 
     while (queue.length) {
-      const node = queue.shift()!;
+      const node = queue.shift();
+
+      if (!node) {
+        continue;
+      }
 
       if (nodeToIndex.has(node)) {
         continue;
@@ -94,7 +99,12 @@ export class Flattener {
     };
 
     for (let i = 0; i < nodes.length; i++) {
-      const node = nodes[i]!;
+      const node = nodes[i];
+
+      if (!node) {
+        continue;
+      }
+
       const base = i * NODE_STRIDE;
       const kindCode = node.kind === NodeKind.Static ? 0 : node.kind === NodeKind.Param ? 1 : 2;
       let wildcardOriginCode = 0;
@@ -118,7 +128,7 @@ export class Flattener {
       let methodMask = 0;
 
       if (methodCount > 0) {
-        const sortedEntries: { code: number; key: number }[] = [];
+        const sortedEntries: MethodEntry[] = [];
 
         for (const [method, key] of node.methods.byMethod.entries()) {
           const mCodeNum = METHOD_OFFSET[method];
@@ -156,7 +166,12 @@ export class Flattener {
 
         for (const [seg, child] of staticEntries) {
           staticChildrenList.push(getStringId(seg));
-          staticChildrenList.push(nodeToIndex.get(child)!);
+
+          const childIndex = nodeToIndex.get(child);
+
+          if (childIndex !== undefined) {
+            staticChildrenList.push(childIndex);
+          }
         }
       } else {
         nodeBuffer[base + NODE_OFFSET_STATIC_CHILD_PTR] = 0;
@@ -167,14 +182,20 @@ export class Flattener {
         nodeBuffer[base + NODE_OFFSET_PARAM_CHILD_PTR] = paramChildrenList.length;
 
         for (const child of node.paramChildren) {
-          paramChildrenList.push(nodeToIndex.get(child)!);
+          const childIndex = nodeToIndex.get(child);
+
+          if (childIndex !== undefined) {
+            paramChildrenList.push(childIndex);
+          }
         }
       } else {
         nodeBuffer[base + NODE_OFFSET_PARAM_CHILD_PTR] = 0;
       }
 
-      if (node.wildcardChild) {
-        nodeBuffer[base + NODE_OFFSET_WILDCARD_CHILD_PTR] = nodeToIndex.get(node.wildcardChild)!;
+      if (node.wildcardChild !== undefined) {
+        const childIndex = nodeToIndex.get(node.wildcardChild);
+
+        nodeBuffer[base + NODE_OFFSET_WILDCARD_CHILD_PTR] = childIndex ?? 0;
       } else {
         nodeBuffer[base + NODE_OFFSET_WILDCARD_CHILD_PTR] = 0;
       }
@@ -186,7 +207,7 @@ export class Flattener {
 
         let patternId = 0xffffffff;
 
-        if (node.patternSource) {
+        if (typeof node.patternSource === 'string' && node.patternSource.length > 0) {
           patternId = getPatternId(node.patternSource, node.pattern?.flags ?? '');
         }
 
