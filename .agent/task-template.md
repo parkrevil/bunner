@@ -234,7 +234,7 @@ Scope delta rule (MUST):
 
 - <이 Task에서 하지 않는 것>
 
-### Plan Code Scope Cross-check (Gate, 필수)
+### Scope Gate Cross-check (Gate, 필수)
 
 - Plan §6의 “변경 대상(예상/참고)”는 보조 근거다.
 - 기계 게이트는 2절의 `Allowed paths (MUST, copy from Plan)`로 판정하며,
@@ -315,6 +315,23 @@ Decidable execution plan rule (MUST):
 - [ ] <구현 작업 2: `file` + change summary>
 - [ ] (선택) 테스트 추가/수정: `file` + what
 
+### Implementation Details (필수)
+
+이 섹션은 “어떻게 구현할지”를 Task 내부에서 **추론 없이** 판정 가능하게 만든다.
+
+Rule (MUST):
+
+- 최소 3개 이상의 bullet(또는 numbered) 라인이 존재해야 한다.
+- 각 라인은 최소 1개 이상의 백틱 토큰을 포함해야 한다.
+  - 예: `path/to/file`, `SymbolName`, `SomeType`
+- `## 2) Scope`의 `Files to change (expected)`에 나열된 각 경로는, 이 섹션에서 최소 1회 **동일한 백틱 경로**로 등장해야 한다.
+
+Example (format only):
+
+- `path/to/file.ts`: <변경할 함수/타입>를 <어떻게 바꿀지> (입력/출력/에러 경로)
+- `path/to/other.ts`: <새 코드 경로/호출 순서/타입 흐름>를 <어떻게 연결할지>
+- `path/to/test.ts`: <어떤 케이스>를 <어떻게 검증할지>
+
 ### Verification (Gate)
 
 - Gate command(s) (필수):
@@ -366,6 +383,7 @@ Option B (log file):
   - Collection method (no VCS / no file-compare, 필수):
     - `manual` (Changed files (actual) 목록을 사람이 선언)
     - 또는 “도구 출력이 변경 파일 경로를 직접 출력하는 경우” 해당 출력의 발췌를 Evidence로 남김
+
 - Verification evidence (단일 규칙으로 고정):
   - Command logs (필수):
     - LOG-VERIFY: `<Option A 또는 Option B>`

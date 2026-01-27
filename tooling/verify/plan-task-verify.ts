@@ -133,10 +133,7 @@ const containsDisallowedVcsOrCompareCommand = (contents: string): string | null 
   return null;
 };
 
-const extractScopeSubsectionBulletLines = (
-  contents: string,
-  subsectionHeadingIncludes: string,
-): string[] => {
+const extractScopeSubsectionBulletLines = (contents: string, subsectionHeadingIncludes: string): string[] => {
   const lines = splitLines(contents);
   const bullets: string[] = [];
   let inScope = false;
@@ -218,6 +215,47 @@ const extractExecutionChecklistCheckboxLines = (contents: string, subsectionHead
   return items;
 };
 
+const extractExecutionChecklistSubsectionLines = (contents: string, subsectionHeadingIncludes: string): string[] => {
+  const lines = splitLines(contents);
+  const out: string[] = [];
+  let inExecution = false;
+  let inSubsection = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    if (!inExecution) {
+      if (trimmed.startsWith('## 5) Execution Checklist')) {
+        inExecution = true;
+      }
+
+      continue;
+    }
+
+    if (!inSubsection) {
+      if (trimmed.startsWith('## ')) {
+        break;
+      }
+
+      if (trimmed.startsWith('### ') && trimmed.includes(subsectionHeadingIncludes)) {
+        inSubsection = true;
+      }
+
+      continue;
+    }
+
+    if (trimmed.startsWith('### ') || trimmed.startsWith('## ')) {
+      break;
+    }
+
+    if (trimmed.length > 0) {
+      out.push(trimmed);
+    }
+  }
+
+  return out;
+};
+
 const extractBacktickedPaths = (line: string): string[] => {
   const matches = [...line.matchAll(/`([^`]+)`/g)];
 
@@ -228,9 +266,14 @@ const extractBacktickedPaths = (line: string): string[] => {
     .filter(value => value.length > 0);
 };
 
-const extractTaskFileRelationPairs = (contents: string): Array<{ from: string; to: string }> => {
+interface TaskFileRelationPair {
+  from: string;
+  to: string;
+}
+
+const extractTaskFileRelationPairs = (contents: string): TaskFileRelationPair[] => {
   const bullets = extractScopeSubsectionBulletLines(contents, 'File Relations');
-  const pairs: Array<{ from: string; to: string }> = [];
+  const pairs: TaskFileRelationPair[] = [];
 
   for (const bullet of bullets) {
     const match = bullet.match(/`([^`]+)`\s*->\s*`([^`]+)`/);
@@ -263,6 +306,35 @@ const validateExecutionChecklistDetail = (filePath: string, contents: string): s
     errors.push(`[plan-task-verify] ${filePath}: Execution Checklist Implementation must have at least 3 checkbox items`);
   }
 
+  if (!contents.includes('### Implementation Details (필수)')) {
+    errors.push(`[plan-task-verify] ${filePath}: missing section: Implementation Details (필수)`);
+  }
+
+  const implementationDetails = extractExecutionChecklistSubsectionLines(contents, 'Implementation Details');
+  const detailBulletCount = implementationDetails.filter(
+    line => line.startsWith('- ') || line.startsWith('* ') || /^\d+\.\s+/.test(line),
+  ).length;
+
+  if (implementationDetails.length === 0) {
+    errors.push(`[plan-task-verify] ${filePath}: Implementation Details must not be empty`);
+  } else if (detailBulletCount < 3) {
+    errors.push(`[plan-task-verify] ${filePath}: Implementation Details must include at least 3 bullet/numbered lines`);
+  }
+
+  const detailTokens = new Set<string>();
+
+  for (const line of implementationDetails) {
+    for (const value of extractBacktickedPaths(line)) {
+      detailTokens.add(value);
+    }
+  }
+
+  if (implementationDetails.length > 0 && detailTokens.size === 0) {
+    errors.push(
+      `[plan-task-verify] ${filePath}: Implementation Details must include at least one backticked token (path/symbol)`,
+    );
+  }
+
   const filesToChange = extractTaskFilesToChange(contents);
 
   if (filesToChange.length === 0) {
@@ -281,6 +353,12 @@ const validateExecutionChecklistDetail = (filePath: string, contents: string): s
     if (!mentioned.has(fileToChange)) {
       errors.push(
         `[plan-task-verify] ${filePath}: Files to change (expected) must appear as a backticked path in at least one Implementation checkbox: ${fileToChange}`,
+      );
+    }
+
+    if (implementationDetails.length > 0 && !detailTokens.has(fileToChange)) {
+      errors.push(
+        `[plan-task-verify] ${filePath}: Files to change (expected) must appear as a backticked path in Implementation Details: ${fileToChange}`,
       );
     }
   }
@@ -877,9 +955,7 @@ const validateTask = async (filePath: string, contents: string): Promise<string[
   }
 
   if (isTaskFileInTasksRoot(filePath)) {
-    errors.push(
-      `[plan-task-verify] ${filePath}: invalid task path (must be under tasks/<plan-id>/..., not tasks/*.md)`,
-    );
+    errors.push(`[plan-task-verify] ${filePath}: invalid task path (must be under tasks/<plan-id>/..., not tasks/*.md)`);
   }
 
   if (!contents.includes('# Task')) {

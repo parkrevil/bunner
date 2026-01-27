@@ -53,6 +53,7 @@ MUST-5:
 ```
 
 Note (정렬, Non-gate):
+
 - `decisionPoints`는 독립 detector가 아니라 메트릭이다.
 
 | MUST ID | Evidence ID | Step   |
@@ -124,8 +125,8 @@ Scope delta rule (MUST):
 
 ## 3) Hard Constraints (Gate, 필수)
 
-- [ ] (skip) status=draft: SSOT(docs/10..50/**) 변경 없음
-- [ ] (skip) status=draft: Public Facade(packages/*/index.ts export) 변경 없음
+- [ ] (skip) status=draft: SSOT(docs/10..50/\*\*) 변경 없음
+- [ ] (skip) status=draft: Public Facade(packages/\*/index.ts export) 변경 없음
 - [ ] (skip) status=draft: deps(package.json deps) 변경 없음
 - [ ] (skip) status=draft: `bun run verify` 통과
 
@@ -158,6 +159,13 @@ Baseline 기록 (필수):
 - [ ] (skip) status=draft: `packages/firebat/src/analyses/early-return/`에 early return 신호(guard clause 부족) 산출 규칙 추가 + 리팩터 “제안 카드” 타입 정의
 - [ ] (skip) status=draft: report 스키마에 `analyses.nesting`/`analyses.earlyReturn` 결과를 추가(`packages/firebat/src/types.ts`)
 - [ ] (skip) status=draft: text/json 출력에 nesting/earlyReturn 결과 렌더링/직렬화 추가(`packages/firebat/src/report.ts`)
+
+### Implementation Details (필수)
+
+- `packages/firebat/src/analyses/nesting/`: 함수 단위로 AST/IR에서 nesting depth 및 decisionPoints를 계산하고, report에 올릴 최소 결과 형상을 고정한다.
+- `packages/firebat/src/analyses/early-return/`: guard-clause 부족/early return 패턴을 신호로 산출하고, 리팩터 우선순위에 사용할 카드(메시지/근거) 형상을 정의한다.
+- `packages/firebat/src/types.ts`: `analyses.nesting`/`analyses.earlyReturn` 결과 타입을 추가하고, report 출력이 참조하는 필드명을 확정한다.
+- `packages/firebat/src/report.ts`: text/json 출력에서 새로운 analyses 결과를 직렬화/렌더링하며, 결과가 비어도 안정적으로 출력되게 처리한다.
 
 ### Verification (Gate)
 

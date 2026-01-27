@@ -53,6 +53,7 @@ MUST-3:
 ```
 
 Note (정렬, Non-gate):
+
 - 본 Step은 `analyses.dependencies`(증거/그래프 사실)와 `analyses.coupling`(우선순위/hotspot)을 함께 산출한다.
 
 | MUST ID | Evidence ID | Step   |
@@ -128,8 +129,8 @@ Scope delta rule (MUST):
 
 ## 3) Hard Constraints (Gate, 필수)
 
-- [ ] (skip) status=draft: SSOT(docs/10..50/**) 변경 없음
-- [ ] (skip) status=draft: Public Facade(packages/*/index.ts export) 변경 없음
+- [ ] (skip) status=draft: SSOT(docs/10..50/\*\*) 변경 없음
+- [ ] (skip) status=draft: Public Facade(packages/\*/index.ts export) 변경 없음
 - [ ] (skip) status=draft: deps(package.json deps) 변경 없음
 - [ ] (skip) status=draft: `bun run verify` 통과 (Evidence는 실행 시점에 기록)
 
@@ -164,6 +165,13 @@ Baseline 기록 (필수):
 - [ ] (skip) status=draft: cycle 탐지(최소 SCC 또는 DFS back-edge) 결과를 report 스키마에 매핑(`packages/firebat/src/types.ts`)
 - [ ] (skip) status=draft: fan-in/fan-out 산출(노드별 in/out degree) + 임계값/상위 N 정책을 report 스키마에 매핑
 - [ ] (skip) status=draft: text/json 출력 경로에 dependencies 결과를 연결(`packages/firebat/src/report.ts`)
+
+### Implementation Details (필수)
+
+- `packages/firebat/src/analyses/dependencies/`: import edge 수집(최소: file -> imported files) 데이터 구조를 정의하고, fan-in/fan-out 및 cycle 입력으로 정규화한다.
+- `packages/firebat/src/analyses/coupling/`: dependencies 결과(그래프 사실)를 받아 hotspot/우선순위용 coupling 지표를 계산하고, report 출력용 형상으로 변환한다.
+- `packages/firebat/src/types.ts`: dependencies/coupling 결과 타입을 추가하고, report에서 참조되는 최소 스키마(필드명/배열 형상)를 고정한다.
+- `packages/firebat/src/report.ts`: text/json 출력 경로에 새로운 analyses 결과를 연결하고, 누락/빈 결과(예: cycle 없음)도 안정적으로 직렬화한다.
 
 ### Verification (Gate)
 
@@ -224,12 +232,8 @@ Baseline 기록 (필수):
           "path": ["src/a.ts", "src/b.ts", "src/c.ts", "src/a.ts"]
         }
       ],
-      "fanInTop": [
-        { "module": "src/core/index.ts", "count": 18 }
-      ],
-      "fanOutTop": [
-        { "module": "src/features/heavy.ts", "count": 31 }
-      ]
+      "fanInTop": [{ "module": "src/core/index.ts", "count": 18 }],
+      "fanOutTop": [{ "module": "src/features/heavy.ts", "count": 31 }]
     }
   }
 }

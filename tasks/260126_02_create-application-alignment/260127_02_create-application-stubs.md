@@ -52,7 +52,7 @@ MUST-2:
 createApplication takes exactly one entry module and it is statically resolvable
 
 MUST-3:
-createApplication/app.start/app.stop/app.get/app.attach returns Result
+| APP-R-013 | active | MUST NOT | outcomes | Outcome:OUT-013 | createApplication/app.start/app.stop/app.get/app.attach returns Result | runtime |
 ```
 
 | MUST ID | Evidence ID | Step   |
@@ -128,8 +128,8 @@ Scope delta rule (MUST):
 
 ## 3) Hard Constraints (Gate, 필수)
 
-- [ ] (skip) status=draft: SSOT(docs/10..50/**) 변경 없음
-- [ ] (skip) status=draft: Public Facade(packages/*/index.ts export) 변경 없음
+- [ ] (skip) status=draft: SSOT(docs/10..50/\*\*) 변경 없음
+- [ ] (skip) status=draft: Public Facade(packages/\*/index.ts export) 변경 없음
 - [ ] (skip) status=draft: deps(package.json deps) 변경 없음
 - [ ] (skip) status=draft: `bun run verify` 통과
 
@@ -163,6 +163,12 @@ Baseline 기록 (필수):
 - [ ] (skip) status=draft: `packages/core/src/application/application.ts`: 반환 객체(`BunnerApplication` 또는 대체 표면)가 `get/start/stop/attach` 4개 함수를 제공하도록 스텁(no-op) 보장 + `// MUST: MUST-3` 태그 포함
 - [ ] (skip) status=draft: `packages/core/src/application/interfaces.ts`: `EntryModule`/`CreateApplicationOptions` 최소 정합(Plan §6.1) 반영 + 관련 위치에 `// MUST: MUST-2` 또는 `// MUST: MUST-3` 태그 포함
 - [ ] (skip) status=draft: (Gate 준비) expected 외 파일 변경이 필요하면 §2 Scope delta rule에 Delta 기록(또는 Plan Drift로 전환)
+
+### Implementation Details (필수)
+
+- `packages/core/src/application/application.ts`: `createApplication(entry, options?)`의 입력 검증/정규화는 하지 않고, `get/start/stop/attach` 4개 메서드를 가진 객체를 스텁(no-op)으로 반환한다.
+- `packages/core/src/application/interfaces.ts`: `EntryModule` 및 `CreateApplicationOptions`를 Plan §6.1 잠금에 맞게 최소 정의하고, `BunnerApplication` 표면 타입에 `get/start/stop/attach`를 반영한다.
+- `packages/core/src/application/application.ts`: `// MUST: MUST-2`와 `// MUST: MUST-3`가 실제 변경 지점에 포함되도록 배치한다.
 
 ### Verification (Gate)
 

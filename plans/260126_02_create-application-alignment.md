@@ -134,7 +134,7 @@ allowed_paths:
   - Quote:
 
     ```text
-    createApplication/app.start/app.stop/app.get/app.attach returns Result
+    | APP-R-013 | active | MUST NOT | outcomes | Outcome:OUT-013 | createApplication/app.start/app.stop/app.get/app.attach returns Result | runtime |
     ```
 
 ---
@@ -221,6 +221,8 @@ allowed_paths:
 
 ## 9) 실행 계획 (Step Gates, 필수)
 
+<!-- markdownlint-disable MD033 -->
+
 <a id="Step-1"></a>
 
 ### Step 1) defineModule stub 추가
@@ -240,12 +242,14 @@ allowed_paths:
   - packages/core/src/module/module.ts: MUST-1
   - packages/core/src/module/index.ts: MUST-1
 - Tasks (필수):
-  - none
+  - `tasks/260126_02_create-application-alignment/260127_01_define-module-stub.md`
 - Verification (Gate):
   - Command(s): `bun run verify`
   - Expected result: exit=0
 
 <a id="Step-2"></a>
+
+<!-- markdownlint-enable MD033 -->
 
 ### Step 2) createApplication + app surface stubs
 
@@ -266,7 +270,7 @@ allowed_paths:
   - packages/core/src/application/application.ts: MUST-2, MUST-3
   - packages/core/src/application/interfaces.ts: MUST-2, MUST-3
 - Tasks (필수):
-  - none
+  - `tasks/260126_02_create-application-alignment/260127_02_create-application-stubs.md`
 - Verification (Gate):
   - Command(s): `bun run verify`
   - Expected result: exit=0
@@ -275,11 +279,11 @@ allowed_paths:
 
 ## 10) 검증 매트릭스 (MUST → Evidence, 필수)
 
-| MUST ID | Evidence ID  | Evidence (test/log/snapshot) | Step | Notes |
-| ------- | ------------ | ---------------------------- | ---- | ----- |
-| MUST-1  | MUST-EVID-1  | `bun run verify`             | 1    | defineModule marker is present |
-| MUST-2  | MUST-EVID-2  | `bun run verify`             | 2    | entry is a single, statically resolvable module marker |
-| MUST-3  | MUST-EVID-3  | `bun run verify`             | 2    | no Result return |
+| MUST ID | Evidence ID | Evidence (test/log/snapshot) | Step | Notes                                                  |
+| ------- | ----------- | ---------------------------- | ---- | ------------------------------------------------------ |
+| MUST-1  | MUST-EVID-1 | `bun run verify`             | 1    | defineModule marker is present                         |
+| MUST-2  | MUST-EVID-2 | `bun run verify`             | 2    | entry is a single, statically resolvable module marker |
+| MUST-3  | MUST-EVID-3 | `bun run verify`             | 2    | no Result return                                       |
 
 ---
 

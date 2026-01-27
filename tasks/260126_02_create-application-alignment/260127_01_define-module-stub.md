@@ -121,8 +121,8 @@ Scope delta rule (MUST):
 
 ## 3) Hard Constraints (Gate, 필수)
 
-- [ ] (skip) status=draft: SSOT(docs/10..50/**) 변경 없음
-- [ ] (skip) status=draft: Public Facade(packages/*/index.ts export) 변경 없음
+- [ ] (skip) status=draft: SSOT(docs/10..50/\*\*) 변경 없음
+- [ ] (skip) status=draft: Public Facade(packages/\*/index.ts export) 변경 없음
 - [ ] (skip) status=draft: deps(package.json deps) 변경 없음
 - [ ] (skip) status=draft: `bun run verify` 통과
 
@@ -156,6 +156,12 @@ Baseline 기록 (필수):
 - [ ] (skip) status=draft: `packages/core/src/module/module.ts`: `DefineModuleOptions`를 “임시 프로퍼티 1개” 포함 형태로 선언(Plan §6.1 잠금 준수)
 - [ ] (skip) status=draft: `packages/core/src/module/index.ts`: `defineModule` named export re-export(배럴) + `// MUST: MUST-1` 태그 포함
 - [ ] (skip) status=draft: expected 외 파일 변경이 필요하면 §2 Scope delta rule에 Delta 기록(또는 Plan Drift로 전환)
+
+### Implementation Details (필수)
+
+- `packages/core/src/module/module.ts`: `defineModule`이 `symbol` marker를 반환하도록 스텁 구현하고, `DefineModuleOptions`는 `__temp?: true` 형태로만 유지한다.
+- `packages/core/src/module/index.ts`: `defineModule`를 named export로 re-export하여 import 경로를 고정한다.
+- `packages/core/src/module/module.ts`: `// MUST: MUST-1` 태그가 실제 변경 코드 경로에 포함되도록 배치한다.
 
 ### Verification (Gate)
 

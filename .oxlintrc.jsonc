@@ -307,5 +307,6 @@
     "dist",
     "**/dist/**",
     ".dependency-cruiser.cjs",
+    "commitlint.config.cjs",
   ],
 }
