@@ -9,7 +9,7 @@ export interface BunnerAdapter {
 export interface Context {
   getType(): string;
   get(key: string): BunnerValue | undefined;
-  to<TContext>(ctor: ClassToken<TContext>): TContext;
+  to<TContext extends BunnerValue>(ctor: ClassToken<TContext>): TContext;
 }
 
 // DI Interfaces
@@ -111,7 +111,7 @@ export interface MiddlewareRegistration<TOptions = BunnerValue> {
 export type BunnerFactory<TValue = BunnerValue> = (container: BunnerContainer) => TValue;
 
 export interface BunnerContainer {
-  get<TValue = BunnerValue>(token: ProviderToken): TValue;
+  get(token: ProviderToken): BunnerValue;
   set<TValue = BunnerValue>(token: ProviderToken, factory: BunnerFactory<TValue>): void;
   has(token: ProviderToken): boolean;
   getInstances(): IterableIterator<BunnerValue>;

@@ -1,7 +1,6 @@
 import * as path from 'node:path';
 
 import type { SourcePosition } from '../types';
-import type { ParserOptions } from 'oxc-parser';
 import type { OxcParseResult, ParseSyncFn, ParsedFile } from './types';
 
 import * as oxcParser from 'oxc-parser';
@@ -41,8 +40,8 @@ const loadParseSync = (): ParseSyncFn => {
   const candidate = oxcParser.parseSync;
 
   if (typeof candidate === 'function') {
-    return (filePath: string, sourceText: string, options?: ParserOptions | null) => {
-      return candidate(filePath, sourceText, options ?? undefined);
+    return (filePath: string, sourceText: string) => {
+      return candidate(filePath, sourceText);
     };
   }
 

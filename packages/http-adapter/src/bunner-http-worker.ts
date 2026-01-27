@@ -30,18 +30,13 @@ class BunnerHttpWorker extends ClusterBaseWorker {
 
     const { options, entryModule } = params;
     const manifestPath = entryModule.manifestPath;
+    const manifest = entryModule.manifest;
 
-    if (typeof manifestPath === 'string' && manifestPath.length > 0) {
-      this.logger.info(`⚡ AOT Worker Load: ${manifestPath}`);
-
-      // eslint-disable-next-line bunner/no-dynamic-import, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-type-assertion
-      const manifestModule = (await import(manifestPath)) as BunnerValue;
-
-      if (!this.isHttpWorkerManifest(manifestModule)) {
-        throw new Error('Invalid AOT manifest module. Missing createContainer().');
+    if (this.isHttpWorkerManifest(manifest)) {
+      if (typeof manifestPath === 'string' && manifestPath.length > 0) {
+        this.logger.info(`⚡ AOT Worker Load: ${manifestPath}`);
       }
 
-      const manifest = manifestModule;
       const container = manifest.createContainer();
       const metadataRegistry =
         manifest.createMetadataRegistry?.() ?? new Map<ControllerConstructor, ClassMetadata>();
@@ -64,6 +59,10 @@ class BunnerHttpWorker extends ClusterBaseWorker {
 
       await this.httpServer.boot(container, bootOptions);
     } else {
+      if (typeof manifestPath === 'string' && manifestPath.length > 0) {
+        this.logger.warn('⚠️ AOT manifest path provided but manifest module is missing. Falling back to JIT.');
+      }
+
       this.logger.warn('⚠️ Standard Mode (JIT) - Booting without AOT Manifest');
 
       // Basic JIT Container Setup
@@ -84,7 +83,7 @@ class BunnerHttpWorker extends ClusterBaseWorker {
     this.logger.info(`🛑 Worker #${this.id} is destroying...`);
   }
 
-  private isHttpWorkerManifest(value: BunnerValue): value is HttpWorkerManifest {
+  private isHttpWorkerManifest(value: BunnerValue | undefined): value is HttpWorkerManifest {
     if (!this.isRecord(value)) {
       return false;
     }
@@ -113,7 +112,7 @@ class BunnerHttpWorker extends ClusterBaseWorker {
     return this.isRecord(options);
   }
 
-  private isRecord(value: BunnerValue): value is BunnerRecord {
+  private isRecord(value: BunnerValue | undefined): value is BunnerRecord {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
   }
 }

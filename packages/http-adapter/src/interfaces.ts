@@ -94,6 +94,7 @@ export interface HttpWorkerEntryModule {
   readonly path?: string;
   readonly className: string;
   readonly manifestPath?: string;
+  readonly manifest?: HttpWorkerManifest;
 }
 
 export interface HttpWorkerInitParams {

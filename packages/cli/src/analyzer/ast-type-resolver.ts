@@ -1,12 +1,10 @@
-import type { Program } from 'oxc-parser';
-
-import type { AnalyzerValue, AnalyzerValueRecord, NodeRecord, TypeInfo } from './types';
+import type { AnalyzerProgram, AnalyzerValue, AnalyzerValueRecord, NodeRecord, TypeInfo } from './types';
 
 const isAnalyzerValueArray = (value: AnalyzerValue): value is AnalyzerValue[] => {
   return Array.isArray(value);
 };
 
-const isRecordCandidate = (value: AnalyzerValue): value is AnalyzerValueRecord | Program => {
+const isRecordCandidate = (value: AnalyzerValue): value is AnalyzerValueRecord | AnalyzerProgram => {
   return typeof value === 'object' && value !== null && !isAnalyzerValueArray(value);
 };
 
@@ -169,7 +167,7 @@ export class AstTypeResolver {
     return value;
   }
 
-  private isProgram(value: AnalyzerValueRecord | Program): value is Program {
+  private isProgram(value: AnalyzerValueRecord | AnalyzerProgram): value is AnalyzerProgram {
     const typeValue = value.type;
 
     return typeof typeValue === 'string' && typeValue === 'Program';

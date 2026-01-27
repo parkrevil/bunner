@@ -153,8 +153,7 @@ export class BunnerHttpServer {
       ) {
         if (contentType.includes('application/json')) {
           try {
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-type-assertion
-            const parsed = (await req.json()) as BunnerValue;
+            const parsed = await req.json();
 
             body = this.isJsonValue(parsed) ? parsed : {};
           } catch {

@@ -1,4 +1,4 @@
-import type { BunnerValue, Context } from '@bunner/common';
+import type { BunnerValue, Callable, Context } from '@bunner/common';
 
 import { BunnerErrorFilter } from '@bunner/common';
 import { describe, expect, it, mock } from 'bun:test';
@@ -16,7 +16,7 @@ import type {
 import { createHttpTestHarness, handleRequest, withGlobalMiddlewares } from '../http-test-kit';
 import { BunnerHttpContext, type BunnerResponse, HttpMethod } from '../index';
 
-function isBunnerRecordValue(value: BunnerValue): value is Record<string, BunnerValue> {
+function isBunnerRecordValue(value: BunnerValue | SystemError): value is Record<string, BunnerValue> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
@@ -107,13 +107,12 @@ const toJsonValue = (value: BunnerValue): RequestBodyValue => {
 };
 
 const toBunnerRecord = (value: SystemError): Record<string, BunnerValue> | undefined => {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+  if (!isBunnerRecordValue(value)) {
     return undefined;
   }
 
   const record: Record<string, BunnerValue> = {};
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
-  const entries = Object.entries(value as Record<string, BunnerValue>);
+  const entries = Object.entries(value);
 
   for (const [key, entry] of entries) {
     if (isBunnerValue(entry)) {
@@ -124,14 +123,13 @@ const toBunnerRecord = (value: SystemError): Record<string, BunnerValue> | undef
   return record;
 };
 
-const parseWorkerBody = (body: HttpWorkerResponseBody): BunnerValue | null => {
+const parseWorkerBody = async (body: HttpWorkerResponseBody): Promise<BunnerValue | null> => {
   if (typeof body !== 'string') {
     return null;
   }
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const parsed: BunnerValue = JSON.parse(body);
+    const parsed = await new Response(body).json();
 
     return isBunnerValue(parsed) ? parsed : null;
   } catch {
@@ -153,8 +151,12 @@ class ValidationController {
 }
 
 class HttpStatusErrorFilter extends BunnerErrorFilter<SystemError> {
-  constructor(private readonly onCall: () => void) {
+  private readonly onCall: Callable;
+
+  constructor(onCall: BunnerValue) {
     super();
+
+    this.onCall = isCallable(onCall) ? onCall : () => undefined;
   }
 
   catch(error: SystemError, ctx: Context): void {
@@ -194,6 +196,10 @@ function assertHttpContext(ctx: Context): BunnerHttpContext {
   }
 
   throw new Error('Expected BunnerHttpContext');
+}
+
+function isCallable(value: BunnerValue): value is Callable {
+  return typeof value === 'function';
 }
 
 function createRegistry(): Map<MetadataRegistryKey, CombinedMetadataInput | ClassMetadata> {
@@ -249,8 +255,7 @@ describe('RequestHandler.handle', () => {
     const metadataRegistry = createRegistry();
     const onErrorFilter = mock(() => undefined);
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
-    metadataRegistry.set(HttpStatusErrorFilter as MetadataRegistryKey, {
+    metadataRegistry.set(HttpStatusErrorFilter, {
       className: 'HttpStatusErrorFilter',
       decorators: [{ name: 'Catch', arguments: [Error] }],
     });
@@ -276,7 +281,7 @@ describe('RequestHandler.handle', () => {
     expect(onErrorFilter).toHaveBeenCalledTimes(0);
     expect(workerResponse.init.status).toBe(StatusCodes.OK);
 
-    const parsed = parseWorkerBody(workerResponse.body);
+    const parsed = await parseWorkerBody(workerResponse.body);
 
     expect(isRecord(parsed)).toBeTrue();
 
@@ -292,8 +297,7 @@ describe('RequestHandler.handle', () => {
     const metadataRegistry = createRegistry();
     const onErrorFilter = mock(() => {});
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
-    metadataRegistry.set(HttpStatusErrorFilter as MetadataRegistryKey, {
+    metadataRegistry.set(HttpStatusErrorFilter, {
       className: 'HttpStatusErrorFilter',
       decorators: [{ name: 'Catch', arguments: [Error] }],
     });
@@ -319,7 +323,7 @@ describe('RequestHandler.handle', () => {
     expect(onErrorFilter).toHaveBeenCalledTimes(1);
     expect(workerResponse.init.status).toBe(StatusCodes.BAD_REQUEST);
 
-    const parsed = parseWorkerBody(workerResponse.body);
+    const parsed = await parseWorkerBody(workerResponse.body);
 
     expect(isRecord(parsed)).toBeTrue();
 
@@ -340,8 +344,7 @@ describe('RequestHandler.handle', () => {
     const metadataRegistry = createRegistry();
     const onErrorFilter = mock(() => {});
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
-    metadataRegistry.set(HttpStatusErrorFilter as MetadataRegistryKey, {
+    metadataRegistry.set(HttpStatusErrorFilter, {
       className: 'HttpStatusErrorFilter',
       decorators: [{ name: 'Catch', arguments: [Error] }],
     });
@@ -367,7 +370,7 @@ describe('RequestHandler.handle', () => {
     expect(onErrorFilter).toHaveBeenCalledTimes(1);
     expect(workerResponse.init.status).toBe(StatusCodes.BAD_REQUEST);
 
-    const parsed = parseWorkerBody(workerResponse.body);
+    const parsed = await parseWorkerBody(workerResponse.body);
 
     expect(isRecord(parsed)).toBeTrue();
 
@@ -387,8 +390,7 @@ describe('RequestHandler.handle', () => {
     const metadataRegistry = createRegistry();
     const onErrorFilter = mock(() => {});
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
-    metadataRegistry.set(HttpStatusErrorFilter as MetadataRegistryKey, {
+    metadataRegistry.set(HttpStatusErrorFilter, {
       className: 'HttpStatusErrorFilter',
       decorators: [{ name: 'Catch', arguments: [Error] }],
     });
@@ -414,7 +416,7 @@ describe('RequestHandler.handle', () => {
     expect(onErrorFilter).toHaveBeenCalledTimes(1);
     expect(workerResponse.init.status).toBe(StatusCodes.BAD_REQUEST);
 
-    const parsed = parseWorkerBody(workerResponse.body);
+    const parsed = await parseWorkerBody(workerResponse.body);
 
     expect(isRecord(parsed)).toBeTrue();
 

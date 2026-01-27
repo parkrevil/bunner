@@ -171,8 +171,7 @@ export class ConfigLoader {
   private static async loadJsonConfig(path: string, cwd: string): Promise<ResolvedBunnerConfig> {
     const sourcePath = relative(cwd, path);
     const rawText = await Bun.file(path).text();
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
-    const parsed = JSON.parse(rawText) as JsonValue;
+    const parsed = JSON.parse(rawText);
 
     return this.toResolvedConfig(parsed, sourcePath);
   }

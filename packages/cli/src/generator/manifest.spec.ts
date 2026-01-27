@@ -33,6 +33,7 @@ const assertArrayValue = (value: AnalyzerValue): AnalyzerValue[] => {
   throw new Error('Expected an array value.');
 };
 
+
 function executeModule<TModule>(jsCode: string, initialExports: TModule): TModule {
   const moduleContainer = { exports: initialExports };
   const context = { module: moduleContainer, exports: moduleContainer.exports };
@@ -218,8 +219,7 @@ describe('manifest', () => {
       handlerIndex: [{ id: 'test:src/controllers.ts#SampleController.handle' }],
     });
     // Act
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
-    const parsed = JSON.parse(json) as AnalyzerValue;
+    const parsed = JSON.parse(json);
     const parsedRecord = assertRecordValue(parsed);
     const adapterSpecs = assertRecordValue(parsedRecord.adapterStaticSpecs);
     const handlerIndex = assertArrayValue(parsedRecord.handlerIndex);

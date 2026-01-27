@@ -52,6 +52,3 @@ const plugin = {
 };
 
 export { plugin };
-
-// eslint-disable-next-line import/no-default-export
-export default plugin;

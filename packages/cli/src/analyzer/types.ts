@@ -10,7 +10,9 @@ export interface AnalyzerValueRecord {
 
 export type AnalyzerValueArray = ReadonlyArray<AnalyzerValue>;
 
-export type AnalyzerValue = AnalyzerPrimitive | AnalyzerValueArray | AnalyzerValueRecord | Program;
+export type AnalyzerProgram = Program;
+
+export type AnalyzerValue = AnalyzerPrimitive | AnalyzerValueArray | AnalyzerValueRecord | AnalyzerProgram;
 
 export interface NodeRecord extends AnalyzerValueRecord {
   readonly type: string;

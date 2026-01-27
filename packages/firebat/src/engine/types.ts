@@ -1,7 +1,7 @@
 import type { IntegerCFG } from './cfg';
 import type { IBitSet } from './dataflow';
 import type { RoaringBitmap32 } from 'roaring';
-import type { ParseResult, ParserOptions, Program } from 'oxc-parser';
+import type { ParseResult } from 'oxc-parser';
 
 export type NodeId = number;
 
@@ -38,6 +38,12 @@ export interface FunctionBodyAnalysis {
 }
 
 export type RoaringBitmap32Instance = RoaringBitmap32;
+
+export type Program = ParseResult['program'];
+
+export type OxcParseError = ParseResult['errors'][number];
+
+export type OxcComment = ParseResult['comments'][number];
 
 export type OxcNodeValue =
   | string
@@ -89,7 +95,7 @@ export interface ParseSyncModule {
   parseSync?: ParseSyncFn;
 }
 
-export type ParseSyncFn = (filePath: string, sourceText: string, options?: ParserOptions | null) => OxcParseResult;
+export type ParseSyncFn = (filePath: string, sourceText: string) => OxcParseResult;
 
 export interface ParseTask {
   filePath: string;

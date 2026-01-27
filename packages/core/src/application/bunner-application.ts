@@ -6,7 +6,6 @@ import type {
   ClassToken,
   Configurer,
   MiddlewareConfig,
-  ProviderToken,
   OnDestroy,
   OnInit,
   OnShutdown,
@@ -138,9 +137,8 @@ export class BunnerApplication {
     await this.callLifecycleHook('onDestroy');
   }
 
-  private getContextInstance<TContext>(ctor: ClassToken<TContext>): TContext {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
-    const instance = this.container.get<TContext>(ctor as ProviderToken);
+  private getContextInstance<TContext extends BunnerValue>(ctor: ClassToken<TContext>): TContext {
+    const instance = this.container.get(ctor);
 
     if (instance instanceof ctor) {
       return instance;
@@ -159,7 +157,7 @@ export class BunnerApplication {
           return undefined;
         }
       },
-      to: <TContext>(ctor: ClassToken<TContext>) => this.getContextInstance(ctor),
+      to: <TContext extends BunnerValue>(ctor: ClassToken<TContext>) => this.getContextInstance(ctor),
       container: this.container,
       entryModule: this.entryModule,
     };

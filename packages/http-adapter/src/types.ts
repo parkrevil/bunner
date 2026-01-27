@@ -117,6 +117,7 @@ export type RouteHandlerFunction = (...args: readonly RouteHandlerArgument[]) =>
 export type ControllerInstance = Record<string, RouteHandlerValue | RouteHandlerFunction>;
 
 export type ContainerInstance =
+  | BunnerValue
   | ControllerInstance
   | BunnerMiddleware
   | BunnerErrorFilter

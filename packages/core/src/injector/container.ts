@@ -44,12 +44,11 @@ export class Container implements BunnerContainer {
     this.factories.set(token, wrapped);
   }
 
-  get<TValue = ContainerValue>(token: Token): TValue {
+  get(token: Token): ContainerValue {
     const existing = this.instances.get(token);
 
     if (this.instances.has(token)) {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
-      return existing as TValue;
+      return existing;
     }
 
     const factory = this.factories.get(token);
@@ -64,8 +63,7 @@ export class Container implements BunnerContainer {
 
     this.instances.set(token, instance);
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
-    return instance as TValue;
+    return instance;
   }
 
   keys(): IterableIterator<Token> {
