@@ -161,7 +161,6 @@ export type DecoratorArgument =
   | TokenCarrier
   | MiddlewareToken
   | MiddlewareRegistration
-   
   | ErrorConstructor
   | PrimitiveArray
   | PrimitiveRecord

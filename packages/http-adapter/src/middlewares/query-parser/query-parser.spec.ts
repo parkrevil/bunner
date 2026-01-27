@@ -692,12 +692,11 @@ describe('query-parser', () => {
       const parser = new QueryParser();
       // Act
       const res = parseRecord(parser, '__defineGetter__=bad');
-      // Assert
-      const descriptor = Object.getOwnPropertyDescriptor(res, '__defineGetter__');
 
-      expect(descriptor?.value).not.toBe('bad');
+      // Assert
+      expect(Object.prototype.hasOwnProperty.call(res, '__defineGetter__')).toBe(false);
       // It is blocked, so it remains the inherited function from Object.prototype
-      expect(typeof descriptor?.value).toBe('function');
+      expect(typeof res.__defineGetter__).toBe('function');
     });
   });
 

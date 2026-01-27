@@ -1,10 +1,10 @@
-import type { ImportRegistry } from './import-registry';
-
-import { type ClassMetadata } from '../analyzer';
 import type { ConstructorParamMetadata, DecoratorMetadata } from '../analyzer/interfaces';
 import type { AnalyzerValue, AnalyzerValueRecord } from '../analyzer/types';
-import { compareCodePoint } from '../common';
+import type { ImportRegistry } from './import-registry';
 import type { MetadataClassEntry } from './interfaces';
+
+import { type ClassMetadata } from '../analyzer';
+import { compareCodePoint } from '../common';
 
 export class MetadataGenerator {
   generate(classes: MetadataClassEntry[], registry: ImportRegistry): string {
@@ -98,7 +98,11 @@ export class MetadataGenerator {
         const parentProps = resolveMetadata(h.typeName, new Set(visited));
 
         if (h.typeName) {
-          if (['Partial', 'Pick', 'Omit', 'Required'].includes(h.typeName) && Array.isArray(h.typeArgs) && h.typeArgs.length > 0) {
+          if (
+            ['Partial', 'Pick', 'Omit', 'Required'].includes(h.typeName) &&
+            Array.isArray(h.typeArgs) &&
+            h.typeArgs.length > 0
+          ) {
             const baseDtoName = h.typeArgs[0];
 
             if (!isNonEmptyString(baseDtoName)) {

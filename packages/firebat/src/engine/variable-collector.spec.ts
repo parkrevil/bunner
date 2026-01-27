@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 
+import type { OxcNode, OxcNodeValue, VariableUsage } from './types';
+
 import { parseSource } from './oxc-wrapper';
 import { collectVariables } from './variable-collector';
-import type { OxcNode, OxcNodeValue, VariableUsage } from './types';
 
 const isOxcNode = (value: OxcNodeValue | undefined): value is OxcNode =>
   typeof value === 'object' && value !== null && !Array.isArray(value);

@@ -104,6 +104,15 @@ export function resolveHttpNamesForHosting(adapters: AdapterCollectionLike, http
   }
 
   const targets = httpTargets;
+
+  if (targets.length === 0) {
+    return [];
+  }
+
+  if (httpGroup !== undefined && hasAllMethod(httpGroup) && allHttpNames.length === 0) {
+    throw new Error('Scalar: http adapter group does not support lookup');
+  }
+
   const missing = targets.filter(name => !allHttpNames.includes(name));
 
   if (missing.length > 0) {

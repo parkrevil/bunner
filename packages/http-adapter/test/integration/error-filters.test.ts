@@ -5,6 +5,7 @@ import { Container } from '@bunner/core';
 import { describe, expect, it, mock } from 'bun:test';
 import { StatusCodes } from 'http-status-codes';
 
+import type { HttpAdapterStartContext } from '../../src/interfaces';
 import type {
   ClassMetadata,
   MetadataRegistryKey,
@@ -14,7 +15,6 @@ import type {
   RouteHandlerValue,
   SystemError,
 } from '../../src/types';
-import type { HttpAdapterStartContext } from '../../src/interfaces';
 import type { ErrorFilterRegistryParams } from './types';
 
 import { BunnerHttpAdapter } from '../../index';
@@ -64,7 +64,6 @@ class ErrorController {
     return { ok: true };
   }
 }
-
 
 function assertHttpContext(ctx: Context): BunnerHttpContext {
   if (ctx instanceof BunnerHttpContext) {

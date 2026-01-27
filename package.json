@@ -27,16 +27,16 @@
   ],
   "type": "module",
   "scripts": {
-    "tools:update": "(cd ./packages/oxlint-plugin && bun run build) & p1=$!; (cd ./packages/firebat && bun run build) & p2=$!; wait $p1 && wait $p2 && bun install",
     "firebat": "firebat",
     "format": "oxfmt --config .oxfmtrc.jsonc --write .",
+    "knip": "knip",
     "lint": "oxlint --config .oxlintrc.jsonc --type-aware --type-check --fix .",
     "prepare": "husky",
     "test": "bun test",
     "test:coverage": "bun test --coverage",
+    "tools:update": "(cd ./packages/oxlint-plugin && bun run build) & p1=$!; (cd ./packages/firebat && bun run build) & p2=$!; wait $p1 && wait $p2 && bun install",
     "tsc": "tsc --noEmit",
-    "verify": "bun run tooling/verify",
-    "knip": "knip"
+    "verify": "bun run tooling/verify"
   },
   "dependencies": {},
   "devDependencies": {

@@ -35,10 +35,7 @@ export class Container implements BunnerContainer {
 
   set<TValue extends ContainerValue = ContainerValue>(token: Token, factory: BunnerFactory<TValue>): void;
   set(token: Token, factory: FactoryFn): void;
-  set<TValue extends ContainerValue = ContainerValue>(
-    token: Token,
-    factory: BunnerFactory<TValue> | FactoryFn,
-  ): void {
+  set<TValue extends ContainerValue = ContainerValue>(token: Token, factory: BunnerFactory<TValue> | FactoryFn): void {
     const wrapped: FactoryFn = c => factory(c);
 
     this.factories.set(token, wrapped);

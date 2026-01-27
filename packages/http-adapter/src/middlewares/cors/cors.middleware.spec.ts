@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'bun:test';
+import { StatusCodes } from 'http-status-codes';
 
 import type { HttpAdapter } from '../../adapter/http-adapter';
-
-import { StatusCodes } from 'http-status-codes';
 
 import { BunnerHttpContext } from '../../adapter';
 import { BunnerRequest } from '../../bunner-request';
@@ -57,7 +56,7 @@ describe('cors.middleware', () => {
       ip: null,
       ips: [],
     });
-    const response = new BunnerResponse(request, new Response());
+    const response = new BunnerResponse(request, new Headers());
     const adapter: HttpAdapter = {
       getRequest: () => request,
       getResponse: () => response,

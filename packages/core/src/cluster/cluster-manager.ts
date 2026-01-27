@@ -86,17 +86,13 @@ export class ClusterManager<T extends ClusterBaseWorker & Record<string, RpcCall
       return;
     }
 
-    const meta =
-      error instanceof Error
-        ? error
-        : { error: error instanceof Event ? error.type : 'unknown' };
+    const meta = error instanceof Error ? error : { error: error instanceof Event ? error.type : 'unknown' };
 
     this.logger.error(`💥 Worker #${id} ${event}: `, meta);
 
     try {
       await this.destroyWorker(id);
-    } catch {
-    }
+    } catch {}
 
     this.workers[id] = undefined;
 

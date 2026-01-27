@@ -1,5 +1,6 @@
-import { PathResolver, compareCodePoint } from '../common';
 import type { ImportRegistryEntry } from './interfaces';
+
+import { PathResolver, compareCodePoint } from '../common';
 
 export class ImportRegistry {
   private imports = new Map<string, ImportRegistryEntry>();

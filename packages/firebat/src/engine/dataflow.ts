@@ -1,6 +1,3 @@
-import { RoaringBitmap32 } from 'roaring';
-
-import type { RoaringBitmap32Instance } from './types';
 
 interface IBitSet {
   add(index: number): void;
@@ -98,88 +95,9 @@ class BigIntBitSet implements IBitSet {
   }
 }
 
-class RoaringBitSet implements IBitSet {
-  private bitmap: RoaringBitmap32Instance;
 
-  constructor(bitmap?: RoaringBitmap32Instance) {
-    this.bitmap = bitmap ? new RoaringBitmap32(bitmap) : new RoaringBitmap32();
-  }
-
-  add(index: number): void {
-    this.bitmap.add(index);
-  }
-
-  remove(index: number): void {
-    this.bitmap.remove(index);
-  }
-
-  has(index: number): boolean {
-    return this.bitmap.has(index);
-  }
-
-  union(other: IBitSet): IBitSet {
-    if (other instanceof RoaringBitSet) {
-      const result = new RoaringBitmap32(this.bitmap);
-
-      result.orInPlace(other.bitmap);
-
-      return new RoaringBitSet(result);
-    }
-
-    throw new Error('BitSet type mismatch in union');
-  }
-
-  intersect(other: IBitSet): IBitSet {
-    if (other instanceof RoaringBitSet) {
-      const result = new RoaringBitmap32(this.bitmap);
-
-      result.andInPlace(other.bitmap);
-
-      return new RoaringBitSet(result);
-    }
-
-    throw new Error('BitSet type mismatch in intersect');
-  }
-
-  subtract(other: IBitSet): IBitSet {
-    if (other instanceof RoaringBitSet) {
-      const result = new RoaringBitmap32(this.bitmap);
-
-      result.andNotInPlace(other.bitmap);
-
-      return new RoaringBitSet(result);
-    }
-
-    throw new Error('BitSet type mismatch in subtract');
-  }
-
-  clone(): IBitSet {
-    return new RoaringBitSet(this.bitmap);
-  }
-
-  isEmpty(): boolean {
-    return this.bitmap.isEmpty;
-  }
-
-  equals(other: IBitSet): boolean {
-    if (other instanceof RoaringBitSet) {
-      return this.bitmap.isEqual(other.bitmap);
-    }
-
-    return false;
-  }
-
-  toArray(): number[] {
-    return this.bitmap.toArray();
-  }
-}
-
-const createBitSet = (variableCount: number): IBitSet => {
-  if (variableCount <= 64) {
-    return new BigIntBitSet();
-  }
-
-    return new RoaringBitSet();
+const createBitSet = (): IBitSet => {
+  return new BigIntBitSet();
 };
 
 export { createBitSet };

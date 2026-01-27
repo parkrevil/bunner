@@ -5,9 +5,9 @@ import { StatusCodes } from 'http-status-codes';
 
 import type { ClassMetadata, MetadataRegistryKey, SystemError } from '../../src/types';
 
+import { SystemErrorHandler } from '../../src/system-error-handler';
 import { createHttpTestHarness, handleRequest, withGlobalMiddlewares } from '../http-test-kit';
 import { BunnerHttpContext, type BunnerResponse, HttpMethod } from '../index';
-import { SystemErrorHandler } from '../../src/system-error-handler';
 
 class SystemController {
   boom(): void {

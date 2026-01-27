@@ -1,9 +1,8 @@
 import * as path from 'node:path';
+import * as oxcParser from 'oxc-parser';
 
 import type { SourcePosition } from '../types';
 import type { OxcParseResult, ParseSyncFn, ParsedFile } from './types';
-
-import * as oxcParser from 'oxc-parser';
 
 const resolveOxcParserNativeBinding = async (): Promise<string | null> => {
   const candidates = [

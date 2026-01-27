@@ -1,10 +1,11 @@
 import { RestController, Delete, Get, Param, Post, Put, Body } from '@bunner/http-adapter';
 
+import type { PostCommentInput } from './comments/interfaces';
+import type { Post as PostEntity } from './interfaces';
+
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { PostsService } from './posts.service';
-import type { Post as PostEntity } from './interfaces';
-import type { PostCommentInput } from './comments/interfaces';
 
 @RestController('posts')
 export class PostsController {

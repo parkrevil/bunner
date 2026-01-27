@@ -294,6 +294,64 @@ export class QueryParser {
         }
       }
 
+      if (Array.isArray(current)) {
+        if (prop === '') {
+          if (isLast) {
+            this.assignLeaf(current, prop, value);
+
+            depth++;
+
+            continue;
+          }
+
+          const nextKey = keys[k + 1] ?? '';
+          const nextContainer: QueryContainer = this.shouldCreateArray(nextKey) ? [] : {};
+
+          current.push(nextContainer);
+
+          parent = current;
+          parentKey = current.length - 1;
+          current = nextContainer;
+
+          depth++;
+
+          continue;
+        }
+
+        if (this.isValidArrayIndex(prop)) {
+          const index = parseInt(prop, 10);
+
+          if (index > this.options.arrayLimit) {
+            return;
+          }
+
+          if (isLast) {
+            this.assignLeaf(current, prop, value);
+
+            depth++;
+
+            continue;
+          }
+
+          const nextKey = keys[k + 1] ?? '';
+          let nextValue = current[index];
+
+          if (!this.isRecordValue(nextValue) && !Array.isArray(nextValue)) {
+            nextValue = this.shouldCreateArray(nextKey) ? [] : {};
+
+            this.assignArrayRecordValue(current, prop, nextValue);
+          }
+
+          parent = current;
+          parentKey = prop;
+          current = nextValue;
+
+          depth++;
+
+          continue;
+        }
+      }
+
       if (isLast) {
         this.assignLeaf(current, prop, value);
       } else {
@@ -394,7 +452,7 @@ export class QueryParser {
           return;
         } // Sparse Array Protection
 
-          this.assignArrayRecordValue(obj, key, value);
+        this.assignArrayRecordValue(obj, key, value);
       } else {
         // Mixed keys: Non-numeric key in array context
         if (this.options.strictMode) {

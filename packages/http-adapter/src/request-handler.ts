@@ -284,10 +284,7 @@ export class RequestHandler {
       throw new Error('ErrorFilter engine failed');
     }
 
-    const filters: Array<BunnerErrorFilter<SystemError>> = [
-      ...(entry?.errorFilters ?? []),
-      ...this.globalErrorFilters,
-    ];
+    const filters: Array<BunnerErrorFilter<SystemError>> = [...(entry?.errorFilters ?? []), ...this.globalErrorFilters];
     const originalError = error;
     let currentError: SystemError = error;
 
@@ -605,11 +602,7 @@ export class RequestHandler {
     return undefined;
   }
 
-  private async invokeErrorFilter(
-    filter: BunnerErrorFilter<SystemError>,
-    error: SystemError,
-    ctx: Context,
-  ): Promise<void> {
+  private async invokeErrorFilter(filter: BunnerErrorFilter<SystemError>, error: SystemError, ctx: Context): Promise<void> {
     const catchHandler = filter.catch.bind(filter);
 
     await catchHandler(error, ctx);

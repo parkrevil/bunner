@@ -394,7 +394,7 @@ export class ModuleGraph {
       token = record.__bunner_ref;
     }
 
-    const metadata = this.isClassMetadata(p) ? p : record ?? undefined;
+    const metadata = this.isClassMetadata(p) ? p : (record ?? undefined);
 
     return { token, metadata, isExported, scope };
   }

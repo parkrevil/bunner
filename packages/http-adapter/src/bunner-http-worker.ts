@@ -1,11 +1,13 @@
 import type { BunnerRecord, BunnerValue, ProviderToken } from '@bunner/common';
-import { ClusterBaseWorker, Container, type ClusterWorkerId, expose } from '@bunner/core';
 import type { RpcArgs, RpcCallable } from '@bunner/core/src/cluster/types';
+
+import { ClusterBaseWorker, Container, type ClusterWorkerId, expose } from '@bunner/core';
 import { Logger } from '@bunner/logger';
 
-import { BunnerHttpServer } from './bunner-http-server';
 import type { BunnerHttpServerBootOptions, HttpWorkerInitParams, HttpWorkerManifest } from './interfaces';
 import type { ClassMetadata, ControllerConstructor } from './types';
+
+import { BunnerHttpServer } from './bunner-http-server';
 
 class BunnerHttpWorker extends ClusterBaseWorker {
   private logger = new Logger(BunnerHttpWorker.name);
@@ -38,8 +40,7 @@ class BunnerHttpWorker extends ClusterBaseWorker {
       }
 
       const container = manifest.createContainer();
-      const metadataRegistry =
-        manifest.createMetadataRegistry?.() ?? new Map<ControllerConstructor, ClassMetadata>();
+      const metadataRegistry = manifest.createMetadataRegistry?.() ?? new Map<ControllerConstructor, ClassMetadata>();
       const scopedKeysMap = manifest.createScopedKeysMap?.() ?? new Map<ProviderToken, string>();
 
       if (typeof manifest.registerDynamicModules === 'function') {

@@ -1,9 +1,10 @@
-import { ValidatorCompiler, TransformerCompiler } from '@bunner/core';
-import { StatusCodes } from 'http-status-codes';
-
 import type { Class, PrimitiveArray, PrimitiveRecord, PrimitiveValue } from '@bunner/common';
 import type { TransformerPlainValue, TransformerValue } from '@bunner/core/src/transformer/types';
 import type { ValidatorValueRecord } from '@bunner/core/src/validator/types';
+
+import { ValidatorCompiler, TransformerCompiler } from '@bunner/core';
+import { StatusCodes } from 'http-status-codes';
+
 import type { ArgumentMetadata, PipeTransform } from '../interfaces';
 import type { RequestBodyValue, RouteParamType, RouteParamValue } from '../types';
 
@@ -38,6 +39,13 @@ export class ValidationPipe implements PipeTransform {
       Object.assign(error, {
         status: StatusCodes.BAD_REQUEST,
         details: errors,
+      });
+
+      Object.defineProperty(error, 'message', {
+        value: error.message,
+        enumerable: true,
+        writable: true,
+        configurable: true,
       });
 
       throw error;
@@ -208,6 +216,4 @@ export class ValidationPipe implements PipeTransform {
   private isTransformerRecord(value: TransformerValue): value is Record<string, TransformerValue> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
   }
-
-  
 }

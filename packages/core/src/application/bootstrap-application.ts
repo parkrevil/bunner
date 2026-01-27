@@ -14,13 +14,13 @@ import type {
 import { CONFIG_SERVICE, ENV_SERVICE } from '@bunner/common';
 import { config as dotenvConfig } from 'dotenv';
 
+import type { BunnerApplication } from './bunner-application';
 import type {
   BootstrapApplicationOptions,
   BootstrapConfigLoadParams,
   BootstrapEnvOptions,
   BunnerApplicationRuntimeOptions,
 } from './interfaces';
-import type { BunnerApplication } from './bunner-application';
 import type { EntryModule } from './types';
 
 import { BunnerScanner } from '../injector/scanner';
@@ -100,7 +100,6 @@ function isValueLikeRecord(value: BunnerValue): value is Record<string, ValueLik
 }
 
 function isValueLikeMap(value: ReadonlyMap<string | symbol, ValueLike>): boolean {
-
   for (const [key, entry] of value.entries()) {
     if (typeof key !== 'string' && typeof key !== 'symbol') {
       return false;

@@ -49,8 +49,10 @@ function createHttpAdapters(entries: Array<[string, HttpAdapter]>): AdapterColle
     get: (name: string): HttpAdapter | undefined => map.get(name),
     all: (): HttpAdapter[] => Array.from(map.values()),
     forEach: (callback: (adapter: HttpAdapter) => void): void => {
-      map.forEach(adapter => {
-        callback(adapter);
+      map.forEach((adapter, name) => {
+        const handler = callback as (adapter: HttpAdapter, name: string) => void;
+
+        handler(adapter, name);
       });
     },
   };

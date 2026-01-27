@@ -67,11 +67,16 @@ export type ClassProperties<T> = {
   [K in keyof T]-?: T[K] extends (...args: BunnerValue[]) => BunnerValue ? K : never;
 }[keyof T];
 
-export type MethodParams<T, K extends ClassProperties<T>> = T[K] extends (...args: infer P) => BunnerValue | void ? [...P] : never;
+export type MethodParams<T, K extends ClassProperties<T>> = T[K] extends (...args: infer P) => BunnerValue | void
+  ? [...P]
+  : never;
 
 export type MethodReturn<T, K extends ClassProperties<T>> = T[K] extends (...args: BunnerValue[]) => infer R ? R : never;
 
-export type MethodTailParams<T, K extends ClassProperties<T>> = T[K] extends (first: BunnerValue, ...rest: infer R) => BunnerValue | void
+export type MethodTailParams<T, K extends ClassProperties<T>> = T[K] extends (
+  first: BunnerValue,
+  ...rest: infer R
+) => BunnerValue | void
   ? [...R]
   : [];
 

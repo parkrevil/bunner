@@ -1,6 +1,7 @@
 import { type BunnerValue, type Context, Catch } from '@bunner/common';
 import { BunnerHttpContext } from '@bunner/http-adapter';
 import { Logger, type LogMetadataValue } from '@bunner/logger';
+
 import type { HttpErrorPayload, HttpErrorResponse } from './interfaces';
 
 @Catch()

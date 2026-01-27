@@ -23,5 +23,5 @@ for file in $staged_files; do
 done
 
 #if [ "$should_run_tests" -eq 1 ]; then
-#	bun test
+	#bun test
 #fi

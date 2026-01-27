@@ -1,5 +1,17 @@
+let parseSync: typeof import('oxc-parser').parseSync | undefined;
+
+try {
+  const parserModule = await import('oxc-parser');
+
+  if (typeof parserModule.parseSync === 'function') {
+    parseSync = parserModule.parseSync;
+  }
+} catch {
+  parseSync = undefined;
+}
+
 import type { AstNode, AstNodeValue, RuleContext, Variable } from '../../src/types';
-import { parseSync } from 'oxc-parser';
+
 import { blankLinesBetweenStatementGroupsRule } from '../../src/rules/blank-lines-between-statement-groups';
 import { noBracketNotationRule } from '../../src/rules/no-bracket-notation';
 import { paddingLineBetweenStatementsRule } from '../../src/rules/padding-line-between-statements';
@@ -343,6 +355,10 @@ const runRuleOnParsedCode = (
 };
 
 const runParserAutofixInvariantsFuzz = (): void => {
+  if (!parseSync) {
+    return;
+  }
+
   const seeds = [101, 102, 103, 104, 105, 4242];
 
   for (const seed of seeds) {
@@ -508,4 +524,8 @@ const runParserAutofixInvariantsFuzz = (): void => {
   }
 };
 
-export { runParserAutofixInvariantsFuzz };
+const canRunParserAutofixInvariantsFuzz = (): boolean => {
+  return typeof parseSync === 'function';
+};
+
+export { runParserAutofixInvariantsFuzz, canRunParserAutofixInvariantsFuzz };

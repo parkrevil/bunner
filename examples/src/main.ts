@@ -1,11 +1,13 @@
 import type { ConfigService, ValueLike } from '@bunner/common';
+
 import { LogLevel } from '@bunner/common';
 import { bootstrapApplication } from '@bunner/core';
 import { bunnerHttpAdapter } from '@bunner/http-adapter';
 
+import type { HttpConfig } from './core/config/types';
+
 import { rootModule } from './__module__';
 import { ConfigNamespace } from './core/config/config-namespace';
-import type { HttpConfig } from './core/config/types';
 
 const isHttpConfig = (value: ValueLike): value is HttpConfig => {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {

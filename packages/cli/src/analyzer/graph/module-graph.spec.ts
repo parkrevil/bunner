@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'bun:test';
 
 import type { ClassMetadata } from '../interfaces';
-import type { ModuleNode } from './module-node';
 import type { FileAnalysis } from './interfaces';
+import type { ModuleNode } from './module-node';
 
 import { ModuleGraph } from './module-graph';
 

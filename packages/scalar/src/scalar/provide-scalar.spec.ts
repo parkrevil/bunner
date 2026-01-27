@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'bun:test';
-
 import type { Provider, ProviderToken, ProviderUseFactory, ProviderUseValue } from '@bunner/common';
+
+import { describe, it, expect } from 'bun:test';
 
 import type { ScalarSetupOptions } from './interfaces';
 
@@ -52,11 +52,21 @@ function getProviderUseFactory(providers: readonly Provider[], token: ProviderTo
 }
 
 function isProviderUseValue(provider: Provider, token: ProviderToken): provider is ProviderUseValue {
-  return typeof provider === 'object' && provider !== null && 'provide' in provider && 'useValue' in provider &&
-    provider.provide === token;
+  return (
+    typeof provider === 'object' &&
+    provider !== null &&
+    'provide' in provider &&
+    'useValue' in provider &&
+    provider.provide === token
+  );
 }
 
 function isProviderUseFactory(provider: Provider, token: ProviderToken): provider is ProviderUseFactory {
-  return typeof provider === 'object' && provider !== null && 'provide' in provider && 'useFactory' in provider &&
-    provider.provide === token;
+  return (
+    typeof provider === 'object' &&
+    provider !== null &&
+    'provide' in provider &&
+    'useFactory' in provider &&
+    provider.provide === token
+  );
 }

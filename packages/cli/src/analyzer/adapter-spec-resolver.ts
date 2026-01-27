@@ -344,7 +344,7 @@ export class AdapterSpecResolver {
               continue;
             }
 
-                if (!isNonEmptyString(controllerAdapterId) || controllerAdapterId !== extraction.adapterId) {
+            if (!isNonEmptyString(controllerAdapterId) || controllerAdapterId !== extraction.adapterId) {
               throw new Error(
                 `[Bunner AOT] Handler '${cls.className}.${method.name}' must belong to a controller for adapter '${extraction.adapterId}'.`,
               );

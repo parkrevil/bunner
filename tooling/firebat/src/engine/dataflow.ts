@@ -1,4 +1,3 @@
-
 interface IBitSet {
   add(index: number): void;
   remove(index: number): void;
@@ -11,7 +10,7 @@ interface IBitSet {
   // For "Dead Store" (Must NOT be used), we want to prove that Variable X is NOT live.
   // So we calculate Liveness (May-Live). If X is NOT in Live-Out, it is Dead.
   // So standard Liveness (Union) is correct for "Strict Dead Store" if we interpret the result correctly.
-  
+
   clone(): IBitSet;
   isEmpty(): boolean;
   equals(other: IBitSet): boolean;
@@ -26,9 +25,9 @@ class BigIntBitSet implements IBitSet {
   }
 
   add(index: number): void {
-    this.mask |= (1n << BigInt(index));
+    this.mask |= 1n << BigInt(index);
   }
-  
+
   remove(index: number): void {
     this.mask &= ~(1n << BigInt(index));
   }
@@ -70,11 +69,11 @@ class BigIntBitSet implements IBitSet {
   }
 
   equals(other: IBitSet): boolean {
-      if (other instanceof BigIntBitSet) {
-        return this.mask === other.mask;
-      }
+    if (other instanceof BigIntBitSet) {
+      return this.mask === other.mask;
+    }
 
-      return false;
+    return false;
   }
 
   toArray(): number[] {

@@ -4,10 +4,10 @@ import { ModuleKind, ScriptTarget, transpileModule } from 'typescript';
 
 import type { FileAnalysis } from '../analyzer/graph/interfaces';
 import type { AnalyzerValue, AnalyzerValueRecord } from '../analyzer/types';
+import type { DeepFreezeModule, GeneratedBlockParams, MetadataRegistryModule, ScopedKeysMapModule } from './types';
 
 import { ModuleGraph } from '../analyzer/graph/module-graph';
 import { ManifestGenerator } from './manifest';
-import type { DeepFreezeModule, GeneratedBlockParams, MetadataRegistryModule, ScopedKeysMapModule } from './types';
 
 const isAnalyzerValueRecord = (value: AnalyzerValue): value is AnalyzerValueRecord => {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -32,7 +32,6 @@ const assertArrayValue = (value: AnalyzerValue): AnalyzerValue[] => {
 
   throw new Error('Expected an array value.');
 };
-
 
 function executeModule<TModule>(jsCode: string, initialExports: TModule): TModule {
   const moduleContainer = { exports: initialExports };

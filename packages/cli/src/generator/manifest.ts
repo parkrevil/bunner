@@ -1,9 +1,16 @@
 import { dirname, relative } from 'path';
 
-import type { ManifestDiNode, ManifestJsonModel, ManifestJsonParams, ManifestModuleDescriptor, ManifestProviderToken, MetadataClassEntry } from './interfaces';
+import type { AnalyzerValue, AnalyzerValueRecord } from '../analyzer/types';
+import type {
+  ManifestDiNode,
+  ManifestJsonModel,
+  ManifestJsonParams,
+  ManifestModuleDescriptor,
+  ManifestProviderToken,
+  MetadataClassEntry,
+} from './interfaces';
 
 import { type AdapterStaticSpec, type ClassMetadata, ModuleGraph, type ModuleNode } from '../analyzer';
-import type { AnalyzerValue, AnalyzerValueRecord } from '../analyzer/types';
 import { compareCodePoint, PathResolver } from '../common';
 import { ImportRegistry } from './import-registry';
 import { InjectorGenerator } from './injector';
@@ -162,7 +169,9 @@ export const scopedKeysMap = createScopedKeysMap();
         file,
       };
     });
-    const sortedModuleDescriptors: ManifestModuleDescriptor[] = moduleDescriptors.sort((left, right) => compareCodePoint(left.id, right.id));
+    const sortedModuleDescriptors: ManifestModuleDescriptor[] = moduleDescriptors.sort((left, right) =>
+      compareCodePoint(left.id, right.id),
+    );
     const diNodes: ManifestDiNode[] = [];
 
     const isRecordValue = (value: AnalyzerValue | ClassMetadata): value is AnalyzerValueRecord => {

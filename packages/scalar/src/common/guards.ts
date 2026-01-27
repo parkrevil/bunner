@@ -13,4 +13,3 @@ export function isMap<K extends ScalarRegistryKey, V extends ScalarInput>(
 ): value is Map<K, V> {
   return value instanceof Map;
 }
-

@@ -90,7 +90,9 @@ describe('decorators', () => {
       const decorator = ApiProperty();
 
       // Act
-      const act = () =>{  decorator(TestDecoratorTarget.prototype, 'method'); };
+      const act = () => {
+        decorator(TestDecoratorTarget.prototype, 'method');
+      };
 
       // Assert
       expect(act).not.toThrow();
@@ -112,7 +114,9 @@ describe('decorators', () => {
       const decorator = ApiPropertyOptional();
 
       // Act
-      const act = () =>{  decorator(TestDecoratorTarget.prototype, 'method'); };
+      const act = () => {
+        decorator(TestDecoratorTarget.prototype, 'method');
+      };
 
       // Assert
       expect(act).not.toThrow();

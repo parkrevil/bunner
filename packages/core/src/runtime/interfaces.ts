@@ -1,7 +1,6 @@
 import type { Class, ProviderToken } from '@bunner/common';
 
 import type { Container } from '../injector/container';
-
 import type { ClassMetadata } from '../injector/types';
 
 export interface RuntimeContext {

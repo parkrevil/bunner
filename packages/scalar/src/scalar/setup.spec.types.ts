@@ -16,11 +16,7 @@ export interface HttpAdapterInternal {
 }
 
 export interface HttpAdapter extends BunnerAdapter {
-  [key: PropertyKey]:
-    | HttpAdapterInternal
-    | BunnerAdapter['start']
-    | BunnerAdapter['stop']
-    | undefined;
+  [key: PropertyKey]: HttpAdapterInternal | BunnerAdapter['start'] | BunnerAdapter['stop'] | undefined;
 }
 
 export interface HttpAdapterSpy {

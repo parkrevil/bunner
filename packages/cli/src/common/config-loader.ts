@@ -1,5 +1,5 @@
-import { basename, join, relative } from 'path';
 import { runInNewContext } from 'node:vm';
+import { basename, join, relative } from 'path';
 import { ModuleKind, ScriptTarget, transpileModule } from 'typescript';
 
 import type { ConfigLoadResult, ConfigModule, JsonRecord, JsonValue, ResolvedBunnerConfig } from './interfaces';

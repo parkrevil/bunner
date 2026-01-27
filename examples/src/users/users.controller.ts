@@ -1,11 +1,12 @@
 import { RestController, Get, Post, Put, Delete, Body } from '@bunner/http-adapter';
 import { Logger } from '@bunner/logger';
 
+import type { IdRouteParams } from '../interfaces';
+import type { ComplexCreateResponse, User } from './interfaces';
+
 import { AddressDto } from './dto/address.dto';
 import { CreateUserComplexDto } from './dto/complex.dto';
 import { SocialDto } from './dto/social.dto';
-import type { ComplexCreateResponse, User } from './interfaces';
-import type { IdRouteParams } from '../interfaces';
 import { UsersService } from './users.service';
 
 @RestController('users')

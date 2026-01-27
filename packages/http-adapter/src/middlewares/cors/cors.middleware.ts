@@ -1,6 +1,7 @@
 import { BunnerMiddleware, type Context } from '@bunner/common';
 
 import type { CorsOptions } from './interfaces';
+
 import { BunnerHttpContext } from '../../adapter';
 import { HeaderField, HttpMethod } from '../../enums';
 import { CORS_DEFAULT_METHODS, CORS_DEFAULT_OPTIONS_SUCCESS_STATUS } from './constants';
@@ -74,6 +75,8 @@ export class CorsMiddleware extends BunnerMiddleware<CorsOptions> {
 
         if (headerValue.length > 0) {
           res.setHeader(HeaderField.AccessControlAllowMethods, headerValue);
+        } else {
+          res.setHeader(HeaderField.AccessControlAllowMethods, '');
         }
       }
 

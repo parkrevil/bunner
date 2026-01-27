@@ -1,7 +1,7 @@
+import { getRuntimeContext } from '@bunner/core';
+
 import type { Doc } from './interfaces';
 import type { ScalarMetadataRegistry, ScalarRecord, ScalarRegistryKey } from './types';
-
-import { getRuntimeContext } from '@bunner/core';
 
 import { isMap } from '../common';
 import { OpenApiFactory } from '../spec-factory';

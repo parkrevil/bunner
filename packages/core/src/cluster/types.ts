@@ -19,5 +19,5 @@ export type ClusterInitParams<_T> = BunnerValue | undefined;
 export type ClusterBootstrapParams<_T> = BunnerValue | undefined;
 
 export type Promisified<T extends Record<string, RpcCallable>> = {
-	[K in keyof T]: (...args: RpcArgs) => Promise<Awaited<RpcResult>>;
+  [K in keyof T]: (...args: RpcArgs) => Promise<Awaited<RpcResult>>;
 };

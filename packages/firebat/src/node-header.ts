@@ -26,10 +26,7 @@ const resolveNameFromPropertyName = (name: ts.PropertyName, checker: ts.TypeChec
   return null;
 };
 
-const resolveNameFromDeclarationName = (
-  name: ts.DeclarationName | undefined,
-  checker: ts.TypeChecker,
-): string | null => {
+const resolveNameFromDeclarationName = (name: ts.DeclarationName | undefined, checker: ts.TypeChecker): string | null => {
   if (!name) {
     return null;
   }

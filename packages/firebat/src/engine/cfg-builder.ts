@@ -1,5 +1,4 @@
 import { IntegerCFG } from './cfg';
-
 import { EdgeType, type LoopTargets, type NodeId, type OxcBuiltFunctionCfg, type OxcNode, type OxcNodeValue } from './types';
 
 const isOxcNode = (value: OxcNodeValue | undefined): value is OxcNode =>
@@ -196,22 +195,36 @@ export class OxcCFGBuilder {
 
         const trueEntry = this.addNode(null);
         const falseEntry = this.addNode(null);
+        const consequentValue = node.consequent;
+        const alternateValue = node.alternate;
 
         if (truthiness === true) {
           this.cfg.addEdge(conditionNode, trueEntry, EdgeType.True);
-        } else if (truthiness === false) {
-          this.cfg.addEdge(conditionNode, falseEntry, EdgeType.False);
-        } else {
-          this.cfg.addEdge(conditionNode, trueEntry, EdgeType.True);
-          this.cfg.addEdge(conditionNode, falseEntry, EdgeType.False);
+
+          const trueTails = this.visitStatement(consequentValue, [trueEntry], loopStack, null);
+          const mergeNode = this.addNode(null);
+
+          this.connect(trueTails, mergeNode, EdgeType.Normal);
+
+          return [mergeNode];
         }
 
-        const consequentValue = node.consequent;
-        const alternateValue = node.alternate;
+        if (truthiness === false) {
+          this.cfg.addEdge(conditionNode, falseEntry, EdgeType.False);
+
+          const falseTails = alternateValue ? this.visitStatement(alternateValue, [falseEntry], loopStack, null) : [falseEntry];
+          const mergeNode = this.addNode(null);
+
+          this.connect(falseTails, mergeNode, EdgeType.Normal);
+
+          return [mergeNode];
+        }
+
+        this.cfg.addEdge(conditionNode, trueEntry, EdgeType.True);
+        this.cfg.addEdge(conditionNode, falseEntry, EdgeType.False);
+
         const trueTails = this.visitStatement(consequentValue, [trueEntry], loopStack, null);
-        const falseTails = alternateValue
-          ? this.visitStatement(alternateValue, [falseEntry], loopStack, null)
-          : [falseEntry];
+        const falseTails = alternateValue ? this.visitStatement(alternateValue, [falseEntry], loopStack, null) : [falseEntry];
         const mergeNode = this.addNode(null);
 
         this.connect(trueTails, mergeNode, EdgeType.Normal);
@@ -237,6 +250,10 @@ export class OxcCFGBuilder {
         } else {
           this.cfg.addEdge(conditionNode, bodyEntry, EdgeType.True);
           this.cfg.addEdge(conditionNode, afterLoop, EdgeType.False);
+        }
+
+        if (truthiness === false) {
+          return [afterLoop];
         }
 
         const nextLoopStack: LoopTargets[] = [
@@ -350,6 +367,10 @@ export class OxcCFGBuilder {
         if (updateValue !== undefined && updateValue !== null) {
           updateNode = this.addNode(updateValue);
           continueTarget = updateNode;
+        }
+
+        if (truthiness === false) {
+          return [afterLoop];
         }
 
         const nextLoopStack: LoopTargets[] = [...loopStack, { breakTarget: afterLoop, continueTarget, label: currentLabel }];

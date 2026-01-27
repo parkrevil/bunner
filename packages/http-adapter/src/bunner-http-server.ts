@@ -19,16 +19,6 @@ import type {
   HttpWorkerResponse,
   MiddlewareRegistrationInput,
 } from './interfaces';
-
-import { BunnerHttpContext, BunnerHttpContextAdapter } from './adapter';
-import { BunnerRequest } from './bunner-request';
-import { BunnerResponse } from './bunner-response';
-import { HTTP_ERROR_FILTER } from './constants';
-import { HttpMethod } from './enums';
-import { HttpMiddlewareLifecycle } from './interfaces';
-import { RequestHandler } from './request-handler';
-import { RouteHandler } from './route-handler';
-import { getIps } from './utils';
 import type {
   AdaptiveRequest,
   ClassMetadata,
@@ -40,6 +30,16 @@ import type {
   RequestBodyValue,
   RequestQueryMap,
 } from './types';
+
+import { BunnerHttpContext, BunnerHttpContextAdapter } from './adapter';
+import { BunnerRequest } from './bunner-request';
+import { BunnerResponse } from './bunner-response';
+import { HTTP_ERROR_FILTER } from './constants';
+import { HttpMethod } from './enums';
+import { HttpMiddlewareLifecycle } from './interfaces';
+import { RequestHandler } from './request-handler';
+import { RouteHandler } from './route-handler';
+import { getIps } from './utils';
 
 const isHttpMethod = (value: string): value is HttpMethod => {
   const methods: string[] = Object.values(HttpMethod);
@@ -212,7 +212,7 @@ export class BunnerHttpServer {
             : typeof error === 'string' || typeof error === 'number' || typeof error === 'boolean'
               ? error
               : typeof error === 'object'
-                ? JSON.stringify(error) ?? 'Unknown error'
+                ? (JSON.stringify(error) ?? 'Unknown error')
                 : 'Unknown error';
 
         this.logger.error('Error in beforeResponse', logValue);
@@ -237,7 +237,7 @@ export class BunnerHttpServer {
             : typeof error === 'string' || typeof error === 'number' || typeof error === 'boolean'
               ? error
               : typeof error === 'object'
-                ? JSON.stringify(error) ?? 'Unknown error'
+                ? (JSON.stringify(error) ?? 'Unknown error')
                 : 'Unknown error';
 
         this.logger.error('Error in afterResponse', logValue);
@@ -251,7 +251,7 @@ export class BunnerHttpServer {
           : typeof error === 'string' || typeof error === 'number' || typeof error === 'boolean'
             ? error
             : typeof error === 'object'
-              ? JSON.stringify(error) ?? 'Unknown error'
+              ? (JSON.stringify(error) ?? 'Unknown error')
               : 'Unknown error';
 
       this.logger.error('Fetch Error', logValue);
@@ -413,9 +413,7 @@ export class BunnerHttpServer {
     return typeof value === 'symbol' || this.isMiddlewareConstructor(value);
   }
 
-  private isMiddlewareConstructor(
-    value: HttpMiddlewareToken | MiddlewareRegistrationInput,
-  ): value is HttpMiddlewareConstructor {
+  private isMiddlewareConstructor(value: HttpMiddlewareToken | MiddlewareRegistrationInput): value is HttpMiddlewareConstructor {
     return typeof value === 'function';
   }
 

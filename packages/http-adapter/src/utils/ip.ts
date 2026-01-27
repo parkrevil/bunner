@@ -1,15 +1,11 @@
-import type { Server } from 'bun';
 import type { BunnerValue } from '@bunner/common';
+import type { Server } from 'bun';
 
 import type { ClientIpsResult } from './interfaces';
 
 import { HeaderField } from '../enums';
 
-function getIps(
-  request: Request,
-  server: Pick<Server<BunnerValue>, 'requestIP'>,
-  trustProxy?: boolean,
-): ClientIpsResult {
+function getIps(request: Request, server: Pick<Server<BunnerValue>, 'requestIP'>, trustProxy?: boolean): ClientIpsResult {
   const shouldTrustProxy = trustProxy ?? false;
   const headers = request.headers;
   const socketAddress = server.requestIP(request) ?? undefined;

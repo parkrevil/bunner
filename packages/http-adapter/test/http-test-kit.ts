@@ -1,27 +1,15 @@
-import type { BunnerValue, ProviderToken } from '@bunner/common';
+import type { BunnerValue, Class, ProviderToken } from '@bunner/common';
 
 import { Container } from '@bunner/core';
 
-import {
-  BunnerRequest,
-  BunnerResponse,
-  HTTP_AFTER_RESPONSE,
-  HTTP_BEFORE_REQUEST,
-  HTTP_BEFORE_RESPONSE,
-  HTTP_ERROR_FILTER,
-  HTTP_SYSTEM_ERROR_HANDLER,
-  RequestHandler,
-  RouteHandler,
-} from './index';
 import type {
-  CreateHttpTestHarnessParams,
-  CreateRequestParams,
-  GlobalMiddlewaresParams,
-  HandleRequestParams,
-  HandleRequestResult,
-  HttpTestHarness,
-  TestProvider,
-} from './interfaces';
+  CombinedMetadataInput,
+  MetadataConstructorParam,
+  MetadataDecorator,
+  MetadataMethod,
+  MetadataParameter,
+} from '../../core/src/metadata/interfaces';
+import type { MetadataArgument, MetadataTypeValue } from '../../core/src/metadata/types';
 import type {
   BunnerRequestInit,
   ClassMetadata,
@@ -34,19 +22,48 @@ import type {
   ParamTypeReference,
 } from '../src/types';
 import type {
-  CombinedMetadataInput,
-  MetadataConstructorParam,
-  MetadataDecorator,
-  MetadataMethod,
-  MetadataParameter,
-} from '../../core/src/metadata/interfaces';
-import type { MetadataArgument, MetadataTypeValue } from '../../core/src/metadata/types';
+  CreateHttpTestHarnessParams,
+  CreateRequestParams,
+  GlobalMiddlewaresParams,
+  HandleRequestParams,
+  HandleRequestResult,
+  HttpTestHarness,
+  TestProvider,
+} from './interfaces';
 import type { TestProviderValue } from './types';
+
+import {
+  BunnerRequest,
+  BunnerResponse,
+  HTTP_AFTER_RESPONSE,
+  HTTP_BEFORE_REQUEST,
+  HTTP_BEFORE_RESPONSE,
+  HTTP_ERROR_FILTER,
+  HTTP_SYSTEM_ERROR_HANDLER,
+  RequestHandler,
+  RouteHandler,
+} from './index';
+import { MetadataConsumer } from '../../core/src/metadata/metadata-consumer';
 
 function createHttpTestHarness(params: CreateHttpTestHarnessParams): HttpTestHarness {
   const { metadataRegistry, providers, routerOptions } = params;
   const container = new Container();
   const runtimeRegistry = normalizeMetadataRegistry(metadataRegistry);
+  const cliRegistry = new Map<Class, CombinedMetadataInput>();
+
+  for (const [key, value] of metadataRegistry.entries()) {
+    if (!isCombinedMetadataInput(value)) {
+      continue;
+    }
+
+    if (typeof key !== 'function') {
+      continue;
+    }
+
+    cliRegistry.set(key, value);
+  }
+
+  MetadataConsumer.registerCLIMetadata(cliRegistry);
 
   for (const p of providers) {
     if (!isBunnerValue(p.value)) {
@@ -65,6 +82,12 @@ function createHttpTestHarness(params: CreateHttpTestHarnessParams): HttpTestHar
 
   return { container, metadataRegistry, routeHandler, requestHandler };
 }
+
+const isCombinedMetadataInput = (
+  value: ClassMetadata | CombinedMetadataInput,
+): value is CombinedMetadataInput => {
+  return Array.isArray(value.properties);
+};
 
 function normalizeMetadataRegistry(
   registry: Map<MetadataRegistryKey, ClassMetadata | CombinedMetadataInput>,

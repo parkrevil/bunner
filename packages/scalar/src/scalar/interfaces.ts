@@ -1,7 +1,6 @@
 import type { BunnerRecord } from '@bunner/common';
 
 import type { OpenApiDocument } from '../openapi';
-
 import type { DocumentTarget, DocumentTargets, HttpTargets, ScalarMetadataRegistry } from './types';
 
 export interface ScalarSetupOptions extends BunnerRecord {

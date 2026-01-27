@@ -5,7 +5,7 @@ export type TransformerValueItem = PrimitiveValue | PrimitiveRecord | BunnerReco
 export type TransformerValueArray = Array<TransformerValue>;
 
 export interface TransformerValueRecord {
-	[key: string]: TransformerValue;
+  [key: string]: TransformerValue;
 }
 
 export type TransformerValue = TransformerValueItem | TransformerValueArray | TransformerValueRecord;

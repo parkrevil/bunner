@@ -3,7 +3,15 @@ import { dirname, resolve } from 'path';
 
 import type { ClassMetadata, DecoratorMetadata, ImportEntry } from './interfaces';
 import type { ModuleDefinition, ParseResult, ReExport } from './parser-models';
-import type { AnalyzerValue, AnalyzerValueRecord, ExtractedParam, FactoryDependency, NodeRecord, ReExportName, TypeInfo } from './types';
+import type {
+  AnalyzerValue,
+  AnalyzerValueRecord,
+  ExtractedParam,
+  FactoryDependency,
+  NodeRecord,
+  ReExportName,
+  TypeInfo,
+} from './types';
 
 import { AstTypeResolver } from './ast-type-resolver';
 

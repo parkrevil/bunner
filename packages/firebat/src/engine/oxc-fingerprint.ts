@@ -1,5 +1,6 @@
-import { hashString } from './hasher';
 import type { OxcNode, OxcNodeValue } from './types';
+
+import { hashString } from './hasher';
 
 const isOxcNode = (value: OxcNodeValue | undefined): value is OxcNode =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -66,9 +67,7 @@ export const createOxcFingerprint = (node: OxcNodeValue | undefined): string => 
     // For 'Physical Limit', we might want a optimized traverser.
     // Let's stick to generic for now, optimizing later if profiled.
 
-    const entries = (Object.entries(n)).sort((left, right) =>
-      left[0].localeCompare(right[0]),
-    );
+    const entries = Object.entries(n).sort((left, right) => left[0].localeCompare(right[0]));
 
     for (const [key, value] of entries) {
       if (key === 'type' || key === 'start' || key === 'end' || key === 'loc' || key === 'span' || key === 'comments') {

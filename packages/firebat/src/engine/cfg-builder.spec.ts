@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 
+import type { OxcBuiltFunctionCfg, OxcNode, OxcNodeValue } from './types';
+
 import { OxcCFGBuilder } from './cfg-builder';
 import { parseSource } from './oxc-wrapper';
-import type { OxcBuiltFunctionCfg, OxcNode, OxcNodeValue } from './types';
 
 const isOxcNode = (value: OxcNodeValue | undefined): value is OxcNode =>
   typeof value === 'object' && value !== null && !Array.isArray(value);

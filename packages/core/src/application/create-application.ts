@@ -1,7 +1,6 @@
+import type { BunnerApplication } from './bunner-application';
 import type { BunnerApplicationRuntimeOptions } from './interfaces';
 import type { EntryModule } from './types';
-
-import type { BunnerApplication } from './bunner-application';
 
 import { Bunner } from '../bunner';
 

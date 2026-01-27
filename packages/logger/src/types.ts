@@ -9,7 +9,7 @@ export type LogMetadataPrimitive = string | number | boolean | null | undefined;
 export type LogMetadataLeaf = LogMetadataPrimitive | Error | Loggable;
 
 export interface LogMetadataRecord {
-	[key: string]: LogMetadataValue;
+  [key: string]: LogMetadataValue;
 }
 
 export type LogMetadataValue = LogMetadataLeaf | ReadonlyArray<LogMetadataLeaf> | LogMetadataRecord;

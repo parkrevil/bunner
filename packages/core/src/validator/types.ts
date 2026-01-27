@@ -2,7 +2,7 @@ import type { BunnerValue, Class, PrimitiveArray, PrimitiveRecord, PrimitiveValu
 
 export type ValidatorTarget = Class;
 
-export type ValidatorValueItem = PrimitiveValue | PrimitiveArray | PrimitiveRecord  ;
+export type ValidatorValueItem = PrimitiveValue | PrimitiveArray | PrimitiveRecord;
 
 export type ValidatorValueArray = Array<ValidatorValueItem>;
 

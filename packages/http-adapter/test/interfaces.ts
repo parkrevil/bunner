@@ -1,5 +1,6 @@
 import type { BunnerContainer, BunnerErrorFilter, BunnerMiddleware, ProviderToken } from '@bunner/common';
 
+import type { RequestBodyValue, RequestQueryMap, SystemError } from '../src/types';
 import type {
   BunnerRequest,
   BunnerResponse,
@@ -9,7 +10,6 @@ import type {
   RouteHandler,
   RouterOptions,
 } from './index';
-import type { RequestBodyValue, RequestQueryMap, SystemError } from '../src/types';
 import type { TestMetadataRegistry, TestProviderValue } from './types';
 
 export interface TestProvider {

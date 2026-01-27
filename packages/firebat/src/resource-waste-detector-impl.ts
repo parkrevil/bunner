@@ -299,9 +299,8 @@ const recordDeadStoreFindings = (
   };
 
   const recordBreakState = (state: Map<ts.Symbol, Map<number, ts.Identifier>>, labelText: string | null): void => {
-    const bucket = labelText !== null
-      ? findNearestLabeledBucket(breakStatesStack, labelText)
-      : findNearestUnlabeledBucket(breakStatesStack);
+    const bucket =
+      labelText !== null ? findNearestLabeledBucket(breakStatesStack, labelText) : findNearestUnlabeledBucket(breakStatesStack);
 
     if (bucket === null) {
       return;
@@ -311,9 +310,10 @@ const recordDeadStoreFindings = (
   };
 
   const recordContinueState = (state: Map<ts.Symbol, Map<number, ts.Identifier>>, labelText: string | null): void => {
-    const bucket = labelText !== null
-      ? findNearestLabeledBucket(continueStatesStack, labelText)
-      : findNearestUnlabeledBucket(continueStatesStack);
+    const bucket =
+      labelText !== null
+        ? findNearestLabeledBucket(continueStatesStack, labelText)
+        : findNearestUnlabeledBucket(continueStatesStack);
 
     if (bucket === null) {
       return;

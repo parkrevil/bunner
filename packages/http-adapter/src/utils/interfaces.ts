@@ -1,5 +1,5 @@
-import type { Server } from 'bun';
 import type { BunnerValue } from '@bunner/common';
+import type { Server } from 'bun';
 
 export interface ClientIpOptions {
   trustProxy?: boolean;

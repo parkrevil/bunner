@@ -7,8 +7,6 @@ import type {
   ConstructorParamMetadata as CoreConstructorParamMetadata,
   DecoratorMetadata as CoreDecoratorMetadata,
 } from '../../core/src/injector/types';
-
-import { BunnerHttpServer } from './bunner-http-server';
 import type {
   BunnerHttpInternalChannel,
   BunnerHttpServerBootOptions,
@@ -19,8 +17,10 @@ import type {
   InternalRouteEntry,
   MiddlewareRegistrationInput,
 } from './interfaces';
-import { HttpMiddlewareLifecycle } from './interfaces';
 import type { ClassMetadata, HttpWorkerRpc, MetadataRegistryKey, ParamTypeReference } from './types';
+
+import { BunnerHttpServer } from './bunner-http-server';
+import { HttpMiddlewareLifecycle } from './interfaces';
 
 const BUNNER_HTTP_INTERNAL = Symbol.for('bunner:http:internal');
 
@@ -189,9 +189,7 @@ export class BunnerHttpAdapter implements BunnerAdapter {
     }
 
     const decorators = value.decorators ? this.normalizeCoreDecorators(value.decorators) : undefined;
-    const constructorParams = value.constructorParams
-      ? this.normalizeCoreConstructorParams(value.constructorParams)
-      : undefined;
+    const constructorParams = value.constructorParams ? this.normalizeCoreConstructorParams(value.constructorParams) : undefined;
 
     return {
       ...(decorators !== undefined ? { decorators } : {}),
@@ -203,15 +201,11 @@ export class BunnerHttpAdapter implements BunnerAdapter {
     return 'methods' in value || 'className' in value;
   }
 
-  private normalizeCoreDecorators(
-    decorators: readonly CoreDecoratorMetadata[],
-  ): ClassMetadata['decorators'] {
+  private normalizeCoreDecorators(decorators: readonly CoreDecoratorMetadata[]): ClassMetadata['decorators'] {
     return decorators.map(decorator => ({ name: decorator.name }));
   }
 
-  private normalizeCoreConstructorParams(
-    params: readonly CoreConstructorParamMetadata[],
-  ): ClassMetadata['constructorParams'] {
+  private normalizeCoreConstructorParams(params: readonly CoreConstructorParamMetadata[]): ClassMetadata['constructorParams'] {
     return params.map(param => {
       const type = this.isProviderToken(param.type) ? param.type : undefined;
       const decorators = param.decorators ? this.normalizeCoreDecorators(param.decorators) : undefined;

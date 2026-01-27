@@ -159,11 +159,7 @@ export class Router<R = MatchResult> {
     let searchPath = path;
 
     // Fast-path: Trailing slash
-    if (
-      this.options.ignoreTrailingSlash === true &&
-      searchPath.length > 1 &&
-      searchPath.endsWith('/')
-    ) {
+    if (this.options.ignoreTrailingSlash === true && searchPath.length > 1 && searchPath.endsWith('/')) {
       searchPath = searchPath.slice(0, -1);
     }
 

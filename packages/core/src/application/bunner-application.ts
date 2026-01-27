@@ -14,8 +14,6 @@ import type {
   BunnerValue,
 } from '@bunner/common';
 
-import { Container } from '../injector/container';
-import { BunnerScanner } from '../injector/scanner';
 import type { ContainerValue } from '../injector/types';
 import type {
   AdapterRegistrationOptions,
@@ -25,6 +23,9 @@ import type {
   BunnerModule,
 } from './interfaces';
 import type { EntryModule, LifecycleHookMethod } from './types';
+
+import { Container } from '../injector/container';
+import { BunnerScanner } from '../injector/scanner';
 
 function isRecordInstance(value: BunnerValue): value is Record<string, BunnerValue> {
   return (typeof value === 'object' || typeof value === 'function') && value !== null;
@@ -42,7 +43,6 @@ export class BunnerApplication {
     const providedContainer = this._options.container;
 
     this.container = providedContainer ?? new Container();
-
   }
 
   public addAdapter(adapter: BunnerAdapter, options: AdapterRegistrationOptions = {}): this {
@@ -307,8 +307,10 @@ export class BunnerApplication {
     return typeof candidate === 'function';
   }
 
-  private isLifecycleTarget(instance: ContainerValue, method: LifecycleHookMethod): instance is OnInit &
-    BeforeStart & OnStart & OnShutdown & OnDestroy {
+  private isLifecycleTarget(
+    instance: ContainerValue,
+    method: LifecycleHookMethod,
+  ): instance is OnInit & BeforeStart & OnStart & OnShutdown & OnDestroy {
     if (!isRecordInstance(instance)) {
       return false;
     }

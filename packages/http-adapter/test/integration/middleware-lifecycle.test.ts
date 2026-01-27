@@ -343,7 +343,7 @@ describe('RequestHandler.handle', () => {
     // Assert
     expect(onErrorFilter).toHaveBeenCalledTimes(0);
     expect(workerResponse.init.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
-    expect(workerResponse.body).toBeUndefined();
+    expect(workerResponse.body).toBeNull();
   });
 
   it('should set status to 500 without setting body when a beforeResponse middleware throws while status is unset', async () => {
@@ -381,7 +381,7 @@ describe('RequestHandler.handle', () => {
 
     // Assert
     expect(workerResponse.init.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
-    expect(workerResponse.body).toBeUndefined();
+    expect(workerResponse.body).toBeNull();
   });
 
   it('should keep the response when an afterResponse middleware throws', async () => {

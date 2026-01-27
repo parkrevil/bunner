@@ -1,7 +1,8 @@
 import { Injectable } from '@bunner/common';
 
-import { CommentRepository } from './comments.repository';
 import type { PostCommentInput } from './interfaces';
+
+import { CommentRepository } from './comments.repository';
 
 @Injectable({
   visibility: 'exported',

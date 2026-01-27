@@ -22,7 +22,9 @@ const isFunctionNode = (node: OxcNodeValue | undefined): boolean => {
     return false;
   }
 
-  return getNodeType(node) === 'ArrowFunctionExpression';
+  const nodeType = getNodeType(node);
+
+  return nodeType === 'ArrowFunctionExpression' || nodeType === 'FunctionDeclaration' || nodeType === 'FunctionExpression';
 };
 
 const unwrapExpression = (node: OxcNodeValue | undefined): OxcNode | null => {

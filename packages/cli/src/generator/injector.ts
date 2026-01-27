@@ -1,7 +1,7 @@
+import type { AnalyzerValue, AnalyzerValueRecord } from '../analyzer/types';
 import type { ImportRegistry } from './import-registry';
 
 import { type ClassMetadata, ModuleGraph, type ModuleNode } from '../analyzer';
-import type { AnalyzerValue, AnalyzerValueRecord } from '../analyzer/types';
 import { compareCodePoint } from '../common';
 
 type RecordValue = AnalyzerValueRecord;
@@ -235,7 +235,10 @@ export class InjectorGenerator {
           if (providerRecord.useFactory !== undefined) {
             const factoryRecord = asRecord(providerRecord.useFactory as AnalyzerValue);
             let factoryFn = typeof factoryRecord?.__bunner_factory_code === 'string' ? factoryRecord.__bunner_factory_code : '';
-            const deps = factoryRecord && isAnalyzerValueArray(factoryRecord.__bunner_factory_deps) ? factoryRecord.__bunner_factory_deps : [];
+            const deps =
+              factoryRecord && isAnalyzerValueArray(factoryRecord.__bunner_factory_deps)
+                ? factoryRecord.__bunner_factory_deps
+                : [];
 
             if (factoryFn.length === 0) {
               return;

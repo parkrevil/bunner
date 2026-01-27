@@ -21,8 +21,9 @@ const isFunctionNode = (node: OxcNodeValue | undefined): boolean => {
     return false;
   }
 
-  // OXC AST node types we want to treat as "function boundaries" for analysis.
-  return getNodeType(node) === 'ArrowFunctionExpression';
+  const nodeType = getNodeType(node);
+
+  return nodeType === 'ArrowFunctionExpression' || nodeType === 'FunctionDeclaration' || nodeType === 'FunctionExpression';
 };
 
 const collectLocalVarIndexes = (functionNode: OxcNode): Map<string, number> => {
@@ -66,10 +67,7 @@ const unionAll = (sets: readonly IBitSet[], empty: IBitSet): IBitSet => {
   return current;
 };
 
-const analyzeFunctionBody = (
-  bodyNode: OxcNodeValue | undefined,
-  localIndexByName: Map<string, number>,
-): FunctionBodyAnalysis => {
+const analyzeFunctionBody = (bodyNode: OxcNodeValue | undefined, localIndexByName: Map<string, number>): FunctionBodyAnalysis => {
   const cfgBuilder = new OxcCFGBuilder();
   const built = cfgBuilder.buildFunctionBody(bodyNode);
   const nodeCount = built.cfg.nodeCount;
@@ -263,6 +261,14 @@ export const detectResourceWasteOxc = (files: ParsedFile[]): ResourceWasteFindin
     }
 
     const visit = (node: OxcNodeValue | undefined): void => {
+      if (Array.isArray(node)) {
+        for (const entry of node) {
+          visit(entry);
+        }
+
+        return;
+      }
+
       if (!isOxcNode(node)) {
         return;
       }

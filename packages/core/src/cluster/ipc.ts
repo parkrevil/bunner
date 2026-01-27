@@ -128,10 +128,7 @@ export function expose<T extends Record<string, RpcCallable>>(obj: T): void {
   });
 }
 
-export function wrap<T extends Record<string, RpcCallable>>(
-  worker: Worker,
-  methods: ReadonlyArray<keyof T>,
-): Promisified<T> {
+export function wrap<T extends Record<string, RpcCallable>>(worker: Worker, methods: ReadonlyArray<keyof T>): Promisified<T> {
   const pending = new Map<string, RpcPending>();
 
   worker.addEventListener('message', (event: MessageEvent<BunnerValue>) => {

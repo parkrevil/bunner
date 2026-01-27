@@ -1,11 +1,4 @@
-import type {
-  BunnerValue,
-  Class,
-  ForwardRef,
-  PrimitiveRecord,
-  Provider,
-  ProviderToken,
-} from '@bunner/common';
+import type { BunnerValue, Class, ForwardRef, PrimitiveRecord, Provider, ProviderToken } from '@bunner/common';
 
 import type { Container } from './container';
 

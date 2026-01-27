@@ -1,10 +1,11 @@
 import { LogLevel, type BunnerApplicationOptions } from '@bunner/common';
 import { Logger } from '@bunner/logger';
 
-import { type BunnerApplicationBaseOptions } from './application';
-import { BunnerApplication } from './application/bunner-application';
 import type { BunnerApplicationRuntimeOptions } from './application/interfaces';
 import type { EntryModule } from './application/types';
+
+import { type BunnerApplicationBaseOptions } from './application';
+import { BunnerApplication } from './application/bunner-application';
 
 export class Bunner {
   static apps: Map<string, BunnerApplication> = new Map();

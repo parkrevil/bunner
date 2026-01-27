@@ -1,11 +1,12 @@
 import { Injectable } from '@bunner/common';
 
-import { CommentsService } from './comments';
-import { PostsRepository } from './posts.repository';
+import type { PostCommentInput } from './comments/interfaces';
 import type { CreatePostDto } from './dto/create-post.dto';
 import type { UpdatePostDto } from './dto/update-post.dto';
 import type { Post } from './interfaces';
-import type { PostCommentInput } from './comments/interfaces';
+
+import { CommentsService } from './comments';
+import { PostsRepository } from './posts.repository';
 
 @Injectable()
 export class PostsService {

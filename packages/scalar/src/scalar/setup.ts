@@ -1,5 +1,12 @@
 import type { Doc, InternalRouter, ScalarRequest, ScalarSetupOptionsInput } from './interfaces';
-import type { AdapterCollectionLike, AdapterGroupGetResult, AdapterGroupLike, AdapterGroupWithGet, ScalarInput, ScalarKeyedRecord } from './types';
+import type {
+  AdapterCollectionLike,
+  AdapterGroupGetResult,
+  AdapterGroupLike,
+  AdapterGroupWithGet,
+  ScalarInput,
+  ScalarKeyedRecord,
+} from './types';
 
 import { resolveHttpNamesForDocuments, resolveHttpNamesForHosting } from './adapter-names';
 import { buildDocsForHttpAdapters } from './docs';

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'bun:test';
 import { StatusCodes } from 'http-status-codes';
 
-import type { BunnerResponse } from '../index';
 import type { ClassMetadata, MetadataRegistryKey, RequestParamMap, ResponseBodyValue } from '../../src/types';
+import type { BunnerResponse } from '../index';
 
 import { createHttpTestHarness, handleRequest, withGlobalMiddlewares } from '../http-test-kit';
 import { HttpMethod } from '../index';
