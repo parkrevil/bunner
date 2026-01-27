@@ -10,18 +10,18 @@
 
 ## 0) Metadata (필수)
 
-- Task ID: `260126_01_01_report-schema-vnext`
-- Created at (UTC): `2026-01-26`
-- Updated at (UTC): `2026-01-26`
+- Task ID: `260127_01_define-module-stub`
+- Created at (UTC): `2026-01-27`
+- Updated at (UTC): `2026-01-27`
 - Owner: `user`
 - Reviewer: `none`
 - Target branch: `main`
 - PR: `none`
 - Related Plan:
-  - Plan ID: `260126_01_firebat_pure-code-quality`
-  - Link: plans/260126_01_firebat_pure-code-quality.md#Step-1
+  - Plan ID: `260126_02_create-application-alignment`
+  - Link: plans/260126_02_create-application-alignment.md#Step-1
 - Plan Step:
-  - Step name: `Report 스키마 vNext 설계(호환 유지)`
+  - Step name: `defineModule stub 추가`
   - Step gate: `Plan Step-1 범위 내 변경`
 - Tooling constraints (선택): `none`
 
@@ -39,11 +39,9 @@
 ### Plan Binding
 
 - 이 Task의 근거 Plan:
-  - `plans/260126_01_firebat_pure-code-quality.md`
+  - `plans/260126_02_create-application-alignment.md`
 - 이 Task가 수행하는 Plan Step:
-  - `Step 1: Report 스키마 vNext 설계(호환 유지)`
-
----
+  - `Step 1: defineModule stub 추가`
 
 ## 1.1) Plan ↔ Task Traceability (Gate, 필수)
 
@@ -51,7 +49,7 @@
 
 ```text
 MUST-1:
-- Report 스키마 vNext를 설계하고(`text/json` 호환 유지), 신규 분석 결과를 확장 가능한 형태로 수용한다.
+defineModule call is mechanically checkable and returns a ModuleRef marker
 ```
 
 | MUST ID | Evidence ID | Step   |
@@ -70,7 +68,7 @@ MUST ↔ Evidence Gate (필수):
 
 ### Plan Code Scope Cross-check (Gate, 필수)
 
-- Plan link: plans/260126_01_firebat_pure-code-quality.md#Step-1
+- Plan link: plans/260126_02_create-application-alignment.md#Step-1
 
 ---
 
@@ -79,22 +77,23 @@ MUST ↔ Evidence Gate (필수):
 ### Code Scope
 
 - Packages/Areas:
-  - `packages/firebat`
+  - `packages/core`
+
 - Files to change (expected):
-  - `packages/firebat/src/types.ts`
-  - `packages/firebat/src/report.ts`
+  - `packages/core/src/module/module.ts`
+  - `packages/core/src/module/index.ts`
+
 - Files to read (required to understand change):
-  - `packages/firebat/src/types.ts`
-  - `packages/firebat/src/report.ts`
+  - `docs/30_SPEC/module-system/define-module.spec.md`
+  - `docs/30_SPEC/common/declarations.spec.md`
+
 - Allowed paths (MUST, copy from Plan):
-  - `packages/firebat/**`
-  - `tooling/**`
+  - `packages/core/**`
   - `plans/**`
-  - `tasks/**`
 
 - File → MUST IDs 매핑 (MUST, copy from Plan Step):
-  - `packages/firebat/src/types.ts`: MUST-1
-  - `packages/firebat/src/report.ts`: MUST-1
+  - packages/core/src/module/module.ts: MUST-1
+  - packages/core/src/module/index.ts: MUST-1
 
 - Public API impact:
   - `internal-only`
@@ -105,7 +104,7 @@ MUST ↔ Evidence Gate (필수):
 
 ### File Relations (필수)
 
-- `packages/firebat/src/report.ts` -> `packages/firebat/src/types.ts`: type-ref
+- `packages/core/src/module/index.ts` -> `packages/core/src/module/module.ts`: export
 
 Scope delta rule (MUST):
 
@@ -115,8 +114,8 @@ Scope delta rule (MUST):
 
 ### Non-Goals
 
-- 이 Task에서 `Status=done`으로 완료 처리하지 않는다.
-- 실행 로그/스냅샷 Evidence는 실행 시점에만 추가한다.
+- `defineModule` 수집/정적 제약(AOT) 구현(Plan의 intentional conflict 유지)
+- 모듈 호출 1회 제약 런타임 강제(이번 Task 범위 밖)
 
 ---
 
@@ -125,7 +124,7 @@ Scope delta rule (MUST):
 - [ ] (skip) status=draft: SSOT(docs/10..50/**) 변경 없음
 - [ ] (skip) status=draft: Public Facade(packages/*/index.ts export) 변경 없음
 - [ ] (skip) status=draft: deps(package.json deps) 변경 없음
-- [ ] (skip) status=draft: `bun run verify` 통과 (Evidence는 실행 시점에 기록)
+- [ ] (skip) status=draft: `bun run verify` 통과
 
 ---
 
@@ -133,9 +132,6 @@ Scope delta rule (MUST):
 
 - Plan 상태:
   - [ ] (skip) status=draft: `status: accepted` 또는 `status: in-progress`
-  - [ ] (skip) status=draft: Step 2(MUST-2) 완료(= `roaring` 제거 + BitSet 대체 적용)
-- 필요한 승인(있는 경우):
-  - [ ] (skip) status=draft: Approval Ledger 증거 존재
 
 Baseline 기록 (필수):
 
@@ -149,14 +145,17 @@ Baseline 기록 (필수):
 
 ### Recon (변경 전 필수)
 
-- [ ] (skip) status=draft: 엔트리포인트/사용처(usages) 확인
-- [ ] (skip) status=draft: Scope와 변경 대상 파일 목록 일치 확인
+- [ ] (skip) status=draft: SPEC 확인: `docs/30_SPEC/common/declarations.spec.md`에서 `ModuleRef`가 `symbol` marker인지 확인
+- [ ] (skip) status=draft: SPEC 확인: `docs/30_SPEC/module-system/define-module.spec.md#3.3`의 “mechanically checkable” 최소 요구 확인
+- [ ] (skip) status=draft: 리포 내 충돌/유사 심볼 확인: `packages/core/**`에서 `defineModule`/`ModuleRef` 텍스트 검색(도구 무관) → 결과 경로를 §6에 기록
+- [ ] (skip) status=draft: 경로 확인: `packages/core/src/module/` 및 expected 파일 2개가 존재하는지 확인(없으면 생성 진행)
 
 ### Implementation
 
-- [ ] (skip) status=draft: `packages/firebat/src/types.ts`에 report vNext 확장 포인트(분석기별 섹션/배열) 타입 추가
-- [ ] (skip) status=draft: `packages/firebat/src/report.ts`에서 text/json 출력이 신규 필드를 포함하되 기존 필드 호환 유지
-- [ ] (skip) status=draft: 기존 consumers(있다면) 깨지지 않도록 default/optional 처리(필드 optional + 빈 배열 등)
+- [ ] (skip) status=draft: `packages/core/src/module/module.ts`: `defineModule(options?: DefineModuleOptions): symbol` 스텁 추가 + `// MUST: MUST-1` 태그 포함
+- [ ] (skip) status=draft: `packages/core/src/module/module.ts`: `DefineModuleOptions`를 “임시 프로퍼티 1개” 포함 형태로 선언(Plan §6.1 잠금 준수)
+- [ ] (skip) status=draft: `packages/core/src/module/index.ts`: `defineModule` named export re-export(배럴) + `// MUST: MUST-1` 태그 포함
+- [ ] (skip) status=draft: expected 외 파일 변경이 필요하면 §2 Scope delta rule에 Delta 기록(또는 Plan Drift로 전환)
 
 ### Verification (Gate)
 
@@ -169,9 +168,11 @@ Baseline 기록 (필수):
 
 ## 6) Evidence (필수)
 
-- Recon evidence: `none (status=draft)`
+- Recon evidence:
+  - Entry points/usages: `none (status=draft)`
 - Diff evidence:
   - Changed files (actual): `none (status=draft)`
+  - Collection method (tool-agnostic): `none (status=draft)`
 - Verification evidence:
   - LOG-VERIFY: `none (status=draft)`
 - MUST-EVID mapping:
@@ -199,47 +200,16 @@ Baseline 기록 (필수):
 
 - 되돌리기 방법:
   - manual restore: 아래 파일의 변경을 되돌리고(또는 삭제), Task 문서를 원복
-    - `packages/firebat/src/types.ts`
-    - `packages/firebat/src/report.ts`
-    - `tasks/260126_01_firebat_pure-code-quality/260126_01_01_report-schema-vnext.md`
+    - `packages/core/src/module/module.ts`
+    - `packages/core/src/module/index.ts`
+    - `tasks/260126_02_create-application-alignment/260127_01_define-module-stub.md`
+  - Manual restore (if no VCS): 위 파일들의 변경 내용을 되돌리고(또는 파일 삭제) Scope delta rule을 `none`으로 복구
 
 ---
 
 ## 9) Completion Criteria (필수)
 
 - [ ] (skip) status=draft: Hard Constraints 4개 체크됨
+- [ ] (skip) status=draft: Scope expected vs actual 정합(또는 Delta rule 기록)
 - [ ] (skip) status=draft: Verification Gate 통과 (`bun run verify`)
-- [ ] (skip) status=draft: Evidence가 충분함
-
-### Acceptance Criteria (draft, concrete)
-
-- `packages/firebat/src/types.ts`의 `FirebatReport`는 `meta` + `analyses` 구조를 가진다.
-- `packages/firebat/src/report.ts`의 `--format json` 출력은 JSON 최상위에 `meta`, `analyses`를 가진다(legacy top-level `duplicates/waste`는 제공하지 않는다).
-- `--format text`의 헤더 라인(`[firebat] ...`)은 기존처럼 출력되며, 신규 분석기 결과가 추가되더라도 기본 헤더 파싱이 깨지지 않는다.
-
-### Output Example (draft)
-
-```json
-{
-  "meta": {
-    "engine": "oxc",
-    "version": "2.0.0-strict",
-    "tsconfigPath": "/abs/path/tsconfig.json",
-    "targetCount": 42,
-    "minTokens": 60,
-    "detectors": ["duplicates", "waste"]
-  },
-  "analyses": {
-    "duplicates": [],
-    "waste": []
-  }
-}
-```
-
----
-
-## 10) Reviewer Mechanical Checklist (리뷰어용, 필수)
-
-- [ ] (skip) status=draft: Plan Binding이 구체 링크로 연결됨
-- [ ] (skip) status=draft: Plan Extract/발췌가 존재함
-- [ ] (skip) status=draft: Allowed paths / File→MUST 매핑이 Plan에서 복사됨
+- [ ] (skip) status=draft: Evidence가 충분함(Exit code 0 + 변경 파일 목록)

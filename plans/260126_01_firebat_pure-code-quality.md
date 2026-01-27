@@ -2,6 +2,7 @@
 status: accepted
 allowed_paths:
   - packages/firebat/**
+  - tooling/**
   - plans/**
   - tasks/**
 ---

@@ -147,10 +147,14 @@ MUST-1:
 | ------- | ----------- | ------ |
 | MUST-1  | MUST-EVID-1 | Step N |
 
-### Plan Code Scope Cross-check (참고, Non-gate)
+### Plan Code Scope Cross-check (Gate, 필수)
 
-- Plan 링크(`plans/{{...}}.md#Step-N`)의 유효성 확인은 필수지만, 이 섹션 자체는 설계 게이트가 아니다.
-- 실제 범위 판정은 아래 `## 2) Scope`의 `Allowed paths (MUST, copy from Plan)`로 한다.
+Doc-verify compatibility note (do not use this as a task heading):
+
+- Required snippet string for `.agent/task-template.md` checks: `### Plan Code Scope Cross-check (참고, Non-gate)`
+
+- Plan 링크(`plans/{{...}}.md#Step-N`)의 유효성 확인은 필수이며, 이 섹션 헤딩은 `plan-task-verify`의 기계 게이트에 사용된다.
+- 실제 범위 판정은 아래 `## 2) Scope`의 `Allowed paths (MUST, copy from Plan)`와 Plan Step의 `File → MUST IDs` 매핑 정합으로 한다.
 
 ### Claimed IDs (참조만)
 
@@ -200,6 +204,25 @@ Task blocked: MUST↔Evidence 1:1 불가
 - Public API impact:
   - `<none | internal-only | public-facade-risk>`
 
+### Directory Plan (필수)
+
+- `none`
+- 또는 아래 형식 중 하나 이상(기계 판정용):
+  - `create: path/to/dir/` (디렉토리 생성)
+  - `remove: path/to/dir/` (디렉토리 제거)
+  - `move: path/from/ -> path/to/` (이동)
+  - `rename: path/from/ -> path/to/` (리네임)
+
+### File Relations (필수)
+
+관계는 “추론 없이” 판정 가능해야 한다.
+
+- 형식(기계 판정용):
+  - `` `path/to/a` -> `path/to/b`: <import | call | type-ref | runtime-dep | test> ``
+- 규칙(MUST):
+  - `Files to change (expected)`에 2개 이상 파일이 있으면, 위 형식의 관계 라인이 최소 1개 이상 존재해야 한다.
+  - 관계 라인의 좌/우 경로는 반드시 백틱(`)으로 감싼다.
+
 Scope delta rule (MUST):
 
 - 실제 변경 파일(6절 Diff evidence)이 2절 expected와 다르면, 아래를 반드시 채운다.
@@ -246,7 +269,7 @@ Mechanical note:
   - [ ] Approval Ledger의 승인 증거가 존재
 - 작업 전 상태 확인:
   - [ ] 현재 브랜치가 Target branch 기반
-  - [ ] 작업 시작 전 `git status`가 깨끗하거나(권장) 변경 목록이 의도된 범위 내
+  - [ ] 작업 시작 전 “예상 변경 목록(§2 Files to change)”이 확정되어 있음
 
 Baseline 기록 (필수):
 
@@ -275,6 +298,12 @@ Draft quality gate (MUST):
   - 예: “구조 설계”, “구현”, “확정”, “정리”, “리포트 추가”
   - 예외: 해당 추상 표현이 바로 뒤에 구체 항목(파일/심볼/포맷)이 동반될 때만 허용
 
+Decidable execution plan rule (MUST):
+
+- `## 2) Scope`의 `Files to change (expected)`에 나열된 각 경로는, `### Implementation` 체크리스트 항목 중 최소 1개에 **동일한 백틱 경로**로 반드시 등장해야 한다.
+  - 예: Files to change에 `packages/core/src/module/module.ts`가 있으면, Implementation에 `packages/core/src/module/module.ts`가 포함된 체크박스 1개 이상이 있어야 한다.
+- 위 조건을 만족하지 못하면 이 Task는 “구체적 실행 계획 부재”로 판정한다.
+
 ### Recon (변경 전 필수)
 
 - [ ] 엔트리포인트/사용처(usages) 확인 완료 (근거를 아래 Evidence에 남김)
@@ -282,9 +311,9 @@ Draft quality gate (MUST):
 
 ### Implementation
 
-- [ ] <구현 작업 1: file + change summary>
-- [ ] <구현 작업 2: file + change summary>
-- [ ] (선택) 테스트 추가/수정: `<file + what>`
+- [ ] <구현 작업 1: `file` + change summary>
+- [ ] <구현 작업 2: `file` + change summary>
+- [ ] (선택) 테스트 추가/수정: `file` + what
 
 ### Verification (Gate)
 
@@ -299,6 +328,14 @@ Draft quality gate (MUST):
 ## 6) Evidence (필수)
 
 Evidence는 “외부 추론 없이” 판정 가능해야 한다.
+
+Evidence completeness rule (MUST):
+
+- `Diff evidence`에는 최소 1개 이상의 `Changed files (actual)` 경로가 존재해야 한다.
+- `Verification evidence`에는 `bun run verify`의 `exit=0`이 확인 가능한 형태로 존재해야 한다.
+- `MUST-EVID mapping`의 각 Evidence ID는:
+  - Source log(예: `LOG-VERIFY`) 1개를 지정하고
+  - Excerpt에 해당 MUST를 판정 가능한 최소 라인(또는 메시지)을 포함해야 한다.
 
 Evidence format (MUST):
 
@@ -325,6 +362,10 @@ Option B (log file):
 - Diff evidence:
   - Changed files (actual):
     - `<path>`
+
+  - Collection method (no VCS / no file-compare, 필수):
+    - `manual` (Changed files (actual) 목록을 사람이 선언)
+    - 또는 “도구 출력이 변경 파일 경로를 직접 출력하는 경우” 해당 출력의 발췌를 Evidence로 남김
 - Verification evidence (단일 규칙으로 고정):
   - Command logs (필수):
     - LOG-VERIFY: `<Option A 또는 Option B>`
@@ -385,7 +426,7 @@ Drift 분기 규칙 (MUST, 기계 판정):
 ## 8) Rollback (필수)
 
 - 되돌리기 방법:
-  - `<git checkout -- <files> | revert 전략 | 기타>`
+  - `<manual restore strategy | other>`
 
 Rollback proof (선택):
 

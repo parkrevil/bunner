@@ -89,6 +89,7 @@ MUST ↔ Evidence Gate (필수):
 
 - Allowed paths (MUST, copy from Plan):
   - `packages/firebat/**`
+  - `tooling/**`
   - `plans/**`
   - `tasks/**`
 
@@ -99,6 +100,14 @@ MUST ↔ Evidence Gate (필수):
 
 - Public API impact:
   - `internal-only`
+
+### Directory Plan (필수)
+
+- none
+
+### File Relations (필수)
+
+- `packages/firebat/src/report.ts` -> `packages/firebat/src/types.ts`: type-ref
 
 Scope delta rule (MUST):
 
@@ -185,7 +194,11 @@ Baseline 기록 (필수):
 ## 8) Rollback (필수)
 
 - 되돌리기 방법:
-  - `git restore --staged --worktree tasks/260126_01_firebat_pure-code-quality/260126_01_06_semantic-noop.md`
+  - manual restore: 아래 파일/디렉토리의 변경을 되돌리고(또는 삭제), Task 문서를 원복
+    - `packages/firebat/src/analyses/no-op/`
+    - `packages/firebat/src/report.ts`
+    - `packages/firebat/src/types.ts`
+    - `tasks/260126_01_firebat_pure-code-quality/260126_01_06_semantic-noop.md`
 
 ---
 

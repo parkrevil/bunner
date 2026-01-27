@@ -119,6 +119,209 @@ const stripFencedCodeBlocks = (contents: string): string => {
   return out.join('\n');
 };
 
+const containsDisallowedVcsOrCompareCommand = (contents: string): string | null => {
+  const lowered = contents.toLowerCase();
+
+  if (lowered.includes('git ')) {
+    return 'git';
+  }
+
+  if (lowered.includes('-newermt')) {
+    return '-newermt';
+  }
+
+  return null;
+};
+
+const extractScopeSubsectionBulletLines = (
+  contents: string,
+  subsectionHeadingIncludes: string,
+): string[] => {
+  const lines = splitLines(contents);
+  const bullets: string[] = [];
+  let inScope = false;
+  let inSubsection = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    if (!inScope) {
+      if (trimmed.startsWith('## 2) Scope')) {
+        inScope = true;
+      }
+
+      continue;
+    }
+
+    if (!inSubsection) {
+      if (trimmed.startsWith('## ')) {
+        break;
+      }
+
+      if (trimmed.startsWith('### ') && trimmed.includes(subsectionHeadingIncludes)) {
+        inSubsection = true;
+      }
+
+      continue;
+    }
+
+    if (trimmed.startsWith('### ') || trimmed.startsWith('## ')) {
+      break;
+    }
+
+    if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+      bullets.push(trimmed);
+    }
+  }
+
+  return bullets;
+};
+
+const extractExecutionChecklistCheckboxLines = (contents: string, subsectionHeading: 'Recon' | 'Implementation'): string[] => {
+  const lines = splitLines(contents);
+  const items: string[] = [];
+  let inExecution = false;
+  let inSubsection = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    if (!inExecution) {
+      if (trimmed.startsWith('## 5) Execution Checklist')) {
+        inExecution = true;
+      }
+
+      continue;
+    }
+
+    if (!inSubsection) {
+      if (trimmed.startsWith('## ')) {
+        break;
+      }
+
+      if (trimmed === `### ${subsectionHeading}` || trimmed.startsWith(`### ${subsectionHeading} `)) {
+        inSubsection = true;
+      }
+
+      continue;
+    }
+
+    if (trimmed.startsWith('### ') || trimmed.startsWith('## ')) {
+      break;
+    }
+
+    if (trimmed.startsWith('- [ ]') || trimmed.startsWith('- [x]') || trimmed.startsWith('- [X]')) {
+      items.push(trimmed);
+    }
+  }
+
+  return items;
+};
+
+const extractBacktickedPaths = (line: string): string[] => {
+  const matches = [...line.matchAll(/`([^`]+)`/g)];
+
+  return matches
+    .map(match => match[1])
+    .filter((value): value is string => typeof value === 'string')
+    .map(value => normalizePath(value).trim())
+    .filter(value => value.length > 0);
+};
+
+const extractTaskFileRelationPairs = (contents: string): Array<{ from: string; to: string }> => {
+  const bullets = extractScopeSubsectionBulletLines(contents, 'File Relations');
+  const pairs: Array<{ from: string; to: string }> = [];
+
+  for (const bullet of bullets) {
+    const match = bullet.match(/`([^`]+)`\s*->\s*`([^`]+)`/);
+    const fromRaw = match?.[1];
+    const toRaw = match?.[2];
+
+    if (typeof fromRaw === 'string' && typeof toRaw === 'string') {
+      const from = normalizePath(fromRaw).trim();
+      const to = normalizePath(toRaw).trim();
+
+      if (from.length > 0 && to.length > 0) {
+        pairs.push({ from, to });
+      }
+    }
+  }
+
+  return pairs;
+};
+
+const validateExecutionChecklistDetail = (filePath: string, contents: string): string[] => {
+  const errors: string[] = [];
+  const recon = extractExecutionChecklistCheckboxLines(contents, 'Recon');
+  const implementation = extractExecutionChecklistCheckboxLines(contents, 'Implementation');
+
+  if (recon.length < 2) {
+    errors.push(`[plan-task-verify] ${filePath}: Execution Checklist Recon must have at least 2 checkbox items`);
+  }
+
+  if (implementation.length < 3) {
+    errors.push(`[plan-task-verify] ${filePath}: Execution Checklist Implementation must have at least 3 checkbox items`);
+  }
+
+  const filesToChange = extractTaskFilesToChange(contents);
+
+  if (filesToChange.length === 0) {
+    return errors;
+  }
+
+  const mentioned = new Set<string>();
+
+  for (const item of implementation) {
+    for (const value of extractBacktickedPaths(item)) {
+      mentioned.add(value);
+    }
+  }
+
+  for (const fileToChange of filesToChange) {
+    if (!mentioned.has(fileToChange)) {
+      errors.push(
+        `[plan-task-verify] ${filePath}: Files to change (expected) must appear as a backticked path in at least one Implementation checkbox: ${fileToChange}`,
+      );
+    }
+  }
+
+  return errors;
+};
+
+const validateScopeStructureAndRelations = (filePath: string, contents: string): string[] => {
+  const errors: string[] = [];
+
+  if (!contents.includes('### Directory Plan (필수)')) {
+    errors.push(`[plan-task-verify] ${filePath}: missing section: Directory Plan (필수)`);
+  }
+
+  if (!contents.includes('### File Relations (필수)')) {
+    errors.push(`[plan-task-verify] ${filePath}: missing section: File Relations (필수)`);
+  }
+
+  const directoryPlan = extractScopeSubsectionBulletLines(contents, 'Directory Plan');
+
+  if (directoryPlan.length === 0) {
+    errors.push(`[plan-task-verify] ${filePath}: Directory Plan must include at least one bullet (e.g. "- none")`);
+  }
+
+  const filesToChange = extractTaskFilesToChange(contents);
+  const relations = extractTaskFileRelationPairs(contents);
+
+  if (filesToChange.length >= 2) {
+    const fileSet = new Set(filesToChange);
+    const hasCrossReference = relations.some(pair => fileSet.has(pair.from) && fileSet.has(pair.to) && pair.from !== pair.to);
+
+    if (!hasCrossReference) {
+      errors.push(
+        `[plan-task-verify] ${filePath}: File Relations must include at least one relation between two different Files to change (expected) when there are 2+ files`,
+      );
+    }
+  }
+
+  return errors;
+};
+
 const isCodeFile = (filePath: string): boolean => CODE_EXTENSIONS.has(path.extname(filePath));
 
 const findUnresolvedCheckboxes = (contents: string): string[] => {
@@ -662,6 +865,11 @@ const listUnmappedMustIds = (taskMustIds: readonly string[], fileMustMap: Readon
 
 const validateTask = async (filePath: string, contents: string): Promise<string[]> => {
   const errors: string[] = [];
+  const disallowed = containsDisallowedVcsOrCompareCommand(contents);
+
+  if (disallowed !== null) {
+    errors.push(`[plan-task-verify] ${filePath}: disallowed command/reference found (no VCS / no file-compare): ${disallowed}`);
+  }
 
   if (isTaskFileInTasksRoot(filePath)) {
     errors.push(
@@ -684,6 +892,9 @@ const validateTask = async (filePath: string, contents: string): Promise<string[
   if (!contents.includes('### Plan Code Scope Cross-check (Gate, 필수)')) {
     errors.push(`[plan-task-verify] ${filePath}: missing section: Plan Code Scope Cross-check`);
   }
+
+  errors.push(...validateExecutionChecklistDetail(filePath, contents));
+  errors.push(...validateScopeStructureAndRelations(filePath, contents));
 
   const planLink = extractTaskPlanLink(contents);
 

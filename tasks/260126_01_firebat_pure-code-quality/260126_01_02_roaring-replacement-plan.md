@@ -91,6 +91,7 @@ MUST ↔ Evidence Gate (필수):
 
 - Allowed paths (MUST, copy from Plan):
   - `packages/firebat/**`
+  - `tooling/**`
   - `plans/**`
   - `tasks/**`
 
@@ -102,6 +103,14 @@ MUST ↔ Evidence Gate (필수):
 
 - Public API impact:
   - `internal-only`
+
+### Directory Plan (필수)
+
+- none
+
+### File Relations (필수)
+
+- `packages/firebat/src/engine/dataflow.ts` -> `packages/firebat/src/engine/types.ts`: type-ref
 
 Scope delta rule (MUST):
 
@@ -197,7 +206,12 @@ Baseline 기록 (필수):
 ## 8) Rollback (필수)
 
 - 되돌리기 방법:
-  - `git restore --staged --worktree tasks/260126_01_firebat_pure-code-quality/260126_01_02_roaring-replacement-plan.md`
+  - manual restore: 아래 파일의 변경을 되돌리고(또는 삭제), Task 문서를 원복
+    - `plans/260126_01_firebat_pure-code-quality.md`
+    - `packages/firebat/src/engine/dataflow.ts`
+    - `packages/firebat/src/engine/types.ts`
+    - `packages/firebat/package.json`
+    - `tasks/260126_01_firebat_pure-code-quality/260126_01_02_roaring-replacement-plan.md`
 
 ---
 

@@ -155,6 +155,7 @@ export type AppContractData = {
 | APP-R-016 | active | MUST NOT | outcomes | Outcome:OUT-016 | shutdown throw values in AggregateError.errors are wrapped/normalized/converted instead of being included by strict equality | runtime |
 | APP-R-013 | active | MUST NOT | outcomes | Outcome:OUT-013 | createApplication/app.start/app.stop/app.get/app.attach returns Result | runtime |
 | APP-R-017 | active | MUST | inputs, outcomes | InputKind:app-entry, Outcome:OUT-017 | app-entry normalization produces string-id with required format | build |
+| APP-R-018 | active | MUST | outcomes | Outcome:OUT-018 | BunnerApplication is unique per process/worker; multiple createApplication calls are rejected by CLI as error | build |
 
 ---
 
@@ -221,6 +222,7 @@ export type AppContractData = {
 | app.stop invoked | APP-R-016 | Outcome:OUT-016 | OUT-016 | AggregateError.errors includes original shutdown throw values by strict equality and without wrapping/normalization |
 | app surface returns Result | APP-R-013 | Outcome:OUT-013 | OUT-013 | build/runtime violation is observable |
 | app-entry collected | APP-R-017 | InputKind:app-entry | OUT-017 | app-entry string-id normalization is deterministic and matches required format |
+| createApplication call observed more than once in the same process/worker | APP-R-018 | Outcome:OUT-018 | OUT-018 | build failure is observable (CLI emits error) |
 
 ### 6.2 State Conditions
 
@@ -251,6 +253,7 @@ export type AppContractData = {
 | APP-R-016 | AggregateError.errors values are wrapped/normalized/converted | BUNNER_APP_016  | error                    | symbol              | runtime:observation               |
 | APP-R-013 | Result returned from app surface                              | BUNNER_APP_013  | error                    | symbol              | runtime:observation               |
 | APP-R-017 | app-entry normalization output violates format                | BUNNER_APP_017  | error                    | symbol              | static:artifact                   |
+| APP-R-018 | multiple createApplication calls observed                      | BUNNER_APP_018  | error                    | file                | static:ast                        |
 
 ---
 

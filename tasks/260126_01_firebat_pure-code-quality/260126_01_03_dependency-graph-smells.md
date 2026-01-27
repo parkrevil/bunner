@@ -93,6 +93,7 @@ MUST ↔ Evidence Gate (필수):
 
 - Allowed paths (MUST, copy from Plan):
   - `packages/firebat/**`
+  - `tooling/**`
   - `plans/**`
   - `tasks/**`
 
@@ -104,6 +105,14 @@ MUST ↔ Evidence Gate (필수):
 
 - Public API impact:
   - `internal-only`
+
+### Directory Plan (필수)
+
+- none
+
+### File Relations (필수)
+
+- `packages/firebat/src/report.ts` -> `packages/firebat/src/types.ts`: type-ref
 
 Scope delta rule (MUST):
 
@@ -151,6 +160,7 @@ Baseline 기록 (필수):
 ### Implementation
 
 - [ ] (skip) status=draft: `packages/firebat/src/analyses/dependencies/`에 분석기 모듈 스캐폴딩 추가(입력/출력 타입 포함)
+- [ ] (skip) status=draft: `packages/firebat/src/analyses/coupling/`에 coupling(예: afferent/efferent) 분석기 스캐폴딩 추가
 - [ ] (skip) status=draft: cycle 탐지(최소 SCC 또는 DFS back-edge) 결과를 report 스키마에 매핑(`packages/firebat/src/types.ts`)
 - [ ] (skip) status=draft: fan-in/fan-out 산출(노드별 in/out degree) + 임계값/상위 N 정책을 report 스키마에 매핑
 - [ ] (skip) status=draft: text/json 출력 경로에 dependencies 결과를 연결(`packages/firebat/src/report.ts`)
@@ -239,4 +249,9 @@ Baseline 기록 (필수):
 ## 8) Rollback (필수)
 
 - 되돌리기 방법:
-  - `git restore --staged --worktree tasks/260126_01_firebat_pure-code-quality/260126_01_03_dependency-graph-smells.md`
+  - manual restore: 아래 파일/디렉토리의 변경을 되돌리고(또는 삭제), Task 문서를 원복
+    - `packages/firebat/src/analyses/dependencies/`
+    - `packages/firebat/src/analyses/coupling/`
+    - `packages/firebat/src/report.ts`
+    - `packages/firebat/src/types.ts`
+    - `tasks/260126_01_firebat_pure-code-quality/260126_01_03_dependency-graph-smells.md`
