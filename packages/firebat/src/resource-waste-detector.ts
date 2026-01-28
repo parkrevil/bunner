@@ -1,4 +1,4 @@
-import type { ParsedFile } from './engine/oxc-wrapper';
+import type { ParsedFile } from './engine/types';
 import type { ResourceWasteFinding } from './types';
 
 import { detectResourceWasteOxc } from './engine/resource-waste-detector-oxc';

@@ -1,4 +1,4 @@
-import type { ParseResult } from 'oxc-parser';
+import type { ParseResult, Node } from 'oxc-parser';
 
 import type { IntegerCFG } from './cfg';
 import type { IBitSet } from './dataflow';
@@ -38,56 +38,15 @@ export interface FunctionBodyAnalysis {
 }
 
 
-export type Program = ParseResult['program'];
-
-export type OxcParseError = ParseResult['errors'][number];
-
-export type OxcComment = ParseResult['comments'][number];
-
-export type OxcNodeValue = string | number | boolean | null | Program | OxcNode | ReadonlyArray<OxcNodeValue>;
-
-export interface OxcNode {
-  type?: string;
-  name?: string;
-  start?: number;
-  end?: number;
-  [key: string]: OxcNodeValue | undefined;
-  expression?: OxcNode;
-  properties?: ReadonlyArray<OxcNode>;
-  key?: OxcNode;
-  value?: OxcNodeValue;
-  operator?: string;
-  argument?: OxcNode;
-  computed?: boolean;
-  property?: OxcNode;
-  object?: OxcNode;
-  callee?: OxcNode;
-  left?: OxcNode;
-  right?: OxcNode;
-  test?: OxcNode;
-  consequent?: OxcNode | ReadonlyArray<OxcNode>;
-  alternate?: OxcNode;
-  init?: OxcNode;
-  update?: OxcNode;
-  id?: OxcNode;
-  arguments?: ReadonlyArray<OxcNode>;
-  params?: ReadonlyArray<OxcNode>;
-  body?: OxcNode | ReadonlyArray<OxcNode>;
-  label?: OxcNode;
-  discriminant?: OxcNode;
-  cases?: ReadonlyArray<OxcNode>;
-  handler?: OxcNode;
-  block?: OxcNode;
-  finalizer?: OxcNode;
+export interface LoopHeaderNode {
+  type: 'ForInHeader' | 'ForOfHeader';
+  start: number;
+  end: number;
+  left?: Node;
+  right?: Node;
 }
 
-export type OxcParseResult = ParseResult;
-
-export interface ParseSyncModule {
-  parseSync?: ParseSyncFn;
-}
-
-export type ParseSyncFn = (filePath: string, sourceText: string) => OxcParseResult;
+export type CfgNodePayload = Node | LoopHeaderNode;
 
 export interface ParseTask {
   filePath: string;
@@ -96,9 +55,9 @@ export interface ParseTask {
 
 export interface ParsedFile {
   filePath: string;
-  program: OxcParseResult['program'];
-  errors: OxcParseResult['errors'];
-  comments: OxcParseResult['comments'];
+  program: ParseResult['program'];
+  errors: ParseResult['errors'];
+  comments: ParseResult['comments'];
   sourceText: string;
 }
 
@@ -106,7 +65,7 @@ export interface OxcBuiltFunctionCfg {
   readonly cfg: IntegerCFG;
   readonly entryId: NodeId;
   readonly exitId: NodeId;
-  readonly nodePayloads: ReadonlyArray<OxcNode | null>;
+  readonly nodePayloads: ReadonlyArray<CfgNodePayload | null>;
 }
 
 export interface LoopTargets {

@@ -1,22 +1,21 @@
+import type { Node } from 'oxc-parser';
+
 import type { ResourceWasteFinding } from '../types';
-import type { ParsedFile } from './oxc-wrapper';
-import type { DefMeta, FunctionBodyAnalysis, OxcNode, OxcNodeValue } from './types';
+import type { DefMeta, FunctionBodyAnalysis, ParsedFile } from './types';
 
 import { OxcCFGBuilder } from './cfg-builder';
 import { createBitSet, type IBitSet } from './dataflow';
-import { getLineColumn } from './oxc-wrapper';
+import { getLineColumn } from './source-position';
 import { collectVariables } from './variable-collector';
 
-const isOxcNode = (value: OxcNodeValue | undefined): value is OxcNode =>
+const isOxcNode = (value: Node | ReadonlyArray<Node> | undefined): value is Node =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-const isOxcNodeArray = (value: OxcNodeValue | undefined): value is ReadonlyArray<OxcNodeValue> => Array.isArray(value);
+const isOxcNodeArray = (value: Node | ReadonlyArray<Node> | undefined): value is ReadonlyArray<Node> => Array.isArray(value);
 
-const getNodeType = (node: OxcNode): string | null => {
-  return typeof node.type === 'string' ? node.type : null;
-};
+const getNodeType = (node: Node): string => node.type;
 
-const isFunctionNode = (node: OxcNodeValue | undefined): boolean => {
+const isFunctionNode = (node: Node | ReadonlyArray<Node> | undefined): boolean => {
   if (!isOxcNode(node)) {
     return false;
   }
@@ -26,13 +25,13 @@ const isFunctionNode = (node: OxcNodeValue | undefined): boolean => {
   return nodeType === 'ArrowFunctionExpression' || nodeType === 'FunctionDeclaration' || nodeType === 'FunctionExpression';
 };
 
-const collectLocalVarIndexes = (functionNode: OxcNode): Map<string, number> => {
+const collectLocalVarIndexes = (functionNode: Node): Map<string, number> => {
   const names = new Set<string>();
-  const params = isOxcNodeArray(functionNode.params) ? functionNode.params : [];
+  const params = (functionNode.params ?? []) as ReadonlyArray<Node>;
 
   for (const param of params) {
-    if (isOxcNode(param) && getNodeType(param) === 'Identifier' && typeof param.name === 'string') {
-      names.add(param.name);
+    if (isOxcNode(param) && getNodeType(param) === 'Identifier') {
+      names.add(param.name as string);
     }
   }
 
@@ -67,7 +66,7 @@ const unionAll = (sets: readonly IBitSet[], empty: IBitSet): IBitSet => {
   return current;
 };
 
-const analyzeFunctionBody = (bodyNode: OxcNodeValue | undefined, localIndexByName: Map<string, number>): FunctionBodyAnalysis => {
+const analyzeFunctionBody = (bodyNode: Node | ReadonlyArray<Node> | undefined, localIndexByName: Map<string, number>): FunctionBodyAnalysis => {
   const cfgBuilder = new OxcCFGBuilder();
   const built = cfgBuilder.buildFunctionBody(bodyNode);
   const nodeCount = built.cfg.nodeCount;
@@ -260,9 +259,9 @@ export const detectResourceWasteOxc = (files: ParsedFile[]): ResourceWasteFindin
       continue;
     }
 
-    const visit = (node: OxcNodeValue | undefined): void => {
+    const visit = (node: Node | ReadonlyArray<Node> | undefined): void => {
       if (Array.isArray(node)) {
-        const entries = node as ReadonlyArray<OxcNodeValue>;
+        const entries = node as ReadonlyArray<Node>;
 
         for (const entry of entries) {
           visit(entry);

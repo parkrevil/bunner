@@ -1,4 +1,4 @@
-import type { ParsedFile } from './engine/oxc-wrapper';
+import type { ParsedFile } from './engine/types';
 import type { DuplicateGroup } from './types';
 
 import { detectDuplicatesOxc } from './engine/duplicate-detector-oxc';

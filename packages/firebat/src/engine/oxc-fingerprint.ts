@@ -1,43 +1,60 @@
-import type { OxcNode, OxcNodeValue } from './types';
+import type { Node } from 'oxc-parser';
 
 import { hashString } from './hasher';
 
-const isOxcNode = (value: OxcNodeValue | undefined): value is OxcNode =>
+const isOxcNode = (value: Node | ReadonlyArray<Node> | undefined): value is Node =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-const isOxcNodeArray = (value: OxcNodeValue | undefined): value is ReadonlyArray<OxcNodeValue> => Array.isArray(value);
+const isOxcNodeArray = (value: Node | ReadonlyArray<Node> | undefined): value is ReadonlyArray<Node> => Array.isArray(value);
+
+const pushLiteralValue = (node: Node, diffs: string[]): void => {
+  if (!('value' in node)) {
+    return;
+  }
+
+  const literalType = node.type;
+  const value = (node as { value: unknown }).value;
+
+  if (literalType === 'Literal' || literalType.endsWith('Literal')) {
+    if (typeof value === 'string') {
+      diffs.push(`string:${value}`);
+
+      return;
+    }
+
+    if (typeof value === 'number') {
+      diffs.push(`number:${value}`);
+
+      return;
+    }
+
+    if (typeof value === 'boolean') {
+      diffs.push(`boolean:${value}`);
+
+      return;
+    }
+
+    if (typeof value === 'bigint') {
+      diffs.push(`bigint:${value.toString()}`);
+
+      return;
+    }
+
+    if (value === null) {
+      diffs.push('null');
+    }
+  }
+};
 
 // Oxc AST structure needs normalization for fingerprinting.
 // We traverse the AST and build a string representation of semantics.
 // Ignore names, locations, comments.
 // Focus on structure: types, operators, literals (optional, maybe normalized).
 
-export const createOxcFingerprint = (node: OxcNodeValue | undefined): string => {
+export const createOxcFingerprint = (node: Node | ReadonlyArray<Node> | undefined): string => {
   const diffs: string[] = [];
 
-  const visit = (n: OxcNodeValue | undefined) => {
-    if (n == null) {
-      return;
-    }
-
-    if (typeof n === 'string') {
-      diffs.push(`string:${n}`);
-
-      return;
-    }
-
-    if (typeof n === 'number') {
-      diffs.push(`number:${n}`);
-
-      return;
-    }
-
-    if (typeof n === 'boolean') {
-      diffs.push(`boolean:${n}`);
-
-      return;
-    }
-
+  const visit = (n: Node | ReadonlyArray<Node> | undefined) => {
     if (isOxcNodeArray(n)) {
       for (const child of n) {
         visit(child);
@@ -51,13 +68,15 @@ export const createOxcFingerprint = (node: OxcNodeValue | undefined): string => 
     }
 
     // push Type
-    if (typeof n.type === 'string' && n.type.length > 0) {
+    if (n.type.length > 0) {
       diffs.push(n.type);
     }
 
+    pushLiteralValue(n, diffs);
+
     // push specific semantic properties
     // e.g. Operator for BinaryExpression
-    if (typeof n.operator === 'string' && n.operator.length > 0) {
+    if (n.operator) {
       diffs.push(n.operator);
     }
 

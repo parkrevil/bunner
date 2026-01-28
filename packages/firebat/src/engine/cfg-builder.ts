@@ -1,16 +1,23 @@
-import { IntegerCFG } from './cfg';
-import { EdgeType, type LoopTargets, type NodeId, type OxcBuiltFunctionCfg, type OxcNode, type OxcNodeValue } from './types';
+import type { Node } from 'oxc-parser';
 
-const isOxcNode = (value: OxcNodeValue | undefined): value is OxcNode =>
+import { IntegerCFG } from './cfg';
+import {
+  EdgeType,
+  type CfgNodePayload,
+  type LoopTargets,
+  type NodeId,
+  type OxcBuiltFunctionCfg,
+  type LoopHeaderNode,
+} from './types';
+
+const isOxcNode = (value: Node | ReadonlyArray<Node> | undefined): value is Node =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-const isOxcNodeArray = (value: OxcNodeValue | undefined): value is ReadonlyArray<OxcNodeValue> => Array.isArray(value);
+const isOxcNodeArray = (value: Node | ReadonlyArray<Node> | undefined): value is ReadonlyArray<Node> => Array.isArray(value);
 
-const getNodeType = (node: OxcNode): string | null => {
-  return typeof node.type === 'string' ? node.type : null;
-};
+const getNodeType = (node: Node): string => node.type;
 
-const unwrapExpression = (node: OxcNodeValue | undefined): OxcNode | null => {
+const unwrapExpression = (node: Node | ReadonlyArray<Node> | undefined): Node | null => {
   let current = isOxcNode(node) ? node : null;
 
   while (current !== null) {
@@ -38,7 +45,7 @@ const unwrapExpression = (node: OxcNodeValue | undefined): OxcNode | null => {
   return current;
 };
 
-const evalStaticTruthiness = (node: OxcNodeValue | undefined): boolean | null => {
+const evalStaticTruthiness = (node: Node | ReadonlyArray<Node> | undefined): boolean | null => {
   const n = unwrapExpression(node);
 
   if (n === null) {
@@ -91,7 +98,7 @@ const evalStaticTruthiness = (node: OxcNodeValue | undefined): boolean | null =>
 
 export class OxcCFGBuilder {
   private cfg: IntegerCFG;
-  private nodePayloads: Array<OxcNode | null>;
+  private nodePayloads: Array<CfgNodePayload | null>;
   private exitId: NodeId;
   private finallyReturnEntryStack: NodeId[];
 
@@ -102,7 +109,7 @@ export class OxcCFGBuilder {
     this.finallyReturnEntryStack = [];
   }
 
-  public buildFunctionBody(bodyNode: OxcNodeValue | undefined): OxcBuiltFunctionCfg {
+  public buildFunctionBody(bodyNode: Node | ReadonlyArray<Node> | undefined): OxcBuiltFunctionCfg {
     this.cfg = new IntegerCFG();
     this.nodePayloads = [];
     this.finallyReturnEntryStack = [];
@@ -125,7 +132,7 @@ export class OxcCFGBuilder {
     };
   }
 
-  private addNode(payload: OxcNode | null): NodeId {
+  private addNode(payload: CfgNodePayload | null): NodeId {
     const nodeId = this.cfg.addNode();
 
     this.nodePayloads[nodeId] = payload;
@@ -140,7 +147,7 @@ export class OxcCFGBuilder {
   }
 
   private visitStatement(
-    node: OxcNodeValue | undefined,
+    node: Node | ReadonlyArray<Node> | undefined,
     incoming: readonly NodeId[],
     loopStack: readonly LoopTargets[],
     currentLabel: string | null,
@@ -161,15 +168,10 @@ export class OxcCFGBuilder {
 
     const statementType = getNodeType(node);
 
-    if (statementType === null) {
-      return [...incoming];
-    }
-
     switch (statementType) {
       case 'BlockStatement': {
         let tails: NodeId[] = [...incoming];
-        const bodyValue = node.body;
-        const bodyItems = isOxcNodeArray(bodyValue) ? bodyValue : [];
+        const bodyItems = (node.body ?? []) as ReadonlyArray<Node>;
 
         for (const child of bodyItems) {
           tails = this.visitStatement(child, tails, loopStack, null);
@@ -180,7 +182,7 @@ export class OxcCFGBuilder {
 
       case 'LabeledStatement': {
         const labelNode = node.label;
-        const labelName = isOxcNode(labelNode) && typeof labelNode.name === 'string' ? labelNode.name : null;
+        const labelName = isOxcNode(labelNode) ? (labelNode.name as string) : null;
         const bodyValue = node.body;
 
         return this.visitStatement(bodyValue, incoming, loopStack, labelName);
@@ -296,8 +298,10 @@ export class OxcCFGBuilder {
         // Model as: header -> body -> header, with an explicit exit edge.
         // IMPORTANT: keep the header payload free of `body` so that uses in the body
         // are not attributed to the same CFG node as the loop variable write.
-        const headerPayload: OxcNode = {
+        const headerPayload: LoopHeaderNode = {
           type: statementType === 'ForInStatement' ? 'ForInHeader' : 'ForOfHeader',
+          start: node.start,
+          end: node.end,
         };
 
         if (node.left !== undefined) {
@@ -393,7 +397,7 @@ export class OxcCFGBuilder {
         this.connect(incoming, discriminantNode, EdgeType.Normal);
 
         const afterSwitch = this.addNode(null);
-        const cases = isOxcNodeArray(node.cases) ? node.cases : [];
+        const cases = (node.cases ?? []) as ReadonlyArray<Node>;
         const caseEntries: NodeId[] = cases.map(() => this.addNode(null));
 
         for (const entry of caseEntries) {
@@ -414,7 +418,7 @@ export class OxcCFGBuilder {
           }
 
           const consequentValue = isOxcNode(caseNode) ? caseNode.consequent : undefined;
-          const consequent = isOxcNodeArray(consequentValue) ? consequentValue : [];
+          const consequent = (consequentValue ?? []) as ReadonlyArray<Node>;
           const caseTails = this.visitStatement(consequent, [caseEntry], nextLoopStack, null);
           // Note: switch `case` test expressions are not modeled as nodes.
           const nextEntry = index + 1 < caseEntries.length ? caseEntries[index + 1] : undefined;
@@ -435,7 +439,7 @@ export class OxcCFGBuilder {
         this.connect(incoming, breakNode, EdgeType.Normal);
 
         const labelNode = node.label;
-        const targetLabel = isOxcNode(labelNode) && typeof labelNode.name === 'string' ? labelNode.name : null;
+        const targetLabel = isOxcNode(labelNode) ? (labelNode.name as string) : null;
         const target = this.findBreakTarget(loopStack, targetLabel);
 
         if (target !== null) {
@@ -451,7 +455,7 @@ export class OxcCFGBuilder {
         this.connect(incoming, continueNode, EdgeType.Normal);
 
         const labelNode = node.label;
-        const targetLabel = isOxcNode(labelNode) && typeof labelNode.name === 'string' ? labelNode.name : null;
+        const targetLabel = isOxcNode(labelNode) ? (labelNode.name as string) : null;
         const target = this.findContinueTarget(loopStack, targetLabel);
 
         if (target !== null) {

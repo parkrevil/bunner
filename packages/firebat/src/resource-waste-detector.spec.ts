@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 
-import type { ParsedFile } from './engine/oxc-wrapper';
+import type { ParsedFile } from './engine/types';
 import type { ResourceWasteFinding } from './types';
 
-import { parseSource } from './engine/oxc-wrapper';
+import { parseSource } from './engine/parse-source';
 import { detectResourceWaste } from './resource-waste-detector';
 
 describe('resource-waste-detector', () => {

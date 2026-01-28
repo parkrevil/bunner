@@ -1,16 +1,18 @@
 import { describe, expect, it } from 'bun:test';
 
-import type { OxcNode, OxcNodeValue, VariableUsage } from './types';
+import type { Node } from 'oxc-parser';
 
-import { parseSource } from './oxc-wrapper';
+import type { VariableUsage } from './types';
+
+import { parseSource } from './parse-source';
 import { collectVariables } from './variable-collector';
 
-const isOxcNode = (value: OxcNodeValue | undefined): value is OxcNode =>
+const isOxcNode = (value: Node | ReadonlyArray<Node> | undefined): value is Node =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-const isOxcNodeArray = (value: OxcNodeValue | undefined): value is ReadonlyArray<OxcNodeValue> => Array.isArray(value);
+const isOxcNodeArray = (value: Node | ReadonlyArray<Node> | undefined): value is ReadonlyArray<Node> => Array.isArray(value);
 
-const getFunctionBodyStatement = (sourceText: string, statementIndex: number): OxcNodeValue => {
+const getFunctionBodyStatement = (sourceText: string, statementIndex: number): Node | ReadonlyArray<Node> => {
   const parsed = parseSource('/virtual/variable-collector.spec.ts', sourceText);
   const program = parsed.program;
 

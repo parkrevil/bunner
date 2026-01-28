@@ -1,5 +1,3 @@
-import * as path from 'node:path';
-
 import type { FirebatCliOptions } from './interfaces';
 import type { FirebatReport } from './types';
 
@@ -20,7 +18,6 @@ const printHelp = (): void => {
     'Options:',
     '  --format text|json       Output format (default: text)',
     '  --min-tokens <n>         Minimum token threshold for duplicates (default: 60)',
-    '  --tsconfig <path>        Path to tsconfig.json (default: repo root tsconfig.json)',
     '  --only <list>            Limit detectors to duplicates,waste (comma-separated)',
     '  --no-exit                Always exit 0 even if findings exist',
     '  -h, --help               Show this help',
@@ -29,12 +26,8 @@ const printHelp = (): void => {
   console.log(lines.join('\n'));
 };
 
-const resolveDefaultTsconfig = (): string => path.resolve(process.cwd(), 'tsconfig.json');
-
 const buildReport = async (options: FirebatCliOptions): Promise<FirebatReport> => {
-  const tsconfigPath = options.tsconfigPath ?? resolveDefaultTsconfig();
   const program = await createFirebatProgram({
-    tsconfigPath,
     targets: options.targets,
   });
   const duplicates = options.detectors.includes('duplicates') ? detectDuplicates(program, options.minTokens) : [];
@@ -44,7 +37,6 @@ const buildReport = async (options: FirebatCliOptions): Promise<FirebatReport> =
     meta: {
       engine: 'oxc',
       version: '2.0.0-strict',
-      tsconfigPath,
       targetCount: program.length,
       minTokens: options.minTokens,
       detectors: options.detectors,

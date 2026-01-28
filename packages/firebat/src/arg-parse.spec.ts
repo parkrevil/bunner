@@ -14,7 +14,6 @@ describe('arg-parse', () => {
     expect(result.targets).toEqual([]);
     expect(result.format).toBe('text');
     expect(result.minTokens).toBe(60);
-    expect(result.tsconfigPath).toBeNull();
     expect(result.exitOnFindings).toBe(true);
     expect(result.help).toBe(false);
   });
@@ -30,20 +29,18 @@ describe('arg-parse', () => {
     expect(result.targets).toEqual([]);
     expect(result.format).toBe('text');
     expect(result.minTokens).toBe(60);
-    expect(result.tsconfigPath).toBeNull();
     expect(result.exitOnFindings).toBe(true);
   });
 
-  it('should parse format, minTokens, tsconfig, and targets when options are provided', () => {
+  it('should parse format, minTokens, and targets when options are provided', () => {
     // Arrange
-    let argv = ['--format', 'json', '--min-tokens', '120', '--tsconfig', './tsconfig.json', 'packages'];
+    let argv = ['--format', 'json', '--min-tokens', '120', 'packages'];
     // Act
     let result = parseArgs(argv);
 
     // Assert
     expect(result.format).toBe('json');
     expect(result.minTokens).toBe(120);
-    expect(result.tsconfigPath).toBe(path.resolve('./tsconfig.json'));
     expect(result.targets).toEqual([path.resolve('packages')]);
     expect(result.detectors).toEqual(['duplicates', 'waste']);
     expect(result.help).toBe(false);

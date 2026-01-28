@@ -1,7 +1,7 @@
-import type { ParsedFile } from '../../src/engine/oxc-wrapper';
+import type { ParsedFile } from '../../src/engine/types';
 import type { DuplicateGroup, ResourceWasteFinding } from '../../src/types';
 
-import { parseSource } from '../../src/engine/oxc-wrapper';
+import { parseSource } from '../../src/engine/parse-source';
 
 const parseSeed = (seedText: string | undefined): number => {
   if (seedText === undefined) {

@@ -3,7 +3,9 @@ import { describe, expect, it } from 'bun:test';
 import type { DuplicateGroup } from './types';
 
 import { detectDuplicates } from './duplicate-detector';
-import { parseSource, type ParsedFile } from './engine/oxc-wrapper';
+import type { ParsedFile } from './engine/types';
+
+import { parseSource } from './engine/parse-source';
 
 describe('duplicate-detector', () => {
   it('should report at least one duplicate group when identical functions exist', () => {

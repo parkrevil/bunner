@@ -1,23 +1,19 @@
-import type { VariableCollectorOptions, VariableUsage, OxcNode, OxcNodeValue } from './types';
+import type { Node } from 'oxc-parser';
 
-const isOxcNode = (value: OxcNodeValue | undefined): value is OxcNode =>
+import type { VariableCollectorOptions, VariableUsage } from './types';
+
+const isOxcNode = (value: Node | ReadonlyArray<Node> | undefined): value is Node =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-const getNodeType = (node: OxcNode): string | null => {
-  return typeof node.type === 'string' ? node.type : null;
-};
+const getNodeType = (node: Node): string => node.type;
 
-const isOxcNodeArray = (value: OxcNodeValue | undefined): value is ReadonlyArray<OxcNodeValue> => Array.isArray(value);
+const isOxcNodeArray = (value: Node | ReadonlyArray<Node> | undefined): value is ReadonlyArray<Node> => Array.isArray(value);
 
-const getNodeName = (node: OxcNode): string | null => {
-  return typeof node.name === 'string' ? node.name : null;
-};
+const getNodeName = (node: Node): string => node.name as string;
 
-const getNodeStart = (node: OxcNode): number => {
-  return typeof node.start === 'number' ? node.start : 0;
-};
+const getNodeStart = (node: Node): number => node.start;
 
-const isFunctionNode = (node: OxcNodeValue | undefined): boolean => {
+const isFunctionNode = (node: Node | ReadonlyArray<Node> | undefined): boolean => {
   if (!isOxcNode(node)) {
     return false;
   }
@@ -27,7 +23,7 @@ const isFunctionNode = (node: OxcNodeValue | undefined): boolean => {
   return nodeType === 'ArrowFunctionExpression' || nodeType === 'FunctionDeclaration' || nodeType === 'FunctionExpression';
 };
 
-const unwrapExpression = (node: OxcNodeValue | undefined): OxcNode | null => {
+const unwrapExpression = (node: Node | ReadonlyArray<Node> | undefined): Node | null => {
   let current = isOxcNode(node) ? node : null;
 
   while (current !== null) {
@@ -55,7 +51,7 @@ const unwrapExpression = (node: OxcNodeValue | undefined): OxcNode | null => {
   return current;
 };
 
-const evalStaticTruthiness = (node: OxcNodeValue | undefined): boolean | null => {
+const evalStaticTruthiness = (node: Node | ReadonlyArray<Node> | undefined): boolean | null => {
   const n = unwrapExpression(node);
 
   if (n === null) {
@@ -106,7 +102,7 @@ const evalStaticTruthiness = (node: OxcNodeValue | undefined): boolean | null =>
   return null;
 };
 
-const getStaticObjectExpressionKeys = (node: OxcNodeValue | undefined): Set<string> | null => {
+const getStaticObjectExpressionKeys = (node: Node | ReadonlyArray<Node> | undefined): Set<string> | null => {
   const n = unwrapExpression(node);
 
   if (n === null || getNodeType(n) !== 'ObjectExpression') {
@@ -114,7 +110,7 @@ const getStaticObjectExpressionKeys = (node: OxcNodeValue | undefined): Set<stri
   }
 
   const keys = new Set<string>();
-  const properties = isOxcNodeArray(n.properties) ? n.properties : [];
+  const properties = (n.properties ?? []) as ReadonlyArray<Node>;
 
   for (const prop of properties) {
     if (!isOxcNode(prop)) {
@@ -151,12 +147,12 @@ const getStaticObjectExpressionKeys = (node: OxcNodeValue | undefined): Set<stri
   return keys;
 };
 
-export const collectVariables = (node: OxcNodeValue | undefined, options: VariableCollectorOptions = {}): VariableUsage[] => {
+export const collectVariables = (node: Node | ReadonlyArray<Node> | undefined, options: VariableCollectorOptions = {}): VariableUsage[] => {
   const usages: VariableUsage[] = [];
   const includeNestedFunctions = options.includeNestedFunctions !== false;
 
   const visit = (
-    current: OxcNodeValue | undefined,
+    current: Node | ReadonlyArray<Node> | undefined,
     isWriteContext: boolean = false,
     allowNestedFunctions: boolean = includeNestedFunctions,
     writeKind?: VariableUsage['writeKind'],
@@ -184,10 +180,6 @@ export const collectVariables = (node: OxcNodeValue | undefined, options: Variab
     if (nodeType === 'Identifier') {
       const name = getNodeName(current);
 
-      if (name === null) {
-        return;
-      }
-
       const usage: VariableUsage = {
         name,
         isRead: !isWriteContext,
@@ -207,10 +199,6 @@ export const collectVariables = (node: OxcNodeValue | undefined, options: Variab
     if (nodeType === 'IdentifierReference') {
       const name = getNodeName(current);
 
-      if (name === null) {
-        return;
-      }
-
       // Usage (Reference)
       usages.push({
         name,
@@ -220,10 +208,6 @@ export const collectVariables = (node: OxcNodeValue | undefined, options: Variab
       });
     } else if (nodeType === 'BindingIdentifier') {
       const name = getNodeName(current);
-
-      if (name === null) {
-        return;
-      }
 
       // Declaration
       usages.push({
@@ -235,10 +219,6 @@ export const collectVariables = (node: OxcNodeValue | undefined, options: Variab
       });
     } else if (nodeType === 'AssignmentTargetIdentifier') {
       const name = getNodeName(current);
-
-      if (name === null) {
-        return;
-      }
 
       const usage: VariableUsage = {
         name,
@@ -415,9 +395,7 @@ export const collectVariables = (node: OxcNodeValue | undefined, options: Variab
             if (keyType === 'Identifier') {
               const name = getNodeName(keyNode);
 
-              if (name !== null) {
-                keyName = name;
-              }
+              keyName = name;
             } else if (keyType === 'Literal') {
               const value = keyNode.value;
 

@@ -71,7 +71,6 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
   const targets: string[] = [];
   let format: OutputFormat = 'text';
   let minTokens = DEFAULT_MIN_TOKENS;
-  let tsconfigPath: string | null = null;
   let exitOnFindings = true;
   let detectors: ReadonlyArray<FirebatDetector> = DEFAULT_DETECTORS;
 
@@ -87,7 +86,6 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
         targets: [],
         format,
         minTokens,
-        tsconfigPath,
         exitOnFindings,
         detectors,
         help: true,
@@ -116,20 +114,6 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
       }
 
       minTokens = parseNumber(value, '--min-tokens');
-
-      i += 1;
-
-      continue;
-    }
-
-    if (arg === '--tsconfig') {
-      const value = argv[i + 1];
-
-      if (typeof value !== 'string') {
-        throw new Error('[firebat] Missing value for --tsconfig');
-      }
-
-      tsconfigPath = normalizeTarget(value);
 
       i += 1;
 
@@ -167,7 +151,6 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
     targets,
     format,
     minTokens,
-    tsconfigPath,
     exitOnFindings,
     detectors,
     help: false,

@@ -1,11 +1,12 @@
-import type { OxcNode, OxcNodeValue } from './types';
+import type { Node } from 'oxc-parser';
 
-const isOxcNode = (value: OxcNodeValue | undefined): value is OxcNode =>
+
+const isOxcNode = (value: Node | ReadonlyArray<Node> | undefined): value is Node =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-const isOxcNodeArray = (value: OxcNodeValue | undefined): value is ReadonlyArray<OxcNodeValue> => Array.isArray(value);
+const isOxcNodeArray = (value: Node | ReadonlyArray<Node> | undefined): value is ReadonlyArray<Node> => Array.isArray(value);
 
-export const countOxcTokens = (node: OxcNodeValue | undefined): number => {
+export const countOxcTokens = (node: Node | ReadonlyArray<Node> | undefined): number => {
   // Oxc doesn't expose raw token count directly in AST.
   // Estimation based on AST depth or span length is possible, but raw token count requires lexer.
   // For 'physical limit' performance, re-lexing is expensive.
@@ -20,7 +21,7 @@ export const countOxcTokens = (node: OxcNodeValue | undefined): number => {
   // But strict requirement says "token count".
   // Let's implement a fast recursive node counter.
 
-  const visit = (n: OxcNodeValue | undefined) => {
+  const visit = (n: Node | ReadonlyArray<Node> | undefined) => {
     if (isOxcNodeArray(n)) {
       for (const child of n) {
         visit(child);
@@ -33,9 +34,7 @@ export const countOxcTokens = (node: OxcNodeValue | undefined): number => {
       return;
     }
 
-    if (typeof n.type === 'string') {
-      count++;
-    }
+    count += 1;
 
     // Iterate all keys
     const entries = Object.entries(n);

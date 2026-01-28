@@ -1,13 +1,11 @@
 import type {
   ArrowFunction,
-  CompilerOptions,
   ConstructorDeclaration,
   FunctionDeclaration,
   FunctionExpression,
   GetAccessorDeclaration,
   Identifier,
   MethodDeclaration,
-  ProjectReference,
   SetAccessorDeclaration,
   Symbol as TypeScriptSymbol,
 } from 'typescript';
@@ -65,7 +63,6 @@ export interface ResourceWasteFinding {
 export interface FirebatMeta {
   readonly engine: 'oxc';
   readonly version: string;
-  readonly tsconfigPath: string;
   readonly targetCount: number;
   readonly minTokens: number;
   readonly detectors: ReadonlyArray<FirebatDetector>;
@@ -80,12 +77,6 @@ export interface FirebatReport {
 export interface NodeHeader {
   readonly kind: FirebatItemKind;
   readonly header: string;
-}
-
-export interface TsconfigLoadResult {
-  readonly fileNames: ReadonlyArray<string>;
-  readonly options: CompilerOptions;
-  readonly projectReferences: ReadonlyArray<ProjectReference> | undefined;
 }
 
 export type FunctionWithBodyNode =

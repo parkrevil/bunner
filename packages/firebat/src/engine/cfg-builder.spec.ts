@@ -1,16 +1,18 @@
 import { describe, expect, it } from 'bun:test';
 
-import type { OxcBuiltFunctionCfg, OxcNode, OxcNodeValue } from './types';
+import type { Node } from 'oxc-parser';
+
+import type { OxcBuiltFunctionCfg } from './types';
 
 import { OxcCFGBuilder } from './cfg-builder';
-import { parseSource } from './oxc-wrapper';
+import { parseSource } from './parse-source';
 
-const isOxcNode = (value: OxcNodeValue | undefined): value is OxcNode =>
+const isOxcNode = (value: Node | ReadonlyArray<Node> | undefined): value is Node =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-const isOxcNodeArray = (value: OxcNodeValue | undefined): value is ReadonlyArray<OxcNodeValue> => Array.isArray(value);
+const isOxcNodeArray = (value: Node | ReadonlyArray<Node> | undefined): value is ReadonlyArray<Node> => Array.isArray(value);
 
-const getFirstFunction = (sourceText: string): OxcNode => {
+const getFirstFunction = (sourceText: string): Node => {
   const parsed = parseSource('/virtual/cfg-builder.spec.ts', sourceText);
   const program = parsed.program;
 
