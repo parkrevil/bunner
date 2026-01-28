@@ -2,7 +2,7 @@ import { parseSync } from 'oxc-parser';
 import { dirname, resolve } from 'path';
 
 import type { ClassMetadata, DecoratorMetadata, ImportEntry } from './interfaces';
-import type { ModuleDefinition, ParseResult, ReExport } from './parser-models';
+import type { CreateApplicationCall, DefineModuleCall, ModuleDefinition, ParseResult, ReExport } from './parser-models';
 import type {
   AnalyzerValue,
   AnalyzerValueRecord,
@@ -42,6 +42,7 @@ export class AstParser {
   private currentCode: string = '';
   private typeResolver = new AstTypeResolver();
   private currentImports: Record<string, string> = {};
+  private currentImportSources: Record<string, string> = {};
 
   parse(filename: string, code: string): ParseResult {
     this.currentCode = code;
@@ -54,8 +55,15 @@ export class AstParser {
     const importEntries: ImportEntry[] = [];
     const localValues: AnalyzerValueRecord = {};
     const exportedValues: AnalyzerValueRecord = {};
+    const createApplicationCalls: CreateApplicationCall[] = [];
+    const createApplicationAliases = new Set<string>();
+    const createApplicationNamespaces = new Set<string>();
+    const defineModuleCalls: DefineModuleCall[] = [];
+    const defineModuleAliases = new Set<string>();
+    const defineModuleNamespaces = new Set<string>();
 
     this.currentImports = {};
+    this.currentImportSources = {};
 
     let moduleDefinition: ModuleDefinition | undefined;
 
@@ -80,6 +88,7 @@ export class AstParser {
         }
 
         const resolvedSource = this.resolvePath(filename, sourceValue);
+        const isCoreImport = sourceValue === '@bunner/core';
 
         importEntries.push({ source: sourceValue, resolvedSource, isRelative: sourceValue.startsWith('.') });
 
@@ -113,9 +122,46 @@ export class AstParser {
           imports[localName] = resolvedSource;
 
           this.currentImports[localName] = resolvedSource;
+          this.currentImportSources[localName] = sourceValue;
+
+          if (isCoreImport) {
+            if (spec.type === 'ImportNamespaceSpecifier') {
+              createApplicationNamespaces.add(localName);
+              defineModuleNamespaces.add(localName);
+            }
+
+            if (spec.type === 'ImportSpecifier') {
+              const importedNode = this.asNode((spec as NodeRecord).imported);
+              const importedName = importedNode
+                ? this.getString(importedNode, 'name') ?? this.getString(importedNode, 'value')
+                : null;
+
+              if (importedName === 'createApplication') {
+                createApplicationAliases.add(localName);
+              }
+
+              if (importedName === 'defineModule') {
+                defineModuleAliases.add(localName);
+              }
+            }
+          }
         }
 
         return;
+      }
+
+      if (node.type === 'CallExpression') {
+        const call = this.extractCreateApplicationCall(node, createApplicationAliases, createApplicationNamespaces);
+
+        if (call) {
+          createApplicationCalls.push(call);
+        }
+
+        const defineCall = this.extractDefineModuleCall(node, defineModuleAliases, defineModuleNamespaces);
+
+        if (defineCall) {
+          this.upsertDefineModuleCall(defineModuleCalls, defineCall);
+        }
       }
 
       if (node.type === 'ExportAllDeclaration') {
@@ -218,6 +264,20 @@ export class AstParser {
 
               localValues[declName] = initValue;
               exportedValues[declName] = initValue;
+
+              if (decl.init && this.asNode(decl.init)?.type === 'CallExpression') {
+                const defineCall = this.extractDefineModuleCall(
+                  decl.init as NodeRecord,
+                  defineModuleAliases,
+                  defineModuleNamespaces,
+                );
+
+                if (defineCall) {
+                  defineCall.localName = declName;
+                  defineCall.exportedName = declName;
+                  this.upsertDefineModuleCall(defineModuleCalls, defineCall);
+                }
+              }
             }
 
             if (declName === 'module') {
@@ -288,6 +348,19 @@ export class AstParser {
 
           if (decl?.init !== undefined) {
             localValues[declName] = this.parseExpression(decl.init);
+
+            if (decl.init && this.asNode(decl.init)?.type === 'CallExpression') {
+              const defineCall = this.extractDefineModuleCall(
+                decl.init as NodeRecord,
+                defineModuleAliases,
+                defineModuleNamespaces,
+              );
+
+              if (defineCall) {
+                defineCall.localName = declName;
+                this.upsertDefineModuleCall(defineModuleCalls, defineCall);
+              }
+            }
           }
         }
 
@@ -320,6 +393,20 @@ export class AstParser {
 
     traverse(result.program);
 
+    if (defineModuleCalls.length > 0 && localExports.length > 0) {
+      const exportSet = new Set(localExports);
+
+      defineModuleCalls.forEach(call => {
+        if (call.exportedName) {
+          return;
+        }
+
+        if (call.localName && exportSet.has(call.localName)) {
+          call.exportedName = call.localName;
+        }
+      });
+    }
+
     return {
       classes,
       reExports,
@@ -329,7 +416,158 @@ export class AstParser {
       exportedValues,
       localValues,
       moduleDefinition,
+      createApplicationCalls,
+      defineModuleCalls,
     };
+  }
+
+  private extractCreateApplicationCall(
+    node: NodeRecord,
+    createApplicationAliases: Set<string>,
+    createApplicationNamespaces: Set<string>,
+  ): CreateApplicationCall | null {
+    const callee = this.asNode(node.callee);
+    const argsValue = asAnalyzerArray(node.arguments);
+    const args = (argsValue ?? []).map(arg => this.parseExpression(arg));
+
+    if (callee?.type === 'Identifier') {
+      const name = this.getString(callee, 'name');
+
+      if (!isNonEmptyString(name)) {
+        return null;
+      }
+
+      if (name !== 'createApplication' && !createApplicationAliases.has(name)) {
+        return null;
+      }
+
+      return {
+        callee: name,
+        importSource: this.currentImportSources[name],
+        args,
+        start: typeof node.start === 'number' ? node.start : undefined,
+        end: typeof node.end === 'number' ? node.end : undefined,
+      };
+    }
+
+    if (callee?.type === 'MemberExpression') {
+      const objectNode = this.asNode(callee.object);
+      const propertyNode = this.asNode(callee.property);
+      const objectName = objectNode?.type === 'Identifier' ? this.getString(objectNode, 'name') : null;
+      const propertyName = propertyNode ? this.getString(propertyNode, 'name') : null;
+
+      if (!isNonEmptyString(objectName) || propertyName !== 'createApplication') {
+        return null;
+      }
+
+      if (!createApplicationNamespaces.has(objectName)) {
+        return null;
+      }
+
+      return {
+        callee: `${objectName}.createApplication`,
+        importSource: this.currentImportSources[objectName],
+        args,
+        start: typeof node.start === 'number' ? node.start : undefined,
+        end: typeof node.end === 'number' ? node.end : undefined,
+      };
+    }
+
+    return null;
+  }
+
+  private extractDefineModuleCall(
+    node: NodeRecord,
+    defineModuleAliases: Set<string>,
+    defineModuleNamespaces: Set<string>,
+  ): DefineModuleCall | null {
+    const callee = this.asNode(node.callee);
+    const argsValue = asAnalyzerArray(node.arguments);
+    const args = (argsValue ?? []).map(arg => this.parseExpression(arg));
+
+    if (callee?.type === 'Identifier') {
+      const name = this.getString(callee, 'name');
+
+      if (!isNonEmptyString(name)) {
+        return null;
+      }
+
+      if (name !== 'defineModule' && !defineModuleAliases.has(name)) {
+        return null;
+      }
+
+      const importSource = this.currentImportSources[name];
+
+      if (importSource !== '@bunner/core') {
+        return null;
+      }
+
+      return {
+        callee: name,
+        importSource,
+        args,
+        start: typeof node.start === 'number' ? node.start : undefined,
+        end: typeof node.end === 'number' ? node.end : undefined,
+      };
+    }
+
+    if (callee?.type === 'MemberExpression') {
+      const objectNode = this.asNode(callee.object);
+      const propertyNode = this.asNode(callee.property);
+      const objectName = objectNode?.type === 'Identifier' ? this.getString(objectNode, 'name') : null;
+      const propertyName = propertyNode ? this.getString(propertyNode, 'name') : null;
+
+      if (!isNonEmptyString(objectName) || propertyName !== 'defineModule') {
+        return null;
+      }
+
+      if (!defineModuleNamespaces.has(objectName)) {
+        return null;
+      }
+
+      const importSource = this.currentImportSources[objectName];
+
+      if (importSource !== '@bunner/core') {
+        return null;
+      }
+
+      return {
+        callee: `${objectName}.defineModule`,
+        importSource,
+        args,
+        start: typeof node.start === 'number' ? node.start : undefined,
+        end: typeof node.end === 'number' ? node.end : undefined,
+      };
+    }
+
+    return null;
+  }
+
+  private upsertDefineModuleCall(calls: DefineModuleCall[], call: DefineModuleCall): void {
+    const start = call.start;
+    const end = call.end;
+
+    if (typeof start !== 'number' || typeof end !== 'number') {
+      calls.push(call);
+
+      return;
+    }
+
+    const existing = calls.find(entry => entry.start === start && entry.end === end);
+
+    if (!existing) {
+      calls.push(call);
+
+      return;
+    }
+
+    if (call.localName) {
+      existing.localName = call.localName;
+    }
+
+    if (call.exportedName) {
+      existing.exportedName = call.exportedName;
+    }
   }
 
   private extractModuleDefinition(node: NodeRecord): ModuleDefinition {

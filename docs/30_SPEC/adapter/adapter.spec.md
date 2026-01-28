@@ -35,7 +35,7 @@ Rule ID 형식(Rule ID Format) (REQUIRED):
 
 - Rule ID는 전역 유일해야 한다(MUST).
 - Rule ID는 본 섹션의 Spec ID를 접두사로 가져야 한다(MUST).
-- 형식: `<Spec ID>-R-<NNN>` (예: `MY-SPEC-ID-R-001`)
+- 형식: `<SPEC_ID>-R-<NNN>` (예: `MY-SPEC-ID-R-001`)
 - Rule ID는 4~9 섹션에서 참조되기 전에 3.3 섹션에서 먼저 선언되어야 한다(MUST).
 
 ---

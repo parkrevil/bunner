@@ -64,6 +64,14 @@ function createModuleFileAnalysis(params: ModuleFileAnalysisParams): FileAnalysi
     reExports: [],
     exports: [],
     imports: {},
+    defineModuleCalls: [
+      {
+        callee: 'defineModule',
+        importSource: '@bunner/core',
+        args: [],
+        exportedName: 'appModule',
+      },
+    ],
     moduleDefinition: {
       name,
       providers: [],

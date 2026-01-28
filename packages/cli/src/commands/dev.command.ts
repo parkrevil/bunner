@@ -5,6 +5,7 @@ import { join, resolve, relative } from 'path';
 import type { CommandOptions } from './types';
 
 import { AdapterSpecResolver, AstParser, ModuleGraph, type FileAnalysis } from '../analyzer';
+import type { AnalyzerValue, AnalyzerValueRecord } from '../analyzer/types';
 import { ConfigLoader, ConfigLoadError, scanGlobSorted, writeIfChanged } from '../common';
 import { buildDiagnostic, reportDiagnostics } from '../diagnostics';
 import { ManifestGenerator } from '../generator';
@@ -17,9 +18,9 @@ export async function dev(commandOptions?: CommandOptions) {
     const configResult = await ConfigLoader.load();
     const config = configResult.config;
     const moduleFileName = config.module.fileName;
-    const buildProfile = commandOptions?.profile ?? config.compiler?.profile ?? 'full';
+    const buildProfile = commandOptions?.profile ?? 'full';
     const projectRoot = process.cwd();
-    const srcDir = resolve(projectRoot, 'src');
+    const srcDir = resolve(projectRoot, config.sourceDir);
     const outDir = resolve(projectRoot, '.bunner');
     const parser = new AstParser();
     const adapterSpecResolver = new AdapterSpecResolver();
@@ -38,6 +39,8 @@ export async function dev(commandOptions?: CommandOptions) {
           classes: parseResult.classes,
           reExports: parseResult.reExports,
           exports: parseResult.exports,
+          createApplicationCalls: parseResult.createApplicationCalls,
+          defineModuleCalls: parseResult.defineModuleCalls,
         };
 
         if (parseResult.imports !== undefined) {
@@ -78,6 +81,43 @@ export async function dev(commandOptions?: CommandOptions) {
         return false;
       }
     }
+
+    const isAnalyzerRecord = (value: AnalyzerValue): value is AnalyzerValueRecord => {
+      return typeof value === 'object' && value !== null && !Array.isArray(value);
+    };
+
+    const validateCreateApplication = (fileMap: Map<string, FileAnalysis>): void => {
+      const calls = Array.from(fileMap.values())
+        .flatMap(file => file.createApplicationCalls ?? [])
+        .filter(call => call !== undefined);
+
+      if (calls.length === 0) {
+        throw new Error('[Bunner AOT] createApplication call not found in recognized files.');
+      }
+
+      if (calls.length > 1) {
+        throw new Error('[Bunner AOT] Multiple createApplication calls detected in recognized files.');
+      }
+
+      const call = calls[0];
+      const args = call.args ?? [];
+
+      if (args.length !== 1) {
+        throw new Error('[Bunner AOT] createApplication must take exactly one entry module argument.');
+      }
+
+      const entryArg = args[0];
+
+      if (!isAnalyzerRecord(entryArg)) {
+        throw new Error('[Bunner AOT] createApplication entry module must be a statically resolvable identifier.');
+      }
+
+      const entryRef = entryArg.__bunner_ref;
+
+      if (typeof entryRef !== 'string' || entryRef.length === 0) {
+        throw new Error('[Bunner AOT] createApplication entry module must be a statically resolvable identifier.');
+      }
+    };
 
     const reportDevFailure = (reason: string, file: string = '.'): void => {
       const diagnostic = buildDiagnostic({
@@ -168,22 +208,7 @@ export async function dev(commandOptions?: CommandOptions) {
       await analyzeFile(fullPath);
     }
 
-    if (config.scanPaths) {
-      for (const scanPath of config.scanPaths) {
-        const absPath = resolve(projectRoot, scanPath);
-        const extraFiles = await scanGlobSorted({ glob, baseDir: absPath });
-
-        for (const file of extraFiles) {
-          const fullPath = join(absPath, file);
-
-          if (!shouldAnalyzeFile(fullPath)) {
-            continue;
-          }
-
-          await analyzeFile(fullPath);
-        }
-      }
-    }
+    validateCreateApplication(fileCache);
 
     await rebuild();
 

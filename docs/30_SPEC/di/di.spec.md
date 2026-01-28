@@ -35,7 +35,7 @@ Rule ID 형식(Rule ID Format) (REQUIRED):
 
 - Rule ID는 전역 유일해야 한다(MUST).
 - Rule ID는 본 섹션의 Spec ID를 접두사로 가져야 한다(MUST).
-- 형식: `<Spec ID>-R-<NNN>`
+- 형식: `<SPEC_ID>-R-<NNN>`
 - Rule ID는 4~9 섹션에서 참조되기 전에 3.3 섹션에서 먼저 선언되어야 한다(MUST).
 
 ---
@@ -102,7 +102,7 @@ export type DiContractData = unknown;
 | DI-R-002 | active                      | MUST            | inputs, outcomes                    | InputKind:app-get-call, Outcome:OUT-002                                                     | app.get succeeds only for singleton + visibleTo=all                                                                     | build                             |
 | DI-R-003 | active                      | MUST            | outcomes                            | Outcome:OUT-003                                                                             | InjectCall is replaced by static wiring and does not perform runtime token resolution                                   | build                             |
 | DI-R-004 | active                      | MUST            | outcomes                            | Outcome:OUT-004                                                                             | InjectableOptions.visibleTo is deterministically interpreted as module allowlist and is not mixed                       | build                             |
-| DI-R-005 | active                      | MUST            | outcomes                            | Outcome:OUT-005                                                                             | allowlist ModuleRefList is normalized deterministically with duplicates removed                                         | build                             |
+| DI-R-005 | active                      | MUST            | outcomes                            | Outcome:OUT-005                                                                             | allowlist ModuleMarkerList is normalized deterministically with duplicates removed                                      | build                             |
 | DI-R-006 | active                      | MUST            | outcomes                            | Outcome:OUT-006                                                                             | InjectCall.token and app.get token are statically determinable Token forms                                              | build                             |
 | DI-R-007 | active                      | MUST NOT        | outcomes                            | Outcome:OUT-007                                                                             | runtime reflection/container scanning resolves dependencies                                                             | runtime                           |
 | DI-R-008 | active                      | MUST NOT        | outcomes                            | Outcome:OUT-008                                                                             | runtime inject() is reachable from App-External Code                                                                    | runtime                           |

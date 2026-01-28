@@ -3,6 +3,7 @@ import { mkdir, rm } from 'fs/promises';
 import { join, resolve, dirname } from 'path';
 
 import type { CollectedClass, CommandOptions } from './types';
+import type { AnalyzerValue, AnalyzerValueRecord } from '../analyzer/types';
 
 import { AdapterSpecResolver, AstParser, ModuleGraph, type FileAnalysis } from '../analyzer';
 import { ConfigLoader, ConfigLoadError, compareCodePoint, scanGlobSorted, writeIfChanged } from '../common';
@@ -16,9 +17,9 @@ export async function build(commandOptions?: CommandOptions) {
     const configResult = await ConfigLoader.load();
     const config = configResult.config;
     const moduleFileName = config.module.fileName;
-    const buildProfile = commandOptions?.profile ?? config.compiler?.profile ?? 'full';
+    const buildProfile = commandOptions?.profile ?? 'full';
     const projectRoot = process.cwd();
-    const srcDir = resolve(projectRoot, 'src');
+    const srcDir = resolve(projectRoot, config.sourceDir);
     const outDir = resolve(projectRoot, 'dist');
     const bunnerDir = resolve(projectRoot, '.bunner');
     const buildTempDir = resolve(outDir, '.bunner-temp');
@@ -35,7 +36,7 @@ export async function build(commandOptions?: CommandOptions) {
 
     console.info('🔍 Scanning source files...');
 
-    const userMain = join(srcDir, config.entry ?? 'main.ts');
+    const userMain = resolve(projectRoot, config.entry);
     const visited = new Set<string>();
     const queue: string[] = [userMain];
     const glob = new Glob('**/*.ts');
@@ -82,6 +83,8 @@ export async function build(commandOptions?: CommandOptions) {
           classes: parseResult.classes,
           reExports: parseResult.reExports,
           exports: parseResult.exports,
+          createApplicationCalls: parseResult.createApplicationCalls,
+          defineModuleCalls: parseResult.defineModuleCalls,
         };
 
         if (parseResult.imports !== undefined) {
@@ -157,6 +160,45 @@ export async function build(commandOptions?: CommandOptions) {
       } catch (_e) {}
     }
 
+    const isAnalyzerRecord = (value: AnalyzerValue): value is AnalyzerValueRecord => {
+      return typeof value === 'object' && value !== null && !Array.isArray(value);
+    };
+
+    const validateCreateApplication = (fileMapValue: Map<string, FileAnalysis>): void => {
+      const calls = Array.from(fileMapValue.values())
+        .flatMap(file => file.createApplicationCalls ?? [])
+        .filter(call => call !== undefined);
+
+      if (calls.length === 0) {
+        throw new Error('[Bunner AOT] createApplication call not found in recognized files.');
+      }
+
+      if (calls.length > 1) {
+        throw new Error('[Bunner AOT] Multiple createApplication calls detected in recognized files.');
+      }
+
+      const call = calls[0];
+      const args = call.args ?? [];
+
+      if (args.length !== 1) {
+        throw new Error('[Bunner AOT] createApplication must take exactly one entry module argument.');
+      }
+
+      const entryArg = args[0];
+
+      if (!isAnalyzerRecord(entryArg)) {
+        throw new Error('[Bunner AOT] createApplication entry module must be a statically resolvable identifier.');
+      }
+
+      const entryRef = entryArg.__bunner_ref;
+
+      if (typeof entryRef !== 'string' || entryRef.length === 0) {
+        throw new Error('[Bunner AOT] createApplication entry module must be a statically resolvable identifier.');
+      }
+    };
+
+    validateCreateApplication(fileMap);
+
     console.info('🕸️  Building Module Graph...');
 
     const graph = new ModuleGraph(fileMap, moduleFileName);
@@ -189,8 +231,7 @@ export async function build(commandOptions?: CommandOptions) {
 
     const entryPointFile = join(buildTempDir, 'entry.ts');
     const entryGen = new EntryGenerator();
-    const buildGenerateConfig = config.workers !== undefined ? { workers: config.workers } : {};
-    const buildEntryContent = entryGen.generate(userMain, false, buildGenerateConfig);
+    const buildEntryContent = entryGen.generate(userMain, false);
 
     await writeIfChanged(entryPointFile, buildEntryContent);
 
@@ -230,22 +271,10 @@ export async function build(commandOptions?: CommandOptions) {
       await rm(runtimeReportFile, { force: true });
     }
 
-    console.info('📦 Bundling application, manifest, and workers...');
-
-    let workerFiles: string[] = [];
-
-    if (Array.isArray(config.workers)) {
-      workerFiles = config.workers.map(w => resolve(projectRoot, w));
-    }
-
-    if (workerFiles.length > 0) {
-      workerFiles.forEach((w: string) => {
-        console.info(`   Worker Entry: ${w}`);
-      });
-    }
+    console.info('📦 Bundling application and manifest...');
 
     const buildResult = await Bun.build({
-      entrypoints: [entryPointFile, runtimeFile, ...workerFiles],
+      entrypoints: [entryPointFile, runtimeFile],
       outdir: outDir,
       target: 'bun',
       minify: false,

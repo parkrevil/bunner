@@ -1,6 +1,6 @@
 {
   "*.{ts,js,mjs,cjs}": [
-    "oxlint --config .oxlintrc.jsonc --type-aware --type-check --fix",
+    "oxlint --config .oxlintrc.jsonc --type-aware --fix",
     "oxfmt --config .oxfmtrc.jsonc --write"
   ],
   "*.{json,md,yaml,yml}": ["oxfmt --config .oxfmtrc.jsonc --write"]

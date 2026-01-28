@@ -51,6 +51,14 @@ function createSingleModuleGraph(): ModuleGraph {
     classes: [],
     reExports: [],
     exports: [],
+    defineModuleCalls: [
+      {
+        callee: 'defineModule',
+        importSource: '@bunner/core',
+        args: [],
+        exportedName: 'appModule',
+      },
+    ],
     imports: {},
     moduleDefinition: {
       name: 'AppModule',
@@ -199,8 +207,12 @@ describe('manifest', () => {
     const json = gen.generateJson({
       graph,
       projectRoot: '/app',
-      source: { path: '/app/bunner.config.ts', format: 'ts' },
-      resolvedConfig: { module: { fileName: '__module__.ts' } },
+      source: { path: '/app/bunner.json', format: 'json' },
+      resolvedConfig: {
+        module: { fileName: '__module__.ts' },
+        sourceDir: 'src',
+        entry: 'src/main.ts',
+      },
       adapterStaticSpecs: {
         test: {
           pipeline: {

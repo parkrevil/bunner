@@ -80,9 +80,7 @@ export interface Configurer {
 }
 
 export interface BunnerApplicationOptions {
-  name?: string;
-  logLevel?: string | number;
-  logger?: BunnerValue;
+  //
 }
 
 export interface ConfigService {

@@ -35,7 +35,7 @@ Rule ID 형식(Rule ID Format) (REQUIRED):
 
 - Rule ID는 전역 유일해야 한다(MUST).
 - Rule ID는 본 섹션의 Spec ID를 접두사로 가져야 한다(MUST).
-- 형식: <Spec ID>-R-<NNN>
+- 형식: `<SPEC_ID>-R-<NNN>`
 - Rule ID는 4~9 섹션에서 참조되기 전에 3.3 섹션에서 먼저 선언되어야 한다(MUST).
 
 ---
@@ -187,7 +187,7 @@ export type ContractData = unknown;
 | How Detectable         | static:ast, static:artifact, runtime:observation, test:assert |
 | Write Authority        | this-spec-only, shared                                        |
 | Uniqueness Scope       | repo, package, spec                                           |
-| Document Reference     | doc:<SPEC_ID>, path:<relative-path>, url:<https-url>          |
+| Document Reference     | `doc:<SPEC_ID>, path:<relative-path>, url:<https-url>`        |
 | Pattern Kind           | glob, regex                                                   |
 | Rule Lifecycle         | active, retired                                               |
 | Rule Targets           | inputs, artifacts, shapes, outcomes, state                    |

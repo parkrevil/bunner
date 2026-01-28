@@ -35,7 +35,7 @@ Rule ID 형식(Rule ID Format) (REQUIRED):
 
 - Rule ID는 전역 유일해야 한다(MUST).
 - Rule ID는 본 섹션의 Spec ID를 접두사로 가져야 한다(MUST).
-- 형식: `<Spec ID>-R-<NNN>`
+- 형식: `<SPEC_ID>-R-<NNN>`
 - Rule ID는 4~9 섹션에서 참조되기 전에 3.3 섹션에서 먼저 선언되어야 한다(MUST).
 
 ---
@@ -113,7 +113,7 @@ export type AppLifecycleHookDeclaration = {
   token?: Token;
 };
 
-export type EntryModule = ModuleRef;
+export type EntryModule = ModuleMarker;
 
 export type AppConfigInput = {
   env?: string[];
@@ -173,7 +173,7 @@ export type AppContractData = {
 | ------------------------- | --------------------------------------------- |
 | Token                     | path:docs/30_SPEC/common/declarations.spec.md |
 | FactoryRef                | path:docs/30_SPEC/common/declarations.spec.md |
-| ModuleRef                 | path:docs/30_SPEC/common/declarations.spec.md |
+| ModuleMarker              | path:docs/30_SPEC/common/declarations.spec.md |
 
 ### 4.3 No-Duplication Claim (REQUIRED)
 
@@ -193,9 +193,9 @@ export type AppContractData = {
 
 ### 5.2 Dependency
 
-| 의존 규칙(Dependency Rule)         | 참조 아티팩트(Referenced Artifact Ref(s))               | 허용(Allowed) | 금지(Forbidden) | 집행(Enforced By) (token) | 수동 사유(Manual Reason) (required if manual) |
-| ---------------------------------- | ------------------------------------------------------- | ------------- | --------------- | ------------------------- | --------------------------------------------- |
-| app-depends-on-common-declarations | Artifact:Token; Artifact:FactoryRef; Artifact:ModuleRef | allowed       | forbidden       | lint                      | n/a                                           |
+| 의존 규칙(Dependency Rule) | 참조 아티팩트(Referenced Artifact Ref(s)) | 허용(Allowed) | 금지(Forbidden) | 집행(Enforced By) (token) | 수동 사유(Manual Reason) (required if manual) |
+| --- | --- | --- | --- | --- | --- |
+| app-depends-on-common-declarations | Artifact:Token; Artifact:FactoryRef; Artifact:ModuleMarker | allowed | forbidden | lint | n/a |
 
 ---
 

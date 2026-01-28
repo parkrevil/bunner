@@ -35,7 +35,7 @@ Rule ID 형식(Rule ID Format) (REQUIRED):
 
 - Rule ID는 전역 유일해야 한다(MUST).
 - Rule ID는 본 섹션의 Spec ID를 접두사로 가져야 한다(MUST).
-- 형식: `<Spec ID>-R-<NNN>`
+- 형식: `<SPEC_ID>-R-<NNN>`
 - Rule ID는 4~9 섹션에서 참조되기 전에 3.3 섹션에서 먼저 선언되어야 한다(MUST).
 
 ---
@@ -119,12 +119,12 @@ export type MiddlewaresDecoratorDeclaration = {
 
 export type CommonDecoratorDeclaration = RefListDecoratorDeclaration | MiddlewaresDecoratorDeclaration;
 
-export type ModuleRef = symbol;
-export type ModuleRefList = ModuleRef[];
+export type ModuleMarker = symbol;
+export type ModuleMarkerList = ModuleMarker[];
 
 export type InjectableOptions = {
   scope?: string;
-  visibleTo?: 'all' | 'module' | ModuleRefList;
+  visibleTo?: 'all' | 'module' | ModuleMarkerList;
 };
 
 export type InjectableDecoratorName = '@Injectable';
@@ -167,12 +167,12 @@ export type CommonDeclarationsContractData = {
 | COMMON-DECLARATIONS-R-003 | active                      | MUST            | inputs, artifacts, shapes, outcomes | InputKind:provider-decl, Artifact:ProviderDeclaration, Shape:local:ProviderDeclaration, Outcome:OUT-003                       | ProviderDeclaration contains exactly one of useClass/useValue/useFactory/useExisting                | build                             |
 | COMMON-DECLARATIONS-R-004 | active                      | MUST            | inputs, shapes, outcomes            | InputKind:module-decl, Shape:local:ModuleDeclaration, Outcome:OUT-004                                                         | ModuleDeclaration.providers is an array of ProviderDeclaration                                      | build                             |
 | COMMON-DECLARATIONS-R-005 | active                      | MUST            | shapes, outcomes                    | Shape:local:InjectableDeclaration, Outcome:OUT-005                                                                            | InjectableDeclaration.name equals "@Injectable"                                                     | build                             |
-| COMMON-DECLARATIONS-R-006 | active                      | MUST            | shapes, outcomes                    | Shape:local:InjectableOptions, Outcome:OUT-006                                                                                | visibleTo is either "all", "module", or a non-empty ModuleRefList                                   | build                             |
+| COMMON-DECLARATIONS-R-006 | active                      | MUST            | shapes, outcomes                    | Shape:local:InjectableOptions, Outcome:OUT-006                                                                                | visibleTo is either "all", "module", or a non-empty ModuleMarkerList                                | build                             |
 | COMMON-DECLARATIONS-R-007 | active                      | MUST            | shapes, outcomes                    | Shape:local:CommonDecoratorDeclaration, Outcome:OUT-007                                                                       | CommonDecoratorDeclaration is either RefListDecoratorDeclaration or MiddlewaresDecoratorDeclaration | build                             |
 | COMMON-DECLARATIONS-R-008 | active                      | MUST NOT        | outcomes                            | Outcome:OUT-008                                                                                                               | TokenThunk is executed at runtime or used for runtime token resolution                              | runtime                           |
 | COMMON-DECLARATIONS-R-009 | active                      | MUST            | artifacts, shapes, outcomes         | Artifact:Token, Shape:local:Token, Outcome:OUT-009                                                                            | Token is either a class token or a unique symbol token                                              | build                             |
 | COMMON-DECLARATIONS-R-010 | active                      | MUST            | shapes, outcomes                    | Shape:local:FactoryRef, Outcome:OUT-010                                                                                       | FactoryRef and DecoratorRef are function references                                                 | build                             |
-| COMMON-DECLARATIONS-R-011 | active                      | MUST            | shapes, outcomes                    | Shape:local:ModuleRef, Outcome:OUT-011                                                                                        | ModuleRef is an exported module marker binding reference (named export or default export)           | build                             |
+| COMMON-DECLARATIONS-R-011 | active                      | MUST            | shapes, outcomes                    | Shape:local:ModuleMarker, Outcome:OUT-011                                                                                     | ModuleMarker is an exported module marker binding reference (named export or default export)        | build                             |
 | COMMON-DECLARATIONS-R-012 | active                      | MUST            | shapes, outcomes                    | Shape:local:MiddlewaresDecoratorDeclaration, Outcome:OUT-012                                                                  | @Middlewares declarations normalize to one or more phase registrations                              | build                             |
 
 ---
@@ -235,7 +235,7 @@ export type CommonDeclarationsContractData = {
 | runtime executes           | COMMON-DECLARATIONS-R-008 | Outcome:OUT-008                             | OUT-008    | TokenThunk is not executed at runtime               |
 | token used                 | COMMON-DECLARATIONS-R-009 | Shape:local:Token                           | OUT-009    | Token form is constrained                           |
 | function refs used         | COMMON-DECLARATIONS-R-010 | Shape:local:FactoryRef                      | OUT-010    | FactoryRef/DecoratorRef are function refs           |
-| module refs used           | COMMON-DECLARATIONS-R-011 | Shape:local:ModuleRef                       | OUT-011    | ModuleRef is a module marker                        |
+| module markers used        | COMMON-DECLARATIONS-R-011 | Shape:local:ModuleMarker                    | OUT-011    | ModuleMarker is a module marker                     |
 | middlewares decorator used | COMMON-DECLARATIONS-R-012 | Shape:local:MiddlewaresDecoratorDeclaration | OUT-012    | @Middlewares is normalized to phase registrations   |
 
 ### 6.2 State Conditions
@@ -260,7 +260,7 @@ export type CommonDeclarationsContractData = {
 | COMMON-DECLARATIONS-R-008 | TokenThunk executed at runtime       | BUNNER_COMMON_DECLARATIONS_008 | error                    | range               | runtime:observation               |
 | COMMON-DECLARATIONS-R-009 | invalid Token form                   | BUNNER_COMMON_DECLARATIONS_009 | error                    | symbol              | static:ast                        |
 | COMMON-DECLARATIONS-R-010 | invalid function reference form      | BUNNER_COMMON_DECLARATIONS_010 | error                    | symbol              | static:ast                        |
-| COMMON-DECLARATIONS-R-011 | invalid ModuleRef marker             | BUNNER_COMMON_DECLARATIONS_011 | error                    | symbol              | static:ast                        |
+| COMMON-DECLARATIONS-R-011 | invalid ModuleMarker marker          | BUNNER_COMMON_DECLARATIONS_011 | error                    | symbol              | static:ast                        |
 | COMMON-DECLARATIONS-R-012 | invalid @Middlewares declaration     | BUNNER_COMMON_DECLARATIONS_012 | error                    | symbol              | static:ast                        |
 
 ---

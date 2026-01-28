@@ -4,11 +4,6 @@ import type { AdapterStaticSpec, HandlerIndexEntry } from '../analyzer/interface
 import type { AnalyzerValue } from '../analyzer/types';
 import type { BunnerConfigSource, ResolvedBunnerConfig } from '../common/interfaces';
 
-export interface GenerateConfig {
-  workers?: number | string[] | string;
-  [key: string]: AnalyzerValue;
-}
-
 export interface ManifestJsonParams {
   graph: ModuleGraph;
   projectRoot: string;

@@ -1,4 +1,4 @@
-import type { AnalyzerValueArray, AnalyzerValueRecord, ReExportName } from './types';
+import type { AnalyzerValue, AnalyzerValueArray, AnalyzerValueRecord, ReExportName } from './types';
 
 export interface ReExport {
   module: string;
@@ -14,6 +14,24 @@ export interface ModuleDefinition {
   imports: Record<string, string>;
 }
 
+export interface CreateApplicationCall {
+  callee: string;
+  importSource?: string | undefined;
+  args: AnalyzerValueArray;
+  start?: number | undefined;
+  end?: number | undefined;
+}
+
+export interface DefineModuleCall {
+  callee: string;
+  importSource?: string | undefined;
+  args: AnalyzerValueArray;
+  start?: number | undefined;
+  end?: number | undefined;
+  localName?: string | undefined;
+  exportedName?: string | undefined;
+}
+
 export interface ParseResult {
   classes: import('./interfaces').ClassMetadata[];
   reExports: ReExport[];
@@ -23,4 +41,6 @@ export interface ParseResult {
   exportedValues?: AnalyzerValueRecord | undefined;
   localValues?: AnalyzerValueRecord | undefined;
   moduleDefinition?: ModuleDefinition | undefined;
+  createApplicationCalls?: CreateApplicationCall[] | undefined;
+  defineModuleCalls?: DefineModuleCall[] | undefined;
 }

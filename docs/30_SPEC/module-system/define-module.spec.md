@@ -35,7 +35,7 @@ Rule ID 형식(Rule ID Format) (REQUIRED):
 
 - Rule ID는 전역 유일해야 한다(MUST).
 - Rule ID는 본 섹션의 Spec ID를 접두사로 가져야 한다(MUST).
-- 형식: `<Spec ID>-R-<NNN>`
+- 형식: `<SPEC_ID>-R-<NNN>`
 - Rule ID는 4~9 섹션에서 참조되기 전에 3.3 섹션에서 먼저 선언되어야 한다(MUST).
 
 ---
@@ -72,7 +72,7 @@ Normative: 본 SPEC은 새로운 용어를 도입하지 않는다.
 
 | 참조 유형(Reference Type) | 문서(Document) | 헤딩(Heading) |
 | --- | --- | --- |
-| dependency | path:docs/30_SPEC/common/declarations.spec.md | ModuleRef |
+| dependency | path:docs/30_SPEC/common/declarations.spec.md | ModuleMarker |
 | dependency | path:docs/30_SPEC/common/diagnostics.spec.md | diagnostics |
 
 ---
@@ -88,11 +88,9 @@ Normative: 본 SPEC은 새로운 용어를 도입하지 않는다.
 ### 3.2 정적 데이터 형상(Static Data Shapes) (REQUIRED)
 
 ```ts
-export type DefineModuleOptions = {
+export interface DefineModuleOptions {
   __temp?: true;
-};
-
-export type ModuleMarker = ModuleRef;
+}
 
 export type DefineModuleCall = {
   options?: DefineModuleOptions;
@@ -104,7 +102,7 @@ export type DefineModuleCall = {
 
 | Rule ID | 생명주기(Lifecycle) (token) | 키워드(Keyword) | 타깃(Targets) (token list) | 타깃 참조(Target Ref(s)) | 조건(Condition) (boolean, declarative) | 강제 레벨(Enforced Level) (token) |
 | --- | --- | --- | --- | --- | --- | --- |
-| DEFINE-MODULE-R-001 | active | MUST | inputs, artifacts, shapes, outcomes | InputKind:define-module, Artifact:DefineModuleCall, Shape:local:DefineModuleCall, Outcome:OUT-001 | defineModule call is mechanically checkable and returns a ModuleRef marker | build |
+| DEFINE-MODULE-R-001 | active | MUST | inputs, artifacts, shapes, outcomes | InputKind:define-module, Artifact:DefineModuleCall, Shape:local:DefineModuleCall, Outcome:OUT-001 | defineModule call is mechanically checkable and returns a ModuleMarker marker | build |
 | DEFINE-MODULE-R-002 | active | MUST | outcomes | Outcome:OUT-002 | module marker export is either named export or default export | build |
 | DEFINE-MODULE-R-003 | active | MUST | outcomes | Outcome:OUT-003 | each module file contains at most one defineModule call | build |
 
@@ -122,7 +120,7 @@ export type DefineModuleCall = {
 
 | 아티팩트명(Artifact Name) | 정의 위치(Defined In) |
 | --- | --- |
-| ModuleRef | path:docs/30_SPEC/common/declarations.spec.md |
+| ModuleMarker | path:docs/30_SPEC/common/declarations.spec.md |
 
 ### 4.3 No-Duplication Claim (REQUIRED)
 
@@ -144,7 +142,7 @@ export type DefineModuleCall = {
 
 | 의존 규칙(Dependency Rule) | 참조 아티팩트(Referenced Artifact Ref(s)) | 허용(Allowed) | 금지(Forbidden) | 집행(Enforced By) (token) | 수동 사유(Manual Reason) (required if manual) |
 | --- | --- | --- | --- | --- | --- |
-| define-module-depends-on-moduleref | Artifact:ModuleRef | allowed | forbidden | lint | n/a |
+| define-module-depends-on-modulemarker | Artifact:ModuleMarker | allowed | forbidden | lint | n/a |
 
 ---
 

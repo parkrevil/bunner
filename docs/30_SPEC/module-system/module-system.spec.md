@@ -35,7 +35,7 @@ Rule ID 형식(Rule ID Format) (REQUIRED):
 
 - Rule ID는 전역 유일해야 한다(MUST).
 - Rule ID는 본 섹션의 Spec ID를 접두사로 가져야 한다(MUST).
-- 형식: `<Spec ID>-R-<NNN>`
+- 형식: `<SPEC_ID>-R-<NNN>`
 - Rule ID는 4~9 섹션에서 참조되기 전에 3.3 섹션에서 먼저 선언되어야 한다(MUST).
 
 ---
@@ -86,7 +86,7 @@ Normative: 본 SPEC은 추가적인 용어 정의를 도입하지 않는다.
 
 | 입력 종류(Input Kind) | 수집 출처(Collected From) | 허용 형식(Allowed Form) (token) | 리터럴 요구(Must Be Literal) (yes/no) | 해결 가능 요구(Must Be Resolvable) (yes/no) | 정규화 출력(Normalized Output) (none/string-id) |
 | --------------------- | ------------------------- | ------------------------------- | ------------------------------------- | ------------------------------------------- | ----------------------------------------------- |
-| module-fileName       | bunner config             | string-literal                  | yes                                   | yes                                         | none                                            |
+| module-fileName       | bunner config (resolved)  | string-literal                  | yes                                   | yes                                         | none                                            |
 | adapter-config        | module root file (AOT)    | object-literal                  | yes                                   | yes                                         | none                                            |
 
 ### 3.2 정적 데이터 형상(Static Data Shapes) (REQUIRED)

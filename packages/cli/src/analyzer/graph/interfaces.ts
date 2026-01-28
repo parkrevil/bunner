@@ -1,5 +1,5 @@
 import type { ClassMetadata } from '../interfaces';
-import type { ModuleDefinition, ReExport } from '../parser-models';
+import type { CreateApplicationCall, DefineModuleCall, ModuleDefinition, ReExport } from '../parser-models';
 import type { AnalyzerValue, AnalyzerValueRecord } from '../types';
 
 export interface ProviderRef {
@@ -20,6 +20,8 @@ export interface FileAnalysis {
   exportedValues?: AnalyzerValueRecord;
   localValues?: AnalyzerValueRecord;
   moduleDefinition?: ModuleDefinition;
+  createApplicationCalls?: CreateApplicationCall[];
+  defineModuleCalls?: DefineModuleCall[];
 }
 
 export interface AdapterSpecResolveParams {

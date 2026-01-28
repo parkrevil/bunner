@@ -63,6 +63,24 @@ export class ModuleGraph {
       const moduleFile = this.fileMap.get(modulePath);
       const rawDef = moduleFile?.moduleDefinition;
 
+      if (moduleFile) {
+        const defineModuleCalls = moduleFile.defineModuleCalls ?? [];
+
+        if (defineModuleCalls.length === 0) {
+          throw new Error(`[Bunner AOT] Missing defineModule call in module file (${modulePath}).`);
+        }
+
+        if (defineModuleCalls.length > 1) {
+          throw new Error(`[Bunner AOT] Multiple defineModule calls in module file (${modulePath}).`);
+        }
+
+        const exportedCall = defineModuleCalls.find(call => typeof call.exportedName === 'string');
+
+        if (!exportedCall) {
+          throw new Error(`[Bunner AOT] Module marker must be exported from module file (${modulePath}).`);
+        }
+      }
+
       if (rawDef?.nameDeclared === true && !isNonEmptyString(rawDef.name)) {
         throw new Error(`[Bunner AOT] Module name must be a statically determinable string literal (${modulePath}).`);
       }

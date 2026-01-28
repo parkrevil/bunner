@@ -107,3 +107,7 @@ export type ValueLike = PrimitiveValue | PrimitiveArray | PrimitiveRecord | Call
 export type ForwardRefFactory = () => BunnerValue;
 
 export type DecoratorTarget = Class | Record<string, ValueLike>;
+
+export type ModuleMarker = symbol;
+
+export type ModuleMarkers = ModuleMarker[];
