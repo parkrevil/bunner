@@ -1,15 +1,3 @@
-import type {
-  ArrowFunction,
-  ConstructorDeclaration,
-  FunctionDeclaration,
-  FunctionExpression,
-  GetAccessorDeclaration,
-  Identifier,
-  MethodDeclaration,
-  SetAccessorDeclaration,
-  Symbol as TypeScriptSymbol,
-} from 'typescript';
-
 export type OutputFormat = 'text' | 'json';
 
 export type FirebatDetector = 'duplicates' | 'waste';
@@ -22,18 +10,6 @@ export interface SourcePosition {
   readonly line: number;
   readonly column: number;
 }
-
-export interface StaticObjectSourceKey {
-  kind: 'object';
-  propertyKey: string;
-}
-
-export interface StaticArraySourceKey {
-  kind: 'array';
-  index: number;
-}
-
-export type StaticSourceKey = StaticObjectSourceKey | StaticArraySourceKey;
 
 export interface SourceSpan {
   readonly start: SourcePosition;
@@ -77,19 +53,4 @@ export interface FirebatReport {
 export interface NodeHeader {
   readonly kind: FirebatItemKind;
   readonly header: string;
-}
-
-export type FunctionWithBodyNode =
-  | FunctionDeclaration
-  | FunctionExpression
-  | ArrowFunction
-  | MethodDeclaration
-  | ConstructorDeclaration
-  | GetAccessorDeclaration
-  | SetAccessorDeclaration;
-
-export interface ControlFlowStateBucket {
-  readonly label: string | null;
-  readonly acceptsUnlabeled: boolean;
-  readonly states: Array<Map<TypeScriptSymbol, Map<number, Identifier>>>;
 }

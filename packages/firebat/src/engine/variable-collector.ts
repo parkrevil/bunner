@@ -1,19 +1,38 @@
 import type { Node } from 'oxc-parser';
 
-import type { VariableCollectorOptions, VariableUsage } from './types';
+import type { NodeRecord, NodeValue, VariableCollectorOptions, VariableUsage } from './types';
 
-const isOxcNode = (value: Node | ReadonlyArray<Node> | undefined): value is Node =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
+const isOxcNode = (value: NodeValue): value is Node => typeof value === 'object' && value !== null && !Array.isArray(value);
 
 const getNodeType = (node: Node): string => node.type;
 
-const isOxcNodeArray = (value: Node | ReadonlyArray<Node> | undefined): value is ReadonlyArray<Node> => Array.isArray(value);
+const isOxcNodeArray = (value: NodeValue): value is ReadonlyArray<Node> => Array.isArray(value);
 
-const getNodeName = (node: Node): string => node.name as string;
+const isNodeRecord = (node: Node): node is NodeRecord => typeof node === 'object' && node !== null;
+
+const getNodeName = (node: Node): string | null => {
+  if ('name' in node && typeof node.name === 'string') {
+    return node.name;
+  }
+
+  return null;
+};
 
 const getNodeStart = (node: Node): number => node.start;
 
-const isFunctionNode = (node: Node | ReadonlyArray<Node> | undefined): boolean => {
+const getLiteralString = (node: Node): string | null => {
+  if (node.type !== 'Literal') {
+    return null;
+  }
+
+  if ('value' in node && typeof node.value === 'string') {
+    return node.value;
+  }
+
+  return null;
+};
+
+const isFunctionNode = (node: NodeValue): boolean => {
   if (!isOxcNode(node)) {
     return false;
   }
@@ -23,11 +42,11 @@ const isFunctionNode = (node: Node | ReadonlyArray<Node> | undefined): boolean =
   return nodeType === 'ArrowFunctionExpression' || nodeType === 'FunctionDeclaration' || nodeType === 'FunctionExpression';
 };
 
-const unwrapExpression = (node: Node | ReadonlyArray<Node> | undefined): Node | null => {
+const unwrapExpression = (node: NodeValue): Node | null => {
   let current = isOxcNode(node) ? node : null;
 
   while (current !== null) {
-    const nodeType = getNodeType(current);
+    const nodeType = current.type;
 
     if (nodeType === 'ParenthesizedExpression') {
       const expression = current.expression;
@@ -51,14 +70,14 @@ const unwrapExpression = (node: Node | ReadonlyArray<Node> | undefined): Node | 
   return current;
 };
 
-const evalStaticTruthiness = (node: Node | ReadonlyArray<Node> | undefined): boolean | null => {
+const evalStaticTruthiness = (node: NodeValue): boolean | null => {
   const n = unwrapExpression(node);
 
   if (n === null) {
     return null;
   }
 
-  if (getNodeType(n) === 'Literal') {
+  if (n.type === 'Literal') {
     const value = n.value;
 
     if (typeof value === 'boolean') {
@@ -84,7 +103,7 @@ const evalStaticTruthiness = (node: Node | ReadonlyArray<Node> | undefined): boo
     return null;
   }
 
-  if (getNodeType(n) === 'UnaryExpression') {
+  if (n.type === 'UnaryExpression') {
     const operator = typeof n.operator === 'string' ? n.operator : '';
     const argument = n.argument;
 
@@ -102,10 +121,10 @@ const evalStaticTruthiness = (node: Node | ReadonlyArray<Node> | undefined): boo
   return null;
 };
 
-const getStaticObjectExpressionKeys = (node: Node | ReadonlyArray<Node> | undefined): Set<string> | null => {
+const getStaticObjectExpressionKeys = (node: NodeValue): Set<string> | null => {
   const n = unwrapExpression(node);
 
-  if (n === null || getNodeType(n) !== 'ObjectExpression') {
+  if (n?.type !== 'ObjectExpression') {
     return null;
   }
 
@@ -117,13 +136,13 @@ const getStaticObjectExpressionKeys = (node: Node | ReadonlyArray<Node> | undefi
       continue;
     }
 
-    if (getNodeType(prop) !== 'Property') {
+    if (prop.type !== 'Property') {
       continue;
     }
 
     const key = prop.key;
 
-    if (isOxcNode(key) && getNodeType(key) === 'Identifier') {
+    if (isOxcNode(key) && key.type === 'Identifier') {
       const name = getNodeName(key);
 
       if (name !== null) {
@@ -133,10 +152,10 @@ const getStaticObjectExpressionKeys = (node: Node | ReadonlyArray<Node> | undefi
       continue;
     }
 
-    if (isOxcNode(key) && getNodeType(key) === 'Literal') {
-      const value = key.value;
+    if (isOxcNode(key) && key.type === 'Literal') {
+      const value = getLiteralString(key);
 
-      if (typeof value === 'string') {
+      if (value !== null) {
         keys.add(value);
       }
 
@@ -147,12 +166,12 @@ const getStaticObjectExpressionKeys = (node: Node | ReadonlyArray<Node> | undefi
   return keys;
 };
 
-export const collectVariables = (node: Node | ReadonlyArray<Node> | undefined, options: VariableCollectorOptions = {}): VariableUsage[] => {
+export const collectVariables = (node: NodeValue, options: VariableCollectorOptions = {}): VariableUsage[] => {
   const usages: VariableUsage[] = [];
   const includeNestedFunctions = options.includeNestedFunctions !== false;
 
   const visit = (
-    current: Node | ReadonlyArray<Node> | undefined,
+    current: NodeValue,
     isWriteContext: boolean = false,
     allowNestedFunctions: boolean = includeNestedFunctions,
     writeKind?: VariableUsage['writeKind'],
@@ -177,8 +196,12 @@ export const collectVariables = (node: Node | ReadonlyArray<Node> | undefined, o
 
     // Oxc Node Types
     // Observed in our environment: identifiers are represented as `Identifier`.
-    if (nodeType === 'Identifier') {
+    if (current.type === 'Identifier') {
       const name = getNodeName(current);
+
+      if (name === null) {
+        return;
+      }
 
       const usage: VariableUsage = {
         name,
@@ -196,49 +219,15 @@ export const collectVariables = (node: Node | ReadonlyArray<Node> | undefined, o
       return;
     }
 
-    if (nodeType === 'IdentifierReference') {
-      const name = getNodeName(current);
+    // IdentifierReference/BindingIdentifier/AssignmentTargetIdentifier are represented as Identifier nodes.
 
-      // Usage (Reference)
-      usages.push({
-        name,
-        isRead: !isWriteContext,
-        isWrite: isWriteContext,
-        location: getNodeStart(current),
-      });
-    } else if (nodeType === 'BindingIdentifier') {
-      const name = getNodeName(current);
-
-      // Declaration
-      usages.push({
-        name,
-        isRead: false,
-        isWrite: true,
-        location: getNodeStart(current),
-        writeKind: 'declaration',
-      });
-    } else if (nodeType === 'AssignmentTargetIdentifier') {
-      const name = getNodeName(current);
-
-      const usage: VariableUsage = {
-        name,
-        isRead: !isWriteContext,
-        isWrite: isWriteContext,
-        location: getNodeStart(current),
-      };
-
-      if (isWriteContext && writeKind) {
-        usage.writeKind = writeKind;
-      }
-
-      usages.push(usage);
+    if (current.type === 'ChainExpression') {
+      visit(current.expression, false, allowNestedFunctions);
 
       return;
     }
 
-    const isMemberExpression = nodeType?.includes('MemberExpression') === true;
-
-    if (isMemberExpression) {
+    if (current.type === 'MemberExpression') {
       // `obj.prop` does not read `prop` as a variable; only `obj`.
       // `obj[prop]` reads both `obj` and `prop`.
       const objectNode = current.object;
@@ -250,21 +239,15 @@ export const collectVariables = (node: Node | ReadonlyArray<Node> | undefined, o
       const isComputed = current.computed;
       const propertyNode = current.property;
 
-      if (isComputed === true && propertyNode !== undefined && propertyNode !== null) {
+      if (isComputed && propertyNode !== undefined && propertyNode !== null) {
         visit(propertyNode, false, allowNestedFunctions);
-      }
-
-      const expressionNode = current.expression;
-
-      if (expressionNode !== undefined && expressionNode !== null) {
-        visit(expressionNode, false, allowNestedFunctions);
       }
 
       return;
     }
 
     // Handle constructions
-    if (nodeType === 'LogicalExpression') {
+    if (current.type === 'LogicalExpression') {
       const operator = typeof current.operator === 'string' ? current.operator : '';
       const left = current.left;
       const right = current.right;
@@ -300,7 +283,7 @@ export const collectVariables = (node: Node | ReadonlyArray<Node> | undefined, o
       return;
     }
 
-    if (nodeType === 'ConditionalExpression') {
+    if (current.type === 'ConditionalExpression') {
       const test = current.test;
       const consequent = current.consequent;
       const alternate = current.alternate;
@@ -329,7 +312,7 @@ export const collectVariables = (node: Node | ReadonlyArray<Node> | undefined, o
       return;
     }
 
-    if (nodeType === 'AssignmentExpression') {
+    if (current.type === 'AssignmentExpression') {
       const operator = typeof current.operator === 'string' ? current.operator : '=';
       const left = current.left;
       const right = current.right;
@@ -357,7 +340,7 @@ export const collectVariables = (node: Node | ReadonlyArray<Node> | undefined, o
       return;
     }
 
-    if (nodeType === 'UpdateExpression') {
+    if (current.type === 'UpdateExpression') {
       const argument = current.argument;
 
       // Treat update as both read and write.
@@ -367,13 +350,13 @@ export const collectVariables = (node: Node | ReadonlyArray<Node> | undefined, o
       return;
     }
 
-    if (nodeType === 'VariableDeclarator') {
+    if (current.type === 'VariableDeclarator') {
       const init = current.init;
       const id = current.id;
       const initKeys = getStaticObjectExpressionKeys(init);
       const idNode = isOxcNode(id) ? id : null;
 
-      if (idNode !== null && getNodeType(idNode) === 'ObjectPattern' && initKeys !== null) {
+      if (idNode?.type === 'ObjectPattern' && initKeys !== null) {
         // Object destructuring defaults are only evaluated if the property is missing.
         const properties = isOxcNodeArray(idNode.properties) ? idNode.properties : [];
 
@@ -382,7 +365,7 @@ export const collectVariables = (node: Node | ReadonlyArray<Node> | undefined, o
             continue;
           }
 
-          if (getNodeType(prop) !== 'Property') {
+          if (prop.type !== 'Property') {
             continue;
           }
 
@@ -390,16 +373,16 @@ export const collectVariables = (node: Node | ReadonlyArray<Node> | undefined, o
           let keyName: string | null = null;
 
           if (isOxcNode(keyNode)) {
-            const keyType = getNodeType(keyNode);
+            const keyType = keyNode.type;
 
             if (keyType === 'Identifier') {
               const name = getNodeName(keyNode);
 
               keyName = name;
             } else if (keyType === 'Literal') {
-              const value = keyNode.value;
+              const value = getLiteralString(keyNode);
 
-              if (typeof value === 'string') {
+              if (value !== null) {
                 keyName = value;
               }
             }
@@ -407,7 +390,7 @@ export const collectVariables = (node: Node | ReadonlyArray<Node> | undefined, o
 
           const valueNode = prop.value;
 
-          if (isOxcNode(valueNode) && getNodeType(valueNode) === 'AssignmentPattern') {
+          if (isOxcNode(valueNode) && valueNode.type === 'AssignmentPattern') {
             const leftNode = valueNode.left;
             const rightNode = valueNode.right;
 
@@ -436,6 +419,10 @@ export const collectVariables = (node: Node | ReadonlyArray<Node> | undefined, o
     }
 
     if (nodeType === 'CallExpression') {
+      if (!isNodeRecord(current)) {
+        return;
+      }
+
       const callee = current.callee;
       const args = isOxcNodeArray(current.arguments) ? current.arguments : [];
       const unwrappedCallee = unwrapExpression(callee);
@@ -450,6 +437,10 @@ export const collectVariables = (node: Node | ReadonlyArray<Node> | undefined, o
         visit(arg, false, allowNestedFunctions);
       }
 
+      return;
+    }
+
+    if (!isNodeRecord(current)) {
       return;
     }
 

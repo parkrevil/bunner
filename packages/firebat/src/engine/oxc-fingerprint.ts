@@ -1,48 +1,50 @@
 import type { Node } from 'oxc-parser';
 
+import type { NodeRecord, NodeValue, NodeWithValue } from './types';
+
 import { hashString } from './hasher';
 
-const isOxcNode = (value: Node | ReadonlyArray<Node> | undefined): value is Node =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
+const isOxcNode = (value: NodeValue): value is Node => typeof value === 'object' && value !== null && !Array.isArray(value);
 
-const isOxcNodeArray = (value: Node | ReadonlyArray<Node> | undefined): value is ReadonlyArray<Node> => Array.isArray(value);
+const isOxcNodeArray = (value: NodeValue): value is ReadonlyArray<Node> => Array.isArray(value);
+
+const isNodeRecord = (node: Node): node is NodeRecord => typeof node === 'object' && node !== null;
+
+const isLiteralNode = (node: Node): node is NodeWithValue => node.type === 'Literal' && 'value' in node;
 
 const pushLiteralValue = (node: Node, diffs: string[]): void => {
-  if (!('value' in node)) {
+  if (!isLiteralNode(node)) {
     return;
   }
 
-  const literalType = node.type;
-  const value = (node as { value: unknown }).value;
+  const value = node.value;
 
-  if (literalType === 'Literal' || literalType.endsWith('Literal')) {
-    if (typeof value === 'string') {
-      diffs.push(`string:${value}`);
+  if (typeof value === 'string') {
+    diffs.push(`string:${value}`);
 
-      return;
-    }
+    return;
+  }
 
-    if (typeof value === 'number') {
-      diffs.push(`number:${value}`);
+  if (typeof value === 'number') {
+    diffs.push(`number:${value}`);
 
-      return;
-    }
+    return;
+  }
 
-    if (typeof value === 'boolean') {
-      diffs.push(`boolean:${value}`);
+  if (typeof value === 'boolean') {
+    diffs.push(`boolean:${value}`);
 
-      return;
-    }
+    return;
+  }
 
-    if (typeof value === 'bigint') {
-      diffs.push(`bigint:${value.toString()}`);
+  if (typeof value === 'bigint') {
+    diffs.push(`bigint:${value.toString()}`);
 
-      return;
-    }
+    return;
+  }
 
-    if (value === null) {
-      diffs.push('null');
-    }
+  if (value === null) {
+    diffs.push('null');
   }
 };
 
@@ -51,10 +53,10 @@ const pushLiteralValue = (node: Node, diffs: string[]): void => {
 // Ignore names, locations, comments.
 // Focus on structure: types, operators, literals (optional, maybe normalized).
 
-export const createOxcFingerprint = (node: Node | ReadonlyArray<Node> | undefined): string => {
+export const createOxcFingerprint = (node: NodeValue): string => {
   const diffs: string[] = [];
 
-  const visit = (n: Node | ReadonlyArray<Node> | undefined) => {
+  const visit = (n: NodeValue) => {
     if (isOxcNodeArray(n)) {
       for (const child of n) {
         visit(child);
@@ -76,8 +78,12 @@ export const createOxcFingerprint = (node: Node | ReadonlyArray<Node> | undefine
 
     // push specific semantic properties
     // e.g. Operator for BinaryExpression
-    if (n.operator) {
-      diffs.push(n.operator);
+    if (isNodeRecord(n)) {
+      const operatorValue = n.operator;
+
+      if (typeof operatorValue === 'string' && operatorValue.length > 0) {
+        diffs.push(operatorValue);
+      }
     }
 
     // Recursively visit children
@@ -85,6 +91,10 @@ export const createOxcFingerprint = (node: Node | ReadonlyArray<Node> | undefine
     // but generic traversal is safer for completeness unless we map *every* node type.
     // For 'Physical Limit', we might want a optimized traverser.
     // Let's stick to generic for now, optimizing later if profiled.
+
+    if (!isNodeRecord(n)) {
+      return;
+    }
 
     const entries = Object.entries(n).sort((left, right) => left[0].localeCompare(right[0]));
 

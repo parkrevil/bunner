@@ -1,21 +1,34 @@
 import type { Node } from 'oxc-parser';
 
 import type { ResourceWasteFinding } from '../types';
-import type { DefMeta, FunctionBodyAnalysis, ParsedFile } from './types';
+import type { DefMeta, FunctionBodyAnalysis, NodeRecord, NodeValue, ParsedFile } from './types';
 
 import { OxcCFGBuilder } from './cfg-builder';
 import { createBitSet, type IBitSet } from './dataflow';
 import { getLineColumn } from './source-position';
 import { collectVariables } from './variable-collector';
 
-const isOxcNode = (value: Node | ReadonlyArray<Node> | undefined): value is Node =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
+const isOxcNode = (value: NodeValue): value is Node => typeof value === 'object' && value !== null && !Array.isArray(value);
 
-const isOxcNodeArray = (value: Node | ReadonlyArray<Node> | undefined): value is ReadonlyArray<Node> => Array.isArray(value);
+const isNodeRecord = (node: Node): node is NodeRecord => typeof node === 'object' && node !== null;
+
+const isNodeValueArray = (value: NodeValue): value is ReadonlyArray<NodeValue> => Array.isArray(value);
 
 const getNodeType = (node: Node): string => node.type;
 
-const isFunctionNode = (node: Node | ReadonlyArray<Node> | undefined): boolean => {
+const getNodeName = (node: NodeValue): string | null => {
+  if (!isOxcNode(node)) {
+    return null;
+  }
+
+  if ('name' in node && typeof node.name === 'string') {
+    return node.name;
+  }
+
+  return null;
+};
+
+const isFunctionNode = (node: NodeValue): node is Node => {
   if (!isOxcNode(node)) {
     return false;
   }
@@ -27,15 +40,20 @@ const isFunctionNode = (node: Node | ReadonlyArray<Node> | undefined): boolean =
 
 const collectLocalVarIndexes = (functionNode: Node): Map<string, number> => {
   const names = new Set<string>();
-  const params = (functionNode.params ?? []) as ReadonlyArray<Node>;
+  const paramsValue = isNodeRecord(functionNode) ? functionNode.params : undefined;
+  const params = isNodeValueArray(paramsValue) ? paramsValue : [];
 
   for (const param of params) {
     if (isOxcNode(param) && getNodeType(param) === 'Identifier') {
-      names.add(param.name as string);
+      const name = getNodeName(param);
+
+      if (name !== null) {
+        names.add(name);
+      }
     }
   }
 
-  const bodyNode = functionNode.body;
+  const bodyNode = isNodeRecord(functionNode) ? functionNode.body : undefined;
   const bodyUsages = collectVariables(bodyNode, { includeNestedFunctions: false });
 
   for (const usage of bodyUsages) {
@@ -66,7 +84,10 @@ const unionAll = (sets: readonly IBitSet[], empty: IBitSet): IBitSet => {
   return current;
 };
 
-const analyzeFunctionBody = (bodyNode: Node | ReadonlyArray<Node> | undefined, localIndexByName: Map<string, number>): FunctionBodyAnalysis => {
+const analyzeFunctionBody = (
+  bodyNode: Node | ReadonlyArray<Node> | undefined,
+  localIndexByName: Map<string, number>,
+): FunctionBodyAnalysis => {
   const cfgBuilder = new OxcCFGBuilder();
   const built = cfgBuilder.buildFunctionBody(bodyNode);
   const nodeCount = built.cfg.nodeCount;
@@ -185,9 +206,7 @@ const analyzeFunctionBody = (bodyNode: Node | ReadonlyArray<Node> | undefined, l
       }
 
       const nextIn = unionAll(predOutSets, empty.clone());
-      const nextOut = (genByNode[nodeId] ?? createBitSet()).union(
-        nextIn.subtract(killByNode[nodeId] ?? createBitSet()),
-      );
+      const nextOut = (genByNode[nodeId] ?? createBitSet()).union(nextIn.subtract(killByNode[nodeId] ?? createBitSet()));
 
       if (!nextIn.equals(inByNode[nodeId] ?? createBitSet())) {
         inByNode[nodeId] = nextIn;
@@ -274,16 +293,17 @@ export const detectResourceWasteOxc = (files: ParsedFile[]): ResourceWasteFindin
         return;
       }
 
-      const functionBody = node.body;
+      const functionBody = isNodeRecord(node) ? node.body : undefined;
+      const functionBodyNode = isOxcNode(functionBody) || Array.isArray(functionBody) ? functionBody : undefined;
 
-      if (isFunctionNode(node) && functionBody !== undefined && functionBody !== null) {
+      if (isFunctionNode(node) && functionBodyNode !== undefined) {
         const localIndexByName = collectLocalVarIndexes(node);
 
         if (localIndexByName.size === 0) {
           return;
         }
 
-        const analysis = analyzeFunctionBody(functionBody, localIndexByName);
+        const analysis = analyzeFunctionBody(functionBodyNode, localIndexByName);
         const defs = analysis.defs;
         const usedDefs = analysis.usedDefs;
         const overwrittenDefIds = analysis.overwrittenDefIds;
@@ -337,14 +357,21 @@ export const detectResourceWasteOxc = (files: ParsedFile[]): ResourceWasteFindin
         }
       }
 
-      const entries = Object.entries(node);
+      if (!isNodeRecord(node)) {
+        return;
+      }
 
-      for (const [key, value] of entries) {
+      const keys = Object.keys(node);
+
+      for (const key of keys) {
         if (key === 'type' || key === 'loc' || key === 'start' || key === 'end') {
           continue;
         }
 
-        visit(value);
+        const value = node[key];
+        const visitValue = isOxcNode(value) || Array.isArray(value) ? value : undefined;
+
+        visit(visitValue);
       }
     };
 

@@ -1,23 +1,49 @@
 import type { Node } from 'oxc-parser';
 
 import type { DuplicateGroup, DuplicateItem } from '../types';
-import type { ParsedFile } from './types';
+import type { NodeRecord, NodeValue, ParsedFile } from './types';
 
 import { createOxcFingerprint } from './oxc-fingerprint';
 import { countOxcTokens } from './oxc-token-count';
 import { getLineColumn } from './source-position';
 
-// Types of nodes we check for duplicates
-type DuplicateTarget = Node;
+const isOxcNode = (value: NodeValue): value is Node => typeof value === 'object' && value !== null && !Array.isArray(value);
 
-const isOxcNode = (value: Node | ReadonlyArray<Node> | undefined): value is Node =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
-
-const isOxcNodeArray = (value: Node | ReadonlyArray<Node> | undefined): value is ReadonlyArray<Node> => Array.isArray(value);
+const isOxcNodeArray = (value: NodeValue): value is ReadonlyArray<Node> => Array.isArray(value);
 
 const getNodeType = (node: Node): string => node.type;
 
-const isDuplicateTarget = (node: Node): node is DuplicateTarget => {
+const isNodeRecord = (node: Node): node is NodeRecord => typeof node === 'object' && node !== null;
+
+const getNodeName = (node: NodeValue): string | null => {
+  if (!isOxcNode(node)) {
+    return null;
+  }
+
+  if ('name' in node && typeof node.name === 'string') {
+    return node.name;
+  }
+
+  return null;
+};
+
+const getLiteralString = (node: NodeValue): string | null => {
+  if (!isOxcNode(node)) {
+    return null;
+  }
+
+  if (node.type !== 'Literal') {
+    return null;
+  }
+
+  if ('value' in node && typeof node.value === 'string') {
+    return node.value;
+  }
+
+  return null;
+};
+
+const isDuplicateTarget = (node: Node): boolean => {
   // Simplified target selection for Oxc AST
   const type = getNodeType(node);
 
@@ -33,10 +59,10 @@ const isDuplicateTarget = (node: Node): node is DuplicateTarget => {
   );
 };
 
-const collectDuplicateTargets = (program: Node | ReadonlyArray<Node> | undefined): DuplicateTarget[] => {
-  const targets: DuplicateTarget[] = [];
+const collectDuplicateTargets = (program: NodeValue): Node[] => {
+  const targets: Node[] = [];
 
-  const visit = (node: Node | ReadonlyArray<Node> | undefined) => {
+  const visit = (node: NodeValue) => {
     if (isOxcNodeArray(node)) {
       for (const child of node) {
         visit(child);
@@ -51,6 +77,10 @@ const collectDuplicateTargets = (program: Node | ReadonlyArray<Node> | undefined
 
     if (isDuplicateTarget(node)) {
       targets.push(node);
+    }
+
+    if (!isNodeRecord(node)) {
+      return;
     }
 
     const entries = Object.entries(node);
@@ -70,23 +100,23 @@ const collectDuplicateTargets = (program: Node | ReadonlyArray<Node> | undefined
 };
 
 const getNodeHeader = (node: Node): string => {
-  const idNode = node.id;
-  const idName = isOxcNode(idNode) ? (idNode.name as string) : null;
+  const idNode = isNodeRecord(node) ? node.id : undefined;
+  const idName = getNodeName(idNode);
 
   if (typeof idName === 'string' && idName.length > 0) {
     return idName;
   }
 
-  const key = node.key;
+  const key = isNodeRecord(node) ? node.key : undefined;
 
   if (key !== undefined && key !== null) {
-    const keyName = isOxcNode(key) ? (key.name as string) : null;
+    const keyName = getNodeName(key);
 
     if (typeof keyName === 'string' && keyName.length > 0) {
       return keyName;
     }
 
-    const keyValue = isOxcNode(key) ? key.value : null;
+    const keyValue = getLiteralString(key);
 
     if (typeof keyValue === 'string' && keyValue.length > 0) {
       return keyValue;

@@ -12,9 +12,8 @@
     "tsc": "tsc --noEmit"
   },
   "devDependencies": {
-    "@types/bun": "latest"
-  },
-  "peerDependencies": {
+    "@types/bun": "latest",
+    "oxc-parser": "^0.110.0",
     "typescript": "^5"
   }
 }

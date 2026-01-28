@@ -7,6 +7,7 @@ export const getLineColumn = (sourceText: string, offset: number): SourcePositio
   for (let index = 0; index < offset; index += 1) {
     if (sourceText[index] === '\n') {
       line += 1;
+
       lastNewline = index;
     }
   }

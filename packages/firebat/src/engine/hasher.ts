@@ -1,7 +1,7 @@
-import xxhash from 'xxhash-wasm';
+import xxhash, { type XXHashAPI } from 'xxhash-wasm';
 
-let hasherInstance: Awaited<ReturnType<typeof xxhash>> | null = null;
-const hasherPromise = xxhash();
+let hasherInstance: XXHashAPI | null = null;
+const hasherPromise: Promise<XXHashAPI> = xxhash();
 
 const initHasher = async (): Promise<void> => {
   hasherInstance ??= await hasherPromise;

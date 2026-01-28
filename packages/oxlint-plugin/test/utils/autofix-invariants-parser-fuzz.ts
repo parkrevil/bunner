@@ -1,3 +1,5 @@
+import { parseSync as oxcParseSync, type Program } from 'oxc-parser';
+
 import type { AstNode, AstNodeValue, RuleContext, Variable } from '../../src/types';
 
 import { blankLinesBetweenStatementGroupsRule } from '../../src/rules/blank-lines-between-statement-groups';
@@ -7,17 +9,22 @@ import { unusedImportsRule } from '../../src/rules/unused-imports';
 import { applyFixes, createRuleContext, createSourceCode } from './rule-test-kit';
 import { buildCommaTokens } from './token-utils';
 
-let parseSync: typeof import('oxc-parser').parseSync | undefined;
-
-try {
-  const parserModule = await import('oxc-parser');
-
-  if (typeof parserModule.parseSync === 'function') {
-    parseSync = parserModule.parseSync;
-  }
-} catch {
-  parseSync = undefined;
+interface ParseSyncResult {
+  program: AstNode;
 }
+
+type ParseSync = (filename: string, code: string) => ParseSyncResult;
+
+const parseSync: ParseSync = (filename, code) => {
+  const parsed = oxcParseSync(filename, code);
+  const programValue = parsed.program;
+
+  if (!isAstNode(programValue)) {
+    throw new Error('Invalid parse result');
+  }
+
+  return { program: programValue };
+};
 
 interface Visitor {
   [key: string]: ((node: AstNode) => void) | undefined;
@@ -119,7 +126,7 @@ const whitespace = (rng: Rng): string => rng.pick(['', ' ', '  ', '\t']);
 
 const newline = (rng: Rng): string => (rng.bool(0.5) ? '\n' : '\r\n');
 
-const isAstNode = (value: AstNodeValue | AstNodeShape | null | undefined): value is AstNode => {
+const isAstNode = (value: AstNodeValue | AstNodeShape | Program | null | undefined): value is AstNode => {
   if (value === null || value === undefined) {
     return false;
   }
@@ -303,10 +310,6 @@ const runRuleOnParsedCode = (
   rule: RuleModule,
   options: RuleContext['options'] = [],
 ): RuleRunResult => {
-  if (parseSync === undefined) {
-    return { reports: [], fixed: code };
-  }
-
   const parsed = parseSync(filename, code);
   const program = parsed.program;
 
@@ -359,14 +362,6 @@ const runRuleOnParsedCode = (
 };
 
 const runParserAutofixInvariantsFuzz = (): void => {
-  if (parseSync === undefined) {
-    return;
-  }
-
-  if (parseSync === undefined) {
-    return;
-  }
-
   const seeds = [101, 102, 103, 104, 105, 4242];
 
   for (const seed of seeds) {

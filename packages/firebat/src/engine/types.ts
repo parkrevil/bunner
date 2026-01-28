@@ -1,4 +1,4 @@
-import type { ParseResult, Node } from 'oxc-parser';
+import type { Comment, Node, OxcError, Program } from 'oxc-parser';
 
 import type { IntegerCFG } from './cfg';
 import type { IBitSet } from './dataflow';
@@ -37,27 +37,23 @@ export interface FunctionBodyAnalysis {
   readonly defs: ReadonlyArray<DefMeta>;
 }
 
+export type NodeValue = Node | ReadonlyArray<NodeValue> | string | number | boolean | null | undefined;
 
-export interface LoopHeaderNode {
-  type: 'ForInHeader' | 'ForOfHeader';
-  start: number;
-  end: number;
-  left?: Node;
-  right?: Node;
-}
+export type NodeRecord = Node & Record<string, NodeValue>;
 
-export type CfgNodePayload = Node | LoopHeaderNode;
+export type NodeWithBody = Node & Record<'body', Node | ReadonlyArray<Node> | null | undefined>;
 
-export interface ParseTask {
-  filePath: string;
-  sourceText: string;
-}
+export type NodeWithParams = Node & Record<'params', ReadonlyArray<Node>>;
+
+export type NodeWithValue = Node & Record<'value', string | number | boolean | bigint | null>;
+
+export type CfgNodePayload = Node | ReadonlyArray<Node>;
 
 export interface ParsedFile {
   filePath: string;
-  program: ParseResult['program'];
-  errors: ParseResult['errors'];
-  comments: ParseResult['comments'];
+  program: Program;
+  errors: ReadonlyArray<OxcError>;
+  comments: ReadonlyArray<Comment>;
   sourceText: string;
 }
 

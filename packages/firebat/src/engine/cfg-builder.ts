@@ -1,29 +1,29 @@
 import type { Node } from 'oxc-parser';
 
 import { IntegerCFG } from './cfg';
-import {
-  EdgeType,
-  type CfgNodePayload,
-  type LoopTargets,
-  type NodeId,
-  type OxcBuiltFunctionCfg,
-  type LoopHeaderNode,
-} from './types';
+import { EdgeType, type CfgNodePayload, type LoopTargets, type NodeId, type NodeValue, type OxcBuiltFunctionCfg } from './types';
 
-const isOxcNode = (value: Node | ReadonlyArray<Node> | undefined): value is Node =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
+const isOxcNode = (value: NodeValue): value is Node => typeof value === 'object' && value !== null && !Array.isArray(value);
 
-const isOxcNodeArray = (value: Node | ReadonlyArray<Node> | undefined): value is ReadonlyArray<Node> => Array.isArray(value);
+const isOxcNodeArray = (value: NodeValue): value is ReadonlyArray<Node> => Array.isArray(value);
 
-const getNodeType = (node: Node): string => node.type;
+const getNodeName = (node: NodeValue): string | null => {
+  if (!isOxcNode(node)) {
+    return null;
+  }
 
-const unwrapExpression = (node: Node | ReadonlyArray<Node> | undefined): Node | null => {
+  if ('name' in node && typeof node.name === 'string') {
+    return node.name;
+  }
+
+  return null;
+};
+
+const unwrapExpression = (node: NodeValue): Node | null => {
   let current = isOxcNode(node) ? node : null;
 
   while (current !== null) {
-    const nodeType = getNodeType(current);
-
-    if (nodeType === 'ParenthesizedExpression') {
+    if (current.type === 'ParenthesizedExpression') {
       const expression = current.expression;
 
       current = isOxcNode(expression) ? expression : null;
@@ -31,7 +31,7 @@ const unwrapExpression = (node: Node | ReadonlyArray<Node> | undefined): Node | 
       continue;
     }
 
-    if (nodeType === 'ChainExpression') {
+    if (current.type === 'ChainExpression') {
       const expression = current.expression;
 
       current = isOxcNode(expression) ? expression : null;
@@ -45,14 +45,14 @@ const unwrapExpression = (node: Node | ReadonlyArray<Node> | undefined): Node | 
   return current;
 };
 
-const evalStaticTruthiness = (node: Node | ReadonlyArray<Node> | undefined): boolean | null => {
+const evalStaticTruthiness = (node: NodeValue): boolean | null => {
   const n = unwrapExpression(node);
 
   if (n === null) {
     return null;
   }
 
-  if (getNodeType(n) === 'Literal') {
+  if (n.type === 'Literal') {
     const value = n.value;
 
     if (typeof value === 'boolean') {
@@ -78,7 +78,7 @@ const evalStaticTruthiness = (node: Node | ReadonlyArray<Node> | undefined): boo
     return null;
   }
 
-  if (getNodeType(n) === 'UnaryExpression') {
+  if (n.type === 'UnaryExpression') {
     const operator = typeof n.operator === 'string' ? n.operator : '';
     const argument = n.argument;
 
@@ -95,6 +95,41 @@ const evalStaticTruthiness = (node: Node | ReadonlyArray<Node> | undefined): boo
 
   return null;
 };
+
+type HandledStatementType =
+  | 'BlockStatement'
+  | 'LabeledStatement'
+  | 'IfStatement'
+  | 'WhileStatement'
+  | 'DoWhileStatement'
+  | 'ForOfStatement'
+  | 'ForInStatement'
+  | 'ForStatement'
+  | 'SwitchStatement'
+  | 'BreakStatement'
+  | 'ContinueStatement'
+  | 'ReturnStatement'
+  | 'ThrowStatement'
+  | 'TryStatement';
+
+const handledStatementTypes = new Set<string>([
+  'BlockStatement',
+  'LabeledStatement',
+  'IfStatement',
+  'WhileStatement',
+  'DoWhileStatement',
+  'ForOfStatement',
+  'ForInStatement',
+  'ForStatement',
+  'SwitchStatement',
+  'BreakStatement',
+  'ContinueStatement',
+  'ReturnStatement',
+  'ThrowStatement',
+  'TryStatement',
+]);
+
+const isHandledStatementType = (value: string): value is HandledStatementType => handledStatementTypes.has(value);
 
 export class OxcCFGBuilder {
   private cfg: IntegerCFG;
@@ -166,9 +201,15 @@ export class OxcCFGBuilder {
       return [...incoming];
     }
 
-    const statementType = getNodeType(node);
+    if (!isHandledStatementType(node.type)) {
+      const statementNode = this.addNode(node);
 
-    switch (statementType) {
+      this.connect(incoming, statementNode, EdgeType.Normal);
+
+      return [statementNode];
+    }
+
+    switch (node.type) {
       case 'BlockStatement': {
         let tails: NodeId[] = [...incoming];
         const bodyItems = (node.body ?? []) as ReadonlyArray<Node>;
@@ -182,7 +223,7 @@ export class OxcCFGBuilder {
 
       case 'LabeledStatement': {
         const labelNode = node.label;
-        const labelName = isOxcNode(labelNode) ? (labelNode.name as string) : null;
+        const labelName = getNodeName(labelNode);
         const bodyValue = node.body;
 
         return this.visitStatement(bodyValue, incoming, loopStack, labelName);
@@ -298,21 +339,19 @@ export class OxcCFGBuilder {
         // Model as: header -> body -> header, with an explicit exit edge.
         // IMPORTANT: keep the header payload free of `body` so that uses in the body
         // are not attributed to the same CFG node as the loop variable write.
-        const headerPayload: LoopHeaderNode = {
-          type: statementType === 'ForInStatement' ? 'ForInHeader' : 'ForOfHeader',
-          start: node.start,
-          end: node.end,
-        };
+        const headerPayload: Node[] = [];
+        const leftValue = node.left;
+        const rightValue = node.right;
 
-        if (node.left !== undefined) {
-          headerPayload.left = node.left;
+        if (isOxcNode(leftValue)) {
+          headerPayload.push(leftValue);
         }
 
-        if (node.right !== undefined) {
-          headerPayload.right = node.right;
+        if (isOxcNode(rightValue)) {
+          headerPayload.push(rightValue);
         }
 
-        const headerNode = this.addNode(headerPayload);
+        const headerNode = this.addNode(headerPayload.length > 0 ? headerPayload : null);
         const bodyEntry = this.addNode(null);
         const afterLoop = this.addNode(null);
 
@@ -397,7 +436,7 @@ export class OxcCFGBuilder {
         this.connect(incoming, discriminantNode, EdgeType.Normal);
 
         const afterSwitch = this.addNode(null);
-        const cases = (node.cases ?? []) as ReadonlyArray<Node>;
+        const cases = node.cases ?? [];
         const caseEntries: NodeId[] = cases.map(() => this.addNode(null));
 
         for (const entry of caseEntries) {
@@ -413,12 +452,15 @@ export class OxcCFGBuilder {
           const caseNode = cases[index];
           const caseEntry = caseEntries[index];
 
+          if (caseNode === undefined) {
+            continue;
+          }
+
           if (caseEntry === undefined) {
             continue;
           }
 
-          const consequentValue = isOxcNode(caseNode) ? caseNode.consequent : undefined;
-          const consequent = (consequentValue ?? []) as ReadonlyArray<Node>;
+          const consequent = caseNode.consequent ?? [];
           const caseTails = this.visitStatement(consequent, [caseEntry], nextLoopStack, null);
           // Note: switch `case` test expressions are not modeled as nodes.
           const nextEntry = index + 1 < caseEntries.length ? caseEntries[index + 1] : undefined;
@@ -439,7 +481,7 @@ export class OxcCFGBuilder {
         this.connect(incoming, breakNode, EdgeType.Normal);
 
         const labelNode = node.label;
-        const targetLabel = isOxcNode(labelNode) ? (labelNode.name as string) : null;
+        const targetLabel = getNodeName(labelNode);
         const target = this.findBreakTarget(loopStack, targetLabel);
 
         if (target !== null) {
@@ -455,7 +497,7 @@ export class OxcCFGBuilder {
         this.connect(incoming, continueNode, EdgeType.Normal);
 
         const labelNode = node.label;
-        const targetLabel = isOxcNode(labelNode) ? (labelNode.name as string) : null;
+        const targetLabel = getNodeName(labelNode);
         const target = this.findContinueTarget(loopStack, targetLabel);
 
         if (target !== null) {
@@ -546,11 +588,7 @@ export class OxcCFGBuilder {
       }
 
       default: {
-        const statementNode = this.addNode(node);
-
-        this.connect(incoming, statementNode, EdgeType.Normal);
-
-        return [statementNode];
+        return [...incoming];
       }
     }
   }

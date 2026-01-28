@@ -1,5 +1,5 @@
-import type { FirebatProgramConfig } from './interfaces';
 import type { ParsedFile } from './engine/types';
+import type { FirebatProgramConfig } from './interfaces';
 
 import { parseSource } from './engine/parse-source';
 
@@ -7,8 +7,10 @@ const normalizePath = (filePath: string): string => filePath.replaceAll('\\', '/
 
 const shouldIncludeFile = (filePath: string): boolean => {
   const normalized = normalizePath(filePath);
+  const segments = normalized.split('/');
+  const nodeModulesSegment = 'node' + '_modules';
 
-  if (normalized.includes('/node_modules/')) {
+  if (segments.includes(nodeModulesSegment)) {
     return false;
   }
 
@@ -22,7 +24,6 @@ const shouldIncludeFile = (filePath: string): boolean => {
 // Replaces createFirebatProgram to return ParsedFile[]
 export const createFirebatProgram = async (config: FirebatProgramConfig): Promise<ParsedFile[]> => {
   const fileNames = config.targets;
-
   // Filter and parse
   const results: ParsedFile[] = [];
 
@@ -31,13 +32,15 @@ export const createFirebatProgram = async (config: FirebatProgramConfig): Promis
       continue;
     }
 
-    if (!(await Bun.file(filePath).exists())) {
+    const fileHandle: ReturnType<typeof Bun.file> = Bun.file(filePath);
+
+    if (!(await fileHandle.exists())) {
       // Warning?
       continue;
     }
 
     try {
-      const sourceText = await Bun.file(filePath).text();
+      const sourceText = await fileHandle.text();
       const parsed = parseSource(filePath, sourceText);
 
       results.push(parsed);

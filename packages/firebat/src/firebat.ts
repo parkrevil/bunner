@@ -50,7 +50,9 @@ const runFirebat = async (): Promise<void> => {
   let options: FirebatCliOptions;
 
   try {
-    options = parseArgs(Bun.argv.slice(2));
+    const argv: readonly string[] = Bun.argv.slice(2);
+
+    options = parseArgs(argv);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
 

@@ -1,22 +1,29 @@
 import { describe, expect, it } from 'bun:test';
 
-import type { Node } from 'oxc-parser';
-
-import type { OxcBuiltFunctionCfg } from './types';
+import type { NodeRecord, NodeValue, NodeWithBody, OxcBuiltFunctionCfg } from './types';
 
 import { OxcCFGBuilder } from './cfg-builder';
 import { parseSource } from './parse-source';
 
-const isOxcNode = (value: Node | ReadonlyArray<Node> | undefined): value is Node =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
+const isOxcNode = (value: NodeValue): value is NodeRecord => typeof value === 'object' && value !== null && !Array.isArray(value);
 
-const isOxcNodeArray = (value: Node | ReadonlyArray<Node> | undefined): value is ReadonlyArray<Node> => Array.isArray(value);
+const isOxcNodeArray = (value: NodeValue): value is ReadonlyArray<NodeValue> => Array.isArray(value);
 
-const getFirstFunction = (sourceText: string): Node => {
+const getFunctionBody = (fn: NodeWithBody): NodeRecord => {
+  const body = fn.body;
+
+  if (!isOxcNode(body) || body.type !== 'BlockStatement') {
+    throw new Error('Expected function body');
+  }
+
+  return body;
+};
+
+const getFirstFunction = (sourceText: string): NodeWithBody => {
   const parsed = parseSource('/virtual/cfg-builder.spec.ts', sourceText);
   const program = parsed.program;
 
-  if (!isOxcNode(program)) {
+  if (!isOxcNode(program) || program.type !== 'Program') {
     throw new Error('Expected program node');
   }
 
@@ -32,6 +39,10 @@ const getFirstFunction = (sourceText: string): Node => {
     throw new Error('Expected function node');
   }
 
+  if (functionNode.type !== 'FunctionDeclaration' && functionNode.type !== 'FunctionExpression') {
+    throw new Error('Expected function node');
+  }
+
   return functionNode;
 };
 
@@ -43,10 +54,7 @@ const findLiteralNodeId = (built: OxcBuiltFunctionCfg, literalValue: number): nu
       continue;
     }
 
-    const payloadType = payload.type;
-    const payloadValue = payload.value;
-
-    if (payloadType === 'Literal' && payloadValue === literalValue) {
+    if (payload.type === 'Literal' && payload.value === literalValue) {
       return nodeId;
     }
   }
@@ -62,10 +70,7 @@ const findIdentifierNodeId = (built: OxcBuiltFunctionCfg, identifier: string): n
       continue;
     }
 
-    const payloadType = payload.type;
-    const payloadName = payload.name;
-
-    if (payloadType === 'Identifier' && payloadName === identifier) {
+    if (payload.type === 'Identifier' && payload.name === identifier) {
       return nodeId;
     }
   }
@@ -152,7 +157,7 @@ describe('cfg-builder', () => {
     );
     const builder = new OxcCFGBuilder();
     // Act
-    const built = builder.buildFunctionBody(fn.body);
+    const built = builder.buildFunctionBody(getFunctionBody(fn));
     const returnLiteralNodeId = findLiteralNodeId(built, 0);
     const hasDirectEdgeToExit = hasEdge(built.cfg.getEdges(), returnLiteralNodeId, built.exitId);
 
@@ -178,7 +183,7 @@ describe('cfg-builder', () => {
     );
     const builder = new OxcCFGBuilder();
     // Act
-    const built = builder.buildFunctionBody(fn.body);
+    const built = builder.buildFunctionBody(getFunctionBody(fn));
     const returnValueNodeId = findIdentifierNodeId(built, 'value');
     const adjacency = buildAdjacency(built.cfg.getEdges(), built.cfg.nodeCount);
     const reachable = isReachable(adjacency, built.entryId, returnValueNodeId);
