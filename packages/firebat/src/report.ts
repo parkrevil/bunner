@@ -29,17 +29,19 @@ const formatWasteText = (finding: ResourceWasteFinding): string => {
 const formatText = (report: FirebatReport): string => {
   const lines: string[] = [];
   const detectors = report.meta.detectors.join(',');
+  const duplicates = report.analyses.duplicates;
+  const waste = report.analyses.waste;
 
   lines.push(
-    `[firebat] engine=${report.meta.engine} version=${report.meta.version} detectors=${detectors} duplicates=${report.duplicates.length} waste=${report.waste.length}`,
+    `[firebat] engine=${report.meta.engine} version=${report.meta.version} detectors=${detectors} duplicates=${duplicates.length} waste=${waste.length}`,
   );
 
-  for (const group of report.duplicates) {
+  for (const group of duplicates) {
     lines.push('');
     lines.push(formatDuplicateGroupText(group));
   }
 
-  for (const finding of report.waste) {
+  for (const finding of waste) {
     lines.push('');
     lines.push(formatWasteText(finding));
   }

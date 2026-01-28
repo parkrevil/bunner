@@ -1,9 +1,20 @@
 import type { Comment, Node, OxcError, Program } from 'oxc-parser';
 
 import type { IntegerCFG } from './cfg';
-import type { IBitSet } from './dataflow';
 
 export type NodeId = number;
+
+export interface BitSet {
+  add(index: number): void;
+  remove(index: number): void;
+  has(index: number): boolean;
+  new_union(other: BitSet): BitSet;
+  new_intersection(other: BitSet): BitSet;
+  difference(other: BitSet): void;
+  clone(): BitSet;
+  equals(other: BitSet): boolean;
+  array(): number[];
+}
 
 export enum EdgeType {
   Normal = 0,
@@ -32,7 +43,7 @@ export interface DefMeta {
 }
 
 export interface FunctionBodyAnalysis {
-  readonly usedDefs: IBitSet;
+  readonly usedDefs: BitSet;
   readonly overwrittenDefIds: ReadonlyArray<boolean>;
   readonly defs: ReadonlyArray<DefMeta>;
 }

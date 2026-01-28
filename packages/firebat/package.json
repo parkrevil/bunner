@@ -10,11 +10,13 @@
     "tsc": "tsc --noEmit"
   },
   "dependencies": {
+    "fastbitset": "^0.4.1",
     "oxc-parser": "^0.110.0",
     "xxhash-wasm": "^1.1.0"
   },
   "devDependencies": {
     "@types/bun": "latest",
+    "@types/fastbitset": "^0.2.2",
     "typescript": "^5"
   }
 }

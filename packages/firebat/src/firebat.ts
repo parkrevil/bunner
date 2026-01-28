@@ -1,6 +1,12 @@
 import type { FirebatCliOptions } from './interfaces';
 import type { FirebatReport } from './types';
 
+import { analyzeCoupling, createEmptyCoupling } from './analyses/coupling';
+import { analyzeDependencies, createEmptyDependencies } from './analyses/dependencies';
+import { analyzeDuplication, createEmptyDuplication } from './analyses/duplication';
+import { analyzeEarlyReturn, analyzeNesting, createEmptyEarlyReturn, createEmptyNesting } from './analyses/nesting';
+import { analyzeNoop, createEmptyNoop } from './analyses/no-op';
+import { analyzeApiDrift, createEmptyApiDrift } from './analyses/api-drift';
 import { parseArgs } from './arg-parse';
 import { detectDuplicates } from './duplicate-detector';
 import { initHasher } from './engine/hasher';
@@ -18,7 +24,7 @@ const printHelp = (): void => {
     'Options:',
     '  --format text|json       Output format (default: text)',
     '  --min-tokens <n>         Minimum token threshold for duplicates (default: 60)',
-    '  --only <list>            Limit detectors to duplicates,waste (comma-separated)',
+    '  --only <list>            Limit detectors to duplicates,waste,dependencies,coupling,duplication,nesting,early-return,noop,api-drift',
     '  --no-exit                Always exit 0 even if findings exist',
     '  -h, --help               Show this help',
   ];
@@ -32,6 +38,16 @@ const buildReport = async (options: FirebatCliOptions): Promise<FirebatReport> =
   });
   const duplicates = options.detectors.includes('duplicates') ? detectDuplicates(program, options.minTokens) : [];
   const waste = options.detectors.includes('waste') ? detectResourceWaste(program) : [];
+  const shouldRunDependencies = options.detectors.includes('dependencies') || options.detectors.includes('coupling');
+  const dependencies = shouldRunDependencies ? analyzeDependencies(program) : createEmptyDependencies();
+  const coupling = options.detectors.includes('coupling') ? analyzeCoupling(dependencies) : createEmptyCoupling();
+  const duplication = options.detectors.includes('duplication')
+    ? analyzeDuplication(program, options.minTokens)
+    : createEmptyDuplication();
+  const nesting = options.detectors.includes('nesting') ? analyzeNesting(program) : createEmptyNesting();
+  const earlyReturn = options.detectors.includes('early-return') ? analyzeEarlyReturn(program) : createEmptyEarlyReturn();
+  const noop = options.detectors.includes('noop') ? analyzeNoop(program) : createEmptyNoop();
+  const apiDrift = options.detectors.includes('api-drift') ? analyzeApiDrift(program) : createEmptyApiDrift();
 
   return {
     meta: {
@@ -41,8 +57,17 @@ const buildReport = async (options: FirebatCliOptions): Promise<FirebatReport> =
       minTokens: options.minTokens,
       detectors: options.detectors,
     },
-    duplicates,
-    waste,
+    analyses: {
+      duplicates,
+      waste,
+      dependencies,
+      coupling,
+      duplication,
+      nesting,
+      earlyReturn,
+      noop,
+      apiDrift,
+    },
   };
 };
 
@@ -85,7 +110,7 @@ const runFirebat = async (): Promise<void> => {
 
   console.log(output);
 
-  const findingCount = report.duplicates.length + report.waste.length;
+  const findingCount = report.analyses.duplicates.length + report.analyses.waste.length;
 
   if (findingCount > 0 && options.exitOnFindings) {
     process.exit(1);

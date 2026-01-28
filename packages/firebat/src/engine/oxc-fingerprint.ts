@@ -12,8 +12,14 @@ const isNodeRecord = (node: Node): node is NodeRecord => typeof node === 'object
 
 const isLiteralNode = (node: Node): node is NodeWithValue => node.type === 'Literal' && 'value' in node;
 
-const pushLiteralValue = (node: Node, diffs: string[]): void => {
+const pushLiteralValue = (node: Node, diffs: string[], includeLiteralValues: boolean): void => {
   if (!isLiteralNode(node)) {
+    return;
+  }
+
+  if (!includeLiteralValues) {
+    diffs.push('literal');
+
     return;
   }
 
@@ -53,7 +59,7 @@ const pushLiteralValue = (node: Node, diffs: string[]): void => {
 // Ignore names, locations, comments.
 // Focus on structure: types, operators, literals (optional, maybe normalized).
 
-export const createOxcFingerprint = (node: NodeValue): string => {
+const createOxcFingerprintCore = (node: NodeValue, includeLiteralValues: boolean): string => {
   const diffs: string[] = [];
 
   const visit = (n: NodeValue) => {
@@ -74,7 +80,7 @@ export const createOxcFingerprint = (node: NodeValue): string => {
       diffs.push(n.type);
     }
 
-    pushLiteralValue(n, diffs);
+    pushLiteralValue(n, diffs, includeLiteralValues);
 
     // push specific semantic properties
     // e.g. Operator for BinaryExpression
@@ -126,3 +132,7 @@ export const createOxcFingerprint = (node: NodeValue): string => {
 
   return hashString(diffs.join('|'));
 };
+
+export const createOxcFingerprint = (node: NodeValue): string => createOxcFingerprintCore(node, true);
+
+export const createOxcFingerprintShape = (node: NodeValue): string => createOxcFingerprintCore(node, false);

@@ -38,8 +38,20 @@ const parseDetectors = (value: string): ReadonlyArray<FirebatDetector> => {
   const seen = new Set<FirebatDetector>();
 
   for (const selection of selections) {
-    if (selection !== 'duplicates' && selection !== 'waste') {
-      throw new Error(`[firebat] Invalid --only: ${selection}. Expected duplicates|waste`);
+    if (
+      selection !== 'duplicates' &&
+      selection !== 'waste' &&
+      selection !== 'dependencies' &&
+      selection !== 'coupling' &&
+      selection !== 'duplication' &&
+      selection !== 'nesting' &&
+      selection !== 'early-return' &&
+      selection !== 'noop' &&
+      selection !== 'api-drift'
+    ) {
+      throw new Error(
+        `[firebat] Invalid --only: ${selection}. Expected duplicates|waste|dependencies|coupling|duplication|nesting|early-return|noop|api-drift`,
+      );
     }
 
     if (seen.has(selection)) {

@@ -166,6 +166,13 @@ Baseline 기록 (필수):
 - [ ] (skip) status=draft: `packages/firebat/src/engine/dataflow.ts`에서 네이티브 `.node` 직접 import 제거(대체 BitSet으로 교체)
 - [ ] (skip) status=draft: deps 변경이 실제로 필요하면(패키지 채택) 승인 아티팩트 요청 후에만 `packages/firebat/package.json`을 변경
 
+### Implementation Details (필수)
+
+- `plans/260126_01_firebat_pure-code-quality.md`: Step-2 결정(패키지 선정/근거/변경 범위)을 기록한다.
+- `packages/firebat/src/engine/dataflow.ts`: `fastbitset` 기반 BitSet 구현으로 교체하고, 기존 `IBitSet` 계약(추가/삭제/집합 연산/복제/비교/배열 변환)을 유지한다.
+- `packages/firebat/src/engine/types.ts`: BitSet 타입 경계를 유지하며, 외부 구현에 의존하는 타입 노출을 피한다.
+- `packages/firebat/package.json`: `fastbitset`와 `@types/fastbitset`을 추가한다.
+
 ### Verification (Gate)
 
 - Gate command(s):
@@ -177,13 +184,16 @@ Baseline 기록 (필수):
 
 ## 6) Evidence (필수)
 
-- Recon evidence: `none (status=draft)`
+- Recon evidence:
+  - BitSet ops(`engine/dataflow.ts`): `add`, `remove`, `has`, `union`, `intersect`, `subtract`, `clone`, `isEmpty`, `equals`, `toArray`
+  - 현재 구현: 내부 `BigIntBitSet` + `createBitSet()` 팩토리
+  - 네이티브 `.node` 직접 import 없음
 - Diff evidence:
   - Changed files (actual): `none (status=draft)`
 - Verification evidence:
   - LOG-VERIFY: `none (status=draft)`
 - MUST-EVID mapping:
-  - MUST-EVID-2: `none (status=draft)`
+  - MUST-EVID-2: `Selected BitSet: fastbitset, deps change required`
 
 ---
 

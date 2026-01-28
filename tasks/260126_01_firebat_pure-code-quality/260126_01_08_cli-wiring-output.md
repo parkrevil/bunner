@@ -82,6 +82,7 @@ MUST ↔ Evidence Gate (필수):
   - `packages/firebat/src/arg-parse.ts`
   - `packages/firebat/src/firebat.ts`
   - `packages/firebat/src/report.ts`
+  - `packages/firebat/src/types.ts`
 
 - Files to read (required to understand change):
   - `packages/firebat/src/arg-parse.ts`
@@ -98,6 +99,7 @@ MUST ↔ Evidence Gate (필수):
   - packages/firebat/src/arg-parse.ts: MUST-8
   - packages/firebat/src/firebat.ts: MUST-8
   - packages/firebat/src/report.ts: MUST-8
+  - packages/firebat/src/types.ts: MUST-8
 
 - Public API impact:
   - `internal-only`
@@ -153,6 +155,14 @@ Baseline 기록 (필수):
 - [ ] (skip) status=draft: 옵션 스키마 확장(`packages/firebat/src/arg-parse.ts`: 신규 분석기 선택 가능)
 - [ ] (skip) status=draft: 실행 wiring 추가(`packages/firebat/src/firebat.ts`: 선택된 분석기만 실행)
 - [ ] (skip) status=draft: json 출력 안정화(`packages/firebat/src/report.ts`: `--format json` 유지 + 신규 필드 추가)
+- [ ] (skip) status=draft: detector 타입 확장(`packages/firebat/src/types.ts`: CLI/분석기 키 정렬)
+
+### Implementation Details (필수)
+
+- `packages/firebat/src/types.ts`: CLI에서 선택 가능한 detector id를 타입으로 고정하고, vNext `analyses`의 canonical key를 정의한다.
+- `packages/firebat/src/arg-parse.ts`: `--only` 허용 목록에 신규 detector id를 추가한다.
+- `packages/firebat/src/firebat.ts`: 선택된 detector 목록을 meta에 반영하고, vNext `analyses` 구조를 안정적으로 채운다.
+- `packages/firebat/src/report.ts`: text/json 출력에서 `analyses` 구조를 유지하며 JSON 출력은 순수 JSON만 출력한다.
 
 ### Verification (Gate)
 

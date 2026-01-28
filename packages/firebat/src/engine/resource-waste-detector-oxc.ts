@@ -1,10 +1,10 @@
 import type { Node } from 'oxc-parser';
 
 import type { ResourceWasteFinding } from '../types';
-import type { DefMeta, FunctionBodyAnalysis, NodeRecord, NodeValue, ParsedFile } from './types';
+import type { BitSet, DefMeta, FunctionBodyAnalysis, NodeRecord, NodeValue, ParsedFile } from './types';
 
 import { OxcCFGBuilder } from './cfg-builder';
-import { createBitSet, type IBitSet } from './dataflow';
+import { createBitSet, equalsBitSet, intersectBitSet, subtractBitSet, unionBitSet } from './dataflow';
 import { getLineColumn } from './source-position';
 import { collectVariables } from './variable-collector';
 
@@ -74,11 +74,11 @@ const collectLocalVarIndexes = (functionNode: Node): Map<string, number> => {
   return out;
 };
 
-const unionAll = (sets: readonly IBitSet[], empty: IBitSet): IBitSet => {
+const unionAll = (sets: readonly BitSet[], empty: BitSet): BitSet => {
   let current = empty;
 
   for (const set of sets) {
-    current = current.union(set);
+    current = unionBitSet(current, set);
   }
 
   return current;
@@ -150,9 +150,9 @@ const analyzeFunctionBody = (
 
   const defCount = defMetaById.length;
   const empty = createBitSet();
-  const genByNode: IBitSet[] = Array.from({ length: nodeCount }, () => createBitSet());
-  const killByNode: IBitSet[] = Array.from({ length: nodeCount }, () => createBitSet());
-  const defsOfVar: IBitSet[] = Array.from({ length: localIndexByName.size }, () => createBitSet());
+  const genByNode: BitSet[] = Array.from({ length: nodeCount }, () => createBitSet());
+  const killByNode: BitSet[] = Array.from({ length: nodeCount }, () => createBitSet());
+  const defsOfVar: BitSet[] = Array.from({ length: localIndexByName.size }, () => createBitSet());
 
   for (let varIndex = 0; varIndex < defsByVarIndex.length; varIndex += 1) {
     const ids = defsByVarIndex[varIndex] ?? [];
@@ -179,15 +179,15 @@ const analyzeFunctionBody = (
         continue;
       }
 
-      kill = kill.union(defs);
+      kill = unionBitSet(kill, defs);
     }
 
-    killByNode[nodeId] = kill.subtract(genByNode[nodeId] ?? createBitSet());
+    killByNode[nodeId] = subtractBitSet(kill, genByNode[nodeId] ?? createBitSet());
   }
 
   const pred = built.cfg.buildAdjacency('backward');
-  const inByNode: IBitSet[] = Array.from({ length: nodeCount }, () => createBitSet());
-  const outByNode: IBitSet[] = Array.from({ length: nodeCount }, () => createBitSet());
+  const inByNode: BitSet[] = Array.from({ length: nodeCount }, () => createBitSet());
+  const outByNode: BitSet[] = Array.from({ length: nodeCount }, () => createBitSet());
   let changed = true;
 
   while (changed) {
@@ -195,7 +195,7 @@ const analyzeFunctionBody = (
 
     for (let nodeId = 0; nodeId < nodeCount; nodeId += 1) {
       const predIds = pred[nodeId] ?? new Int32Array();
-      const predOutSets: IBitSet[] = [];
+      const predOutSets: BitSet[] = [];
 
       for (const p of predIds) {
         const out = outByNode[p];
@@ -206,14 +206,17 @@ const analyzeFunctionBody = (
       }
 
       const nextIn = unionAll(predOutSets, empty.clone());
-      const nextOut = (genByNode[nodeId] ?? createBitSet()).union(nextIn.subtract(killByNode[nodeId] ?? createBitSet()));
+      const nextOut = unionBitSet(
+        genByNode[nodeId] ?? createBitSet(),
+        subtractBitSet(nextIn, killByNode[nodeId] ?? createBitSet()),
+      );
 
-      if (!nextIn.equals(inByNode[nodeId] ?? createBitSet())) {
+      if (!equalsBitSet(nextIn, inByNode[nodeId] ?? createBitSet())) {
         inByNode[nodeId] = nextIn;
         changed = true;
       }
 
-      if (!nextOut.equals(outByNode[nodeId] ?? createBitSet())) {
+      if (!equalsBitSet(nextOut, outByNode[nodeId] ?? createBitSet())) {
         outByNode[nodeId] = nextOut;
         changed = true;
       }
@@ -233,7 +236,7 @@ const analyzeFunctionBody = (
         continue;
       }
 
-      usedDefs = usedDefs.union(reachingIn.intersect(defs));
+      usedDefs = unionBitSet(usedDefs, intersectBitSet(reachingIn, defs));
     }
   }
 
@@ -250,8 +253,8 @@ const analyzeFunctionBody = (
         continue;
       }
 
-      const killedHere = reachingIn.intersect(defs).subtract(genByNode[nodeId] ?? createBitSet());
-      const killedIds = killedHere.toArray();
+      const killedHere = subtractBitSet(intersectBitSet(reachingIn, defs), genByNode[nodeId] ?? createBitSet());
+      const killedIds = killedHere.array();
 
       for (const defId of killedIds) {
         overwrittenDefIds[defId] = true;
