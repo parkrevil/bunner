@@ -1,5 +1,7 @@
 export type OutputFormat = 'text' | 'json';
 
+export type MinTokensOption = number | 'auto';
+
 export type FirebatDetector =
   | 'duplicates'
   | 'waste'
@@ -13,7 +15,7 @@ export type FirebatDetector =
 
 export type FirebatItemKind = 'function' | 'method' | 'type' | 'interface' | 'node';
 
-export type ResourceWasteKind = 'dead-store' | 'dead-store-overwrite';
+export type WasteKind = 'dead-store' | 'dead-store-overwrite';
 
 export interface SourcePosition {
   readonly line: number;
@@ -144,8 +146,8 @@ export interface ApiDriftAnalysis {
   readonly groups: ReadonlyArray<ApiDriftGroup>;
 }
 
-export interface ResourceWasteFinding {
-  readonly kind: ResourceWasteKind;
+export interface WasteFinding {
+  readonly kind: WasteKind;
   readonly label: string;
   readonly filePath: string;
   readonly span: SourceSpan;
@@ -161,7 +163,7 @@ export interface FirebatMeta {
 
 export interface FirebatAnalyses {
   readonly duplicates: ReadonlyArray<DuplicateGroup>;
-  readonly waste: ReadonlyArray<ResourceWasteFinding>;
+  readonly waste: ReadonlyArray<WasteFinding>;
   readonly dependencies: DependencyAnalysis;
   readonly coupling: CouplingAnalysis;
   readonly duplication: DuplicationAnalysis;

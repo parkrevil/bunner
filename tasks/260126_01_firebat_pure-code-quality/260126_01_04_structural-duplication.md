@@ -2,7 +2,7 @@
 
 ## A) Mechanical Status (필수)
 
-- Status: `draft`
+- Status: `in-progress`
 - Blocked reason (status=blocked): `none`
 - Review mode: `self-review`
 
@@ -12,7 +12,7 @@
 
 - Task ID: `260126_01_04_structural-duplication`
 - Created at (UTC): `2026-01-26`
-- Updated at (UTC): `2026-01-26`
+- Updated at (UTC): `2026-01-29`
 - Owner: `user`
 - Reviewer: `none`
 - Target branch: `main`
@@ -153,6 +153,12 @@ Baseline 기록 (필수):
 - [ ] (skip) status=draft: clone class(클러스터) 결과 타입을 report 스키마에 반영(`packages/firebat/src/types.ts`)
 - [ ] (skip) status=draft: text/json 출력에 clone class 단위 렌더링 추가(`packages/firebat/src/report.ts`)
 
+### Implementation Details (필수)
+
+- `packages/firebat/src/analyses/duplication/`: 구조 유사성을 정규화한 fingerprint를 만들고, 동일 fingerprint를 clone class로 묶는다.
+- `packages/firebat/src/types.ts`: `analyses.duplication.cloneClasses` 결과 타입을 정의하고, item의 위치/헤더 필드를 확정한다.
+- `packages/firebat/src/report.ts`: text/json 출력에서 clone class 결과를 직렬화/렌더링하며, 결과가 비어도 안정적으로 출력되도록 한다.
+
 ### Verification (Gate)
 
 - Gate command(s):
@@ -166,11 +172,11 @@ Baseline 기록 (필수):
 
 - Recon evidence: `none (status=draft)`
 - Diff evidence:
-  - Changed files (actual): `none (status=draft)`
+  - Changed files (actual): `packages/firebat/src/analyses/duplication/**`, `packages/firebat/src/firebat.ts`, `packages/firebat/src/types.ts`, `packages/firebat/src/report.ts`
 - Verification evidence:
-  - LOG-VERIFY: `none (status=draft)`
+  - LOG-VERIFY: `not-run`
 - MUST-EVID mapping:
-  - MUST-EVID-4: `none (status=draft)`
+  - MUST-EVID-4: `structural duplication 분석기 구현 및 wiring 완료`
 
 ---
 

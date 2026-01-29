@@ -13,8 +13,19 @@ describe('arg-parse', () => {
     // Assert
     expect(result.targets).toEqual([]);
     expect(result.format).toBe('text');
-    expect(result.minTokens).toBe(60);
+    expect(result.minTokens).toBe('auto');
     expect(result.exitOnFindings).toBe(true);
+    expect(result.detectors).toEqual([
+      'duplicates',
+      'waste',
+      'dependencies',
+      'coupling',
+      'duplication',
+      'nesting',
+      'early-return',
+      'noop',
+      'api-drift',
+    ]);
     expect(result.help).toBe(false);
   });
 
@@ -28,8 +39,19 @@ describe('arg-parse', () => {
     expect(result.help).toBe(true);
     expect(result.targets).toEqual([]);
     expect(result.format).toBe('text');
-    expect(result.minTokens).toBe(60);
+    expect(result.minTokens).toBe('auto');
     expect(result.exitOnFindings).toBe(true);
+    expect(result.detectors).toEqual([
+      'duplicates',
+      'waste',
+      'dependencies',
+      'coupling',
+      'duplication',
+      'nesting',
+      'early-return',
+      'noop',
+      'api-drift',
+    ]);
   });
 
   it('should parse format, minTokens, and targets when options are provided', () => {
@@ -42,7 +64,17 @@ describe('arg-parse', () => {
     expect(result.format).toBe('json');
     expect(result.minTokens).toBe(120);
     expect(result.targets).toEqual([path.resolve('packages')]);
-    expect(result.detectors).toEqual(['duplicates', 'waste']);
+    expect(result.detectors).toEqual([
+      'duplicates',
+      'waste',
+      'dependencies',
+      'coupling',
+      'duplication',
+      'nesting',
+      'early-return',
+      'noop',
+      'api-drift',
+    ]);
     expect(result.help).toBe(false);
   });
 

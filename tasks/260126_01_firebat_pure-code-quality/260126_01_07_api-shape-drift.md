@@ -2,7 +2,7 @@
 
 ## A) Mechanical Status (필수)
 
-- Status: `draft`
+- Status: `in-progress`
 - Blocked reason (status=blocked): `none`
 - Review mode: `self-review`
 
@@ -12,7 +12,7 @@
 
 - Task ID: `260126_01_07_api-shape-drift`
 - Created at (UTC): `2026-01-26`
-- Updated at (UTC): `2026-01-26`
+- Updated at (UTC): `2026-01-29`
 - Owner: `user`
 - Reviewer: `none`
 - Target branch: `main`
@@ -154,6 +154,12 @@ Baseline 기록 (필수):
 - [ ] (skip) status=draft: report 스키마에 api drift 결과를 반영(`packages/firebat/src/types.ts`)
 - [ ] (skip) status=draft: text/json 출력에 api drift 결과 렌더링/직렬화 추가(`packages/firebat/src/report.ts`)
 
+### Implementation Details (필수)
+
+- `packages/firebat/src/analyses/api-drift/`: 함수 시그니처에서 shape 정보를 추출하고, 동일 이름 기준으로 그룹화/표준 후보/이탈 shape를 산출한다.
+- `packages/firebat/src/types.ts`: `analyses.apiDrift` 결과 타입과 shape 필드(`paramsCount`, `optionalCount`, `returnKind`, `async`)를 고정한다.
+- `packages/firebat/src/report.ts`: text/json 출력에서 api drift 결과를 직렬화/렌더링하며, 결과가 비어도 안정적으로 출력되도록 한다.
+
 ### Verification (Gate)
 
 - Gate command(s):
@@ -167,11 +173,11 @@ Baseline 기록 (필수):
 
 - Recon evidence: `none (status=draft)`
 - Diff evidence:
-  - Changed files (actual): `none (status=draft)`
+  - Changed files (actual): `packages/firebat/src/analyses/api-drift/**`, `packages/firebat/src/firebat.ts`, `packages/firebat/src/types.ts`, `packages/firebat/src/report.ts`
 - Verification evidence:
-  - LOG-VERIFY: `none (status=draft)`
+  - LOG-VERIFY: `not-run`
 - MUST-EVID mapping:
-  - MUST-EVID-7: `none (status=draft)`
+  - MUST-EVID-7: `api drift 분석기 구현 및 wiring 완료`
 
 ---
 

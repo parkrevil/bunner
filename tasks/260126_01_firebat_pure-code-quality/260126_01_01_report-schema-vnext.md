@@ -2,7 +2,7 @@
 
 ## A) Mechanical Status (필수)
 
-- Status: `draft`
+- Status: `in-progress`
 - Blocked reason (status=blocked): `none`
 - Review mode: `self-review`
 
@@ -12,7 +12,7 @@
 
 - Task ID: `260126_01_01_report-schema-vnext`
 - Created at (UTC): `2026-01-26`
-- Updated at (UTC): `2026-01-26`
+- Updated at (UTC): `2026-01-29`
 - Owner: `user`
 - Reviewer: `none`
 - Target branch: `main`
@@ -175,13 +175,13 @@ Baseline 기록 (필수):
 
 ## 6) Evidence (필수)
 
-- Recon evidence: `none (status=draft)`
+- Recon evidence: `packages/firebat/src/types.ts`, `packages/firebat/src/report.ts`
 - Diff evidence:
-  - Changed files (actual): `none (status=draft)`
+  - Changed files (actual): `packages/firebat/src/types.ts`, `packages/firebat/src/report.ts`
 - Verification evidence:
-  - LOG-VERIFY: `none (status=draft)`
+  - LOG-VERIFY: `not-run`
 - MUST-EVID mapping:
-  - MUST-EVID-1: `none (status=draft)`
+  - MUST-EVID-1: `Report schema vNext present in types.ts + report.ts`
 
 ---
 

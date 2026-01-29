@@ -1,9 +1,9 @@
-import type { FirebatDetector, OutputFormat } from './types';
+import type { FirebatDetector, MinTokensOption, OutputFormat } from './types';
 
 export interface FirebatCliOptions {
   readonly targets: readonly string[];
   readonly format: OutputFormat;
-  readonly minTokens: number;
+  readonly minTokens: MinTokensOption;
   readonly exitOnFindings: boolean;
   readonly detectors: ReadonlyArray<FirebatDetector>;
   readonly help: boolean;

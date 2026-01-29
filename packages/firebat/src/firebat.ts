@@ -1,25 +1,32 @@
 import type { FirebatCliOptions } from './interfaces';
 import type { FirebatReport } from './types';
 
-import { analyzeCoupling, createEmptyCoupling } from './analyses/coupling';
-import { analyzeDependencies, createEmptyDependencies } from './analyses/dependencies';
-import { analyzeDuplication, createEmptyDuplication } from './analyses/duplication';
-import { analyzeEarlyReturn, analyzeNesting, createEmptyEarlyReturn, createEmptyNesting } from './analyses/nesting';
-import { analyzeNoop, createEmptyNoop } from './analyses/no-op';
-import { analyzeApiDrift, createEmptyApiDrift } from './analyses/api-drift';
+import { analyzeApiDrift, createEmptyApiDrift } from './features/api-drift';
+import { analyzeCoupling, createEmptyCoupling } from './features/coupling';
+import { analyzeDependencies, createEmptyDependencies } from './features/dependency-graph';
+import { analyzeDuplication, createEmptyDuplication } from './features/duplication-analysis';
+import { analyzeEarlyReturn, createEmptyEarlyReturn } from './features/early-return';
+import { analyzeNesting, createEmptyNesting } from './features/nesting';
+import { analyzeNoop, createEmptyNoop } from './features/noop';
 import { parseArgs } from './arg-parse';
-import { detectDuplicates } from './duplicate-detector';
+import { detectDuplicates } from './features/duplicate-detector';
 import { initHasher } from './engine/hasher';
+import { computeAutoMinTokens } from './engine/auto-min-tokens';
 import { formatReport } from './report';
-import { detectResourceWaste } from './resource-waste-detector';
+import { detectWaste } from './features/waste';
 import { createFirebatProgram } from './ts-program';
+import { discoverDefaultTargets } from './target-discovery';
 
 const printHelp = (): void => {
   const lines = [
-    'firebat - Bunner code quality scanner (duplicates + waste)',
+    'firebat - Bunner code quality scanner',
     '',
     'Usage:',
     '  bun tooling/firebat/index.ts [targets...] [options]',
+    '',
+    'Defaults:',
+    '  - If no targets are provided, firebat scans the repo sources automatically.',
+    '  - If --only is not provided, all detectors are executed.',
     '',
     'Options:',
     '  --format text|json       Output format (default: text)',
@@ -36,13 +43,15 @@ const buildReport = async (options: FirebatCliOptions): Promise<FirebatReport> =
   const program = await createFirebatProgram({
     targets: options.targets,
   });
-  const duplicates = options.detectors.includes('duplicates') ? detectDuplicates(program, options.minTokens) : [];
-  const waste = options.detectors.includes('waste') ? detectResourceWaste(program) : [];
+  const resolvedMinTokens =
+    options.minTokens === 'auto' ? computeAutoMinTokens(program) : Math.max(0, Math.round(options.minTokens));
+  const duplicates = options.detectors.includes('duplicates') ? detectDuplicates(program, resolvedMinTokens) : [];
+  const waste = options.detectors.includes('waste') ? detectWaste(program) : [];
   const shouldRunDependencies = options.detectors.includes('dependencies') || options.detectors.includes('coupling');
   const dependencies = shouldRunDependencies ? analyzeDependencies(program) : createEmptyDependencies();
   const coupling = options.detectors.includes('coupling') ? analyzeCoupling(dependencies) : createEmptyCoupling();
   const duplication = options.detectors.includes('duplication')
-    ? analyzeDuplication(program, options.minTokens)
+    ? analyzeDuplication(program, resolvedMinTokens)
     : createEmptyDuplication();
   const nesting = options.detectors.includes('nesting') ? analyzeNesting(program) : createEmptyNesting();
   const earlyReturn = options.detectors.includes('early-return') ? analyzeEarlyReturn(program) : createEmptyEarlyReturn();
@@ -54,7 +63,7 @@ const buildReport = async (options: FirebatCliOptions): Promise<FirebatReport> =
       engine: 'oxc',
       version: '2.0.0-strict',
       targetCount: program.length,
-      minTokens: options.minTokens,
+      minTokens: resolvedMinTokens,
       detectors: options.detectors,
     },
     analyses: {
@@ -90,6 +99,23 @@ const runFirebat = async (): Promise<void> => {
     printHelp();
 
     return;
+  }
+
+  if (options.targets.length === 0) {
+    try {
+      const targets = await discoverDefaultTargets(process.cwd());
+
+      options = {
+        ...options,
+        targets,
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+
+      console.error(`[firebat] Failed to discover default targets: ${message}`);
+
+      process.exit(1);
+    }
   }
 
   await initHasher();

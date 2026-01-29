@@ -1,10 +1,20 @@
 import * as path from 'node:path';
 
 import type { FirebatCliOptions } from './interfaces';
-import type { FirebatDetector, OutputFormat } from './types';
+import type { FirebatDetector, MinTokensOption, OutputFormat } from './types';
 
-const DEFAULT_MIN_TOKENS = 60;
-const DEFAULT_DETECTORS: ReadonlyArray<FirebatDetector> = ['duplicates', 'waste'];
+const DEFAULT_MIN_TOKENS: MinTokensOption = 'auto';
+const DEFAULT_DETECTORS: ReadonlyArray<FirebatDetector> = [
+  'duplicates',
+  'waste',
+  'dependencies',
+  'coupling',
+  'duplication',
+  'nesting',
+  'early-return',
+  'noop',
+  'api-drift',
+];
 
 const parseNumber = (value: string, label: string): number => {
   const parsed = Number(value);
@@ -14,6 +24,14 @@ const parseNumber = (value: string, label: string): number => {
   }
 
   return parsed;
+};
+
+const parseMinTokens = (value: string): MinTokensOption => {
+  if (value === 'auto') {
+    return 'auto';
+  }
+
+  return parseNumber(value, '--min-tokens');
 };
 
 const parseOutputFormat = (value: string): OutputFormat => {
@@ -82,7 +100,7 @@ const normalizeTarget = (raw: string): string => {
 const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
   const targets: string[] = [];
   let format: OutputFormat = 'text';
-  let minTokens = DEFAULT_MIN_TOKENS;
+  let minTokens: MinTokensOption = DEFAULT_MIN_TOKENS;
   let exitOnFindings = true;
   let detectors: ReadonlyArray<FirebatDetector> = DEFAULT_DETECTORS;
 
@@ -125,7 +143,7 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
         throw new Error('[firebat] Missing value for --min-tokens');
       }
 
-      minTokens = parseNumber(value, '--min-tokens');
+      minTokens = parseMinTokens(value);
 
       i += 1;
 

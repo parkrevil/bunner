@@ -2,7 +2,7 @@
 
 ## A) Mechanical Status (필수)
 
-- Status: `draft`
+- Status: `in-progress`
 - Blocked reason (status=blocked): `none`
 - Review mode: `self-review`
 
@@ -12,7 +12,7 @@
 
 - Task ID: `260126_01_02_roaring-replacement-plan`
 - Created at (UTC): `2026-01-26`
-- Updated at (UTC): `2026-01-26`
+- Updated at (UTC): `2026-01-29`
 - Owner: `user`
 - Reviewer: `none`
 - Target branch: `main`
@@ -189,11 +189,11 @@ Baseline 기록 (필수):
   - 현재 구현: 내부 `BigIntBitSet` + `createBitSet()` 팩토리
   - 네이티브 `.node` 직접 import 없음
 - Diff evidence:
-  - Changed files (actual): `none (status=draft)`
+  - Changed files (actual): `packages/firebat/src/engine/dataflow.ts`, `packages/firebat/src/engine/types.ts`, `packages/firebat/package.json`
 - Verification evidence:
-  - LOG-VERIFY: `none (status=draft)`
+  - LOG-VERIFY: `not-run`
 - MUST-EVID mapping:
-  - MUST-EVID-2: `Selected BitSet: fastbitset, deps change required`
+  - MUST-EVID-2: `fastbitset 적용 및 BitSet 인터페이스 정렬 완료`
 
 ---
 

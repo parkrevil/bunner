@@ -1,0 +1,90 @@
+import { describe, expect, it } from 'bun:test';
+
+import type { ParsedFile } from '../../../src/engine/types';
+
+import { analyzeDuplication } from '../../../src/features/duplication-analysis';
+import { createProgramFromMap } from '../shared/test-kit';
+
+function createFunctionSource(name: string, value: number): string {
+  return `export function ${name}() {\n  const localValue = ${value};\n  return localValue + 1;\n}`;
+}
+
+function createAnonymousFunctionSource(value: number): string {
+  return `export default function () {\n  const localValue = ${value};\n  return localValue + 1;\n}`;
+}
+
+describe('integration/duplication-analysis', () => {
+  it('should detect clone classes when structures match', () => {
+    // Arrange
+    let sources = new Map<string, string>();
+
+    sources.set('/virtual/dup/one.ts', createFunctionSource('alpha', 1));
+    sources.set('/virtual/dup/two.ts', createFunctionSource('beta', 1));
+
+    // Act
+    let program = createProgramFromMap(sources);
+    let duplication = analyzeDuplication(program, 1);
+    let hasCloneClass = duplication.cloneClasses.some(group => group.items.length >= 2);
+
+    // Assert
+    expect(hasCloneClass).toBe(true);
+  });
+
+  it('should not create clone classes when shapes differ', () => {
+    // Arrange
+    let sources = new Map<string, string>();
+
+    sources.set('/virtual/dup/one.ts', createFunctionSource('alpha', 1));
+    sources.set('/virtual/dup/two.ts', `export function gamma() {\n  return 42;\n}`);
+
+    // Act
+    let program = createProgramFromMap(sources);
+    let duplication = analyzeDuplication(program, 1);
+
+    // Assert
+    expect(duplication.cloneClasses.length).toBe(0);
+  });
+
+  it('should return no findings when input is empty', () => {
+    // Arrange
+    let files: ReadonlyArray<ParsedFile> = [];
+    // Act
+    let duplication = analyzeDuplication(files, 1);
+
+    // Assert
+    expect(duplication.cloneClasses.length).toBe(0);
+  });
+
+  it('should label anonymous functions when headers are missing', () => {
+    // Arrange
+    let sources = new Map<string, string>();
+
+    sources.set('/virtual/dup/anon-one.ts', createAnonymousFunctionSource(1));
+    sources.set('/virtual/dup/anon-two.ts', createAnonymousFunctionSource(1));
+
+    // Act
+    let program = createProgramFromMap(sources);
+    let duplication = analyzeDuplication(program, 1);
+    let headers = duplication.cloneClasses.flatMap(group => group.items.map(item => item.header));
+
+    // Assert
+    expect(headers.some(header => header === 'anonymous')).toBe(true);
+  });
+
+  it('should group duplicates when more than two files match', () => {
+    // Arrange
+    let sources = new Map<string, string>();
+
+    sources.set('/virtual/dup/one.ts', createFunctionSource('alpha', 1));
+    sources.set('/virtual/dup/two.ts', createFunctionSource('beta', 1));
+    sources.set('/virtual/dup/three.ts', createFunctionSource('gamma', 1));
+
+    // Act
+    let program = createProgramFromMap(sources);
+    let duplication = analyzeDuplication(program, 1);
+    let groupSize = duplication.cloneClasses.reduce((max, group) => Math.max(max, group.items.length), 0);
+
+    // Assert
+    expect(groupSize).toBeGreaterThanOrEqual(3);
+  });
+});
