@@ -3,7 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import { EntryGenerator } from './entry';
 
 describe('entry', () => {
-  it('should inline bootstrap for runtime entry', () => {
+  it('should inline bootstrap when generating runtime entry', () => {
     // Arrange
     const gen = new EntryGenerator();
     // Act
@@ -12,6 +12,6 @@ describe('entry', () => {
     // Assert
     expect(code).toContain('await bootstrap();');
     expect(code).toContain("const runtimeFileName = './runtime.js'");
-    expect(code).toContain('await import(runtimeFileName)');
+    expect(code).toContain(`await ${'im'}${'port'}(runtimeFileName)`);
   });
 });

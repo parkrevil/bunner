@@ -164,18 +164,18 @@ Baseline 기록 (필수):
 
 ### Recon (변경 전 필수)
 
-- [ ] `packages/common/src/helpers.ts`의 `inject` 현재 동작(placeholder)과 노출 경로(재-export 여부) 확인
-- [ ] `packages/cli/src/generator/injector.ts`가 provider `inject` 배열을 어떻게 사용해 runtime wiring을 생성하는지 확인
+- [x] `packages/common/src/helpers.ts`의 `inject` 현재 동작(placeholder)과 노출 경로(재-export 여부) 확인
+- [x] `packages/cli/src/generator/injector.ts`가 provider `inject` 배열을 어떻게 사용해 runtime wiring을 생성하는지 확인
 
 ### Implementation
 
-- [ ] `packages/cli/src/analyzer/ast-parser.ts`: inject-call 표면을 call-expression으로 수집/정규화
+- [x] `packages/cli/src/analyzer/ast-parser.ts`: inject-call 표면을 call-expression으로 수집/정규화
   - `inject(Token)`
   - `inject(() => Token)` (TokenThunk 허용)
   - 단, TokenThunk는 런타임에 실행되면 안 되므로 AOT는 thunk를 "호출"하지 않고 AST에서 Token을 기계적으로 해석한다
-- [ ] `packages/cli/src/analyzer/graph/module-graph.ts`: 수집된 inject-call을 provider deps로 편입하고 cycle detection/visibility/scope 검증 대상으로 포함
-- [ ] `packages/cli/src/generator/injector.ts`: build-time wiring 결과가 runtime token resolution 없이 동작하도록(InjectCall 대체) 생성 로직 정렬
-- [ ] `packages/common/src/helpers.ts`: 런타임에서 `inject()` 실행이 관측되면 즉시 실패하도록 처리(= DI-R-008 위반을 조기 탐지)
+- [x] `packages/cli/src/analyzer/graph/module-graph.ts`: 수집된 inject-call을 provider deps로 편입하고 cycle detection/visibility/scope 검증 대상으로 포함
+- [x] `packages/cli/src/generator/injector.ts`: build-time wiring 결과가 runtime token resolution 없이 동작하도록(InjectCall 대체) 생성 로직 정렬
+- [x] `packages/common/src/helpers.ts`: 런타임에서 `inject()` 실행이 관측되면 즉시 실패하도록 처리(= DI-R-008 위반을 조기 탐지)
 
 ### Implementation Details (필수)
 
@@ -199,11 +199,19 @@ Baseline 기록 (필수):
 
 ## 6) Evidence (필수)
 
-- Recon evidence: `none (status=blocked)`
+- Recon evidence: `packages/common/src/helpers.ts`, `packages/cli/src/generator/injector.ts`
 - Diff evidence:
-  - Changed files (actual): `none (status=blocked)`
+  - Changed files (actual):
+    - `packages/cli/src/analyzer/ast-parser.ts`
+    - `packages/cli/src/analyzer/parser-models.ts`
+    - `packages/cli/src/analyzer/graph/module-graph.ts`
+    - `packages/cli/src/analyzer/graph/interfaces.ts`
+    - `packages/cli/src/commands/dev.command.ts`
+    - `packages/cli/src/commands/build.command.ts`
+    - `packages/cli/src/generator/injector.ts`
+    - `packages/common/src/helpers.ts`
 - Verification evidence:
-  - LOG-VERIFY: `none (status=blocked)`
+  - LOG-VERIFY: `pass (bun run verify)`
 - MUST-EVID mapping:
   - MUST-EVID-5: `none (status=blocked)`
   - MUST-EVID-6: `none (status=blocked)`

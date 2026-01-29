@@ -157,16 +157,16 @@ Baseline 기록 (필수):
 
 ### Recon (변경 전 필수)
 
-- [ ] `packages/cli/src/common/config-loader.ts`에서 현재 지원 config 파일명/검증 로직 확인
-- [ ] `packages/cli/src/commands/dev.command.ts`/`packages/cli/src/commands/build.command.ts`에서 config 필드 사용처 확인
+- [x] `packages/cli/src/common/config-loader.ts`에서 현재 지원 config 파일명/검증 로직 확인
+- [x] `packages/cli/src/commands/dev.command.ts`/`packages/cli/src/commands/build.command.ts`에서 config 필드 사용처 확인
 
 ### Implementation
 
-- [ ] `packages/cli/src/common/config-loader.ts`: `bunner.json`/`bunner.jsonc`만 로드하도록 후보 목록/에러 메시지/format을 전환
-- [ ] `packages/cli/src/common/config-loader.ts`: `sourceDir`(required) + `entry`(required path) 검증 추가(특히 `entry`가 `sourceDir` 하위인지)
-- [ ] `packages/cli/src/common/config-loader.ts`: `workers`/`port`/`compiler`/`scanPaths` 파싱 제거
-- [ ] `packages/cli/src/commands/dev.command.ts`: `sourceDir`를 스캔 루트로 사용하고 하드코딩된 `src` 경로를 제거
-- [ ] `packages/cli/src/commands/build.command.ts`: `sourceDir`를 스캔 루트로 사용하고 하드코딩된 `src` 경로를 제거
+- [x] `packages/cli/src/common/config-loader.ts`: `bunner.json`/`bunner.jsonc`만 로드하도록 후보 목록/에러 메시지/format을 전환
+- [x] `packages/cli/src/common/config-loader.ts`: `sourceDir`(required) + `entry`(required path) 검증 추가(특히 `entry`가 `sourceDir` 하위인지)
+- [x] `packages/cli/src/common/config-loader.ts`: `workers`/`port`/`compiler`/`scanPaths` 파싱 제거
+- [x] `packages/cli/src/commands/dev.command.ts`: `sourceDir`를 스캔 루트로 사용하고 하드코딩된 `src` 경로를 제거
+- [x] `packages/cli/src/commands/build.command.ts`: `sourceDir`를 스캔 루트로 사용하고 하드코딩된 `src` 경로를 제거
 
 ### Implementation Details (필수)
 
@@ -187,11 +187,14 @@ Baseline 기록 (필수):
 
 ## 6) Evidence (필수)
 
-- Recon evidence: `none (status=draft)`
+- Recon evidence: `packages/cli/src/common/config-loader.ts`, `packages/cli/src/commands/dev.command.ts`, `packages/cli/src/commands/build.command.ts`
 - Diff evidence:
-  - Changed files (actual): `none (status=draft)`
+  - Changed files (actual):
+    - `packages/cli/src/common/config-loader.ts`
+    - `packages/cli/src/commands/dev.command.ts`
+    - `packages/cli/src/commands/build.command.ts`
 - Verification evidence:
-  - LOG-VERIFY: `none (status=draft)`
+  - LOG-VERIFY: `pass (bun run verify)`
 - MUST-EVID mapping:
   - MUST-EVID-10: `none (status=draft)`
   - MUST-EVID-11: `none (status=draft)`

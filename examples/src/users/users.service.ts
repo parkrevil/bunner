@@ -3,7 +3,6 @@ import { Logger, type LogMetadataValue } from '@bunner/logger';
 
 import type { User } from './interfaces';
 
-import { UserRepository } from './users.repository';
 
 @Injectable({
   scope: 'singleton',

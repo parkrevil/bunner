@@ -144,14 +144,14 @@ Baseline 기록 (필수):
 
 ### Recon (변경 전 필수)
 
-- [ ] `packages/cli/src/watcher/project-watcher.ts`가 어떤 이벤트 타입(`rename`/etc)을 전달하는지 확인
-- [ ] `packages/cli/src/commands/dev.command.ts`의 fileCache 갱신 경로(삭제/수정)와 rebuild 트리거 조건 확인
+- [x] `packages/cli/src/watcher/project-watcher.ts`가 어떤 이벤트 타입(`rename`/etc)을 전달하는지 확인
+- [x] `packages/cli/src/commands/dev.command.ts`의 fileCache 갱신 경로(삭제/수정)와 rebuild 트리거 조건 확인
 
 ### Implementation
 
-- [ ] `packages/cli/src/watcher/project-watcher.ts`: rename/delete 케이스에서 파일 존재 여부 판정이 안정적으로 동작하도록 이벤트 처리 정렬
-- [ ] `packages/cli/src/commands/dev.command.ts`: 삭제된 파일은 캐시에서 제거하고, 변경된 파일은 재분석 후 rebuild 하도록 경로를 결정론적으로 유지
-- [ ] `packages/cli/src/commands/dev.command.ts`: 스캔 루트(`sourceDir`)와 watcher 루트가 동일하게 유지되도록(Plan Step-1 반영) 정렬
+- [x] `packages/cli/src/watcher/project-watcher.ts`: rename/delete 케이스에서 파일 존재 여부 판정이 안정적으로 동작하도록 이벤트 처리 정렬
+- [x] `packages/cli/src/commands/dev.command.ts`: 삭제된 파일은 캐시에서 제거하고, 변경된 파일은 재분석 후 rebuild 하도록 경로를 결정론적으로 유지
+- [x] `packages/cli/src/commands/dev.command.ts`: 스캔 루트(`sourceDir`)와 watcher 루트가 동일하게 유지되도록(Plan Step-1 반영) 정렬
 
 ### Implementation Details (필수)
 
@@ -170,11 +170,13 @@ Baseline 기록 (필수):
 
 ## 6) Evidence (필수)
 
-- Recon evidence: `none (status=draft)`
+- Recon evidence: `packages/cli/src/watcher/project-watcher.ts`, `packages/cli/src/commands/dev.command.ts`
 - Diff evidence:
-  - Changed files (actual): `none (status=draft)`
+  - Changed files (actual):
+    - `packages/cli/src/commands/dev.command.ts`
+    - `packages/cli/src/watcher/project-watcher.ts`
 - Verification evidence:
-  - LOG-VERIFY: `none (status=draft)`
+  - LOG-VERIFY: `pass (bun run verify)`
 - MUST-EVID mapping:
   - MUST-EVID-8: `none (status=draft)`
 

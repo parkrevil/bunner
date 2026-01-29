@@ -74,6 +74,92 @@ function createSingleModuleGraph(): ModuleGraph {
   return graph;
 }
 
+function createInjectableClassMetadata(className: string): ClassMetadata {
+  return {
+    className,
+    heritage: undefined,
+    decorators: [
+      {
+        name: 'Injectable',
+        arguments: [{ visibleTo: 'all', scope: 'singleton' }],
+      },
+    ],
+    constructorParams: [],
+    methods: [],
+    properties: [],
+    imports: {},
+  };
+}
+
+function createMultiModuleGraph(): ModuleGraph {
+  const moduleAPath = '/app/src/a/__module__.ts';
+  const moduleBPath = '/app/src/b/__module__.ts';
+  const classAPath = '/app/src/a/a.service.ts';
+  const classBPath = '/app/src/b/b.service.ts';
+  const fileMap = new Map<string, FileAnalysis>();
+
+  fileMap.set(moduleAPath, {
+    filePath: moduleAPath,
+    classes: [],
+    reExports: [],
+    exports: [],
+    defineModuleCalls: [
+      {
+        callee: 'defineModule',
+        importSource: '@bunner/core',
+        args: [],
+        exportedName: 'appModule',
+      },
+    ],
+    imports: {},
+    moduleDefinition: {
+      name: 'AModule',
+      providers: [],
+      imports: {},
+    },
+  });
+  fileMap.set(moduleBPath, {
+    filePath: moduleBPath,
+    classes: [],
+    reExports: [],
+    exports: [],
+    defineModuleCalls: [
+      {
+        callee: 'defineModule',
+        importSource: '@bunner/core',
+        args: [],
+        exportedName: 'bModule',
+      },
+    ],
+    imports: {},
+    moduleDefinition: {
+      name: 'BModule',
+      providers: [],
+      imports: {},
+    },
+  });
+  fileMap.set(classAPath, {
+    filePath: classAPath,
+    classes: [createInjectableClassMetadata('AService')],
+    reExports: [],
+    exports: [],
+    imports: {},
+  });
+  fileMap.set(classBPath, {
+    filePath: classBPath,
+    classes: [createInjectableClassMetadata('BService')],
+    reExports: [],
+    exports: [],
+    imports: {},
+  });
+
+  const graph = new ModuleGraph(fileMap, '__module__.ts');
+
+  graph.build();
+
+  return graph;
+}
+
 function extractGeneratedBlock(params: GeneratedBlockParams): string {
   const { code, matcher, name } = params;
   const match = code.match(matcher);
@@ -94,7 +180,7 @@ function transpileTsModule(tsSnippet: string): string {
   }).outputText;
 }
 
-describe('manifest', () => {
+describe('ManifestGenerator', () => {
   it('should export a sealed metadata registry when generator runs', () => {
     // Arrange
     const graph = createSingleModuleGraph();
@@ -238,5 +324,66 @@ describe('manifest', () => {
     // Assert
     expect(adapterSpecs.test).toBeDefined();
     expect(handlerIndex).toEqual([{ id: 'test:src/controllers.ts#SampleController.handle' }]);
+  });
+
+  it('should sort modules, diGraph nodes, and handlerIndex deterministically', () => {
+    const graph = createMultiModuleGraph();
+    const gen = new ManifestGenerator();
+    const json = gen.generateJson({
+      graph,
+      projectRoot: '/app',
+      source: { path: '/app/bunner.json', format: 'json' },
+      resolvedConfig: {
+        module: { fileName: '__module__.ts' },
+        sourceDir: 'src',
+        entry: 'src/main.ts',
+      },
+      adapterStaticSpecs: {
+        b: {
+          pipeline: {
+            middlewares: [],
+            guards: [],
+            pipes: [],
+            handler: 'h',
+          },
+          middlewarePhaseOrder: [],
+          supportedMiddlewarePhases: {},
+          entryDecorators: { controller: 'Controller', handler: ['Get'] },
+          runtime: { start: 'start', stop: 'stop' },
+        },
+        a: {
+          pipeline: {
+            middlewares: [],
+            guards: [],
+            pipes: [],
+            handler: 'h',
+          },
+          middlewarePhaseOrder: [],
+          supportedMiddlewarePhases: {},
+          entryDecorators: { controller: 'Controller', handler: ['Get'] },
+          runtime: { start: 'start', stop: 'stop' },
+        },
+      },
+      handlerIndex: [
+        { id: 'b:src/controllers.ts#BController.handle' },
+        { id: 'a:src/controllers.ts#AController.handle' },
+      ],
+    });
+
+    const parsed = JSON.parse(json);
+    const parsedRecord = assertRecordValue(parsed as AnalyzerValue);
+    const modules = assertArrayValue(parsedRecord.modules);
+    const diGraph = assertRecordValue(parsedRecord.diGraph);
+    const nodes = assertArrayValue(diGraph.nodes);
+    const handlerIndex = assertArrayValue(parsedRecord.handlerIndex);
+    const adapterSpecs = assertRecordValue(parsedRecord.adapterStaticSpecs);
+
+    expect(modules.map(entry => assertRecordValue(entry).id)).toEqual(['src/a', 'src/b']);
+    expect(nodes.map(entry => assertRecordValue(entry).id)).toEqual(['AModule::AService', 'BModule::BService']);
+    expect(Object.keys(adapterSpecs)).toEqual(['a', 'b']);
+    expect(handlerIndex.map(entry => assertRecordValue(entry).id)).toEqual([
+      'a:src/controllers.ts#AController.handle',
+      'b:src/controllers.ts#BController.handle',
+    ]);
   });
 });

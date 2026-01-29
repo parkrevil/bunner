@@ -45,6 +45,13 @@ export interface FactoryDependency extends AnalyzerValueRecord {
   readonly end: number;
 }
 
+export interface FactoryInjectCall extends AnalyzerValueRecord {
+  readonly start: number;
+  readonly end: number;
+  readonly tokenKind: 'token' | 'thunk' | 'invalid';
+  readonly token: AnalyzerValue | null;
+}
+
 export interface DecoratorArguments {
   arguments: readonly AnalyzerValue[];
 }

@@ -55,6 +55,20 @@ Enforcement: block
 - Plan: `plans/260126_01_firebat_pure-code-quality.md`
 - Task: `tasks/260126_01_firebat_pure-code-quality/260126_01_01_report-schema-vnext.md`
 
+### 테스트 변경 게이트 (Mechanically Enforced)
+
+테스트 파일이 변경되는 경우, 변경이 “현재 코드에 맞춘 기대값 변경”이 아니라
+명시된 계약(요구사항/스펙/정책)에 근거한 변경임을 Task 문서에서 기계적으로 추적 가능해야 한다.
+
+```text
+Rule: VFY-TST-001
+Target: tasks/**
+Violation: 변경된 파일 중 테스트 파일(`*.spec.ts`, `*.test.ts`, `*.e2e.test.ts`)이 1개 이상 존재하고,
+  동시에 변경된 `tasks/**/*.md` 어디에도 아래 패턴의 라인이 존재하지 않음
+  - Contract reference: <non-empty>
+Enforcement: block
+```
+
 ---
 
 ## 통과 기준 (Pass Criteria)

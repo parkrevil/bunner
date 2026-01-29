@@ -2,7 +2,7 @@
 
 ## A) Mechanical Status (필수)
 
-- Status: `draft`
+- Status: `done`
 - Blocked reason (status=blocked): `none`
 - Review mode: `self-review`
 
@@ -128,19 +128,19 @@ Scope delta rule (MUST):
 
 ## 3) Hard Constraints (Gate, 필수)
 
-- [ ] (skip) status=draft: SSOT(docs/10..50/**) 변경 없음
-- [ ] (skip) status=draft: Public Facade(packages/*/index.ts export) 변경 없음
-- [ ] (skip) status=draft: deps(package.json deps) 변경 없음
-- [ ] (skip) status=draft: `bun run verify` 통과
+- [x] SSOT(docs/10..50/**) 변경 없음
+- [x] Public Facade(packages/*/index.ts export) 변경 없음
+- [x] deps(package.json deps) 변경 없음
+- [x] `bun run verify` 통과
 
 ---
 
 ## 4) Preconditions (필수)
 
 - Plan 상태:
-  - [ ] (skip) status=draft: `status: accepted` 또는 `status: in-progress`
+  - [x] `status: accepted` 또는 `status: in-progress`
 - 필요한 승인(있는 경우):
-  - [ ] (skip) status=draft: Approval Ledger 증거 존재
+  - [x] Approval Ledger 증거 존재
 
 Baseline 기록 (필수):
 
@@ -154,17 +154,17 @@ Baseline 기록 (필수):
 
 ### Recon (변경 전 필수)
 
-- [ ] `packages/core/src/application/application.ts`에서 `createApplication`의 호출 형태(인자 1개)와 entry module 형태 확인
-- [ ] `packages/cli/src/analyzer/ast-parser.ts`가 현재 어떤 call-expression을 수집/표현하는지 확인(수집 결과를 어디서 소비하는지 확인)
+- [x] `packages/core/src/application/application.ts`에서 `createApplication`의 호출 형태(인자 1개)와 entry module 형태 확인
+- [x] `packages/cli/src/analyzer/ast-parser.ts`가 현재 어떤 call-expression을 수집/표현하는지 확인(수집 결과를 어디서 소비하는지 확인)
 
 ### Implementation
 
-- [ ] `packages/cli/src/analyzer/ast-parser.ts`: recognized file에서 `createApplication(...)` call-expression을 식별하고 entry module 참조를 정규화 가능한 형태로 수집
-- [ ] `packages/cli/src/analyzer/ast-parser.ts`: `createApplication` alias/namespace import도 동일하게 식별 가능하도록 import map 기반 해석 추가
+- [x] `packages/cli/src/analyzer/ast-parser.ts`: recognized file에서 `createApplication(...)` call-expression을 식별하고 entry module 참조를 정규화 가능한 형태로 수집
+- [x] `packages/cli/src/analyzer/ast-parser.ts`: `createApplication` alias/namespace import도 동일하게 식별 가능하도록 import map 기반 해석 추가
   - 예: `import { createApplication as ca } from '@bunner/core'; ca(...)`
   - 예: `import * as bunner from '@bunner/core'; bunner.createApplication(...)`
-- [ ] `packages/cli/src/commands/dev.command.ts`: 스캔된 결과에서 app-entry(= entry module)를 단일로 결정하고(다중/미발견은 오류) 이후 파이프라인에 반영
-- [ ] `packages/cli/src/commands/build.command.ts`: 스캔된 결과에서 app-entry(= entry module)를 단일로 결정하고(다중/미발견은 오류) 이후 파이프라인에 반영
+- [x] `packages/cli/src/commands/dev.command.ts`: 스캔된 결과에서 app-entry(= entry module)를 단일로 결정하고(다중/미발견은 오류) 이후 파이프라인에 반영
+- [x] `packages/cli/src/commands/build.command.ts`: 스캔된 결과에서 app-entry(= entry module)를 단일로 결정하고(다중/미발견은 오류) 이후 파이프라인에 반영
 
 ### Implementation Details (필수)
 
@@ -176,19 +176,23 @@ Baseline 기록 (필수):
 ### Verification (Gate)
 
 - Gate command(s):
-  - [ ] (skip) status=draft: `bun run verify`
+  - [x] `bun run verify`
 - Expected result:
-  - [ ] (skip) status=draft: Exit code 0
+  - [x] Exit code 0
 
 ---
 
 ## 6) Evidence (필수)
 
-- Recon evidence: `none (status=draft)`
+- Recon evidence: `packages/core/src/application/application.ts`, `packages/cli/src/analyzer/ast-parser.ts`
+- Contract reference: docs/40_ENGINEERING/VERIFY.md (Rule: VFY-TST-001)
 - Diff evidence:
-  - Changed files (actual): `none (status=draft)`
+  - Changed files (actual):
+    - `packages/cli/src/analyzer/ast-parser.ts`
+    - `packages/cli/src/commands/dev.command.ts`
+    - `packages/cli/src/commands/build.command.ts`
 - Verification evidence:
-  - LOG-VERIFY: `none (status=draft)`
+  - LOG-VERIFY: `pass (bun run verify)`
 - MUST-EVID mapping:
   - MUST-EVID-1: `none (status=draft)`
   - MUST-EVID-2: `none (status=draft)`
@@ -198,16 +202,16 @@ Baseline 기록 (필수):
 ## 7) Spec Drift Check (필수, 완료 전)
 
 - 이번 Task에서 SPEC을 암묵적으로 바꿨는가?
-  - [ ] 아니다
-  - [ ] 그렇다
+  - [x] 아니다
+  - (not selected) 그렇다
 
 ---
 
 ## 7.1) Plan Drift Check (필수, 완료 전)
 
 - 이번 Task가 Plan 범위를 암묵적으로 확장했는가?
-  - [ ] 아니다
-  - [ ] 그렇다
+  - [x] 아니다
+  - (not selected) 그렇다
 
 ---
 
@@ -223,11 +227,11 @@ Baseline 기록 (필수):
 
 ## 9) Completion Criteria (필수)
 
-- [ ] (skip) status=draft: Verification Gate 통과 (`bun run verify`)
-- [ ] (skip) status=draft: `createApplication` 0개/다중 케이스가 진단으로 재현 가능
+- [x] Verification Gate 통과 (`bun run verify`)
+- [x] `createApplication` 0개/다중 케이스가 진단으로 재현 가능
 
 ---
 
 ## 10) Reviewer Mechanical Checklist (리뷰어용, 필수)
 
-- [ ] (skip) status=draft: Plan link/Allowed paths/파일 경로 매칭 규칙 통과
+- [x] Plan link/Allowed paths/파일 경로 매칭 규칙 통과

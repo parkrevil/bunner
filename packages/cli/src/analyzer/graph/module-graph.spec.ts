@@ -3,23 +3,13 @@ import { describe, expect, it } from 'bun:test';
 import type { ClassMetadata } from '../interfaces';
 import type { FileAnalysis } from './interfaces';
 import type { ModuleNode } from './module-node';
+import type {
+  ClassFileAnalysisParams,
+  InjectableClassParams,
+  ModuleFileAnalysisParams,
+} from './module-graph.spec.interfaces';
 
 import { ModuleGraph } from './module-graph';
-
-interface InjectableClassParams {
-  readonly className: string;
-  readonly injectedTokens?: readonly string[];
-}
-
-interface ModuleFileAnalysisParams {
-  readonly filePath: string;
-  readonly name: string;
-}
-
-interface ClassFileAnalysisParams {
-  readonly filePath: string;
-  readonly classes: ClassMetadata[];
-}
 
 const requireNode = (node: ModuleNode | undefined): ModuleNode => {
   if (!node) {
@@ -30,7 +20,7 @@ const requireNode = (node: ModuleNode | undefined): ModuleNode => {
 };
 
 function createInjectableClassMetadata(params: InjectableClassParams): ClassMetadata {
-  const { className, injectedTokens } = params;
+  const { className, injectedTokens, visibleTo, scope } = params;
   const constructorParams = (injectedTokens ?? []).map((token, index) => {
     return {
       name: `p${index}`,
@@ -45,7 +35,7 @@ function createInjectableClassMetadata(params: InjectableClassParams): ClassMeta
     decorators: [
       {
         name: 'Injectable',
-        arguments: [{ visibility: 'exported', lifetime: 'singleton' }],
+        arguments: [{ visibleTo: visibleTo ?? 'all', scope: scope ?? 'singleton' }],
       },
     ],
     constructorParams,
@@ -56,7 +46,7 @@ function createInjectableClassMetadata(params: InjectableClassParams): ClassMeta
 }
 
 function createModuleFileAnalysis(params: ModuleFileAnalysisParams): FileAnalysis {
-  const { filePath, name } = params;
+  const { filePath, name, exportedName } = params;
 
   return {
     filePath,
@@ -69,7 +59,7 @@ function createModuleFileAnalysis(params: ModuleFileAnalysisParams): FileAnalysi
         callee: 'defineModule',
         importSource: '@bunner/core',
         args: [],
-        exportedName: 'appModule',
+        exportedName: exportedName ?? 'appModule',
       },
     ],
     moduleDefinition: {
@@ -92,7 +82,7 @@ function createClassFileAnalysis(params: ClassFileAnalysisParams): FileAnalysis 
   };
 }
 
-describe('module-graph', () => {
+describe('ModuleGraph', () => {
   it('should be deterministic when fileMap insertion order differs', () => {
     // Arrange
     const modulePath = '/app/src/a/__module__.ts';
@@ -163,5 +153,144 @@ describe('module-graph', () => {
 
     // Assert
     expect(() => graph.build()).toThrow(/Circular dependency detected/);
+  });
+
+  it('should throw when visibleTo disallows cross-module injection', () => {
+    const moduleAPath = '/app/src/a/__module__.ts';
+    const moduleBPath = '/app/src/b/__module__.ts';
+    const moduleOtherPath = '/app/src/other/__module__.ts';
+    const serviceAPath = '/app/src/a/a.service.ts';
+    const serviceBPath = '/app/src/b/b.service.ts';
+    const fileMap = new Map<string, FileAnalysis>();
+
+    fileMap.set(moduleAPath, createModuleFileAnalysis({ filePath: moduleAPath, name: 'AModule', exportedName: 'appModule' }));
+    fileMap.set(moduleBPath, createModuleFileAnalysis({ filePath: moduleBPath, name: 'BModule', exportedName: 'bModule' }));
+    fileMap.set(
+      moduleOtherPath,
+      createModuleFileAnalysis({ filePath: moduleOtherPath, name: 'OtherModule', exportedName: 'otherModule' }),
+    );
+    fileMap.set(
+      serviceAPath,
+      createClassFileAnalysis({
+        filePath: serviceAPath,
+        classes: [createInjectableClassMetadata({ className: 'AService', injectedTokens: ['BService'] })],
+      }),
+    );
+    fileMap.set(
+      serviceBPath,
+      createClassFileAnalysis({
+        filePath: serviceBPath,
+        classes: [
+          createInjectableClassMetadata({
+            className: 'BService',
+            visibleTo: [
+              { __bunner_ref: 'otherModule', __bunner_import_source: moduleOtherPath },
+            ],
+          }),
+        ],
+      }),
+    );
+
+    const graph = new ModuleGraph(fileMap, '__module__.ts');
+
+    expect(() => graph.build()).toThrow(/Visibility Violation/);
+  });
+
+  it('should normalize visibleTo allowlist with duplicates', () => {
+    const moduleAPath = '/app/src/a/__module__.ts';
+    const moduleBPath = '/app/src/b/__module__.ts';
+    const serviceAPath = '/app/src/a/a.service.ts';
+    const serviceBPath = '/app/src/b/b.service.ts';
+    const fileMap = new Map<string, FileAnalysis>();
+
+    fileMap.set(moduleAPath, createModuleFileAnalysis({ filePath: moduleAPath, name: 'AModule', exportedName: 'appModule' }));
+    fileMap.set(moduleBPath, createModuleFileAnalysis({ filePath: moduleBPath, name: 'BModule', exportedName: 'bModule' }));
+    fileMap.set(
+      serviceAPath,
+      createClassFileAnalysis({
+        filePath: serviceAPath,
+        classes: [createInjectableClassMetadata({ className: 'AService', injectedTokens: ['BService'] })],
+      }),
+    );
+    fileMap.set(
+      serviceBPath,
+      createClassFileAnalysis({
+        filePath: serviceBPath,
+        classes: [
+          createInjectableClassMetadata({
+            className: 'BService',
+            visibleTo: [
+              { __bunner_ref: 'appModule', __bunner_import_source: moduleAPath },
+              { __bunner_ref: 'appModule', __bunner_import_source: moduleAPath },
+            ],
+          }),
+        ],
+      }),
+    );
+
+    const graph = new ModuleGraph(fileMap, '__module__.ts');
+    const modules = graph.build();
+    const moduleNode = requireNode(modules.get(moduleBPath));
+    const provider = moduleNode.providers.get('BService');
+
+    expect(provider?.visibleTo).toEqual(['AModule']);
+  });
+
+  it('should throw when singleton injects request-scoped provider', () => {
+    const moduleAPath = '/app/src/a/__module__.ts';
+    const moduleBPath = '/app/src/b/__module__.ts';
+    const serviceAPath = '/app/src/a/a.service.ts';
+    const serviceBPath = '/app/src/b/b.service.ts';
+    const fileMap = new Map<string, FileAnalysis>();
+
+    fileMap.set(moduleAPath, createModuleFileAnalysis({ filePath: moduleAPath, name: 'AModule', exportedName: 'appModule' }));
+    fileMap.set(moduleBPath, createModuleFileAnalysis({ filePath: moduleBPath, name: 'BModule', exportedName: 'bModule' }));
+    fileMap.set(
+      serviceAPath,
+      createClassFileAnalysis({
+        filePath: serviceAPath,
+        classes: [createInjectableClassMetadata({ className: 'AService', injectedTokens: ['BService'] })],
+      }),
+    );
+    fileMap.set(
+      serviceBPath,
+      createClassFileAnalysis({
+        filePath: serviceBPath,
+        classes: [
+          createInjectableClassMetadata({ className: 'BService', scope: 'request', visibleTo: 'all' }),
+        ],
+      }),
+    );
+
+    const graph = new ModuleGraph(fileMap, '__module__.ts');
+
+    expect(() => graph.build()).toThrow(/Scope Violation/);
+  });
+
+  it('should throw when inject() tokens are invalid', () => {
+    const modulePath = '/app/src/app/__module__.ts';
+    const filePath = '/app/src/app/file.ts';
+    const fileMap = new Map<string, FileAnalysis>();
+
+    fileMap.set(modulePath, createModuleFileAnalysis({ filePath: modulePath, name: 'AppModule', exportedName: 'appModule' }));
+    fileMap.set(filePath, {
+      filePath,
+      classes: [],
+      reExports: [],
+      exports: [],
+      imports: {},
+      injectCalls: [
+        {
+          tokenKind: 'invalid',
+          token: null,
+          callee: 'inject',
+          importSource: '@bunner/common',
+        },
+      ],
+    });
+
+    const graph = new ModuleGraph(fileMap, '__module__.ts');
+
+    expect(() => graph.build()).toThrow(/inject\(\) token is not statically determinable/);
   });
 });

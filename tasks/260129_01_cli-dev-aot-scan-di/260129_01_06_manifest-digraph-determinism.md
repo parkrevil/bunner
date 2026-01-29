@@ -142,14 +142,14 @@ Baseline 기록 (필수):
 
 ### Recon (변경 전 필수)
 
-- [ ] `packages/cli/src/generator/manifest.ts`에서 현재 `modules`/`diGraph` 정렬 및 출력 구조 확인
-- [ ] dev 경로(`packages/cli/src/commands/dev.command.ts`)에서 manifest 생성 입력(graph/config/source)이 어떤 형태인지 확인
+- [x] `packages/cli/src/generator/manifest.ts`에서 현재 `modules`/`diGraph` 정렬 및 출력 구조 확인
+- [x] dev 경로(`packages/cli/src/commands/dev.command.ts`)에서 manifest 생성 입력(graph/config/source)이 어떤 형태인지 확인
 
 ### Implementation
 
-- [ ] `packages/cli/src/generator/manifest.ts`: `modules`/`diGraph.nodes`/`handlerIndex` 정렬이 id 기준으로 결정론적임을 보장(중복/정렬/compare)
-- [ ] `packages/cli/src/generator/manifest.ts`: config 관련 필드(`sourcePath/sourceFormat/...`)가 입력과 일관되게 기록되도록 동기화
-- [ ] `packages/cli/src/generator/manifest.ts`: 누락된 필드가 있으면 기본값/빈 배열 등으로 결정론적 출력 보장
+- [x] `packages/cli/src/generator/manifest.ts`: `modules`/`diGraph.nodes`/`handlerIndex` 정렬이 id 기준으로 결정론적임을 보장(중복/정렬/compare)
+- [x] `packages/cli/src/generator/manifest.ts`: config 관련 필드(`sourcePath/sourceFormat/...`)가 입력과 일관되게 기록되도록 동기화
+- [x] `packages/cli/src/generator/manifest.ts`: 누락된 필드가 있으면 기본값/빈 배열 등으로 결정론적 출력 보장
 
 ### Implementation Details (필수)
 
@@ -168,11 +168,12 @@ Baseline 기록 (필수):
 
 ## 6) Evidence (필수)
 
-- Recon evidence: `none (status=draft)`
+- Recon evidence: `packages/cli/src/generator/manifest.ts`, `packages/cli/src/commands/dev.command.ts`
 - Diff evidence:
-  - Changed files (actual): `none (status=draft)`
+  - Changed files (actual):
+    - `packages/cli/src/generator/manifest.ts`
 - Verification evidence:
-  - LOG-VERIFY: `none (status=draft)`
+  - LOG-VERIFY: `pass (bun run verify)`
 - MUST-EVID mapping:
   - MUST-EVID-8: `none (status=draft)`
 

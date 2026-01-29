@@ -155,17 +155,18 @@ Baseline 기록 (필수):
 
 ### Recon (변경 전 필수)
 
-- [ ] `packages/cli/src/analyzer/module-discovery.ts`가 현재 module root를 어떻게 찾는지(파일명 기준/정렬/오너십) 확인
-- [ ] `packages/cli/src/analyzer/graph/module-graph.ts`가 orphan 처리/defineModule 규칙을 어떤 메시지로 실패시키는지 확인
-- [ ] `packages/cli/src/analyzer/ast-parser.ts`가 defineModule call을 수집하는지(별칭/namespace import 포함) 확인
+- [x] `packages/cli/src/analyzer/module-discovery.ts`가 현재 module root를 어떻게 찾는지(파일명 기준/정렬/오너십) 확인
+- [x] `packages/cli/src/analyzer/graph/module-graph.ts`가 orphan 처리/defineModule 규칙을 어떤 메시지로 실패시키는지 확인
+- [x] `packages/cli/src/analyzer/ast-parser.ts`가 defineModule call을 수집하는지(별칭/namespace import 포함) 확인
 
 ### Implementation
 
-- [ ] `packages/cli/src/analyzer/module-discovery.ts`: 스캔 루트가 `sourceDir`(Plan Step-1) 기준으로 주입될 수 있도록 입력/호출 지점을 정렬
-- [ ] `packages/cli/src/analyzer/module-discovery.ts`: `module.fileName` 전수조사와 “directory-first, deterministic” 규칙을 명시적으로 보장(정렬/중복/에러 메시지)
-- [ ] `packages/cli/src/analyzer/graph/module-graph.ts`: orphan(귀속 불가/다중 귀속) 발생 시 오류 메시지/진단을 결정론적으로 통일
-- [ ] `packages/cli/src/analyzer/ast-parser.ts`: defineModule call-expression 수집(별칭/namespace import 포함)
-- [ ] `packages/cli/src/analyzer/graph/module-graph.ts`: defineModule call 단일성 + module marker export 여부 검증
+- [x] `packages/cli/src/analyzer/module-discovery.ts`: 스캔 루트가 `sourceDir`(Plan Step-1) 기준으로 주입될 수 있도록 입력/호출 지점을 정렬
+- [x] `packages/cli/src/analyzer/module-discovery.ts`: `module.fileName` 전수조사와 “directory-first, deterministic” 규칙을 명시적으로 보장(정렬/중복/에러 메시지)
+- [x] `packages/cli/src/analyzer/graph/module-graph.ts`: orphan(귀속 불가/다중 귀속) 발생 시 오류 메시지/진단을 결정론적으로 통일
+- [x] `packages/cli/src/analyzer/ast-parser.ts`: defineModule call-expression 수집(별칭/namespace import 포함)
+- [x] `packages/cli/src/analyzer/parser-models.ts`: defineModule 수집 결과 모델/필드 정렬
+- [x] `packages/cli/src/analyzer/graph/module-graph.ts`: defineModule call 단일성 + module marker export 여부 검증
 
 ### Implementation Details (필수)
 
@@ -173,6 +174,7 @@ Baseline 기록 (필수):
 - `packages/cli/src/analyzer/module-discovery.ts`: orphan 판정 결과가 동일 입력에서 항상 동일하도록(집합/정렬) 출력/오류 메시지 구성
 - `packages/cli/src/analyzer/graph/module-graph.ts`: Step-3에서의 “defineModule 2회” 등 규칙 위반을 `throw new Error(...)` 메시지 포맷으로 통일하고, module root 파일 경로를 포함
 - `packages/cli/src/analyzer/ast-parser.ts`: defineModule alias/namespace import(`@bunner/core`)를 판별하고 call-expression을 수집
+- `packages/cli/src/analyzer/parser-models.ts`: defineModule call 수집 모델이 내보내는 필드 정의를 정렬/확정
 - `packages/cli/src/analyzer/graph/module-graph.ts`: module file에 defineModule call이 0개/2개 이상이면 build error, module marker export가 없으면 build error
 
 ### Verification (Gate)
@@ -186,11 +188,13 @@ Baseline 기록 (필수):
 
 ## 6) Evidence (필수)
 
-- Recon evidence: `none (status=draft)`
+- Recon evidence: `packages/cli/src/analyzer/module-discovery.ts`, `packages/cli/src/analyzer/graph/module-graph.ts`, `packages/cli/src/analyzer/ast-parser.ts`
 - Diff evidence:
-  - Changed files (actual): `none (status=draft)`
+  - Changed files (actual):
+    - `packages/cli/src/analyzer/ast-parser.ts`
+    - `packages/cli/src/analyzer/parser-models.ts`
 - Verification evidence:
-  - LOG-VERIFY: `none (status=draft)`
+  - LOG-VERIFY: `pass (bun run verify)`
 - MUST-EVID mapping:
   - MUST-EVID-3: `none (status=draft)`
   - MUST-EVID-4: `none (status=draft)`

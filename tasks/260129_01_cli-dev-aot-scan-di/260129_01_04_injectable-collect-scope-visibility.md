@@ -154,14 +154,14 @@ Baseline 기록 (필수):
 
 ### Recon (변경 전 필수)
 
-- [ ] `packages/cli/src/analyzer/graph/module-graph.ts`에서 Injectable 옵션(visibility/lifetime 등) 파싱/기본값/검증 흐름 확인
-- [ ] `packages/cli/src/analyzer/ast-parser.ts`에서 decorator arguments가 어떤 타입(`AnalyzerValue`)로 표현되는지 확인
+- [x] `packages/cli/src/analyzer/graph/module-graph.ts`에서 Injectable 옵션(visibility/lifetime 등) 파싱/기본값/검증 흐름 확인
+- [x] `packages/cli/src/analyzer/ast-parser.ts`에서 decorator arguments가 어떤 타입(`AnalyzerValue`)로 표현되는지 확인
 
 ### Implementation
 
-- [ ] `packages/cli/src/analyzer/ast-parser.ts`: `@Injectable({ visibleTo, scope })` 형태에서 `visibleTo`/`scope`를 정적으로 추출 가능하도록 metadata 모델 확장
-- [ ] `packages/cli/src/analyzer/graph/module-graph.ts`: Injectable 옵션 해석을 `visibleTo` allowlist + scope 규칙으로 정렬하고, 비결정/위반 시 build failure로 통일
-- [ ] `packages/cli/src/analyzer/graph/module-graph.ts`: module-level visibility allowlist가 섞이거나(혼합) 정규화가 비결정이면 build failure로 통일
+- [x] `packages/cli/src/analyzer/ast-parser.ts`: `@Injectable({ visibleTo, scope })` 형태에서 `visibleTo`/`scope`를 정적으로 추출 가능하도록 metadata 모델 확장
+- [x] `packages/cli/src/analyzer/graph/module-graph.ts`: Injectable 옵션 해석을 `visibleTo` allowlist + scope 규칙으로 정렬하고, 비결정/위반 시 build failure로 통일
+- [x] `packages/cli/src/analyzer/graph/module-graph.ts`: module-level visibility allowlist가 섞이거나(혼합) 정규화가 비결정이면 build failure로 통일
 
 ### Implementation Details (필수)
 
@@ -180,11 +180,15 @@ Baseline 기록 (필수):
 
 ## 6) Evidence (필수)
 
-- Recon evidence: `none (status=draft)`
+- Recon evidence: `packages/cli/src/analyzer/graph/module-graph.ts`, `packages/cli/src/analyzer/ast-parser.ts`
 - Diff evidence:
-  - Changed files (actual): `none (status=draft)`
+  - Changed files (actual):
+    - `packages/cli/src/analyzer/ast-parser.ts`
+    - `packages/cli/src/analyzer/parser-models.ts`
+    - `packages/cli/src/analyzer/graph/module-graph.ts`
+    - `packages/cli/src/analyzer/graph/interfaces.ts`
 - Verification evidence:
-  - LOG-VERIFY: `none (status=draft)`
+  - LOG-VERIFY: `pass (bun run verify)`
 - MUST-EVID mapping:
   - MUST-EVID-9: `none (status=draft)`
 

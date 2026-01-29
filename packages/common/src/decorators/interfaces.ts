@@ -1,6 +1,6 @@
-import type { InjectableScope, InjectableVisibility } from './types';
+import type { InjectableScope, InjectableVisibleTo } from './types';
 
 export interface InjectableOptions {
   scope?: InjectableScope;
-  visibleTo?: InjectableVisibility;
+  visibleTo?: InjectableVisibleTo;
 }

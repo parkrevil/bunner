@@ -1,3 +1,4 @@
+import type { ClassMetadata, ImportEntry } from './interfaces';
 import type { AnalyzerValue, AnalyzerValueArray, AnalyzerValueRecord, ReExportName } from './types';
 
 export interface ReExport {
@@ -10,7 +11,7 @@ export interface ModuleDefinition {
   name?: string | undefined;
   nameDeclared?: boolean | undefined;
   providers: AnalyzerValueArray;
-  adapters?: import('./types').AnalyzerValue | undefined;
+  adapters?: AnalyzerValue | undefined;
   imports: Record<string, string>;
 }
 
@@ -32,15 +33,26 @@ export interface DefineModuleCall {
   exportedName?: string | undefined;
 }
 
+export interface InjectCall {
+  tokenKind: 'token' | 'thunk' | 'invalid';
+  token: AnalyzerValue | null;
+  callee?: string | undefined;
+  importSource?: string | undefined;
+  start?: number | undefined;
+  end?: number | undefined;
+  filePath?: string | undefined;
+}
+
 export interface ParseResult {
-  classes: import('./interfaces').ClassMetadata[];
+  classes: ClassMetadata[];
   reExports: ReExport[];
   exports: string[];
   imports?: Record<string, string> | undefined;
-  importEntries?: import('./interfaces').ImportEntry[] | undefined;
+  importEntries?: ImportEntry[] | undefined;
   exportedValues?: AnalyzerValueRecord | undefined;
   localValues?: AnalyzerValueRecord | undefined;
   moduleDefinition?: ModuleDefinition | undefined;
   createApplicationCalls?: CreateApplicationCall[] | undefined;
   defineModuleCalls?: DefineModuleCall[] | undefined;
+  injectCalls?: InjectCall[] | undefined;
 }

@@ -2,11 +2,12 @@ import { parseSync } from 'oxc-parser';
 import { dirname, resolve } from 'path';
 
 import type { ClassMetadata, DecoratorMetadata, ImportEntry } from './interfaces';
-import type { CreateApplicationCall, DefineModuleCall, ModuleDefinition, ParseResult, ReExport } from './parser-models';
+import type { CreateApplicationCall, DefineModuleCall, InjectCall, ModuleDefinition, ParseResult, ReExport } from './parser-models';
 import type {
   AnalyzerValue,
   AnalyzerValueRecord,
   ExtractedParam,
+  FactoryInjectCall,
   FactoryDependency,
   NodeRecord,
   ReExportName,
@@ -14,9 +15,15 @@ import type {
 } from './types';
 
 import { AstTypeResolver } from './ast-type-resolver';
+import { compareCodePoint } from '../common';
 
 const UNKNOWN_TYPE_NAME = 'Unknown';
 const UNKNOWN_CALLEE_NAME = 'unknown';
+
+interface InjectTokenResolution {
+  tokenKind: 'token' | 'thunk';
+  token: AnalyzerValue;
+}
 
 function isNonEmptyString(value: string | null | undefined): value is string {
   return value !== null && value !== undefined && value !== '';
@@ -40,17 +47,22 @@ function isNodeRecord(record: AnalyzerValueRecord): record is NodeRecord {
 
 export class AstParser {
   private currentCode: string = '';
+  private currentFilePath: string = '';
   private typeResolver = new AstTypeResolver();
   private currentImports: Record<string, string> = {};
   private currentImportSources: Record<string, string> = {};
+  private currentInjectCalls: InjectCall[] = [];
 
   parse(filename: string, code: string): ParseResult {
+    this.currentFilePath = filename;
     this.currentCode = code;
+    this.currentInjectCalls = [];
 
     const result = parseSync(filename, code);
     const classes: ClassMetadata[] = [];
     const reExports: ReExport[] = [];
     const localExports: string[] = [];
+    const exportMappings: ReExportName[] = [];
     const imports: Record<string, string> = {};
     const importEntries: ImportEntry[] = [];
     const localValues: AnalyzerValueRecord = {};
@@ -131,7 +143,7 @@ export class AstParser {
             }
 
             if (spec.type === 'ImportSpecifier') {
-              const importedNode = this.asNode((spec as NodeRecord).imported);
+              const importedNode = this.asNode((spec).imported);
               const importedName = importedNode
                 ? this.getString(importedNode, 'name') ?? this.getString(importedNode, 'value')
                 : null;
@@ -162,6 +174,13 @@ export class AstParser {
         if (defineCall) {
           this.upsertDefineModuleCall(defineModuleCalls, defineCall);
         }
+      }
+
+      if (node.type === 'ExpressionStatement') {
+        this.parseExpression(node.expression);
+        traverse(node.expression);
+
+        return;
       }
 
       if (node.type === 'ExportAllDeclaration') {
@@ -265,9 +284,11 @@ export class AstParser {
               localValues[declName] = initValue;
               exportedValues[declName] = initValue;
 
-              if (decl.init && this.asNode(decl.init)?.type === 'CallExpression') {
+              const initNode = this.asNode(decl.init);
+
+              if (initNode?.type === 'CallExpression') {
                 const defineCall = this.extractDefineModuleCall(
-                  decl.init as NodeRecord,
+                  initNode,
                   defineModuleAliases,
                   defineModuleNamespaces,
                 );
@@ -275,6 +296,7 @@ export class AstParser {
                 if (defineCall) {
                   defineCall.localName = declName;
                   defineCall.exportedName = declName;
+
                   this.upsertDefineModuleCall(defineModuleCalls, defineCall);
                 }
               }
@@ -319,9 +341,40 @@ export class AstParser {
             }
 
             localExports.push(exportedName);
+            exportMappings.push({ local: localName, exported: exportedName });
 
             if (Object.prototype.hasOwnProperty.call(localValues, localName)) {
               exportedValues[exportedName] = localValues[localName];
+            }
+          }
+        }
+
+        return;
+      }
+
+      if (node.type === 'ExportDefaultDeclaration') {
+        const decl = this.asNode(node.declaration);
+
+        if (decl?.type === 'CallExpression') {
+          const defineCall = this.extractDefineModuleCall(decl, defineModuleAliases, defineModuleNamespaces);
+
+          if (defineCall) {
+            defineCall.exportedName = 'default';
+
+            this.upsertDefineModuleCall(defineModuleCalls, defineCall);
+          }
+
+          return;
+        }
+
+        if (decl?.type === 'Identifier') {
+          const name = this.getString(decl, 'name');
+
+          if (isNonEmptyString(name)) {
+            const existing = defineModuleCalls.find(call => call.localName === name);
+
+            if (existing) {
+              existing.exportedName = 'default';
             }
           }
         }
@@ -349,15 +402,18 @@ export class AstParser {
           if (decl?.init !== undefined) {
             localValues[declName] = this.parseExpression(decl.init);
 
-            if (decl.init && this.asNode(decl.init)?.type === 'CallExpression') {
+            const initNode = this.asNode(decl.init);
+
+            if (initNode?.type === 'CallExpression') {
               const defineCall = this.extractDefineModuleCall(
-                decl.init as NodeRecord,
+                initNode,
                 defineModuleAliases,
                 defineModuleNamespaces,
               );
 
               if (defineCall) {
                 defineCall.localName = declName;
+
                 this.upsertDefineModuleCall(defineModuleCalls, defineCall);
               }
             }
@@ -393,17 +449,34 @@ export class AstParser {
 
     traverse(result.program);
 
-    if (defineModuleCalls.length > 0 && localExports.length > 0) {
-      const exportSet = new Set(localExports);
+    if (defineModuleCalls.length > 0 && exportMappings.length > 0) {
+      const exportMap = new Map<string, string[]>();
+
+      exportMappings.forEach(mapping => {
+        const entries = exportMap.get(mapping.local) ?? [];
+
+        entries.push(mapping.exported);
+        exportMap.set(mapping.local, entries);
+      });
 
       defineModuleCalls.forEach(call => {
-        if (call.exportedName) {
+        if (typeof call.exportedName === 'string') {
           return;
         }
 
-        if (call.localName && exportSet.has(call.localName)) {
-          call.exportedName = call.localName;
+        if (!isNonEmptyString(call.localName)) {
+          return;
         }
+
+        const exportedNames = exportMap.get(call.localName);
+
+        if (!exportedNames || exportedNames.length === 0) {
+          return;
+        }
+
+        const sorted = Array.from(new Set(exportedNames)).sort(compareCodePoint);
+
+        call.exportedName = sorted[0];
       });
     }
 
@@ -418,6 +491,7 @@ export class AstParser {
       moduleDefinition,
       createApplicationCalls,
       defineModuleCalls,
+      injectCalls: this.currentInjectCalls,
     };
   }
 
@@ -426,6 +500,8 @@ export class AstParser {
     createApplicationAliases: Set<string>,
     createApplicationNamespaces: Set<string>,
   ): CreateApplicationCall | null {
+    // MUST: MUST-1
+    // MUST: MUST-2
     const callee = this.asNode(node.callee);
     const argsValue = asAnalyzerArray(node.arguments);
     const args = (argsValue ?? []).map(arg => this.parseExpression(arg));
@@ -441,9 +517,15 @@ export class AstParser {
         return null;
       }
 
+      const importSource = this.currentImportSources[name];
+
+      if (importSource !== '@bunner/core') {
+        return null;
+      }
+
       return {
         callee: name,
-        importSource: this.currentImportSources[name],
+        importSource,
         args,
         start: typeof node.start === 'number' ? node.start : undefined,
         end: typeof node.end === 'number' ? node.end : undefined,
@@ -464,9 +546,15 @@ export class AstParser {
         return null;
       }
 
+      const importSource = this.currentImportSources[objectName];
+
+      if (importSource !== '@bunner/core') {
+        return null;
+      }
+
       return {
         callee: `${objectName}.createApplication`,
-        importSource: this.currentImportSources[objectName],
+        importSource,
         args,
         start: typeof node.start === 'number' ? node.start : undefined,
         end: typeof node.end === 'number' ? node.end : undefined,
@@ -561,11 +649,11 @@ export class AstParser {
       return;
     }
 
-    if (call.localName) {
+    if (typeof call.localName === 'string') {
       existing.localName = call.localName;
     }
 
-    if (call.exportedName) {
+    if (typeof call.exportedName === 'string') {
       existing.exportedName = call.exportedName;
     }
   }
@@ -1338,6 +1426,17 @@ export class AstParser {
 
         const argsValue = asAnalyzerArray(expr.arguments);
         const args = argsValue ?? [];
+        const injectCall = this.parseInjectCall(calleeName, importSource, args, expr);
+
+        if (injectCall) {
+          this.currentInjectCalls.push(injectCall);
+
+          return {
+            __bunner_inject: true,
+            tokenKind: injectCall.tokenKind,
+            token: injectCall.token,
+          };
+        }
 
         if (calleeName === 'forwardRef' && args.length > 0) {
           const arg = this.asNode(args[0]);
@@ -1365,8 +1464,13 @@ export class AstParser {
         const end = typeof expr.end === 'number' ? expr.end : start;
         const factoryCode = this.currentCode.slice(start, end);
         const deps = this.extractDependencies(expr, start);
+        const injectCalls = this.extractFactoryInjectCalls(expr, start);
 
-        return { __bunner_factory_code: factoryCode, __bunner_factory_deps: deps };
+        return {
+          __bunner_factory_code: factoryCode,
+          __bunner_factory_deps: deps,
+          __bunner_factory_injects: injectCalls,
+        };
       }
 
       case 'SpreadElement':
@@ -1444,6 +1548,191 @@ export class AstParser {
     visit(funcNode.body);
 
     return deps;
+  }
+
+  private extractFactoryInjectCalls(funcNode: NodeRecord, offset: number): FactoryInjectCall[] {
+    const injectCalls: FactoryInjectCall[] = [];
+
+    const visit = (n: AnalyzerValue): void => {
+      const node = this.asNode(n);
+
+      if (!node) {
+        return;
+      }
+
+      if (node.type === 'CallExpression') {
+        const callee = this.asNode(node.callee);
+        const argsValue = asAnalyzerArray(node.arguments);
+        const args = argsValue ?? [];
+        let calleeName = '';
+        let importSource: string | undefined = undefined;
+
+        if (callee?.type === 'Identifier') {
+          const name = this.getString(callee, 'name');
+
+          if (isNonEmptyString(name)) {
+            calleeName = name;
+            importSource = this.currentImports[name];
+          }
+        }
+
+        if (callee?.type === 'MemberExpression') {
+          const objectNode = this.asNode(callee.object);
+          const propertyNode = this.asNode(callee.property);
+          const objectName = objectNode?.type === 'Identifier' ? this.getString(objectNode, 'name') : null;
+          const propertyName = propertyNode ? this.getString(propertyNode, 'name') : null;
+
+          if (isNonEmptyString(objectName) && isNonEmptyString(propertyName)) {
+            calleeName = `${objectName}.${propertyName}`;
+            importSource = this.currentImports[objectName];
+          }
+        }
+
+        if (isNonEmptyString(calleeName)) {
+          const injectCall = this.parseInjectCall(calleeName, importSource, args, node);
+
+          if (injectCall) {
+            const start = typeof node.start === 'number' ? node.start - offset : null;
+            const end = typeof node.end === 'number' ? node.end - offset : null;
+
+            this.currentInjectCalls.push(injectCall);
+
+            if (start !== null && end !== null) {
+              injectCalls.push({
+                start,
+                end,
+                token: injectCall.token,
+                tokenKind: injectCall.tokenKind,
+              });
+            }
+          }
+        }
+      }
+
+      Object.keys(node).forEach(key => {
+        visit(node[key]);
+      });
+    };
+
+    visit(funcNode.body);
+
+    return injectCalls;
+  }
+
+  private parseInjectCall(
+    calleeName: string,
+    importSource: string | undefined,
+    args: AnalyzerValue[],
+    node: NodeRecord,
+  ): InjectCall | null {
+    if (importSource !== '@bunner/common') {
+      return null;
+    }
+
+    if (calleeName !== 'inject' && !calleeName.endsWith('.inject')) {
+      return null;
+    }
+
+    if (args.length !== 1) {
+      return {
+        tokenKind: 'invalid',
+        token: null,
+        callee: calleeName,
+        importSource,
+        start: typeof node.start === 'number' ? node.start : undefined,
+        end: typeof node.end === 'number' ? node.end : undefined,
+        filePath: this.currentFilePath,
+      };
+    }
+
+    const tokenResult = this.parseInjectToken(args[0]);
+
+    if (!tokenResult) {
+      return {
+        tokenKind: 'invalid',
+        token: null,
+        callee: calleeName,
+        importSource,
+        start: typeof node.start === 'number' ? node.start : undefined,
+        end: typeof node.end === 'number' ? node.end : undefined,
+        filePath: this.currentFilePath,
+      };
+    }
+
+    return {
+      tokenKind: tokenResult.tokenKind,
+      token: tokenResult.token,
+      callee: calleeName,
+      importSource,
+      start: typeof node.start === 'number' ? node.start : undefined,
+      end: typeof node.end === 'number' ? node.end : undefined,
+      filePath: this.currentFilePath,
+    };
+  }
+
+  private parseInjectToken(value: AnalyzerValue): InjectTokenResolution | null {
+    const node = this.asNode(value);
+
+    if (!node) {
+      return null;
+    }
+
+    if (node.type === 'Identifier') {
+      return { tokenKind: 'token', token: this.parseExpression(value) };
+    }
+
+    if (node.type === 'ArrowFunctionExpression') {
+      const identifier = this.extractReturnedIdentifier(node.body);
+
+      if (identifier) {
+        return { tokenKind: 'thunk', token: this.parseExpression(identifier) };
+      }
+    }
+
+    if (node.type === 'FunctionExpression') {
+      const identifier = this.extractReturnedIdentifier(node.body);
+
+      if (identifier) {
+        return { tokenKind: 'thunk', token: this.parseExpression(identifier) };
+      }
+    }
+
+    return null;
+  }
+
+  private extractReturnedIdentifier(value: AnalyzerValue): AnalyzerValue | null {
+    const node = this.asNode(value);
+
+    if (!node) {
+      return null;
+    }
+
+    if (node.type === 'Identifier') {
+      return value;
+    }
+
+    if (node.type !== 'BlockStatement') {
+      return null;
+    }
+
+    const statements = asAnalyzerArray(node.body) ?? [];
+
+    for (const statementValue of statements) {
+      const statement = this.asNode(statementValue);
+
+      if (statement?.type !== 'ReturnStatement') {
+        continue;
+      }
+
+      const argument = statement.argument;
+      const argumentNode = this.asNode(argument);
+
+      if (argumentNode?.type === 'Identifier') {
+        return argument;
+      }
+    }
+
+    return null;
   }
 
   private extractParam(paramNodeValue: AnalyzerValue): ExtractedParam | null {

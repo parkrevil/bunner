@@ -1,4 +1,12 @@
-export * from './interfaces';
-export * from './decorators';
-
-export * from './compiler';
+export {
+  IsString,
+  IsNumber,
+  IsInt,
+  IsBoolean,
+  IsArray,
+  IsOptional,
+  IsIn,
+  Min,
+  Max,
+  ValidateNested,
+} from './decorators';
