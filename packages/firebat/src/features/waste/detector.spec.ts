@@ -663,6 +663,6 @@ const createProgram = (fileName: string, sourceText: string): ParsedFile[] => {
   return [parseSource(fileName, sourceText)];
 };
 
-const hasFinding = (findings: ReadonlyArray<WasteFinding>, kind: string, token: string) => {
-  return findings.some(finding => finding.kind === kind && finding.label.includes(token));
+const hasFinding = (findings: ReadonlyArray<WasteFinding>, kind: string, snippet: string) => {
+  return findings.some(finding => finding.kind === kind && finding.label.includes(snippet));
 };

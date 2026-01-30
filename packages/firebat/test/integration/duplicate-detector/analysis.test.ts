@@ -39,7 +39,7 @@ describe('integration/duplicate-detector', () => {
     expect(hasGroup).toBe(true);
   });
 
-  it('should not group functions when minTokens is too high', () => {
+  it('should not group functions when minSize is too high', () => {
     // Arrange
     let sources = new Map<string, string>();
 

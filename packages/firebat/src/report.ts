@@ -8,10 +8,12 @@ import type {
   DependencyFanStat,
   DuplicateGroup,
   EarlyReturnItem,
+  ForwardingFinding,
   FirebatReport,
   NestingItem,
   NoopFinding,
   OutputFormat,
+  TypecheckItem,
   WasteFinding,
 } from './types';
 
@@ -26,7 +28,7 @@ const formatDuplicateGroupText = (group: DuplicateGroup): string => {
     const rel = path.relative(process.cwd(), item.filePath);
     const start = toPos(item.span.start.line, item.span.start.column);
 
-    lines.push(`  - ${item.kind}: ${item.header} @ ${rel}:${start} (tokens: ${item.tokens})`);
+    lines.push(`  - ${item.kind}: ${item.header} @ ${rel}:${start} (size: ${item.size})`);
   }
 
   return lines.join('\n');
@@ -41,7 +43,7 @@ const formatDuplicateGroupTextWithLabel = (label: string, group: DuplicateGroup)
     const rel = path.relative(process.cwd(), item.filePath);
     const start = toPos(item.span.start.line, item.span.start.column);
 
-    lines.push(`  - ${item.kind}: ${item.header} @ ${rel}:${start} (tokens: ${item.tokens})`);
+    lines.push(`  - ${item.kind}: ${item.header} @ ${rel}:${start} (size: ${item.size})`);
   }
 
   return lines.join('\n');
@@ -167,6 +169,13 @@ const formatNoopFindingText = (finding: NoopFinding): string => {
   return `  - ${finding.kind} @ ${rel}:${start} confidence=${finding.confidence} evidence=${finding.evidence}`;
 };
 
+const formatForwardingFindingText = (finding: ForwardingFinding): string => {
+  const rel = path.relative(process.cwd(), finding.filePath);
+  const start = toPos(finding.span.start.line, finding.span.start.column);
+
+  return `  - ${finding.kind}: ${finding.header} @ ${rel}:${start} depth=${finding.depth} evidence=${finding.evidence}`;
+};
+
 const formatApiDriftGroupText = (group: ApiDriftGroup): string => {
   const shape = group.standardCandidate;
   const outliers = group.outliers.map(outlier => outlier.shape);
@@ -177,16 +186,30 @@ const formatApiDriftGroupText = (group: ApiDriftGroup): string => {
   return `  - ${group.label}: standard=(${shape.paramsCount},${shape.optionalCount},${shape.returnKind},${shape.async ? 'async' : 'sync'}) outliers=${group.outliers.length}${outlierSummary.length > 0 ? ` ${outlierSummary}` : ''}`;
 };
 
+const formatTypecheckItemText = (item: TypecheckItem): string => {
+  const rel = item.filePath.length > 0 ? path.relative(process.cwd(), item.filePath) : '<unknown>';
+  const start = toPos(item.span.start.line, item.span.start.column);
+
+  return `  - ${item.severity} ${item.code}: ${item.message} @ ${rel}:${start}`;
+};
+
 const formatText = (report: FirebatReport): string => {
   const lines: string[] = [];
   const detectors = report.meta.detectors.join(',');
   const duplicates = report.analyses.duplicates;
   const waste = report.analyses.waste;
   const selectedDetectors = new Set(report.meta.detectors);
+  const typecheckItems = report.analyses.typecheck.items;
+  const typecheckErrors = typecheckItems.filter(item => item.severity === 'error').length;
+  const typecheckWarnings = typecheckItems.filter(item => item.severity === 'warning').length;
 
   lines.push(
-    `[firebat] engine=${report.meta.engine} version=${report.meta.version} detectors=${detectors} duplicates=${duplicates.length} waste=${waste.length}`,
+    `[firebat] engine=${report.meta.engine} version=${report.meta.version} detectors=${detectors} minSize=${report.meta.minSize} duplicates=${duplicates.length} waste=${waste.length} typecheckErrors=${typecheckErrors} typecheckWarnings=${typecheckWarnings}`,
   );
+
+  if (selectedDetectors.has('typecheck')) {
+    lines.push(`[typecheck] items=${typecheckItems.length} status=${report.analyses.typecheck.status} tool=${report.analyses.typecheck.tool}`);
+  }
 
   if (selectedDetectors.has('dependencies')) {
     lines.push(
@@ -214,6 +237,10 @@ const formatText = (report: FirebatReport): string => {
     lines.push(`[noop] findings=${report.analyses.noop.findings.length}`);
   }
 
+  if (selectedDetectors.has('forwarding')) {
+    lines.push(`[forwarding] findings=${report.analyses.forwarding.findings.length} maxDepth=${report.meta.maxForwardDepth}`);
+  }
+
   if (selectedDetectors.has('api-drift')) {
     lines.push(`[api-drift] groups=${report.analyses.apiDrift.groups.length}`);
   }
@@ -226,6 +253,19 @@ const formatText = (report: FirebatReport): string => {
   for (const finding of waste) {
     lines.push('');
     lines.push(formatWasteText(finding));
+  }
+
+  if (selectedDetectors.has('typecheck')) {
+    lines.push('');
+    lines.push(`[typecheck] items=${typecheckItems.length}`);
+
+    for (const item of typecheckItems) {
+      lines.push(formatTypecheckItemText(item));
+
+      if (item.codeFrame.length > 0) {
+        lines.push(item.codeFrame.split('\n').map(line => `      ${line}`).join('\n'));
+      }
+    }
   }
 
   if (selectedDetectors.has('dependencies')) {
@@ -291,6 +331,17 @@ const formatText = (report: FirebatReport): string => {
 
     for (const group of groups) {
       lines.push(formatApiDriftGroupText(group));
+    }
+  }
+
+  if (selectedDetectors.has('forwarding')) {
+    const findings = report.analyses.forwarding.findings;
+
+    lines.push('');
+    lines.push(`[forwarding] findings=${findings.length}`);
+
+    for (const finding of findings) {
+      lines.push(formatForwardingFindingText(finding));
     }
   }
 

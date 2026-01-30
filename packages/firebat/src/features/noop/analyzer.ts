@@ -1,19 +1,14 @@
 import type { Node } from 'oxc-parser';
 
-import type { NodeRecord, NodeValue, ParsedFile } from '../../engine/types';
+import type { NodeValue, ParsedFile } from '../../engine/types';
 import type { NoopAnalysis, NoopFinding } from '../../types';
 
+import { isNodeRecord, isOxcNode, walkOxcTree } from '../../engine/oxc-ast-utils';
 import { getLineColumn } from '../../engine/source-position';
 
 const createEmptyNoop = (): NoopAnalysis => ({
   findings: [],
 });
-
-const isOxcNode = (value: NodeValue): value is Node => typeof value === 'object' && value !== null && !Array.isArray(value);
-
-const isNodeRecord = (node: Node): node is NodeRecord => typeof node === 'object' && node !== null;
-
-const isNodeValueArray = (value: NodeValue): value is ReadonlyArray<NodeValue> => Array.isArray(value);
 
 const getSpan = (node: Node, sourceText: string) => {
   const start = getLineColumn(sourceText, node.start);
@@ -53,19 +48,7 @@ const isBooleanLiteral = (value: NodeValue): boolean => {
 const collectNoopFindings = (program: NodeValue, sourceText: string, filePath: string): NoopFinding[] => {
   const findings: NoopFinding[] = [];
 
-  const visit = (node: NodeValue): void => {
-    if (isNodeValueArray(node)) {
-      for (const entry of node) {
-        visit(entry);
-      }
-
-      return;
-    }
-
-    if (!isOxcNode(node)) {
-      return;
-    }
-
+  walkOxcTree(program, node => {
     if (node.type === 'ExpressionStatement' && isNodeRecord(node)) {
       const expression = node.expression;
 
@@ -94,22 +77,8 @@ const collectNoopFindings = (program: NodeValue, sourceText: string, filePath: s
       }
     }
 
-    if (!isNodeRecord(node)) {
-      return;
-    }
-
-    const entries = Object.entries(node);
-
-    for (const [key, value] of entries) {
-      if (key === 'type' || key === 'loc' || key === 'start' || key === 'end') {
-        continue;
-      }
-
-      visit(value);
-    }
-  };
-
-  visit(program);
+    return true;
+  });
 
   return findings;
 };

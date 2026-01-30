@@ -9,9 +9,15 @@ const isOxcNode = (value: NodeValue): value is Node =>
   value !== null &&
   !Array.isArray(value) &&
   'type' in value &&
-  typeof (value as Node).type === 'string';
+  typeof (value).type === 'string';
 
-const isOxcNodeArray = (value: NodeValue): value is ReadonlyArray<NodeValue> => Array.isArray(value);
+const isOxcNodeArray = (value: NodeValue): value is ReadonlyArray<NodeValue> => {
+  if (!Array.isArray(value)) {
+    return false;
+  }
+
+  return true;
+};
 
 const isNodeRecord = (node: Node): node is NodeRecord => typeof node === 'object' && node !== null;
 

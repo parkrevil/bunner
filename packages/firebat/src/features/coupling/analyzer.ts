@@ -1,5 +1,7 @@
 import type { CouplingAnalysis, DependencyAnalysis } from '../../types';
 
+import { sortCouplingHotspots } from '../../engine/sort-utils';
+
 const createEmptyCoupling = (): CouplingAnalysis => ({
   hotspots: [],
 });
@@ -26,19 +28,13 @@ const analyzeCoupling = (dependencies: DependencyAnalysis): CouplingAnalysis => 
     signalsByModule.set(entry.module, signals);
   }
 
-  const hotspots = Array.from(scoreByModule.entries())
-    .map(([module, score]) => ({
+  const hotspots = sortCouplingHotspots(
+    Array.from(scoreByModule.entries()).map(([module, score]) => ({
       module,
       score,
       signals: Array.from(signalsByModule.get(module) ?? []).sort(),
-    }))
-    .sort((a, b) => {
-      if (b.score !== a.score) {
-        return b.score - a.score;
-      }
-
-      return a.module.localeCompare(b.module);
-    });
+    })),
+  );
 
   if (hotspots.length === 0) {
     return createEmptyCoupling();

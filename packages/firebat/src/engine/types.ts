@@ -1,5 +1,7 @@
 import type { Comment, Node, OxcError, Program } from 'oxc-parser';
 
+import type { FirebatItemKind } from '../types';
+
 import type { IntegerCFG } from './cfg';
 
 export type NodeId = number;
@@ -49,6 +51,18 @@ export interface FunctionBodyAnalysis {
 }
 
 export type NodeValue = Node | ReadonlyArray<NodeValue> | string | number | boolean | null | undefined;
+
+export type NodeValueVisitor = (value: NodeValue) => void;
+
+export type FunctionNodeAnalyzer<TItem> = (node: Node, filePath: string, sourceText: string) => TItem | null;
+
+export type OxcNodePredicate = (node: Node) => boolean;
+
+export type OxcNodeWalker = (node: Node) => boolean;
+
+export type DuplicateFingerprintResolver = (node: Node) => string;
+
+export type DuplicateItemKindResolver = (node: Node) => FirebatItemKind;
 
 export type NodeRecord = Node & Record<string, NodeValue>;
 

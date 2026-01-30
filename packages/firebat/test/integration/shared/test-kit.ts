@@ -108,7 +108,7 @@ export const toDuplicateSignatures = (groups: ReadonlyArray<DuplicateGroup>): st
 
   for (const group of groups) {
     const itemKeys = [...group.items].map(item => {
-      return `${item.filePath}|${item.kind}|${item.header}|${item.tokens}`;
+      return `${item.filePath}|${item.kind}|${item.header}|${item.size}`;
     });
 
     itemKeys.sort((left, right) => left.localeCompare(right));

@@ -142,7 +142,7 @@ describe('detector', () => {
     expect(functionGroup).toBeNull();
   });
 
-  it('should not report duplicates when tokens are below the threshold', () => {
+  it('should not report duplicates when size is below the threshold', () => {
     // Arrange
     let sources = new Map<string, string>();
 

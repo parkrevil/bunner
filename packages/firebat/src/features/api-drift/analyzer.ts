@@ -1,51 +1,21 @@
 import type { Node } from 'oxc-parser';
 
-import type { NodeRecord, NodeValue, ParsedFile } from '../../engine/types';
+import type { NodeValue, ParsedFile } from '../../engine/types';
 import type { ApiDriftAnalysis, ApiDriftGroup, ApiDriftOutlier, ApiDriftShape } from '../../types';
+
+import {
+  collectFunctionNodes,
+  getLiteralString,
+  getNodeName,
+  isFunctionNode,
+  isNodeRecord,
+  isOxcNode,
+  walkOxcTree,
+} from '../../engine/oxc-ast-utils';
 
 const createEmptyApiDrift = (): ApiDriftAnalysis => ({
   groups: [],
 });
-
-const isOxcNode = (value: NodeValue): value is Node => typeof value === 'object' && value !== null && !Array.isArray(value);
-
-const isOxcNodeArray = (value: NodeValue): value is ReadonlyArray<NodeValue> => Array.isArray(value);
-
-const isNodeRecord = (node: Node): node is NodeRecord => typeof node === 'object' && node !== null;
-
-const isFunctionNode = (node: Node): boolean => {
-  const nodeType = node.type;
-
-  return nodeType === 'FunctionDeclaration' || nodeType === 'FunctionExpression' || nodeType === 'ArrowFunctionExpression';
-};
-
-const getNodeName = (node: NodeValue): string | null => {
-  if (!isOxcNode(node)) {
-    return null;
-  }
-
-  if ('name' in node && typeof node.name === 'string') {
-    return node.name;
-  }
-
-  return null;
-};
-
-const getLiteralString = (node: NodeValue): string | null => {
-  if (!isOxcNode(node)) {
-    return null;
-  }
-
-  if (node.type !== 'Literal') {
-    return null;
-  }
-
-  if ('value' in node && typeof node.value === 'string') {
-    return node.value;
-  }
-
-  return null;
-};
 
 const getFunctionName = (node: Node): string | null => {
   const idNode = isNodeRecord(node) ? node.id : undefined;
@@ -90,65 +60,13 @@ const isParamOptional = (value: NodeValue): boolean => {
   return false;
 };
 
-const collectFunctionNodes = (program: NodeValue): Node[] => {
-  const functions: Node[] = [];
-
-  const visit = (node: NodeValue): void => {
-    if (isOxcNodeArray(node)) {
-      for (const entry of node) {
-        visit(entry);
-      }
-
-      return;
-    }
-
-    if (!isOxcNode(node)) {
-      return;
-    }
-
-    if (isFunctionNode(node)) {
-      functions.push(node);
-    }
-
-    if (!isNodeRecord(node)) {
-      return;
-    }
-
-    const entries = Object.entries(node);
-
-    for (const [key, value] of entries) {
-      if (key === 'type' || key === 'loc' || key === 'start' || key === 'end') {
-        continue;
-      }
-
-      visit(value);
-    }
-  };
-
-  visit(program);
-
-  return functions;
-};
-
 const collectReturnStats = (node: NodeValue, rootNode: Node): readonly [boolean, boolean] => {
   let hasReturn = false;
   let hasReturnValue = false;
 
-  const visit = (value: NodeValue): void => {
-    if (isOxcNodeArray(value)) {
-      for (const entry of value) {
-        visit(entry);
-      }
-
-      return;
-    }
-
-    if (!isOxcNode(value)) {
-      return;
-    }
-
+  walkOxcTree(node, value => {
     if (value !== rootNode && isFunctionNode(value)) {
-      return;
+      return false;
     }
 
     if (value.type === 'ReturnStatement' && isNodeRecord(value)) {
@@ -159,22 +77,8 @@ const collectReturnStats = (node: NodeValue, rootNode: Node): readonly [boolean,
       }
     }
 
-    if (!isNodeRecord(value)) {
-      return;
-    }
-
-    const entries = Object.entries(value);
-
-    for (const [key, entry] of entries) {
-      if (key === 'type' || key === 'loc' || key === 'start' || key === 'end') {
-        continue;
-      }
-
-      visit(entry);
-    }
-  };
-
-  visit(node);
+    return true;
+  });
 
   return [hasReturn, hasReturnValue];
 };

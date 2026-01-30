@@ -1,47 +1,18 @@
 import type { Node } from 'oxc-parser';
 
 import type { WasteFinding } from '../types';
-import type { BitSet, DefMeta, FunctionBodyAnalysis, NodeRecord, NodeValue, ParsedFile } from './types';
+import type { BitSet, DefMeta, FunctionBodyAnalysis, ParsedFile } from './types';
 
 import { OxcCFGBuilder } from './cfg-builder';
 import { createBitSet, equalsBitSet, intersectBitSet, subtractBitSet, unionBitSet } from './dataflow';
+import { getNodeName, getNodeType, isFunctionNode, isNodeRecord, isOxcNode, isOxcNodeArray } from './oxc-ast-utils';
 import { getLineColumn } from './source-position';
 import { collectVariables } from './variable-collector';
-
-const isOxcNode = (value: NodeValue): value is Node => typeof value === 'object' && value !== null && !Array.isArray(value);
-
-const isNodeRecord = (node: Node): node is NodeRecord => typeof node === 'object' && node !== null;
-
-const isNodeValueArray = (value: NodeValue): value is ReadonlyArray<NodeValue> => Array.isArray(value);
-
-const getNodeType = (node: Node): string => node.type;
-
-const getNodeName = (node: NodeValue): string | null => {
-  if (!isOxcNode(node)) {
-    return null;
-  }
-
-  if ('name' in node && typeof node.name === 'string') {
-    return node.name;
-  }
-
-  return null;
-};
-
-const isFunctionNode = (node: NodeValue): node is Node => {
-  if (!isOxcNode(node)) {
-    return false;
-  }
-
-  const nodeType = getNodeType(node);
-
-  return nodeType === 'ArrowFunctionExpression' || nodeType === 'FunctionDeclaration' || nodeType === 'FunctionExpression';
-};
 
 const collectLocalVarIndexes = (functionNode: Node): Map<string, number> => {
   const names = new Set<string>();
   const paramsValue = isNodeRecord(functionNode) ? functionNode.params : undefined;
-  const params = isNodeValueArray(paramsValue) ? paramsValue : [];
+  const params = isOxcNodeArray(paramsValue) ? paramsValue : [];
 
   for (const param of params) {
     if (isOxcNode(param) && getNodeType(param) === 'Identifier') {
@@ -150,9 +121,18 @@ const analyzeFunctionBody = (
 
   const defCount = defMetaById.length;
   const empty = createBitSet();
-  const genByNode: BitSet[] = Array.from({ length: nodeCount }, () => createBitSet());
-  const killByNode: BitSet[] = Array.from({ length: nodeCount }, () => createBitSet());
-  const defsOfVar: BitSet[] = Array.from({ length: localIndexByName.size }, () => createBitSet());
+  const genByNode: BitSet[] = [];
+  const killByNode: BitSet[] = [];
+  const defsOfVar: BitSet[] = [];
+
+  for (let index = 0; index < nodeCount; index += 1) {
+    genByNode.push(createBitSet());
+    killByNode.push(createBitSet());
+  }
+
+  for (let index = 0; index < localIndexByName.size; index += 1) {
+    defsOfVar.push(createBitSet());
+  }
 
   for (let varIndex = 0; varIndex < defsByVarIndex.length; varIndex += 1) {
     const ids = defsByVarIndex[varIndex] ?? [];
@@ -186,8 +166,14 @@ const analyzeFunctionBody = (
   }
 
   const pred = built.cfg.buildAdjacency('backward');
-  const inByNode: BitSet[] = Array.from({ length: nodeCount }, () => createBitSet());
-  const outByNode: BitSet[] = Array.from({ length: nodeCount }, () => createBitSet());
+  const inByNode: BitSet[] = [];
+  const outByNode: BitSet[] = [];
+
+  for (let index = 0; index < nodeCount; index += 1) {
+    inByNode.push(createBitSet());
+    outByNode.push(createBitSet());
+  }
+
   let changed = true;
 
   while (changed) {

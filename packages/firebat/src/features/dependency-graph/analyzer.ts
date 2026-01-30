@@ -1,9 +1,10 @@
 import * as path from 'node:path';
 
-import type { Node } from 'oxc-parser';
-
 import type { NodeRecord, NodeValue, ParsedFile } from '../../engine/types';
 import type { DependencyAnalysis, DependencyEdgeCutHint, DependencyFanStat } from '../../types';
+
+import { isNodeRecord, isOxcNode } from '../../engine/oxc-ast-utils';
+import { sortDependencyFanStats } from '../../engine/sort-utils';
 
 const createEmptyDependencies = (): DependencyAnalysis => ({
   cycles: [],
@@ -15,10 +16,6 @@ const createEmptyDependencies = (): DependencyAnalysis => ({
 const normalizePath = (value: string): string => value.replaceAll('\\', '/');
 
 const toRelativePath = (value: string): string => normalizePath(path.relative(process.cwd(), value));
-
-const isOxcNode = (value: NodeValue): value is Node => typeof value === 'object' && value !== null && !Array.isArray(value);
-
-const isNodeRecord = (node: Node): node is NodeRecord => typeof node === 'object' && node !== null;
 
 const isNodeValueArray = (value: NodeValue): value is ReadonlyArray<NodeValue> => Array.isArray(value);
 
@@ -60,7 +57,7 @@ const collectImportSources = (node: NodeValue, sources: string[]): void => {
   if (node.type === 'ImportDeclaration' || node.type === 'ExportNamedDeclaration' || node.type === 'ExportAllDeclaration') {
     const source = node.source;
 
-    if (isStringLiteral(source)) {
+    if (isStringLiteral(source) && typeof source.value === 'string') {
       sources.push(source.value);
     }
   }
@@ -167,6 +164,64 @@ const normalizeCycle = (cycle: ReadonlyArray<string>): string[] => {
   return best.concat(best[0] ?? '');
 };
 
+const recordCyclePath = (
+  cycleKeys: Set<string>,
+  cycles: string[][],
+  path: ReadonlyArray<string>,
+): void => {
+  const normalized = normalizeCycle(path);
+
+  if (normalized.length === 0) {
+    return;
+  }
+
+  const key = normalized.join('->');
+
+  if (cycleKeys.has(key)) {
+    return;
+  }
+
+  cycleKeys.add(key);
+  cycles.push(normalized);
+};
+
+const walkCycles = (
+  node: string,
+  adjacency: Map<string, ReadonlyArray<string>>,
+  visited: Set<string>,
+  inStack: Set<string>,
+  stack: string[],
+  cycleKeys: Set<string>,
+  cycles: string[][],
+): void => {
+  if (inStack.has(node)) {
+    const index = stack.indexOf(node);
+
+    if (index >= 0) {
+      recordCyclePath(cycleKeys, cycles, stack.slice(index).concat(node));
+    }
+
+    return;
+  }
+
+  if (visited.has(node)) {
+    return;
+  }
+
+  visited.add(node);
+  inStack.add(node);
+  stack.push(node);
+
+  const next = adjacency.get(node) ?? [];
+
+  for (const entry of next) {
+    walkCycles(entry, adjacency, visited, inStack, stack, cycleKeys, cycles);
+  }
+
+  stack.pop();
+  inStack.delete(node);
+};
+
 const detectCycles = (adjacency: Map<string, ReadonlyArray<string>>): ReadonlyArray<ReadonlyArray<string>> => {
   const nodes = Array.from(adjacency.keys()).sort(compareStrings);
   const visited = new Set<string>();
@@ -175,54 +230,8 @@ const detectCycles = (adjacency: Map<string, ReadonlyArray<string>>): ReadonlyAr
   const cycles: string[][] = [];
   const cycleKeys = new Set<string>();
 
-  const recordCycle = (path: ReadonlyArray<string>): void => {
-    const normalized = normalizeCycle(path);
-
-    if (normalized.length === 0) {
-      return;
-    }
-
-    const key = normalized.join('->');
-
-    if (cycleKeys.has(key)) {
-      return;
-    }
-
-    cycleKeys.add(key);
-    cycles.push(normalized);
-  };
-
-  const dfs = (node: string): void => {
-    if (inStack.has(node)) {
-      const index = stack.indexOf(node);
-
-      if (index >= 0) {
-        recordCycle(stack.slice(index).concat(node));
-      }
-
-      return;
-    }
-
-    if (visited.has(node)) {
-      return;
-    }
-
-    visited.add(node);
-    inStack.add(node);
-    stack.push(node);
-
-    const next = adjacency.get(node) ?? [];
-
-    for (const entry of next) {
-      dfs(entry);
-    }
-
-    stack.pop();
-    inStack.delete(node);
-  };
-
   for (const node of nodes) {
-    dfs(node);
+    walkCycles(node, adjacency, visited, inStack, stack, cycleKeys, cycles);
   }
 
   return cycles;
@@ -231,16 +240,9 @@ const detectCycles = (adjacency: Map<string, ReadonlyArray<string>>): ReadonlyAr
 const listFanStats = (counts: Map<string, number>, limit: number): ReadonlyArray<DependencyFanStat> => {
   const items = Array.from(counts.entries())
     .filter(([, count]) => count > 0)
-    .map(([module, count]) => ({ module: toRelativePath(module), count }))
-    .sort((a, b) => {
-      if (b.count !== a.count) {
-        return b.count - a.count;
-      }
+    .map(([module, count]) => ({ module: toRelativePath(module), count }));
 
-      return a.module.localeCompare(b.module);
-    });
-
-  return items.slice(0, limit);
+  return sortDependencyFanStats(items).slice(0, limit);
 };
 
 const buildEdgeCutHints = (

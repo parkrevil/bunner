@@ -82,7 +82,7 @@ describe('integration/duplicate-detector (fuzz)', () => {
     }
   });
 
-  it('should respect minTokens boundaries when functions are tiny', () => {
+  it('should respect minSize boundaries when functions are tiny', () => {
     // Arrange
     const sources = new Map<string, string>();
 

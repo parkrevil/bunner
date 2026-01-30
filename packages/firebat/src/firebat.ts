@@ -8,10 +8,12 @@ import { analyzeDuplication, createEmptyDuplication } from './features/duplicati
 import { analyzeEarlyReturn, createEmptyEarlyReturn } from './features/early-return';
 import { analyzeNesting, createEmptyNesting } from './features/nesting';
 import { analyzeNoop, createEmptyNoop } from './features/noop';
+import { analyzeForwarding, createEmptyForwarding } from './features/forwarding';
+import { analyzeTypecheck, createEmptyTypecheck } from './features/typecheck';
 import { parseArgs } from './arg-parse';
 import { detectDuplicates } from './features/duplicate-detector';
 import { initHasher } from './engine/hasher';
-import { computeAutoMinTokens } from './engine/auto-min-tokens';
+import { computeAutoMinSize } from './engine/auto-min-size';
 import { formatReport } from './report';
 import { detectWaste } from './features/waste';
 import { createFirebatProgram } from './ts-program';
@@ -30,8 +32,9 @@ const printHelp = (): void => {
     '',
     'Options:',
     '  --format text|json       Output format (default: text)',
-    '  --min-tokens <n>         Minimum token threshold for duplicates (default: 60)',
-    '  --only <list>            Limit detectors to duplicates,waste,dependencies,coupling,duplication,nesting,early-return,noop,api-drift',
+    '  --min-size <n>           Minimum size threshold for duplicates (default: auto)',
+    '  --max-forward-depth <n>  Max allowed thin-wrapper chain depth (default: 0)',
+    '  --only <list>            Limit detectors to duplicates,waste,typecheck,dependencies,coupling,duplication,nesting,early-return,noop,api-drift,forwarding',
     '  --no-exit                Always exit 0 even if findings exist',
     '  -h, --help               Show this help',
   ];
@@ -43,32 +46,38 @@ const buildReport = async (options: FirebatCliOptions): Promise<FirebatReport> =
   const program = await createFirebatProgram({
     targets: options.targets,
   });
-  const resolvedMinTokens =
-    options.minTokens === 'auto' ? computeAutoMinTokens(program) : Math.max(0, Math.round(options.minTokens));
-  const duplicates = options.detectors.includes('duplicates') ? detectDuplicates(program, resolvedMinTokens) : [];
+  const resolvedMinSize =
+    options.minSize === 'auto' ? computeAutoMinSize(program) : Math.max(0, Math.round(options.minSize));
+  const duplicates = options.detectors.includes('duplicates') ? detectDuplicates(program, resolvedMinSize) : [];
   const waste = options.detectors.includes('waste') ? detectWaste(program) : [];
+  const typecheck = options.detectors.includes('typecheck') ? await analyzeTypecheck(program) : createEmptyTypecheck();
   const shouldRunDependencies = options.detectors.includes('dependencies') || options.detectors.includes('coupling');
   const dependencies = shouldRunDependencies ? analyzeDependencies(program) : createEmptyDependencies();
   const coupling = options.detectors.includes('coupling') ? analyzeCoupling(dependencies) : createEmptyCoupling();
   const duplication = options.detectors.includes('duplication')
-    ? analyzeDuplication(program, resolvedMinTokens)
+    ? analyzeDuplication(program, resolvedMinSize)
     : createEmptyDuplication();
   const nesting = options.detectors.includes('nesting') ? analyzeNesting(program) : createEmptyNesting();
   const earlyReturn = options.detectors.includes('early-return') ? analyzeEarlyReturn(program) : createEmptyEarlyReturn();
   const noop = options.detectors.includes('noop') ? analyzeNoop(program) : createEmptyNoop();
   const apiDrift = options.detectors.includes('api-drift') ? analyzeApiDrift(program) : createEmptyApiDrift();
+  const forwarding = options.detectors.includes('forwarding')
+    ? analyzeForwarding(program, options.maxForwardDepth)
+    : createEmptyForwarding();
 
   return {
     meta: {
       engine: 'oxc',
       version: '2.0.0-strict',
       targetCount: program.length,
-      minTokens: resolvedMinTokens,
+      minSize: resolvedMinSize,
+      maxForwardDepth: options.maxForwardDepth,
       detectors: options.detectors,
     },
     analyses: {
       duplicates,
       waste,
+      typecheck,
       dependencies,
       coupling,
       duplication,
@@ -76,8 +85,16 @@ const buildReport = async (options: FirebatCliOptions): Promise<FirebatReport> =
       earlyReturn,
       noop,
       apiDrift,
+      forwarding,
     },
   };
+};
+
+const countBlockingFindings = (report: FirebatReport): number => {
+  const typecheckErrors = report.analyses.typecheck.items.filter(item => item.severity === 'error').length;
+  const forwardingFindings = report.analyses.forwarding.findings.length;
+
+  return report.analyses.duplicates.length + report.analyses.waste.length + typecheckErrors + forwardingFindings;
 };
 
 const runFirebat = async (): Promise<void> => {
@@ -136,7 +153,7 @@ const runFirebat = async (): Promise<void> => {
 
   console.log(output);
 
-  const findingCount = report.analyses.duplicates.length + report.analyses.waste.length;
+  const findingCount = countBlockingFindings(report);
 
   if (findingCount > 0 && options.exitOnFindings) {
     process.exit(1);

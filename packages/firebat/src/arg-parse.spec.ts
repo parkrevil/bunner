@@ -13,11 +13,13 @@ describe('arg-parse', () => {
     // Assert
     expect(result.targets).toEqual([]);
     expect(result.format).toBe('text');
-    expect(result.minTokens).toBe('auto');
+    expect(result.minSize).toBe('auto');
+    expect(result.maxForwardDepth).toBe(0);
     expect(result.exitOnFindings).toBe(true);
     expect(result.detectors).toEqual([
       'duplicates',
       'waste',
+      'typecheck',
       'dependencies',
       'coupling',
       'duplication',
@@ -25,6 +27,7 @@ describe('arg-parse', () => {
       'early-return',
       'noop',
       'api-drift',
+      'forwarding',
     ]);
     expect(result.help).toBe(false);
   });
@@ -39,11 +42,13 @@ describe('arg-parse', () => {
     expect(result.help).toBe(true);
     expect(result.targets).toEqual([]);
     expect(result.format).toBe('text');
-    expect(result.minTokens).toBe('auto');
+    expect(result.minSize).toBe('auto');
+    expect(result.maxForwardDepth).toBe(0);
     expect(result.exitOnFindings).toBe(true);
     expect(result.detectors).toEqual([
       'duplicates',
       'waste',
+      'typecheck',
       'dependencies',
       'coupling',
       'duplication',
@@ -51,22 +56,25 @@ describe('arg-parse', () => {
       'early-return',
       'noop',
       'api-drift',
+      'forwarding',
     ]);
   });
 
-  it('should parse format, minTokens, and targets when options are provided', () => {
+  it('should parse format, minSize, and targets when options are provided', () => {
     // Arrange
-    let argv = ['--format', 'json', '--min-tokens', '120', 'packages'];
+    let argv = ['--format', 'json', '--min-size', '120', '--max-forward-depth', '2', 'packages'];
     // Act
     let result = parseArgs(argv);
 
     // Assert
     expect(result.format).toBe('json');
-    expect(result.minTokens).toBe(120);
+    expect(result.minSize).toBe(120);
+    expect(result.maxForwardDepth).toBe(2);
     expect(result.targets).toEqual([path.resolve('packages')]);
     expect(result.detectors).toEqual([
       'duplicates',
       'waste',
+      'typecheck',
       'dependencies',
       'coupling',
       'duplication',
@@ -74,6 +82,7 @@ describe('arg-parse', () => {
       'early-return',
       'noop',
       'api-drift',
+      'forwarding',
     ]);
     expect(result.help).toBe(false);
   });
@@ -87,6 +96,8 @@ describe('arg-parse', () => {
     // Assert
     expect(result.detectors).toEqual(['waste']);
   });
+
+  
 
   it('should throw a validation error when an unknown option is provided', () => {
     // Arrange
