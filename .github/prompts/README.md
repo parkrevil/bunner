@@ -32,7 +32,7 @@
    - `docs/40_ENGINEERING/STYLEGUIDE.md`
    - `docs/40_ENGINEERING/TESTING.md`
    - `docs/40_ENGINEERING/VERIFY.md`
-6) 검증 기준: `bun run verify` (주의: `eslint . --fix` 포함이라 파일 변경 가능)
+6) 검증 기준: `bun run verify`
 ```
 
 ### Handshake (필수)

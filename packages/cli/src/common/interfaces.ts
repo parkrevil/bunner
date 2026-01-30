@@ -1,4 +1,4 @@
-export type BunnerConfigSourceFormat = 'ts' | 'json';
+export type BunnerConfigSourceFormat = 'json' | 'jsonc';
 
 export interface BunnerConfigSource {
   path: string;
@@ -11,26 +11,13 @@ export interface ResolvedBunnerConfigModule {
 
 export interface ResolvedBunnerConfig {
   module: ResolvedBunnerConfigModule;
-  entry?: string;
-  workers?: string[] | number | 'full' | 'half';
-  port?: number;
-  compiler?: CompilerOptions;
-  scanPaths?: string[];
-}
-
-export interface CompilerOptions {
-  strictValidation?: boolean;
-  minify?: boolean;
-  profile?: 'minimal' | 'standard' | 'full';
+  sourceDir: string;
+  entry: string;
 }
 
 export interface ConfigLoadResult {
   config: ResolvedBunnerConfig;
   source: BunnerConfigSource;
-}
-
-export interface ConfigModule {
-  bunnerConfig?: ResolvedBunnerConfig;
 }
 
 export type JsonPrimitive = string | number | boolean | null;

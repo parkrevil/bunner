@@ -1,15 +1,15 @@
-import { Injectable } from '@bunner/common';
+import { Inject, Injectable } from '@bunner/common';
 import { Logger, type LogMetadataValue } from '@bunner/logger';
 
 import type { User } from './interfaces';
 
-import { UserRepository } from './users.repository';
 
 @Injectable({
-  visibility: 'exported',
+  scope: 'singleton',
+  visibleTo: 'all',
 })
 export class UsersService {
-  private readonly userRepository = new UserRepository();
+  private readonly userRepository = Inject;
   private readonly logger = new Logger('UsersService');
 
   findAll(): ReadonlyArray<User> {

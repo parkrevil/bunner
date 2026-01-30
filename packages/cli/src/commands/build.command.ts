@@ -3,10 +3,11 @@ import { mkdir, rm } from 'fs/promises';
 import { join, resolve, dirname } from 'path';
 
 import type { CollectedClass, CommandOptions } from './types';
+import type { AnalyzerValue, AnalyzerValueRecord } from '../analyzer/types';
 
 import { AdapterSpecResolver, AstParser, ModuleGraph, type FileAnalysis } from '../analyzer';
 import { ConfigLoader, ConfigLoadError, compareCodePoint, scanGlobSorted, writeIfChanged } from '../common';
-import { buildDiagnostic, reportDiagnostics } from '../diagnostics';
+import { buildDiagnostic, DiagnosticReportError, reportDiagnostics } from '../diagnostics';
 import { EntryGenerator, ManifestGenerator } from '../generator';
 
 export async function build(commandOptions?: CommandOptions) {
@@ -16,9 +17,9 @@ export async function build(commandOptions?: CommandOptions) {
     const configResult = await ConfigLoader.load();
     const config = configResult.config;
     const moduleFileName = config.module.fileName;
-    const buildProfile = commandOptions?.profile ?? config.compiler?.profile ?? 'full';
+    const buildProfile = commandOptions?.profile ?? 'full';
     const projectRoot = process.cwd();
-    const srcDir = resolve(projectRoot, 'src');
+    const srcDir = resolve(projectRoot, config.sourceDir);
     const outDir = resolve(projectRoot, 'dist');
     const bunnerDir = resolve(projectRoot, '.bunner');
     const buildTempDir = resolve(outDir, '.bunner-temp');
@@ -35,7 +36,7 @@ export async function build(commandOptions?: CommandOptions) {
 
     console.info('🔍 Scanning source files...');
 
-    const userMain = join(srcDir, config.entry ?? 'main.ts');
+    const userMain = resolve(projectRoot, config.entry);
     const visited = new Set<string>();
     const queue: string[] = [userMain];
     const glob = new Glob('**/*.ts');
@@ -82,6 +83,9 @@ export async function build(commandOptions?: CommandOptions) {
           classes: parseResult.classes,
           reExports: parseResult.reExports,
           exports: parseResult.exports,
+          createApplicationCalls: parseResult.createApplicationCalls,
+          defineModuleCalls: parseResult.defineModuleCalls,
+          injectCalls: parseResult.injectCalls,
         };
 
         if (parseResult.imports !== undefined) {
@@ -145,17 +149,115 @@ export async function build(commandOptions?: CommandOptions) {
           }
 
           if (resolvedPath && !visited.has(resolvedPath)) {
-            if (
-              !resolvedPath.endsWith('.d.ts') &&
-              (resolvedPath.endsWith('.ts') || resolvedPath.endsWith('.tsx')) &&
-              !resolvedPath.includes('/node_modules/@types/')
-            ) {
+            if (!resolvedPath.endsWith('.d.ts') && (resolvedPath.endsWith('.ts') || resolvedPath.endsWith('.tsx'))) {
+              const nodeModulesSegment = ['node', 'modules'].join('_');
+              const typesSegment = ['@', 'types'].join('');
+              const typesPath = `/${nodeModulesSegment}/${typesSegment}/`;
+
+              if (resolvedPath.includes(typesPath)) {
+                continue;
+              }
+
               queue.push(resolvedPath);
             }
           }
         }
-      } catch (_e) {}
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : 'Unknown parse error.';
+        const diagnostic = buildDiagnostic({
+          code: 'PARSE_FAILED',
+          severity: 'fatal',
+          summary: 'Parse failed.',
+          reason,
+          file: filePath,
+        });
+
+        reportDiagnostics({ diagnostics: [diagnostic] });
+
+        throw error;
+      }
     }
+
+    const isAnalyzerRecord = (value: AnalyzerValue): value is AnalyzerValueRecord => {
+      return typeof value === 'object' && value !== null && !Array.isArray(value);
+    };
+
+    // MUST: MUST-1
+    // MUST: MUST-2
+    const validateCreateApplication = (fileMapValue: Map<string, FileAnalysis>): void => {
+      const callEntries = Array.from(fileMapValue.values())
+        .flatMap(file => (file.createApplicationCalls ?? []).map(call => ({ call, filePath: file.filePath })))
+        .filter(entry => entry.call !== undefined);
+
+      if (callEntries.length === 0) {
+        throw new DiagnosticReportError(
+          buildDiagnostic({
+            code: 'BUNNER_APP_002',
+            severity: 'fatal',
+            summary: 'createApplication entry module not found.',
+            reason: 'createApplication call not found in recognized files.',
+            file: '.',
+          }),
+        );
+      }
+
+      if (callEntries.length > 1) {
+        throw new DiagnosticReportError(
+          buildDiagnostic({
+            code: 'BUNNER_APP_018',
+            severity: 'fatal',
+            summary: 'Multiple createApplication calls detected.',
+            reason: 'Multiple createApplication calls detected in recognized files.',
+            file: callEntries[0]?.filePath ?? '.',
+          }),
+        );
+      }
+
+      const entry = callEntries[0];
+      const args = entry.call.args ?? [];
+
+      if (args.length !== 1) {
+        throw new DiagnosticReportError(
+          buildDiagnostic({
+            code: 'BUNNER_APP_002',
+            severity: 'fatal',
+            summary: 'Invalid createApplication entry argument.',
+            reason: 'createApplication must take exactly one entry module argument.',
+            file: entry.filePath,
+          }),
+        );
+      }
+
+      const entryArg = args[0];
+
+      if (!isAnalyzerRecord(entryArg)) {
+        throw new DiagnosticReportError(
+          buildDiagnostic({
+            code: 'BUNNER_APP_002',
+            severity: 'fatal',
+            summary: 'Invalid createApplication entry argument.',
+            reason: 'createApplication entry module must be a statically resolvable identifier.',
+            file: entry.filePath,
+          }),
+        );
+      }
+
+      const entryRef = entryArg.__bunner_ref;
+
+      if (typeof entryRef !== 'string' || entryRef.length === 0) {
+        throw new DiagnosticReportError(
+          buildDiagnostic({
+            code: 'BUNNER_APP_002',
+            severity: 'fatal',
+            summary: 'Invalid createApplication entry argument.',
+            reason: 'createApplication entry module must be a statically resolvable identifier.',
+            file: entry.filePath,
+          }),
+        );
+      }
+    };
+
+    validateCreateApplication(fileMap);
 
     console.info('🕸️  Building Module Graph...');
 
@@ -189,8 +291,7 @@ export async function build(commandOptions?: CommandOptions) {
 
     const entryPointFile = join(buildTempDir, 'entry.ts');
     const entryGen = new EntryGenerator();
-    const buildGenerateConfig = config.workers !== undefined ? { workers: config.workers } : {};
-    const buildEntryContent = entryGen.generate(userMain, false, buildGenerateConfig);
+    const buildEntryContent = entryGen.generate(userMain, false);
 
     await writeIfChanged(entryPointFile, buildEntryContent);
 
@@ -230,22 +331,10 @@ export async function build(commandOptions?: CommandOptions) {
       await rm(runtimeReportFile, { force: true });
     }
 
-    console.info('📦 Bundling application, manifest, and workers...');
-
-    let workerFiles: string[] = [];
-
-    if (Array.isArray(config.workers)) {
-      workerFiles = config.workers.map(w => resolve(projectRoot, w));
-    }
-
-    if (workerFiles.length > 0) {
-      workerFiles.forEach((w: string) => {
-        console.info(`   Worker Entry: ${w}`);
-      });
-    }
+    console.info('📦 Bundling application and manifest...');
 
     const buildResult = await Bun.build({
-      entrypoints: [entryPointFile, runtimeFile, ...workerFiles],
+      entrypoints: [entryPointFile, runtimeFile],
       outdir: outDir,
       target: 'bun',
       minify: false,
@@ -263,17 +352,15 @@ export async function build(commandOptions?: CommandOptions) {
     console.info('✅ Build Complete!');
     console.info(`   Entry: ${join(outDir, 'entry.js')}`);
 
-    if (workerFiles.length > 0) {
-      workerFiles.forEach(w => {
-        const workerName = w.split('/').pop()?.replace('.ts', '.js');
-
-        console.info(`   Worker: ${join(outDir, workerName ?? '')}`);
-      });
-    }
-
     console.info(`   Runtime: ${join(outDir, 'runtime.js')}`);
     console.info(`   Manifest: ${manifestFile}`);
   } catch (error) {
+    if (error instanceof DiagnosticReportError) {
+      reportDiagnostics({ diagnostics: [error.diagnostic] });
+
+      throw error;
+    }
+
     const sourcePath = error instanceof ConfigLoadError ? error.sourcePath : undefined;
     const file = typeof sourcePath === 'string' && sourcePath.length > 0 ? sourcePath : '.';
     const reason = error instanceof Error ? error.message : 'Unknown build error.';

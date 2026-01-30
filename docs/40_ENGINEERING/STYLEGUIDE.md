@@ -240,7 +240,12 @@ git diff --unified=0 | grep -nE "^\\+.*\\b(object|Function)\\b"  # 0이어야 �
 - Enum(문서/규격): 시스템의 핵심 규격이거나 외부 표준 프로토콜을 따를 때만 사용한다. 기본은 문자열 Enum을 사용한다.
 - Union Type(제로 오버헤드): 단순 값 범위 제약이면 Union Type을 사용한다(컴파일 후 런타임 객체를 남기지 않는 것을 우선한다).
 - `as const`(룩업/순회): 런타임에서 값 목록을 순회하거나 룩업 테이블로 쓸 필요가 있을 때만 사용한다.
-- `const enum`(최적화): 런타임 오브젝트를 없애면서도 이름을 남겨야 할 때만 예외적으로 사용한다.
+- `const enum`(인라인 상수): 런타임 오브젝트 없이(=인라인) 이름 기반 그룹핑이 필요할 때 사용한다.
+  - MUST: 멤버 값은 string literal 또는 number literal만 사용한다.
+  - MUST NOT: 멤버 값에 계산식/참조/연산자 표현식을 사용하지 않는다.
+  - MUST: `Symbol(<description>)`의 description key로 사용되는 멤버 값은 string literal만 사용한다.
+  - MUST: 선언 위치는 예약 파일(enums.ts)로 제한한다.
+  - MUST NOT: 런타임에서 열거/순회가 필요한 값 목록에 사용하지 않는다.
 
 ## 8. 타입 정의 및 안전성 원칙 (STYLE-006~007)
 

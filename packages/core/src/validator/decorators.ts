@@ -21,42 +21,55 @@ function createDecorator(
   };
 }
 
-export function IsString(options?: ValidatorOptions) {
+function IsString(options?: ValidatorOptions) {
   return createDecorator('IsString', [], options);
 }
 
-export function IsNumber(options?: ValidatorOptions) {
+function IsNumber(options?: ValidatorOptions) {
   return createDecorator('IsNumber', [], options);
 }
 
-export function IsInt(options?: ValidatorOptions) {
+function IsInt(options?: ValidatorOptions) {
   return createDecorator('IsInt', [], options);
 }
 
-export function IsBoolean(options?: ValidatorOptions) {
+function IsBoolean(options?: ValidatorOptions) {
   return createDecorator('IsBoolean', [], options);
 }
 
-export function IsArray(options?: ValidatorOptions) {
+function IsArray(options?: ValidatorOptions) {
   return createDecorator('IsArray', [], options);
 }
 
-export function IsOptional(options?: ValidatorOptions) {
+function IsOptional(options?: ValidatorOptions) {
   return createDecorator('IsOptional', [], options);
 }
 
-export function IsIn(values: PrimitiveArray, options?: ValidatorOptions) {
+function IsIn(values: PrimitiveArray, options?: ValidatorOptions) {
   return createDecorator('IsIn', [values], options);
 }
 
-export function Min(min: number, options?: ValidatorOptions) {
+function Min(min: number, options?: ValidatorOptions) {
   return createDecorator('Min', [min], options);
 }
 
-export function Max(max: number, options?: ValidatorOptions) {
+function Max(max: number, options?: ValidatorOptions) {
   return createDecorator('Max', [max], options);
 }
 
-export function ValidateNested(options?: ValidatorOptions) {
+function ValidateNested(options?: ValidatorOptions) {
   return createDecorator('ValidateNested', [], options);
 }
+
+export {
+  IsString,
+  IsNumber,
+  IsInt,
+  IsBoolean,
+  IsArray,
+  IsOptional,
+  IsIn,
+  Min,
+  Max,
+  ValidateNested,
+};

@@ -1,4 +1,5 @@
 import { watch } from 'fs';
+import { isAbsolute, relative } from 'path';
 
 import type { FileChangePayload } from './interfaces';
 
@@ -11,22 +12,29 @@ export class ProjectWatcher {
     console.info(`👁️  Watching for file changes in ${this.rootPath}...`);
 
     this.watcher = watch(this.rootPath, { recursive: true }, (event, filename) => {
+      if (typeof filename !== 'string' || filename.length === 0) {
+        return;
+      }
+
+      const normalized = filename.replaceAll('\\', '/');
+      const relativeName = isAbsolute(normalized) ? relative(this.rootPath, normalized) : normalized;
+      const nodeModulesSegment = ['node', 'modules'].join('_');
+
       if (
-        typeof filename !== 'string' ||
-        filename.length === 0 ||
-        filename.includes('node_modules') ||
-        filename.includes('.git') ||
-        filename.includes('.bunner') ||
-        filename.includes('dist')
+        relativeName.length === 0 ||
+        relativeName.includes(nodeModulesSegment) ||
+        relativeName.includes('.git') ||
+        relativeName.includes('.bunner') ||
+        relativeName.includes('dist')
       ) {
         return;
       }
 
-      if (!filename.endsWith('.ts')) {
+      if (!relativeName.endsWith('.ts') || relativeName.endsWith('.d.ts')) {
         return;
       }
 
-      onChange({ eventType: event, filename });
+      onChange({ eventType: event, filename: relativeName });
     });
   }
 

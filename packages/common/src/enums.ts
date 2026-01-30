@@ -6,3 +6,7 @@ export enum LogLevel {
   Error = 'error',
   Fatal = 'fatal',
 }
+
+export const enum BunnerSymbol {
+  Module = 'bunner.module',
+}

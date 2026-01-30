@@ -5,8 +5,9 @@ import { join, resolve, relative } from 'path';
 import type { CommandOptions } from './types';
 
 import { AdapterSpecResolver, AstParser, ModuleGraph, type FileAnalysis } from '../analyzer';
+import type { AnalyzerValue, AnalyzerValueRecord } from '../analyzer/types';
 import { ConfigLoader, ConfigLoadError, scanGlobSorted, writeIfChanged } from '../common';
-import { buildDiagnostic, reportDiagnostics } from '../diagnostics';
+import { buildDiagnostic, DiagnosticReportError, reportDiagnostics } from '../diagnostics';
 import { ManifestGenerator } from '../generator';
 import { ProjectWatcher } from '../watcher';
 
@@ -17,9 +18,9 @@ export async function dev(commandOptions?: CommandOptions) {
     const configResult = await ConfigLoader.load();
     const config = configResult.config;
     const moduleFileName = config.module.fileName;
-    const buildProfile = commandOptions?.profile ?? config.compiler?.profile ?? 'full';
+    const buildProfile = commandOptions?.profile ?? 'full';
     const projectRoot = process.cwd();
-    const srcDir = resolve(projectRoot, 'src');
+    const srcDir = resolve(projectRoot, config.sourceDir);
     const outDir = resolve(projectRoot, '.bunner');
     const parser = new AstParser();
     const adapterSpecResolver = new AdapterSpecResolver();
@@ -38,6 +39,9 @@ export async function dev(commandOptions?: CommandOptions) {
           classes: parseResult.classes,
           reExports: parseResult.reExports,
           exports: parseResult.exports,
+          createApplicationCalls: parseResult.createApplicationCalls,
+          defineModuleCalls: parseResult.defineModuleCalls,
+          injectCalls: parseResult.injectCalls,
         };
 
         if (parseResult.imports !== undefined) {
@@ -78,6 +82,85 @@ export async function dev(commandOptions?: CommandOptions) {
         return false;
       }
     }
+
+    const isAnalyzerRecord = (value: AnalyzerValue): value is AnalyzerValueRecord => {
+      return typeof value === 'object' && value !== null && !Array.isArray(value);
+    };
+
+    // MUST: MUST-1
+    // MUST: MUST-2
+    const validateCreateApplication = (fileMap: Map<string, FileAnalysis>): void => {
+      const callEntries = Array.from(fileMap.values())
+        .flatMap(file => (file.createApplicationCalls ?? []).map(call => ({ call, filePath: file.filePath })))
+        .filter(entry => entry.call !== undefined);
+
+      if (callEntries.length === 0) {
+        throw new DiagnosticReportError(
+          buildDiagnostic({
+            code: 'BUNNER_APP_002',
+            severity: 'fatal',
+            summary: 'createApplication entry module not found.',
+            reason: 'createApplication call not found in recognized files.',
+            file: '.',
+          }),
+        );
+      }
+
+      if (callEntries.length > 1) {
+        throw new DiagnosticReportError(
+          buildDiagnostic({
+            code: 'BUNNER_APP_018',
+            severity: 'fatal',
+            summary: 'Multiple createApplication calls detected.',
+            reason: 'Multiple createApplication calls detected in recognized files.',
+            file: callEntries[0]?.filePath ?? '.',
+          }),
+        );
+      }
+
+      const entry = callEntries[0];
+      const args = entry.call.args ?? [];
+
+      if (args.length !== 1) {
+        throw new DiagnosticReportError(
+          buildDiagnostic({
+            code: 'BUNNER_APP_002',
+            severity: 'fatal',
+            summary: 'Invalid createApplication entry argument.',
+            reason: 'createApplication must take exactly one entry module argument.',
+            file: entry.filePath,
+          }),
+        );
+      }
+
+      const entryArg = args[0];
+
+      if (!isAnalyzerRecord(entryArg)) {
+        throw new DiagnosticReportError(
+          buildDiagnostic({
+            code: 'BUNNER_APP_002',
+            severity: 'fatal',
+            summary: 'Invalid createApplication entry argument.',
+            reason: 'createApplication entry module must be a statically resolvable identifier.',
+            file: entry.filePath,
+          }),
+        );
+      }
+
+      const entryRef = entryArg.__bunner_ref;
+
+      if (typeof entryRef !== 'string' || entryRef.length === 0) {
+        throw new DiagnosticReportError(
+          buildDiagnostic({
+            code: 'BUNNER_APP_002',
+            severity: 'fatal',
+            summary: 'Invalid createApplication entry argument.',
+            reason: 'createApplication entry module must be a statically resolvable identifier.',
+            file: entry.filePath,
+          }),
+        );
+      }
+    };
 
     const reportDevFailure = (reason: string, file: string = '.'): void => {
       const diagnostic = buildDiagnostic({
@@ -168,22 +251,7 @@ export async function dev(commandOptions?: CommandOptions) {
       await analyzeFile(fullPath);
     }
 
-    if (config.scanPaths) {
-      for (const scanPath of config.scanPaths) {
-        const absPath = resolve(projectRoot, scanPath);
-        const extraFiles = await scanGlobSorted({ glob, baseDir: absPath });
-
-        for (const file of extraFiles) {
-          const fullPath = join(absPath, file);
-
-          if (!shouldAnalyzeFile(fullPath)) {
-            continue;
-          }
-
-          await analyzeFile(fullPath);
-        }
-      }
-    }
+    validateCreateApplication(fileCache);
 
     await rebuild();
 
@@ -201,6 +269,10 @@ export async function dev(commandOptions?: CommandOptions) {
         }
 
         const fullPath = join(srcDir, filename);
+
+        if (!shouldAnalyzeFile(fullPath)) {
+          return;
+        }
 
         if (event.eventType === 'rename' && !(await Bun.file(fullPath).exists())) {
           console.info(`🗑️ File deleted: ${filename}`);
@@ -224,6 +296,12 @@ export async function dev(commandOptions?: CommandOptions) {
 
     process.on('SIGINT', onSigint);
   } catch (error) {
+    if (error instanceof DiagnosticReportError) {
+      reportDiagnostics({ diagnostics: [error.diagnostic] });
+
+      throw error;
+    }
+
     const sourcePath = error instanceof ConfigLoadError ? error.sourcePath : undefined;
     const file = typeof sourcePath === 'string' && sourcePath.length > 0 ? sourcePath : '.';
     const reason = error instanceof Error ? error.message : 'Unknown dev error.';

@@ -300,6 +300,45 @@ export class InjectorGenerator {
                 replacements.push({ start, end, content: alias });
               }
             });
+
+            const injectCalls =
+              factoryRecord && isAnalyzerValueArray(factoryRecord.__bunner_factory_injects)
+                ? factoryRecord.__bunner_factory_injects
+                : [];
+
+            injectCalls.forEach(injectEntry => {
+              const injectRecord = asRecord(injectEntry);
+
+              if (!injectRecord) {
+                return;
+              }
+
+              const start = typeof injectRecord.start === 'number' ? injectRecord.start : null;
+              const end = typeof injectRecord.end === 'number' ? injectRecord.end : null;
+              const tokenKind = injectRecord.tokenKind;
+              const tokenValue = injectRecord.token;
+
+              if (start === null || end === null || tokenKind === 'invalid' || tokenValue === null) {
+                throw new Error('[Bunner AOT] inject() token is not statically determinable.');
+              }
+
+              const tokenName = getRefName(tokenValue);
+
+              if (!isNonEmptyString(tokenName)) {
+                throw new Error('[Bunner AOT] inject() token is not statically determinable.');
+              }
+
+              const resolvedToken = graph.resolveToken(node.name, tokenName);
+              const targetModule = graph.classMap.get(tokenName);
+              const resolvedKey = isNonEmptyString(resolvedToken)
+                ? resolvedToken
+                : targetModule
+                  ? `${targetModule.name}::${tokenName}`
+                  : tokenName;
+
+              replacements.push({ start, end, content: `c.get('${resolvedKey}')` });
+            });
+
             replacements
               .sort((a, b) => b.start - a.start)
               .forEach(rep => {

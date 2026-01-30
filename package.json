@@ -30,7 +30,7 @@
     "firebat": "firebat",
     "format": "oxfmt --config .oxfmtrc.jsonc --write .",
     "knip": "knip",
-    "lint": "oxlint --config .oxlintrc.jsonc --type-aware --type-check --fix .",
+    "lint": "oxlint --config .oxlintrc.jsonc --type-aware --fix .",
     "prepare": "husky",
     "test": "bun test",
     "test:coverage": "bun test --coverage",

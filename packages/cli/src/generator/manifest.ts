@@ -300,7 +300,7 @@ export const scopedKeysMap = createScopedKeysMap();
     const sortedHandlerIndex = [...handlerIndex].sort((a, b) => compareCodePoint(a.id, b.id));
 
     return {
-      schemaVersion: '2',
+      schemaVersion: '3',
       config: {
         sourcePath: PathResolver.normalize(source.path),
         sourceFormat: source.format,

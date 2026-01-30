@@ -10,9 +10,15 @@ import { ModuleNode } from './module-node';
 
 type ProviderMetadata = AnalyzerValue | ClassMetadata;
 
+interface VisibilityResolution {
+  kind: 'module' | 'all' | 'allowlist';
+  visibleTo?: string[];
+}
+
 interface InjectableOptions {
-  visibility?: string;
-  lifetime?: string;
+  visibility: 'module' | 'all' | 'allowlist';
+  visibleTo?: string[];
+  scope: 'singleton' | 'request' | 'transient';
 }
 
 interface ClassDefinition {
@@ -38,6 +44,10 @@ export class ModuleGraph {
   public modules: Map<string, ModuleNode> = new Map();
   public classMap: Map<string, ModuleNode> = new Map();
   public classDefinitions: Map<string, ClassDefinition> = new Map();
+  private moduleFileSet: Set<string> = new Set();
+  private moduleNameByPath: Map<string, string> = new Map();
+  private moduleMarkerExports: Map<string, Set<string>> = new Map();
+  private moduleInjectDeps: Map<string, string[]> = new Map();
 
   constructor(
     private fileMap: Map<string, FileAnalysis>,
@@ -50,6 +60,8 @@ export class ModuleGraph {
     const moduleMap = discovery.discover();
     const orphans = discovery.getOrphans();
 
+    this.moduleFileSet = new Set(moduleMap.keys());
+
     if (orphans.size > 0) {
       const sortedOrphans = Array.from(orphans.values()).sort(compareCodePoint);
       const summary = sortedOrphans.join('\n');
@@ -59,9 +71,30 @@ export class ModuleGraph {
 
     const moduleEntries = Array.from(moduleMap.entries()).sort(([a], [b]) => compareCodePoint(a, b));
 
+    this.moduleNameByPath = this.collectModuleNames(moduleEntries);
+    this.moduleMarkerExports = this.collectModuleMarkerExports(moduleEntries);
+
     for (const [modulePath, files] of moduleEntries) {
       const moduleFile = this.fileMap.get(modulePath);
       const rawDef = moduleFile?.moduleDefinition;
+
+      if (moduleFile) {
+        const defineModuleCalls = moduleFile.defineModuleCalls ?? [];
+
+        if (defineModuleCalls.length === 0) {
+          throw new Error(`[Bunner AOT] Missing defineModule call in module file (${modulePath}).`);
+        }
+
+        if (defineModuleCalls.length > 1) {
+          throw new Error(`[Bunner AOT] Multiple defineModule calls in module file (${modulePath}).`);
+        }
+
+        const exportedCall = defineModuleCalls.find(call => typeof call.exportedName === 'string');
+
+        if (!exportedCall) {
+          throw new Error(`[Bunner AOT] Module marker must be exported from module file (${modulePath}).`);
+        }
+      }
 
       if (rawDef?.nameDeclared === true && !isNonEmptyString(rawDef.name)) {
         throw new Error(`[Bunner AOT] Module name must be a statically determinable string literal (${modulePath}).`);
@@ -72,7 +105,7 @@ export class ModuleGraph {
       }
 
       const moduleRootDir = dirname(modulePath);
-      const moduleName = rawDef?.name ?? basename(moduleRootDir);
+      const moduleName = this.moduleNameByPath.get(modulePath) ?? rawDef?.name ?? basename(moduleRootDir);
       const syntheticMeta: ClassMetadata = {
         className: moduleName,
         heritage: undefined,
@@ -94,6 +127,7 @@ export class ModuleGraph {
       this.modules.set(modulePath, node);
 
       const sortedOwnedFiles = Array.from(files).sort(compareCodePoint);
+      const injectDeps: string[] = [];
 
       sortedOwnedFiles.forEach(filePath => {
         const fileAnalysis = this.fileMap.get(filePath);
@@ -101,6 +135,10 @@ export class ModuleGraph {
         if (!fileAnalysis) {
           return;
         }
+
+        const fileInjectDeps = this.collectInjectDeps(fileAnalysis);
+
+        injectDeps.push(...fileInjectDeps);
 
         fileAnalysis.classes.forEach(cls => {
           this.classMap.set(cls.className, node);
@@ -116,20 +154,25 @@ export class ModuleGraph {
           if (isInjectable) {
             const token = cls.className;
             const injectableDec = cls.decorators.find(d => d.name === 'Injectable');
-            const options = this.parseInjectableOptions(injectableDec?.arguments?.[0]);
-            const visibility = options.visibility ?? 'internal';
-            const lifetime = options.lifetime ?? 'singleton';
+            const options = this.parseInjectableOptions(injectableDec?.arguments?.[0], modulePath, moduleName);
 
             node.providers.set(token, {
               token,
               metadata: cls,
-              isExported: visibility === 'exported',
-              scope: lifetime,
+              visibility: options.visibility,
+              visibleTo: options.visibleTo,
+              scope: options.scope,
               filePath: filePath,
             });
           }
         });
       });
+
+      if (injectDeps.length > 0) {
+        const normalized = Array.from(new Set(injectDeps)).sort(compareCodePoint);
+
+        this.moduleInjectDeps.set(modulePath, normalized);
+      }
 
       if (rawDef?.providers) {
         rawDef.providers.forEach((p: ProviderTokenValue) => {
@@ -141,7 +184,7 @@ export class ModuleGraph {
             return;
           }
 
-          const ref = this.normalizeProvider(p);
+          const ref = this.normalizeProvider(p, modulePath, moduleName);
 
           if (node.providers.has(ref.token) && !this.isImplicit(node.providers.get(ref.token))) {
             throw new Error(
@@ -159,6 +202,8 @@ export class ModuleGraph {
                 const prevMeta = prev?.metadata;
                 const prevFilePath = prev?.filePath;
                 const prevScope = prev?.scope;
+                const prevVisibility = prev?.visibility;
+                const prevVisibleTo = prev?.visibleTo;
 
                 if (prevMeta !== undefined) {
                   ref.metadata = prevMeta;
@@ -172,8 +217,12 @@ export class ModuleGraph {
                   ref.scope = prevScope;
                 }
 
-                if (prev?.isExported === true) {
-                  ref.isExported = true;
+                if (ref.visibility === 'module' && prevVisibility !== undefined) {
+                  ref.visibility = prevVisibility;
+                }
+
+                if (ref.visibleTo === undefined && prevVisibleTo !== undefined) {
+                  ref.visibleTo = prevVisibleTo;
                 }
               }
             }
@@ -204,6 +253,7 @@ export class ModuleGraph {
     nodes.forEach(node => {
       const next = new Set<ModuleNode>();
       const providerTokens = Array.from(node.providers.keys()).sort(compareCodePoint);
+      const injectDeps = this.moduleInjectDeps.get(node.filePath) ?? [];
 
       providerTokens.forEach(token => {
         const provider = node.providers.get(token);
@@ -228,6 +278,20 @@ export class ModuleGraph {
 
           next.add(target);
         });
+      });
+
+      injectDeps.forEach(depToken => {
+        const target = this.classMap.get(depToken);
+
+        if (!target) {
+          return;
+        }
+
+        if (target === node) {
+          return;
+        }
+
+        next.add(target);
       });
       adjacency.set(
         node,
@@ -299,6 +363,12 @@ export class ModuleGraph {
 
   private validateVisibilityAndScope() {
     this.modules.forEach(node => {
+      const injectDeps = this.moduleInjectDeps.get(node.filePath) ?? [];
+
+      injectDeps.forEach(depToken => {
+        this.assertVisibility(node, depToken, 'inject');
+      });
+
       node.providers.forEach(provider => {
         if (provider.metadata === undefined) {
           return;
@@ -307,13 +377,12 @@ export class ModuleGraph {
         const deps = this.extractDeps(provider);
 
         deps.forEach(depToken => {
+          this.assertVisibility(node, depToken, provider.token);
+
+          const sourceScope = provider.scope ?? 'singleton';
           const targetModule = this.classMap.get(depToken);
 
           if (!targetModule) {
-            return;
-          }
-
-          if (targetModule === node) {
             return;
           }
 
@@ -323,16 +392,9 @@ export class ModuleGraph {
             return;
           }
 
-          if (!targetProvider.isExported) {
-            throw new Error(
-              `[Bunner AOT] Visibility Violation: '${provider.token}' in module '${node.name}' tries to inject '${depToken}' from '${targetModule.name}', but it is NOT exported.`,
-            );
-          }
-
-          const sourceScope = provider.scope ?? 'singleton';
           const targetScope = targetProvider.scope ?? 'singleton';
 
-          if (sourceScope === 'singleton' && targetScope === 'request-context') {
+          if (sourceScope === 'singleton' && targetScope === 'request') {
             throw new Error(
               `[Bunner AOT] Scope Violation: Singleton '${provider.token}' cannot inject Request-Scoped '${depToken}'.`,
             );
@@ -340,6 +402,42 @@ export class ModuleGraph {
         });
       });
     });
+  }
+
+  private assertVisibility(node: ModuleNode, depToken: string, sourceLabel: string): void {
+    const targetModule = this.classMap.get(depToken);
+
+    if (!targetModule) {
+      return;
+    }
+
+    if (targetModule === node) {
+      return;
+    }
+
+    const targetProvider = targetModule.providers.get(depToken);
+
+    if (!targetProvider) {
+      return;
+    }
+
+    if (targetProvider.visibility === 'all') {
+      return;
+    }
+
+    if (targetProvider.visibility === 'module') {
+      throw new Error(
+        `[Bunner AOT] Visibility Violation: '${sourceLabel}' in module '${node.name}' tries to inject '${depToken}' from '${targetModule.name}', but it is module-only.`,
+      );
+    }
+
+    const allowlist = targetProvider.visibleTo ?? [];
+
+    if (!allowlist.includes(node.name)) {
+      throw new Error(
+        `[Bunner AOT] Visibility Violation: '${sourceLabel}' in module '${node.name}' tries to inject '${depToken}' from '${targetModule.name}', but it is not allowlisted.`,
+      );
+    }
   }
 
   private extractDeps(provider: ProviderRef): string[] {
@@ -380,11 +478,10 @@ export class ModuleGraph {
     return [];
   }
 
-  private normalizeProvider(p: ProviderTokenValue): ProviderRef {
+  private normalizeProvider(p: ProviderTokenValue, modulePath: string, moduleName: string): ProviderRef {
     let token = 'UNKNOWN';
-    const isExported = false;
-    const scope = 'singleton';
     const record = this.asRecord(p);
+    const options = this.parseInjectableOptions(record ?? undefined, modulePath, moduleName);
 
     if (record?.provide !== undefined) {
       token = this.extractTokenName(record.provide);
@@ -396,10 +493,16 @@ export class ModuleGraph {
 
     const metadata = this.isClassMetadata(p) ? p : (record ?? undefined);
 
-    return { token, metadata, isExported, scope };
+    return {
+      token,
+      metadata,
+      visibility: options.visibility,
+      visibleTo: options.visibleTo,
+      scope: options.scope,
+    };
   }
 
-  private extractTokenName(t: ProviderTokenValue): string {
+  private extractTokenName(t: ProviderTokenValue | AnalyzerValue): string {
     if (typeof t === 'string') {
       return t;
     }
@@ -483,26 +586,198 @@ export class ModuleGraph {
     );
   }
 
-  private parseInjectableOptions(value: ProviderMetadata | undefined): InjectableOptions {
+  private parseInjectableOptions(
+    value: ProviderMetadata | undefined,
+    modulePath: string,
+    moduleName: string,
+  ): InjectableOptions {
     const record = value === undefined ? null : this.asRecord(value);
+    const visibility = this.resolveVisibility(record?.visibleTo, modulePath, moduleName);
+    const scope = this.resolveScope(record?.scope, record?.lifetime);
 
-    if (record === null) {
-      return {};
+    return {
+      visibility: visibility.kind,
+      visibleTo: visibility.visibleTo,
+      scope,
+    };
+  }
+
+  private resolveVisibility(
+    visibleTo: AnalyzerValue | undefined,
+    modulePath: string,
+    moduleName: string,
+  ): VisibilityResolution {
+    if (visibleTo === undefined) {
+      return { kind: 'module' };
     }
 
-    const visibility = typeof record.visibility === 'string' ? record.visibility : undefined;
-    const lifetime = typeof record.lifetime === 'string' ? record.lifetime : undefined;
-    const options: InjectableOptions = {};
+    if (typeof visibleTo === 'string') {
+      if (visibleTo === 'all') {
+        return { kind: 'all' };
+      }
 
-    if (visibility !== undefined) {
-      options.visibility = visibility;
+      if (visibleTo === 'module') {
+        return { kind: 'module' };
+      }
+
+      throw new Error(`[Bunner AOT] Invalid Injectable visibleTo value: '${visibleTo}'.`);
     }
 
-    if (lifetime !== undefined) {
-      options.lifetime = lifetime;
+    const arrayValue = isAnalyzerValueArray(visibleTo) ? visibleTo : null;
+
+    if (arrayValue === null) {
+      throw new Error('[Bunner AOT] Injectable visibleTo must be "all", "module", or ModuleMarkerList.');
     }
 
-    return options;
+    if (arrayValue.length === 0) {
+      throw new Error('[Bunner AOT] Injectable visibleTo allowlist must not be empty.');
+    }
+
+    const resolved = arrayValue
+      .map(token => this.resolveModuleMarker(token, modulePath, moduleName))
+      .filter((value): value is string => typeof value === 'string');
+
+    if (resolved.length !== arrayValue.length) {
+      throw new Error('[Bunner AOT] Injectable visibleTo contains non-determinable module markers.');
+    }
+
+    const unique = Array.from(new Set(resolved)).sort(compareCodePoint);
+
+    return { kind: 'allowlist', visibleTo: unique };
+  }
+
+  private resolveScope(scope: AnalyzerValue | undefined, legacyLifetime: AnalyzerValue | undefined): InjectableOptions['scope'] {
+    const raw = typeof scope === 'string' ? scope : typeof legacyLifetime === 'string' ? legacyLifetime : undefined;
+
+    if (raw === undefined) {
+      return 'singleton';
+    }
+
+    if (raw === 'singleton' || raw === 'transient') {
+      return raw;
+    }
+
+    if (raw === 'request' || raw === 'request-context') {
+      return 'request';
+    }
+
+    throw new Error(`[Bunner AOT] Invalid provider scope '${raw}'.`);
+  }
+
+  private collectModuleNames(moduleEntries: Array<[string, Set<string>]>): Map<string, string> {
+    const names = new Map<string, string>();
+
+    moduleEntries.forEach(([modulePath]) => {
+      const moduleFile = this.fileMap.get(modulePath);
+      const rawDef = moduleFile?.moduleDefinition;
+      const moduleRootDir = dirname(modulePath);
+      const moduleName = rawDef?.name ?? basename(moduleRootDir);
+
+      names.set(modulePath, moduleName);
+    });
+
+    return names;
+  }
+
+  private collectModuleMarkerExports(moduleEntries: Array<[string, Set<string>]>): Map<string, Set<string>> {
+    const map = new Map<string, Set<string>>();
+
+    moduleEntries.forEach(([modulePath]) => {
+      const moduleFile = this.fileMap.get(modulePath);
+      const exports = new Set<string>();
+      const defineCalls = moduleFile?.defineModuleCalls ?? [];
+
+      defineCalls.forEach(call => {
+        if (typeof call.exportedName === 'string' && call.exportedName.length > 0) {
+          exports.add(call.exportedName);
+        }
+      });
+
+      if (exports.size > 0) {
+        map.set(modulePath, exports);
+      }
+    });
+
+    return map;
+  }
+
+  private resolveModulePath(importSource: string | undefined): string | null {
+    if (typeof importSource !== 'string' || importSource.length === 0) {
+      return null;
+    }
+
+    const candidates = [
+      importSource,
+      `${importSource}.ts`,
+      `${importSource}.tsx`,
+      `${importSource}/index.ts`,
+      `${importSource}/index.tsx`,
+    ];
+
+    for (const candidate of candidates) {
+      if (this.moduleFileSet.has(candidate)) {
+        return candidate;
+      }
+    }
+
+    return null;
+  }
+
+  private resolveModuleMarker(token: AnalyzerValue, modulePath: string, moduleName: string): string | null {
+    const record = this.asRecord(token);
+
+    if (!record || typeof record.__bunner_ref !== 'string') {
+      return null;
+    }
+
+    const refName = record.__bunner_ref;
+    const importSource = typeof record.__bunner_import_source === 'string' ? record.__bunner_import_source : undefined;
+    const targetModulePath = this.resolveModulePath(importSource) ?? modulePath;
+    const exports = this.moduleMarkerExports.get(targetModulePath);
+
+    if (!exports || exports.size === 0) {
+      return null;
+    }
+
+    if (exports.has('default')) {
+      return this.moduleNameByPath.get(targetModulePath) ?? moduleName;
+    }
+
+    if (exports.has(refName)) {
+      return this.moduleNameByPath.get(targetModulePath) ?? moduleName;
+    }
+
+    return null;
+  }
+
+  private collectInjectDeps(fileAnalysis: FileAnalysis): string[] {
+    const injectCalls = fileAnalysis.injectCalls ?? [];
+
+    if (injectCalls.length === 0) {
+      return [];
+    }
+
+    const deps: string[] = [];
+
+    injectCalls.forEach(call => {
+      if (call.tokenKind === 'invalid') {
+        throw new Error('[Bunner AOT] inject() token is not statically determinable.');
+      }
+
+      if (call.token === null) {
+        throw new Error('[Bunner AOT] inject() token is not statically determinable.');
+      }
+
+      const tokenName = this.extractTokenName(call.token);
+
+      if (!tokenName || tokenName === 'UNKNOWN') {
+        throw new Error('[Bunner AOT] inject() token is not statically determinable.');
+      }
+
+      deps.push(tokenName);
+    });
+
+    return deps;
   }
 
   private asRecord(value: ProviderMetadata | ProviderTokenValue): AnalyzerValueRecord | null {

@@ -188,6 +188,7 @@ export class AdapterSpecResolver {
       classes: parseResult.classes,
       reExports: parseResult.reExports,
       exports: parseResult.exports,
+      defineModuleCalls: parseResult.defineModuleCalls,
     };
 
     if (parseResult.imports !== undefined) {
