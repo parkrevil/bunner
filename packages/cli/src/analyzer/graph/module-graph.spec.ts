@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, mock } from 'bun:test';
+import { createRequire } from 'node:module';
+
+// MUST: MUST-4 (모듈 경계 판정 deterministic)
 
 import type { ClassMetadata } from '../interfaces';
 import type { FileAnalysis } from './interfaces';
@@ -9,7 +12,40 @@ import type {
   ModuleFileAnalysisParams,
 } from './module-graph.spec.interfaces';
 
-import { ModuleGraph } from './module-graph';
+const require = createRequire(import.meta.url);
+const actualPath = require('path');
+const actualCommon = require('../../common');
+const actualModuleDiscovery = require('../module-discovery');
+const actualModuleNode = require('./module-node');
+
+mock.module('path', () => {
+  return {
+    ...actualPath,
+    basename: (...args: unknown[]) => actualPath.basename(...args),
+    dirname: (...args: unknown[]) => actualPath.dirname(...args),
+  };
+});
+
+mock.module('../../common', () => {
+  return {
+    ...actualCommon,
+    compareCodePoint: (...args: unknown[]) => actualCommon.compareCodePoint(...args),
+  };
+});
+
+mock.module('../module-discovery', () => {
+  return {
+    ModuleDiscovery: actualModuleDiscovery.ModuleDiscovery,
+  };
+});
+
+mock.module('./module-node', () => {
+  return {
+    ModuleNode: actualModuleNode.ModuleNode,
+  };
+});
+
+const { ModuleGraph } = require('./module-graph');
 
 const requireNode = (node: ModuleNode | undefined): ModuleNode => {
   if (!node) {
@@ -293,4 +329,78 @@ describe('ModuleGraph', () => {
 
     expect(() => graph.build()).toThrow(/inject\(\) token is not statically determinable/);
   });
+
+  it('should throw when module file is missing defineModule call', () => {
+    const modulePath = '/app/src/app/__module__.ts';
+    const fileMap = new Map<string, FileAnalysis>();
+
+    fileMap.set(modulePath, {
+      filePath: modulePath,
+      classes: [],
+      reExports: [],
+      exports: [],
+      imports: {},
+    });
+
+    const graph = new ModuleGraph(fileMap, '__module__.ts');
+
+    expect(() => graph.build()).toThrow(/Missing defineModule call/);
+  });
+
+  it('should throw when module has multiple defineModule calls', () => {
+    const modulePath = '/app/src/app/__module__.ts';
+    const fileMap = new Map<string, FileAnalysis>();
+
+    fileMap.set(modulePath, {
+      filePath: modulePath,
+      classes: [],
+      reExports: [],
+      exports: [],
+      imports: {},
+      defineModuleCalls: [
+        {
+          callee: 'defineModule',
+          importSource: '@bunner/core',
+          args: [],
+          exportedName: 'module1',
+        },
+        {
+          callee: 'defineModule',
+          importSource: '@bunner/core',
+          args: [],
+          exportedName: 'module2',
+        },
+      ],
+    });
+
+    const graph = new ModuleGraph(fileMap, '__module__.ts');
+
+    expect(() => graph.build()).toThrow(/Multiple defineModule calls/);
+  });
+
+  it('should throw when defineModule call is not exported', () => {
+    const modulePath = '/app/src/app/__module__.ts';
+    const fileMap = new Map<string, FileAnalysis>();
+
+    fileMap.set(modulePath, {
+      filePath: modulePath,
+      classes: [],
+      reExports: [],
+      exports: [],
+      imports: {},
+      defineModuleCalls: [
+        {
+          callee: 'defineModule',
+          importSource: '@bunner/core',
+          args: [],
+          exportedName: undefined,
+        },
+      ],
+    });
+
+    const graph = new ModuleGraph(fileMap, '__module__.ts');
+
+    expect(() => graph.build()).toThrow(/Module marker must be exported/);
+  });
 });
+

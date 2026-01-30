@@ -1,13 +1,41 @@
-import { describe, expect, it } from 'bun:test';
-import { mkdir, rm } from 'fs/promises';
-import { dirname, join } from 'path';
-
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
+import { createRequire } from 'node:module';
 import type { FileAnalysis } from './graph/interfaces';
+import type { FileSetup } from '../../test/shared/interfaces';
 
-import { PathResolver } from '../common';
-import { AdapterSpecResolver, AstParser } from './index';
 
-type AstParseResult = ReturnType<AstParser['parse']>;
+import type { AstParseResult } from './test/types';
+
+import { createBunFileStub } from '../../test/shared/stubs';
+
+const require = createRequire(import.meta.url);
+const actualOxcParser = require('oxc-parser');
+const actualPath = require('path');
+const actualCommon = require('../common');
+const actualAstParser = require('./ast-parser');
+const { PathResolver } = actualCommon;
+const { join } = actualPath;
+
+mock.module('oxc-parser', () => {
+  return {
+    parseSync: (...args: unknown[]) => actualOxcParser.parseSync(...args),
+  };
+});
+
+mock.module('../common', () => {
+  return {
+    ...actualCommon,
+    PathResolver: actualCommon.PathResolver,
+  };
+});
+
+mock.module('./ast-parser', () => {
+  return {
+    AstParser: actualAstParser.AstParser,
+  };
+});
+
+const { AdapterSpecResolver, AstParser } = require('./index');
 
 const applyParseToAnalysis = (analysis: FileAnalysis, parseResult: AstParseResult): FileAnalysis => {
   if (parseResult.imports !== undefined) {
@@ -29,75 +57,73 @@ const applyParseToAnalysis = (analysis: FileAnalysis, parseResult: AstParseResul
   return analysis;
 };
 
-async function createTempDir(): Promise<string> {
-  const base = join(process.cwd(), '.tmp-adapter-spec');
-
-  await rm(base, { recursive: true, force: true });
-  await mkdir(base, { recursive: true });
-
-  return base;
-}
-
-async function writeFileContent(filePath: string, content: string): Promise<void> {
-  await mkdir(dirname(filePath), { recursive: true });
-  await Bun.write(filePath, content);
-}
-
 describe('adapter-spec-resolver', () => {
-  it('should resolve adapterStaticSpecs and handlerIndex when entry files are provided', async () => {
-    // Arrange
-    const projectRoot = await createTempDir();
-    const srcDir = join(projectRoot, 'src');
-    const adapterDir = join(projectRoot, 'adapters', 'test-adapter');
-    const controllerFile = join(srcDir, 'controllers.ts');
-    const entryFile = join(adapterDir, 'index.ts');
+  const projectRoot = '/project';
+  const srcDir = join(projectRoot, 'src');
+  const adapterDir = join(projectRoot, 'adapters', 'test-adapter');
+  const controllerFile = join(srcDir, 'controllers.ts');
+  const entryFile = join(adapterDir, 'index.ts');
+  let setup: FileSetup;
+  let bunFileSpy: ReturnType<typeof spyOn> | undefined;
 
-    await mkdir(srcDir, { recursive: true });
-    await mkdir(adapterDir, { recursive: true });
-    await writeFileContent(
-      entryFile,
-      [
-        'function Controller() { return () => {}; }',
-        'function Get() { return () => {}; }',
-        'function startAdapter() {}',
-        'function stopAdapter() {}',
-        'function dispatchBefore() {}',
-        'function dispatchHandler() {}',
-        '',
-        'export class TestAdapter {',
-        "  static adapterId = 'test';",
-        "  static middlewarePhaseOrder = ['Before'];",
-        '  static supportedMiddlewarePhases = { Before: true };',
-        '  static entryDecorators = { controller: Controller, handler: [Get] };',
-        '  static runtime = { start: startAdapter, stop: stopAdapter };',
-        '  static pipeline = { middlewares: [dispatchBefore], guards: [], pipes: [], handler: dispatchHandler };',
-        '}',
-        '',
-        'export const adapterSpec = defineAdapter(TestAdapter);',
-        '',
-      ].join('\n'),
-    );
-    await writeFileContent(
-      controllerFile,
-      [
-        'function Controller() { return () => {}; }',
-        'function Get() { return () => {}; }',
-        'function Middlewares() { return () => {}; }',
-        'function mwOne() {}',
-        '',
-        '@Controller()',
-        'class SampleController {',
-        '  @Get()',
-        "  @Middlewares('Before', [mwOne])",
-        '  handle() {}',
-        '}',
-      ].join('\n'),
-    );
+  beforeEach(() => {
+    setup = {
+      existsByPath: new Map<string, boolean>(),
+      textByPath: new Map<string, string>(),
+    };
+
+    bunFileSpy = spyOn(Bun, 'file').mockImplementation((path: string) => {
+      return createBunFileStub(setup, path) as any;
+    });
+  });
+
+  afterEach(() => {
+    bunFileSpy?.mockRestore();
+  });
+
+  it('should resolve adapterStaticSpecs and handlerIndex when adapterSpec is exported in entry file', async () => {
+    // Arrange
+    const entryCode = [
+      'function Controller() { return () => {}; }',
+      'function Get() { return () => {}; }',
+      'function startAdapter() {}',
+      'function stopAdapter() {}',
+      'function dispatchBefore() {}',
+      'function dispatchHandler() {}',
+      '',
+      'export class TestAdapter {',
+      "  static adapterId = 'test';",
+      "  static middlewarePhaseOrder = ['Before'];",
+      '  static supportedMiddlewarePhases = { Before: true };',
+      '  static entryDecorators = { controller: Controller, handler: [Get] };',
+      '  static runtime = { start: startAdapter, stop: stopAdapter };',
+      '  static pipeline = { middlewares: [dispatchBefore], guards: [], pipes: [], handler: dispatchHandler };',
+      '}',
+      '',
+      'export const adapterSpec = defineAdapter(TestAdapter);',
+      '',
+    ].join('\n');
+    const controllerCode = [
+      'function Controller() { return () => {}; }',
+      'function Get() { return () => {}; }',
+      'function Middlewares() { return () => {}; }',
+      'function mwOne() {}',
+      '',
+      '@Controller()',
+      'class SampleController {',
+      '  @Get()',
+      "  @Middlewares('Before', [mwOne])",
+      '  handle() {}',
+      '}',
+    ].join('\n');
+
+    setup.existsByPath.set(entryFile, true);
+    setup.textByPath.set(entryFile, entryCode);
 
     const parser = new AstParser();
-    const controllerContent = await Bun.file(controllerFile).text();
-    const controllerParse = parser.parse(controllerFile, controllerContent);
     const fileMap = new Map<string, FileAnalysis>();
+
+    const controllerParse = parser.parse(controllerFile, controllerCode);
     const controllerAnalysis: FileAnalysis = {
       filePath: controllerFile,
       classes: controllerParse.classes,
@@ -113,8 +139,25 @@ describe('adapter-spec-resolver', () => {
     };
 
     applyParseToAnalysis(controllerAnalysis, controllerParse);
-
     fileMap.set(controllerFile, controllerAnalysis);
+
+    const entryParse = parser.parse(entryFile, entryCode);
+    const entryAnalysis: FileAnalysis = {
+      filePath: entryFile,
+      classes: entryParse.classes,
+      reExports: entryParse.reExports,
+      exports: entryParse.exports,
+    };
+
+    applyParseToAnalysis(entryAnalysis, entryParse);
+    entryAnalysis.exportedValues = {
+      ...(entryAnalysis.exportedValues ?? {}),
+      adapterSpec: {
+        __bunner_call: 'defineAdapter',
+        args: [{ __bunner_ref: 'TestAdapter' }],
+      } as any,
+    };
+    fileMap.set(entryFile, entryAnalysis);
 
     // Act
     const resolver = new AdapterSpecResolver();
@@ -127,27 +170,15 @@ describe('adapter-spec-resolver', () => {
     const expectedId = `test:${expectedFile}#SampleController.handle`;
 
     expect(result.handlerIndex.map(entry => entry.id)).toEqual([expectedId]);
-    await rm(projectRoot, { recursive: true, force: true });
   });
 
-  it('should fail when adapterSpec is missing', async () => {
+  it('should fail when adapterSpec export is missing in entry files', async () => {
     // Arrange
-    const projectRoot = await createTempDir();
-    const srcDir = join(projectRoot, 'src');
-    const adapterDir = join(projectRoot, 'adapters', 'missing-adapter');
-    const controllerFile = join(srcDir, 'controllers.ts');
-    const entryFile = join(adapterDir, 'index.ts');
-
-    await mkdir(srcDir, { recursive: true });
-    await mkdir(adapterDir, { recursive: true });
-    await writeFileContent(entryFile, 'export const notAdapterSpec = 123;');
-    await writeFileContent(controllerFile, 'class SampleController {}');
-
+    const controllerCode = 'class SampleController {}';
     const parser = new AstParser();
-    const controllerContent = await Bun.file(controllerFile).text();
-    const controllerParse = parser.parse(controllerFile, controllerContent);
     const fileMap = new Map<string, FileAnalysis>();
-    const missingAnalysis: FileAnalysis = {
+    const controllerParse = parser.parse(controllerFile, controllerCode);
+    const controllerAnalysis: FileAnalysis = {
       filePath: controllerFile,
       classes: controllerParse.classes,
       reExports: controllerParse.reExports,
@@ -161,22 +192,29 @@ describe('adapter-spec-resolver', () => {
       ],
     };
 
-    applyParseToAnalysis(missingAnalysis, controllerParse);
+    applyParseToAnalysis(controllerAnalysis, controllerParse);
+    fileMap.set(controllerFile, controllerAnalysis);
 
-    fileMap.set(controllerFile, missingAnalysis);
+    const entryParse = parser.parse(entryFile, 'export const notAdapterSpec = 123;');
+    const entryAnalysis: FileAnalysis = {
+      filePath: entryFile,
+      classes: entryParse.classes,
+      reExports: entryParse.reExports,
+      exports: entryParse.exports,
+      exportedValues: { notAdapterSpec: 123 } as any,
+    };
+
+    applyParseToAnalysis(entryAnalysis, entryParse);
+    fileMap.set(entryFile, entryAnalysis);
 
     const resolver = new AdapterSpecResolver();
-    let errorMessage = '';
 
     // Act
-    try {
+    const act = async () => {
       await resolver.resolve({ fileMap, projectRoot });
-    } catch (error) {
-      errorMessage = String(error);
-    }
+    };
 
     // Assert
-    expect(errorMessage).toContain('No adapterSpec exports found');
-    await rm(projectRoot, { recursive: true, force: true });
+    await expect(act()).rejects.toThrow(/No adapterSpec exports found/);
   });
 });

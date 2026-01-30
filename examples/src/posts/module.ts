@@ -1,3 +1,5 @@
 import { defineModule } from '@bunner/core';
 
-defineModule();
+const postsModule = defineModule();
+
+export { postsModule };

@@ -287,6 +287,16 @@ export class AstParser {
               const initNode = this.asNode(decl.init);
 
               if (initNode?.type === 'CallExpression') {
+                const createCall = this.extractCreateApplicationCall(
+                  initNode,
+                  createApplicationAliases,
+                  createApplicationNamespaces,
+                );
+
+                if (createCall) {
+                  createApplicationCalls.push(createCall);
+                }
+
                 const defineCall = this.extractDefineModuleCall(
                   initNode,
                   defineModuleAliases,
@@ -405,6 +415,16 @@ export class AstParser {
             const initNode = this.asNode(decl.init);
 
             if (initNode?.type === 'CallExpression') {
+              const createCall = this.extractCreateApplicationCall(
+                initNode,
+                createApplicationAliases,
+                createApplicationNamespaces,
+              );
+
+              if (createCall) {
+                createApplicationCalls.push(createCall);
+              }
+
               const defineCall = this.extractDefineModuleCall(
                 initNode,
                 defineModuleAliases,

@@ -162,18 +162,6 @@ export async function dev(commandOptions?: CommandOptions) {
       }
     };
 
-    const reportDevFailure = (reason: string, file: string = '.'): void => {
-      const diagnostic = buildDiagnostic({
-        code: 'DEV_FAILED',
-        severity: 'fatal',
-        summary: 'Dev failed.',
-        reason,
-        file,
-      });
-
-      reportDiagnostics({ diagnostics: [diagnostic] });
-    };
-
     async function rebuild() {
       try {
         const fileMap = new Map(fileCache.entries());
@@ -219,10 +207,15 @@ export async function dev(commandOptions?: CommandOptions) {
         }
       } catch (error) {
         const reason = error instanceof Error ? error.message : 'Unknown dev error.';
+        const diagnostic = buildDiagnostic({
+          code: 'DEV_FAILED',
+          severity: 'fatal',
+          summary: 'Dev failed.',
+          reason,
+          file: '.',
+        });
 
-        reportDevFailure(reason);
-
-        throw error;
+        throw new DiagnosticReportError(diagnostic);
       }
     }
 
@@ -284,7 +277,11 @@ export async function dev(commandOptions?: CommandOptions) {
 
         try {
           await rebuild();
-        } catch (_error) {
+        } catch (error) {
+          if (error instanceof DiagnosticReportError) {
+            reportDiagnostics({ diagnostics: [error.diagnostic] });
+          }
+
           return;
         }
       })();

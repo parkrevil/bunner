@@ -28,7 +28,6 @@
 #### 예외 허용 범위
 
 - **Integration Test**: 명시적으로 준비된 로컬 인프라(DB, Redis 등)만 허용
-- **E2E Test**: 실제 네트워크/프로세스 허용
 
 위 규칙을 위반하는 테스트는 **구조적으로 잘못된 테스트**로 간주한다.
 
@@ -89,11 +88,10 @@ Bun Test가 제공하는 표준 훅을 최대한 활용하여 테스트 전후 �
 
 ## 3. 테스트 계층 구조 (Test Pyramid)
 
-| 계층            | 파일 패턴       | 위치                              | 목적                                  | Mocking 전략                                      |
-| :-------------- | :-------------- | :-------------------------------- | :------------------------------------ | :------------------------------------------------ |
-| **Unit**        | `*.spec.ts`     | 소스 코드와 동일 위치 (Colocated) | 단일 함수/클래스의 로직 검증          | **Strict Mocking** (외부 의존성 전면 차단)        |
-| **Integration** | `*.test.ts`     | `test/integration/`               | 모듈 간 상호작용 및 파이프라인 검증   | 3rd Party API만 Mocking (DB는 실제/인메모리 사용) |
-| **E2E**         | `*.e2e.test.ts` | `test/e2e/`                       | 최종 사용자 시나리오 검증 (Black-box) | 원칙적 금지 (제어 불가능한 외부 API 제외)         |
+|계층|파일 패턴|위치|목적|Mocking 전략|
+|:--|:--|:--|:--|:--|
+|**Unit**|`*.spec.ts`|소스 코드와 동일 위치 (Colocated)|단일 함수/클래스의 로직 검증|**Strict Mocking** (외부 의존성 전면 차단)|
+|**Integration**|`*.test.ts`|`test/integration/` (패키지 루트 또는 레포 루트)|모듈 간 상호작용 및 파이프라인 검증|3rd Party API만 Mocking (DB는 실제/인메모리 사용)|
 
 ### 3.1 Test Case Coverage Model (Mandatory)
 
@@ -114,6 +112,54 @@ Bun Test가 제공하는 표준 훅을 최대한 활용하여 테스트 전후 �
 
 Happy Path만 검증하는 테스트는
 **테스트 대상의 신뢰성을 보장하지 못하므로 불완전한 테스트**로 간주한다.
+
+### 3.2 Monorepo Test Layout (Hybrid)
+
+이 저장소는 Monorepo이므로 테스트 자산은 아래 2가지 루트로 분리된다.
+
+- 패키지 로컬: 각 패키지가 독립적으로 유지되기 위해 필요한 테스트 자산은 패키지 루트의 `test/` 아래에 둔다.
+- 레포 루트: 여러 패키지를 가로지르는 공통 규격/공유 인프라 모킹/오케스트레이션은 레포 루트의 `test/` 아래에 둔다.
+
+패키지 내부 코드는 레포 루트 `test/`를 참조하지 않는 것을 기본값으로 둔다.
+
+표준 배치(요약):
+
+```text
+<repo-root>/
+├── packages/
+│   └── <pkg>/
+│       ├── src/
+│       │   └── <dir>/
+│       │       ├── <file>.ts
+│       │       ├── <file>.spec.ts
+│       │       └── test/                # src-local test assets
+│       │           ├── interfaces.ts
+│       │           ├── types.ts
+│       │           ├── constants.ts
+│       │           ├── stubs.ts
+│       │           ├── fixtures.ts
+│       │           ├── factories.ts
+│       │           ├── helpers.ts
+│       │           └── utils.ts
+│       └── test/
+│           ├── shared/
+│           │   ├── types/
+│           │   ├── factories/
+│           │   └── stubs/
+│           └── integration/
+│               └── <domain>/
+│                   ├── <case>.test.ts
+│                   └── <flow>.test.ts
+└── test/                                # repo-root test kernel & cross-package verification
+    ├── setup.ts
+    ├── matchers/
+    │   ├── index.ts
+    │   └── *.matcher.ts
+    ├── shared/
+    │   └── types/
+    ├── fixtures/
+    └── mocks/
+```
 
 ---
 
@@ -165,7 +211,7 @@ Unit Test에서 테스트 대상 함수(SUT)가 내부적으로 호출하는
 이 규칙을 위반한 테스트는
 Unit Test가 아닌 **암묵적 Integration Test**로 간주하며 허용되지 않는다.
 
-#### Integration / E2E Structure Rules (MUST)
+#### Integration Structure Rules (MUST)
 
 - `describe` 1-depth는 **주제 또는 사용자 관점의 기능 단위**여야 한다.
 - `describe` 2-depth는 **옵션, 분기, 환경 차이**를 표현할 때만 사용한다.
@@ -222,20 +268,6 @@ Integration Test는 내부 경계 간 결합을 검증한다.
 - 외부 SaaS/외부 API/결제/메일/SMS 등 통제 불가능한 의존성은 Mock/Stub로 대체한다.
 - 로컬에서 재현 가능한 인프라(DB, Redis 등)는 실제 인스턴스 사용을 허용한다.
 
-#### E2E Mocking Boundary
-
-E2E Test는 사용자 관점의 Black-box 검증이다.
-
-- 원칙적으로 내부 모킹은 금지한다.
-- 단, 통제 불가능한 외부 의존성(외부 SaaS/API)은 테스트 더블(Stub server 등)로 대체할 수 있다.
-
-### 4.5 E2E 테스트 (End-to-End Tests)
-
-- **Black-box Testing**: 시스템 내부 구조(DB 스키마, 클래스 명 등)를 전혀 모른다고 가정한다. HTTP 요청/응답 만으로 검증한다.
-- **시나리오 중심**: 단순 기능 점검이 아닌, 사용자 시나리오(User Journey)를 기반으로 작성한다.
-
----
-
 ## 5. 코딩 표준 및 스타일 (Coding Standards)
 
 ### 5.1 네이밍 컨벤션 (Naming - BDD Style)
@@ -273,14 +305,33 @@ describe('UserService', () => {
 ### 5.3 데이터셋 및 Fixture 관리 (Datasets & Stubs)
 
 - **하드코딩 지양**: 반복되는 테스트 데이터는 별도 파일로 분리한다.
-- **Stubs**: 정적인 데이터셋(JSON 등)은 `test/fixtures/` 또는 `test/stubs/` 디렉토리에 위치시킨다.
+- **Fixtures**: 정적인 데이터셋(JSON 등)은 `test/fixtures/` 디렉토리에 위치시킨다.
   - Unit Test에서는 런타임 파일 I/O에 의존하지 않도록, 모듈 import 등 결정적인 로딩 방식만 사용한다.
-- **Factories**: 동적인 데이터 생성이 필요한 경우, `test/utils/factories/` 내에 팩토리 함수를 작성하여 활용한다. (예: `createUserParams()`)
+- **Stubs**: 테스트 더블로 사용하는 스텁 데이터/오브젝트/함수는 `packages/<pkg>/src/<dir>/test/stubs.ts` 또는 `packages/<pkg>/test/shared/stubs/`에 위치시킨다.
+- **Factories**: 동적인 데이터 생성이 필요한 경우, `packages/<pkg>/src/<dir>/test/factories.ts` 또는 `packages/<pkg>/test/shared/factories/`에 작성하여 활용한다. (예: `createUserParams()`)
+
+Monorepo에서 위 `test/` 경로는 다음 중 하나를 의미할 수 있다.
+
+- 레포 루트 `test/`
+- 패키지 루트 `packages/<pkg>/test/`
 
 ### 5.4 헬퍼 및 유틸리티 (Helpers & Utils)
 
-- **전역 헬퍼**: 모든 테스트에서 공통으로 사용되는 유틸리티(예: `mockLogger`, `createTestApp`)는 `test/utils/`에 작성한다.
+- **전역 헬퍼**: 모든 테스트에서 공통으로 사용되는 유틸리티(예: `mockLogger`, `createTestApp`)는 `packages/<pkg>/src/<dir>/test/helpers.ts` 또는 `packages/<pkg>/test/shared/`에 작성한다.
 - **지역 헬퍼**: 특정 도메인에만 한정된 헬퍼는 해당 테스트 파일과 인접한 `__test_utils__` 디렉토리나 파일 내부에 작성한다.
+
+Monorepo에서 전역 헬퍼의 기준은 아래와 같이 해석한다.
+
+- 패키지 로컬 전역 헬퍼: `packages/<pkg>/test/shared/`
+- 레포 루트 전역 헬퍼: `test/`
+
+Monorepo에서 전역 타입/매처/인프라 모킹은 아래 위치를 기준으로 한다.
+
+- 전역 타입: `test/shared/types/` (패키지 로컬이면 `packages/<pkg>/test/shared/types/`)
+- 전역 매처: `test/matchers/`
+- 인프라 모킹: `test/mocks/`
+
+본 문서는 TestContainer를 표준 테스트 유틸리티로 정의하지 않는다.
 
 ### 5.5 Assertion Rules (One It = One Reason) (MUST)
 
@@ -306,8 +357,9 @@ describe('UserService', () => {
    - Snapshot 변경을 무비판적으로 승인하는 행위는 테스트 무효화로 간주한다.
 
 6. **Code-Driven Expectation Change**
-  - 실패한 테스트를 “현재 코드가 하는 대로” 통과시키기 위해 기대 결과(expected output)를 조정하는 것을 금지한다.
-  - 기대 결과 변경이 필요하다면, 먼저 입력과 기대 결과(계약)를 명시적으로 확정한 뒤 그 계약을 기준으로 변경한다.
+
+    - 실패한 테스트를 “현재 코드가 하는 대로” 통과시키기 위해 기대 결과(expected output)를 조정하는 것을 금지한다.
+    - 기대 결과 변경이 필요하다면, 먼저 입력과 기대 결과(계약)를 명시적으로 확정한 뒤 그 계약을 기준으로 변경한다.
 
 ### 6.1 Failure Message Quality
 

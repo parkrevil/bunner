@@ -1,4 +1,8 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, mock } from 'bun:test';
+import { createRequire } from 'node:module';
+
+// MUST: MUST-8 (manifest sorting deterministic)
+
 import { runInNewContext } from 'node:vm';
 import { ModuleKind, ScriptTarget, transpileModule } from 'typescript';
 
@@ -7,7 +11,55 @@ import type { AnalyzerValue, AnalyzerValueRecord } from '../analyzer/types';
 import type { DeepFreezeModule, GeneratedBlockParams, MetadataRegistryModule, ScopedKeysMapModule } from './types';
 
 import { ModuleGraph } from '../analyzer/graph/module-graph';
-import { ManifestGenerator } from './manifest';
+const require = createRequire(import.meta.url);
+const actualPath = require('path');
+const actualAnalyzer = require('../analyzer');
+const actualCommon = require('../common');
+const actualImportRegistry = require('./import-registry');
+const actualInjector = require('./injector');
+const actualMetadata = require('./metadata');
+
+mock.module('path', () => {
+  return {
+    ...actualPath,
+    dirname: (...args: unknown[]) => actualPath.dirname(...args),
+    relative: (...args: unknown[]) => actualPath.relative(...args),
+  };
+});
+
+mock.module('../analyzer', () => {
+  return {
+    ...actualAnalyzer,
+  };
+});
+
+mock.module('../common', () => {
+  return {
+    ...actualCommon,
+    compareCodePoint: (...args: unknown[]) => actualCommon.compareCodePoint(...args),
+    PathResolver: actualCommon.PathResolver,
+  };
+});
+
+mock.module('./import-registry', () => {
+  return {
+    ImportRegistry: actualImportRegistry.ImportRegistry,
+  };
+});
+
+mock.module('./injector', () => {
+  return {
+    InjectorGenerator: actualInjector.InjectorGenerator,
+  };
+});
+
+mock.module('./metadata', () => {
+  return {
+    MetadataGenerator: actualMetadata.MetadataGenerator,
+  };
+});
+
+const { ManifestGenerator } = require('./manifest');
 
 const isAnalyzerValueRecord = (value: AnalyzerValue): value is AnalyzerValueRecord => {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -369,7 +421,6 @@ describe('ManifestGenerator', () => {
         { id: 'a:src/controllers.ts#AController.handle' },
       ],
     });
-
     const parsed = JSON.parse(json);
     const parsedRecord = assertRecordValue(parsed as AnalyzerValue);
     const modules = assertArrayValue(parsedRecord.modules);
@@ -385,5 +436,355 @@ describe('ManifestGenerator', () => {
       'a:src/controllers.ts#AController.handle',
       'b:src/controllers.ts#BController.handle',
     ]);
+  });
+
+  it('should generate deterministic module arrays (sorted by id)', () => {
+    const moduleNames = ['zeta', 'alpha', 'beta'];
+    const fileMap = new Map<string, FileAnalysis>();
+
+    moduleNames.forEach(name => {
+      const modulePath = `/app/src/${name}/__module__.ts`;
+
+      fileMap.set(modulePath, {
+        filePath: modulePath,
+        classes: [],
+        reExports: [],
+        exports: [],
+        defineModuleCalls: [
+          {
+            callee: 'defineModule',
+            importSource: '@bunner/core',
+            args: [],
+            exportedName: `${name}Module`,
+          },
+        ],
+        imports: {},
+        moduleDefinition: {
+          name: `${name}Module`,
+          providers: [],
+          imports: {},
+        },
+      });
+    });
+
+    const graph = new ModuleGraph(fileMap, '__module__.ts');
+
+    graph.build();
+
+    const gen = new ManifestGenerator();
+    const json = gen.generateJson({
+      graph,
+      projectRoot: '/app',
+      source: { path: '/app/bunner.json', format: 'json' },
+      resolvedConfig: {
+        module: { fileName: '__module__.ts' },
+        sourceDir: 'src',
+        entry: 'src/main.ts',
+      },
+      adapterStaticSpecs: {},
+      handlerIndex: [],
+    });
+    const parsed = JSON.parse(json);
+    const parsedRecord = assertRecordValue(parsed as AnalyzerValue);
+    const modules = assertArrayValue(parsedRecord.modules);
+    const ids = modules.map(entry => assertRecordValue(entry).id);
+
+    expect(ids).toEqual(['src/alpha', 'src/beta', 'src/zeta']);
+  });
+
+
+
+  it('should generate stable JSON output for identical graphs', () => {
+    const graph1 = createSingleModuleGraph();
+    const graph2 = createSingleModuleGraph();
+    const gen = new ManifestGenerator();
+    const params = {
+      projectRoot: '/app',
+      source: { path: '/app/bunner.json', format: 'json' as const },
+      resolvedConfig: {
+        module: { fileName: '__module__.ts' },
+        sourceDir: 'src',
+        entry: 'src/main.ts',
+      },
+      adapterStaticSpecs: {},
+      handlerIndex: [],
+    };
+    const json1 = gen.generateJson({ graph: graph1, ...params });
+    const json2 = gen.generateJson({ graph: graph2, ...params });
+
+    expect(json1).toBe(json2);
+  });
+
+  it('should generate parseable JSON when graph is empty', () => {
+    // Arrange
+    const fileMap = new Map<string, FileAnalysis>();
+    const graph = new ModuleGraph(fileMap, '__module__.ts');
+    const gen = new ManifestGenerator();
+
+    // Act
+    const json = gen.generateJson({
+      graph,
+      projectRoot: '/app',
+      source: { path: '/app/bunner.json', format: 'json' },
+      resolvedConfig: {
+        module: { fileName: '__module__.ts' },
+        sourceDir: 'src',
+        entry: 'src/main.ts',
+      },
+      adapterStaticSpecs: {},
+      handlerIndex: [],
+    });
+
+    // Assert
+    expect(() => JSON.parse(json)).not.toThrow();
+  });
+
+  it('should generate single module manifest', () => {
+    const modulePath = '/app/src/app/__module__.ts';
+    const fileMap = new Map<string, FileAnalysis>();
+
+    fileMap.set(modulePath, {
+      filePath: modulePath,
+      classes: [],
+      reExports: [],
+      exports: [],
+      defineModuleCalls: [
+        {
+          callee: 'defineModule',
+          importSource: '@bunner/core',
+          args: [],
+          exportedName: 'appModule',
+        },
+      ],
+      imports: {},
+      moduleDefinition: {
+        name: 'AppModule',
+        providers: [],
+        imports: {},
+      },
+    });
+
+    const graph = new ModuleGraph(fileMap, '__module__.ts');
+
+    graph.build();
+
+    const gen = new ManifestGenerator();
+    const json = gen.generateJson({
+      graph,
+      projectRoot: '/app',
+      source: { path: '/app/bunner.json', format: 'json' },
+      resolvedConfig: {
+        module: { fileName: '__module__.ts' },
+        sourceDir: 'src',
+        entry: 'src/main.ts',
+      },
+      adapterStaticSpecs: {},
+      handlerIndex: [],
+    });
+    const parsed = JSON.parse(json);
+    const parsedRecord = assertRecordValue(parsed as AnalyzerValue);
+    const modules = assertArrayValue(parsedRecord.modules);
+
+    expect(modules).toHaveLength(1);
+
+    const appModule = assertRecordValue(modules[0]);
+
+    expect(appModule.id).toBe('src/app');
+    expect(appModule.name).toBe('AppModule');
+  });
+
+  it('should generate parseable JSON when graph has one module', () => {
+    // Arrange
+    const graph = createSingleModuleGraph();
+    const gen = new ManifestGenerator();
+
+    // Act
+    const json = gen.generateJson({
+      graph,
+      projectRoot: '/app',
+      source: { path: '/app/bunner.json', format: 'json' },
+      resolvedConfig: {
+        module: { fileName: '__module__.ts' },
+        sourceDir: 'src',
+        entry: 'src/main.ts',
+      },
+      adapterStaticSpecs: {},
+      handlerIndex: [],
+    });
+
+    // Assert
+    expect(() => JSON.parse(json)).not.toThrow();
+  });
+
+  it('should include config metadata in JSON output when generated', () => {
+    // Arrange
+    const graph = createSingleModuleGraph();
+    const gen = new ManifestGenerator();
+
+    // Act
+    const json = gen.generateJson({
+      graph,
+      projectRoot: '/app',
+      source: { path: '/app/bunner.json', format: 'json' },
+      resolvedConfig: {
+        module: { fileName: '__module__.ts' },
+        sourceDir: 'src',
+        entry: 'src/main.ts',
+      },
+      adapterStaticSpecs: {},
+      handlerIndex: [],
+    });
+    const parsed = JSON.parse(json);
+    const parsedRecord = assertRecordValue(parsed as AnalyzerValue);
+
+    // Assert
+    const config = assertRecordValue(parsedRecord.config as AnalyzerValue);
+    const resolvedModuleConfig = assertRecordValue(config.resolvedModuleConfig as AnalyzerValue);
+
+    expect(config.sourcePath).toBe('/app/bunner.json');
+    expect(config.sourceFormat).toBe('json');
+    expect(resolvedModuleConfig.fileName).toBe('__module__.ts');
+
+    expect(parsedRecord).toBeDefined();
+    expect(() => JSON.parse(json)).not.toThrow();
+  });
+
+  it('should generate parseable JSON when adapterStaticSpecs is empty', () => {
+    // Arrange
+    const graph = createSingleModuleGraph();
+    const gen = new ManifestGenerator();
+
+    // Act
+    const json = gen.generateJson({
+      graph,
+      projectRoot: '/app',
+      source: { path: '/app/bunner.json', format: 'json' },
+      resolvedConfig: {
+        module: { fileName: '__module__.ts' },
+        sourceDir: 'src',
+        entry: 'src/main.ts',
+      },
+      adapterStaticSpecs: {},
+      handlerIndex: [],
+    });
+
+    // Assert
+    expect(() => JSON.parse(json)).not.toThrow();
+  });
+
+  it('should generate parseable JSON when projectRoot is /app', () => {
+    // Arrange
+    const gen = new ManifestGenerator();
+    const graph = createSingleModuleGraph();
+
+    // Act
+    const json = gen.generateJson({
+      graph,
+      projectRoot: '/app',
+      source: { path: '/app/bunner.json', format: 'json' },
+      resolvedConfig: {
+        module: { fileName: '__module__.ts' },
+        sourceDir: 'src',
+        entry: 'src/main.ts',
+      },
+      adapterStaticSpecs: {},
+      handlerIndex: [],
+    });
+
+    // Assert
+    expect(() => JSON.parse(json)).not.toThrow();
+  });
+
+  it('should generate parseable JSON when projectRoot is /app/src', () => {
+    // Arrange
+    const gen = new ManifestGenerator();
+    const graph = createSingleModuleGraph();
+
+    // Act
+    const json = gen.generateJson({
+      graph,
+      projectRoot: '/app/src',
+      source: { path: '/app/src/bunner.json', format: 'json' },
+      resolvedConfig: {
+        module: { fileName: '__module__.ts' },
+        sourceDir: 'src',
+        entry: 'src/main.ts',
+      },
+      adapterStaticSpecs: {},
+      handlerIndex: [],
+    });
+
+    // Assert
+    expect(() => JSON.parse(json)).not.toThrow();
+  });
+
+  it('should generate parseable JSON when projectRoot is /', () => {
+    // Arrange
+    const gen = new ManifestGenerator();
+    const graph = createSingleModuleGraph();
+
+    // Act
+    const json = gen.generateJson({
+      graph,
+      projectRoot: '/',
+      source: { path: '/bunner.json', format: 'json' },
+      resolvedConfig: {
+        module: { fileName: '__module__.ts' },
+        sourceDir: 'src',
+        entry: 'src/main.ts',
+      },
+      adapterStaticSpecs: {},
+      handlerIndex: [],
+    });
+
+    // Assert
+    expect(() => JSON.parse(json)).not.toThrow();
+  });
+
+  it('should generate parseable JSON when projectRoot is /Users/dev/project', () => {
+    // Arrange
+    const gen = new ManifestGenerator();
+    const graph = createSingleModuleGraph();
+
+    // Act
+    const json = gen.generateJson({
+      graph,
+      projectRoot: '/Users/dev/project',
+      source: { path: '/Users/dev/project/bunner.json', format: 'json' },
+      resolvedConfig: {
+        module: { fileName: '__module__.ts' },
+        sourceDir: 'src',
+        entry: 'src/main.ts',
+      },
+      adapterStaticSpecs: {},
+      handlerIndex: [],
+    });
+
+    // Assert
+    expect(() => JSON.parse(json)).not.toThrow();
+  });
+
+  it('should generate identical JSON when called twice with the same graph', () => {
+    // Arrange
+    const gen = new ManifestGenerator();
+    const graph1 = createSingleModuleGraph();
+    const params = {
+      projectRoot: '/app',
+      source: { path: '/app/bunner.json', format: 'json' as const },
+      resolvedConfig: {
+        module: { fileName: '__module__.ts' },
+        sourceDir: 'src',
+        entry: 'src/main.ts',
+      },
+      adapterStaticSpecs: {},
+      handlerIndex: [],
+    };
+
+    // Act
+    const json1a = gen.generateJson({ graph: graph1, ...params });
+    const json1b = gen.generateJson({ graph: graph1, ...params });
+
+    // Assert
+    expect(json1a).toBe(json1b);
   });
 });

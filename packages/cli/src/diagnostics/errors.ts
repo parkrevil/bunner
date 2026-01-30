@@ -5,6 +5,7 @@ export class DiagnosticReportError extends Error {
 
   constructor(diagnostic: Diagnostic) {
     super(diagnostic.summary);
+
     this.diagnostic = diagnostic;
   }
 }

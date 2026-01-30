@@ -2,10 +2,11 @@ import { describe, expect, it } from 'bun:test';
 
 import { EntryGenerator } from './entry';
 
-describe('entry', () => {
-  it('should inline bootstrap when generating runtime entry', () => {
+describe('EntryGenerator', () => {
+  it('should inline bootstrap when generating runtime entry code', () => {
     // Arrange
     const gen = new EntryGenerator();
+
     // Act
     const code = gen.generate('./src/main.ts', false);
 
