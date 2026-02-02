@@ -2,7 +2,7 @@
 
 ## A) Mechanical Status (필수)
 
-- Status: `draft`
+- Status: `in-progress`
 - Blocked reason (status=blocked): `none`
 - Review mode: `self-review`
 
@@ -12,7 +12,7 @@
 
 - Task ID: `260126_01_01_report-schema-vnext`
 - Created at (UTC): `2026-01-26`
-- Updated at (UTC): `2026-01-26`
+- Updated at (UTC): `2026-01-29`
 - Owner: `user`
 - Reviewer: `none`
 - Target branch: `main`
@@ -21,7 +21,7 @@
   - Plan ID: `260126_01_firebat_pure-code-quality`
   - Link: plans/260126_01_firebat_pure-code-quality.md#Step-1
 - Plan Step:
-  - Step name: `Report 스키마 vNext 설계(호환 유지)`
+  - Step name: `Report 스키마 vNext 설계`
   - Step gate: `Plan Step-1 범위 내 변경`
 - Tooling constraints (선택): `none`
 
@@ -41,7 +41,7 @@
 - 이 Task의 근거 Plan:
   - `plans/260126_01_firebat_pure-code-quality.md`
 - 이 Task가 수행하는 Plan Step:
-  - `Step 1: Report 스키마 vNext 설계(호환 유지)`
+  - `Step 1: Report 스키마 vNext 설계`
 
 ---
 
@@ -51,7 +51,7 @@
 
 ```text
 MUST-1:
-- Report 스키마 vNext를 설계하고(`text/json` 호환 유지), 신규 분석 결과를 확장 가능한 형태로 수용한다.
+- Report 스키마 vNext를 설계하고(`text/json` 출력 지원), 신규 분석 결과를 확장 가능한 형태로 수용한다.
 ```
 
 | MUST ID | Evidence ID | Step   |
@@ -155,8 +155,14 @@ Baseline 기록 (필수):
 ### Implementation
 
 - [ ] (skip) status=draft: `packages/firebat/src/types.ts`에 report vNext 확장 포인트(분석기별 섹션/배열) 타입 추가
-- [ ] (skip) status=draft: `packages/firebat/src/report.ts`에서 text/json 출력이 신규 필드를 포함하되 기존 필드 호환 유지
-- [ ] (skip) status=draft: 기존 consumers(있다면) 깨지지 않도록 default/optional 처리(필드 optional + 빈 배열 등)
+- [ ] (skip) status=draft: `packages/firebat/src/report.ts`에서 text/json 출력이 신규 필드를 포함하도록 vNext 스키마로 정렬
+- [ ] (skip) status=draft: vNext 스키마에서 누락/빈 결과가 있어도 안정적으로 출력되게 default/optional 처리(필드 optional + 빈 배열 등)
+
+### Implementation Details (필수)
+
+- `packages/firebat/src/types.ts`: `FirebatReport`의 canonical shape를 `meta` + `analyses`로 고정하고, `analyses`의 key(D3)를 수용 가능한 타입 구조를 정의한다.
+- `packages/firebat/src/report.ts`: `--format json`에서 vNext report를 그대로 직렬화하고, 결과가 비어도(`analyses.* = []` 등) 안정적으로 출력한다.
+- `packages/firebat/src/report.ts`: `--format text`에서 기존 출력 헤더 포맷을 유지하되, 신규 `analyses` 결과가 추가되어도 기본 출력이 깨지지 않게 한다.
 
 ### Verification (Gate)
 
@@ -169,13 +175,13 @@ Baseline 기록 (필수):
 
 ## 6) Evidence (필수)
 
-- Recon evidence: `none (status=draft)`
+- Recon evidence: `packages/firebat/src/types.ts`, `packages/firebat/src/report.ts`
 - Diff evidence:
-  - Changed files (actual): `none (status=draft)`
+  - Changed files (actual): `packages/firebat/src/types.ts`, `packages/firebat/src/report.ts`
 - Verification evidence:
-  - LOG-VERIFY: `none (status=draft)`
+  - LOG-VERIFY: `not-run`
 - MUST-EVID mapping:
-  - MUST-EVID-1: `none (status=draft)`
+  - MUST-EVID-1: `Report schema vNext present in types.ts + report.ts`
 
 ---
 

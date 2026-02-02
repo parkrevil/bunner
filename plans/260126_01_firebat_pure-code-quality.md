@@ -104,14 +104,14 @@ allowed_paths:
 
 - D5: `roaring` 제거의 1순위 기준은 Bun 환경에서의 결정성/휴대성(네이티브 `.node` 직접 import 제거)이다.
   - 성능 동급 보장은 본 Plan 범위에서 요구하지 않는다.
-  - Step-2의 기본 후보는 `fastbitset`으로 고정한다(교체/추가 후보 채택 시 Plan Step-2에서 근거 갱신).
+  - Step-2의 기본 후보는 `fastbitset`으로 고정한다.
 
 ---
 
 ## 4) SPEC MUST SNAPSHOT (필수, 원문 복사)
 
 - MUST-1:
-  - Report 스키마 vNext를 설계하고(`text/json` 호환 유지), 신규 분석 결과를 확장 가능한 형태로 수용한다.
+  - Report 스키마 vNext를 설계하고(`text/json` 출력 지원), 신규 분석 결과를 확장 가능한 형태로 수용한다.
 - MUST-2:
   - `roaring` 제거를 위한 BitSet 대체 전략을 확정하고, `engine/dataflow.ts`의 네이티브 `.node` 직접 import 제거를 목표로 삼는다.
 - MUST-3:
@@ -183,8 +183,9 @@ allowed_paths:
 
 ### 6.1.3 현재 의존성/기술 부채(핵심)
 
-- `roaring` 의존이 존재하며, 현재 구현은 `packages/firebat/src/engine/dataflow.ts`에서 `node_modules/roaring/native/.../*.node`를 직접 경로로 동적 import 한다.
-  - 이 방식은 플랫폼/ABI/런타임 변화에 취약하며(특히 Bun 환경), 순수 코드 품질 분석기의 “결정성/휴대성” 목표와 충돌한다.
+- BitSet은 `fastbitset`(Apache-2.0)을 사용한다.
+  - 네이티브 `.node` 직접 import는 존재하지 않는다.
+  - 리스크: 대규모 코드베이스에서 `fastbitset` 성능/메모리 특성 재검토 필요.
 
 ---
 
@@ -340,7 +341,7 @@ packages/firebat/
 
 <a id="Step-1"></a>
 
-### Step 1) Report 스키마 vNext 설계(호환 유지)
+### Step 1) Report 스키마 vNext 설계
 
 - 목표:
   - 기존 `FirebatReport`에 신규 분석 결과를 추가할 수 있는 구조 확정
@@ -348,6 +349,7 @@ packages/firebat/
 
 - Contract (고정):
   - JSON 최상위 키는 `meta`, `analyses`를 가진다.
+  - Backward compatibility(legacy JSON shape)는 목표가 아니다.
   - `analyses` 아래 canonical key는 §3.1(D3)을 따른다.
 
 - Files to change (expected):
@@ -373,6 +375,7 @@ packages/firebat/
 - 산출물:
   - 대체 패키지 결정 기록(왜 이 선택인지)
   - 변경 대상 파일 목록(예: `engine/dataflow.ts`, `engine/types.ts`, `package.json` 등)
+  - 결정(현재): `fastbitset` 사용. deps 변경 포함.
 
 - Files to change (expected):
   - plans/260126_01_firebat_pure-code-quality.md
@@ -510,11 +513,13 @@ packages/firebat/
   - packages/firebat/src/arg-parse.ts
   - packages/firebat/src/firebat.ts
   - packages/firebat/src/report.ts
+  - packages/firebat/src/types.ts
 
 - File → MUST IDs 매핑 (MUST):
   - packages/firebat/src/arg-parse.ts: MUST-8
   - packages/firebat/src/firebat.ts: MUST-8
   - packages/firebat/src/report.ts: MUST-8
+  - packages/firebat/src/types.ts: MUST-8
 
 <!-- markdownlint-enable MD033 -->
 

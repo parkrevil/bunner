@@ -2,99 +2,8 @@ import type { Node } from 'oxc-parser';
 
 import { IntegerCFG } from './cfg';
 import { EdgeType, type CfgNodePayload, type LoopTargets, type NodeId, type NodeValue, type OxcBuiltFunctionCfg } from './types';
-
-const isOxcNode = (value: NodeValue): value is Node => typeof value === 'object' && value !== null && !Array.isArray(value);
-
-const isOxcNodeArray = (value: NodeValue): value is ReadonlyArray<Node> => Array.isArray(value);
-
-const getNodeName = (node: NodeValue): string | null => {
-  if (!isOxcNode(node)) {
-    return null;
-  }
-
-  if ('name' in node && typeof node.name === 'string') {
-    return node.name;
-  }
-
-  return null;
-};
-
-const unwrapExpression = (node: NodeValue): Node | null => {
-  let current = isOxcNode(node) ? node : null;
-
-  while (current !== null) {
-    if (current.type === 'ParenthesizedExpression') {
-      const expression = current.expression;
-
-      current = isOxcNode(expression) ? expression : null;
-
-      continue;
-    }
-
-    if (current.type === 'ChainExpression') {
-      const expression = current.expression;
-
-      current = isOxcNode(expression) ? expression : null;
-
-      continue;
-    }
-
-    break;
-  }
-
-  return current;
-};
-
-const evalStaticTruthiness = (node: NodeValue): boolean | null => {
-  const n = unwrapExpression(node);
-
-  if (n === null) {
-    return null;
-  }
-
-  if (n.type === 'Literal') {
-    const value = n.value;
-
-    if (typeof value === 'boolean') {
-      return value;
-    }
-
-    if (typeof value === 'number') {
-      return value !== 0;
-    }
-
-    if (typeof value === 'bigint') {
-      return value !== 0n;
-    }
-
-    if (typeof value === 'string') {
-      return value.length > 0;
-    }
-
-    if (value === null) {
-      return false;
-    }
-
-    return null;
-  }
-
-  if (n.type === 'UnaryExpression') {
-    const operator = typeof n.operator === 'string' ? n.operator : '';
-    const argument = n.argument;
-
-    if (operator === 'void') {
-      return false;
-    }
-
-    if (operator === '!') {
-      const inner = evalStaticTruthiness(argument);
-
-      return inner === null ? null : !inner;
-    }
-  }
-
-  return null;
-};
+import { getNodeName, isNodeRecord, isOxcNode, isOxcNodeArray } from './oxc-ast-utils';
+import { evalStaticTruthiness } from './oxc-expression-utils';
 
 type HandledStatementType =
   | 'BlockStatement'
@@ -130,6 +39,30 @@ const handledStatementTypes = new Set<string>([
 ]);
 
 const isHandledStatementType = (value: string): value is HandledStatementType => handledStatementTypes.has(value);
+
+const toPayload = (value: NodeValue | undefined): CfgNodePayload | null => {
+  if (isOxcNode(value)) {
+    return value;
+  }
+
+  if (isOxcNodeArray(value)) {
+    return value;
+  }
+
+  return null;
+};
+
+const toStatement = (value: NodeValue | undefined): Node | ReadonlyArray<Node> | undefined => {
+  if (isOxcNode(value)) {
+    return value;
+  }
+
+  if (isOxcNodeArray(value)) {
+    return value;
+  }
+
+  return undefined;
+};
 
 export class OxcCFGBuilder {
   private cfg: IntegerCFG;
@@ -181,6 +114,76 @@ export class OxcCFGBuilder {
     }
   }
 
+  private addConditionalEdges(
+    conditionNode: NodeId,
+    trueTarget: NodeId,
+    falseTarget: NodeId,
+    truthiness: boolean | null,
+    treatMissingAsTrue: boolean,
+  ): void {
+    if (truthiness === true) {
+      this.cfg.addEdge(conditionNode, trueTarget, EdgeType.True);
+
+      return;
+    }
+
+    if (truthiness === false) {
+      this.cfg.addEdge(conditionNode, falseTarget, EdgeType.False);
+
+      return;
+    }
+
+    if (treatMissingAsTrue) {
+      this.cfg.addEdge(conditionNode, trueTarget, EdgeType.True);
+
+      return;
+    }
+
+    this.cfg.addEdge(conditionNode, trueTarget, EdgeType.True);
+    this.cfg.addEdge(conditionNode, falseTarget, EdgeType.False);
+  }
+
+  private resolveLoopTarget(loopStack: readonly LoopTargets[], label: string | null, useBreakTarget: boolean): NodeId | null {
+    for (let index = loopStack.length - 1; index >= 0; index -= 1) {
+      const entry = loopStack[index];
+
+      if (!entry) {
+        continue;
+      }
+
+      if (label === null) {
+        return useBreakTarget ? entry.breakTarget : entry.continueTarget;
+      }
+
+      if (entry.label === label) {
+        return useBreakTarget ? entry.breakTarget : entry.continueTarget;
+      }
+    }
+
+    return null;
+  }
+
+  private visitJumpStatement(
+    node: Node,
+    incoming: readonly NodeId[],
+    loopStack: readonly LoopTargets[],
+    useBreakTarget: boolean,
+  ): NodeId[] {
+    const jumpNode = this.addNode(node);
+
+    this.connect(incoming, jumpNode, EdgeType.Normal);
+
+    const labelNode = 'label' in node ? node.label : undefined;
+    const targetLabel = getNodeName(labelNode);
+    const target = this.resolveLoopTarget(loopStack, targetLabel, useBreakTarget);
+
+    if (target !== null) {
+      this.cfg.addEdge(jumpNode, target, EdgeType.Normal);
+    }
+
+    return [];
+  }
+
   private visitStatement(
     node: Node | ReadonlyArray<Node> | undefined,
     incoming: readonly NodeId[],
@@ -201,6 +204,14 @@ export class OxcCFGBuilder {
       return [...incoming];
     }
 
+    if (!isNodeRecord(node)) {
+      const statementNode = this.addNode(node);
+
+      this.connect(incoming, statementNode, EdgeType.Normal);
+
+      return [statementNode];
+    }
+
     if (!isHandledStatementType(node.type)) {
       const statementNode = this.addNode(node);
 
@@ -209,10 +220,12 @@ export class OxcCFGBuilder {
       return [statementNode];
     }
 
-    switch (node.type) {
+    const nodeType = String(node.type);
+
+    switch (nodeType) {
       case 'BlockStatement': {
         let tails: NodeId[] = [...incoming];
-        const bodyItems = (node.body ?? []) as ReadonlyArray<Node>;
+        const bodyItems = isOxcNodeArray(node.body) ? node.body : [];
 
         for (const child of bodyItems) {
           tails = this.visitStatement(child, tails, loopStack, null);
@@ -224,22 +237,22 @@ export class OxcCFGBuilder {
       case 'LabeledStatement': {
         const labelNode = node.label;
         const labelName = getNodeName(labelNode);
-        const bodyValue = node.body;
+        const bodyValue = toStatement(node.body);
 
         return this.visitStatement(bodyValue, incoming, loopStack, labelName);
       }
 
       case 'IfStatement': {
         const testValue = node.test;
-        const conditionNode = this.addNode(testValue ?? null);
+        const conditionNode = this.addNode(toPayload(testValue));
         const truthiness = evalStaticTruthiness(testValue);
 
         this.connect(incoming, conditionNode, EdgeType.Normal);
 
         const trueEntry = this.addNode(null);
         const falseEntry = this.addNode(null);
-        const consequentValue = node.consequent;
-        const alternateValue = node.alternate;
+        const consequentValue = toStatement(node.consequent);
+        const alternateValue = toStatement(node.alternate);
 
         if (truthiness === true) {
           this.cfg.addEdge(conditionNode, trueEntry, EdgeType.True);
@@ -255,7 +268,9 @@ export class OxcCFGBuilder {
         if (truthiness === false) {
           this.cfg.addEdge(conditionNode, falseEntry, EdgeType.False);
 
-          const falseTails = alternateValue ? this.visitStatement(alternateValue, [falseEntry], loopStack, null) : [falseEntry];
+          const falseTails = alternateValue === undefined
+            ? [falseEntry]
+            : this.visitStatement(alternateValue, [falseEntry], loopStack, null);
           const mergeNode = this.addNode(null);
 
           this.connect(falseTails, mergeNode, EdgeType.Normal);
@@ -267,7 +282,9 @@ export class OxcCFGBuilder {
         this.cfg.addEdge(conditionNode, falseEntry, EdgeType.False);
 
         const trueTails = this.visitStatement(consequentValue, [trueEntry], loopStack, null);
-        const falseTails = alternateValue ? this.visitStatement(alternateValue, [falseEntry], loopStack, null) : [falseEntry];
+        const falseTails = alternateValue === undefined
+          ? [falseEntry]
+          : this.visitStatement(alternateValue, [falseEntry], loopStack, null);
         const mergeNode = this.addNode(null);
 
         this.connect(trueTails, mergeNode, EdgeType.Normal);
@@ -278,7 +295,7 @@ export class OxcCFGBuilder {
 
       case 'WhileStatement': {
         const testValue = node.test;
-        const conditionNode = this.addNode(testValue ?? null);
+        const conditionNode = this.addNode(toPayload(testValue));
         const truthiness = evalStaticTruthiness(testValue);
 
         this.connect(incoming, conditionNode, EdgeType.Normal);
@@ -286,14 +303,7 @@ export class OxcCFGBuilder {
         const bodyEntry = this.addNode(null);
         const afterLoop = this.addNode(null);
 
-        if (truthiness === true) {
-          this.cfg.addEdge(conditionNode, bodyEntry, EdgeType.True);
-        } else if (truthiness === false) {
-          this.cfg.addEdge(conditionNode, afterLoop, EdgeType.False);
-        } else {
-          this.cfg.addEdge(conditionNode, bodyEntry, EdgeType.True);
-          this.cfg.addEdge(conditionNode, afterLoop, EdgeType.False);
-        }
+        this.addConditionalEdges(conditionNode, bodyEntry, afterLoop, truthiness, false);
 
         if (truthiness === false) {
           return [afterLoop];
@@ -303,7 +313,7 @@ export class OxcCFGBuilder {
           ...loopStack,
           { breakTarget: afterLoop, continueTarget: conditionNode, label: currentLabel },
         ];
-        const bodyValue = node.body;
+        const bodyValue = toStatement(node.body);
         const bodyTails = this.visitStatement(bodyValue, [bodyEntry], nextLoopStack, null);
 
         this.connect(bodyTails, conditionNode, EdgeType.Normal);
@@ -314,7 +324,7 @@ export class OxcCFGBuilder {
       case 'DoWhileStatement': {
         const bodyEntry = this.addNode(null);
         const testValue = node.test;
-        const conditionNode = this.addNode(testValue ?? null);
+        const conditionNode = this.addNode(toPayload(testValue));
         const afterLoop = this.addNode(null);
 
         this.connect(incoming, bodyEntry, EdgeType.Normal);
@@ -323,7 +333,7 @@ export class OxcCFGBuilder {
           ...loopStack,
           { breakTarget: afterLoop, continueTarget: conditionNode, label: currentLabel },
         ];
-        const bodyValue = node.body;
+        const bodyValue = toStatement(node.body);
         const bodyTails = this.visitStatement(bodyValue, [bodyEntry], nextLoopStack, null);
 
         this.connect(bodyTails, conditionNode, EdgeType.Normal);
@@ -365,7 +375,7 @@ export class OxcCFGBuilder {
           ...loopStack,
           { breakTarget: afterLoop, continueTarget: headerNode, label: currentLabel },
         ];
-        const bodyValue = node.body;
+        const bodyValue = toStatement(node.body);
         const bodyTails = this.visitStatement(bodyValue, [bodyEntry], nextLoopStack, null);
 
         this.connect(bodyTails, headerNode, EdgeType.Normal);
@@ -380,14 +390,14 @@ export class OxcCFGBuilder {
         const updateValue = node.update;
 
         if (initValue !== undefined && initValue !== null) {
-          const initNode = this.addNode(initValue);
+          const initNode = this.addNode(toPayload(initValue));
 
           this.connect(tails, initNode, EdgeType.Normal);
 
           tails = [initNode];
         }
 
-        const testNode = this.addNode(testValue ?? null);
+        const testNode = this.addNode(toPayload(testValue));
         const truthiness = evalStaticTruthiness(testValue);
 
         this.connect(tails, testNode, EdgeType.Normal);
@@ -395,20 +405,13 @@ export class OxcCFGBuilder {
         const bodyEntry = this.addNode(null);
         const afterLoop = this.addNode(null);
 
-        if (truthiness === true || testValue === undefined) {
-          this.cfg.addEdge(testNode, bodyEntry, EdgeType.True);
-        } else if (truthiness === false) {
-          this.cfg.addEdge(testNode, afterLoop, EdgeType.False);
-        } else {
-          this.cfg.addEdge(testNode, bodyEntry, EdgeType.True);
-          this.cfg.addEdge(testNode, afterLoop, EdgeType.False);
-        }
+        this.addConditionalEdges(testNode, bodyEntry, afterLoop, truthiness, testValue === undefined);
 
         let continueTarget = testNode;
         let updateNode: NodeId | null = null;
 
         if (updateValue !== undefined && updateValue !== null) {
-          updateNode = this.addNode(updateValue);
+          updateNode = this.addNode(toPayload(updateValue));
           continueTarget = updateNode;
         }
 
@@ -417,7 +420,7 @@ export class OxcCFGBuilder {
         }
 
         const nextLoopStack: LoopTargets[] = [...loopStack, { breakTarget: afterLoop, continueTarget, label: currentLabel }];
-        const bodyValue = node.body;
+        const bodyValue = toStatement(node.body);
         const bodyTails = this.visitStatement(bodyValue, [bodyEntry], nextLoopStack, null);
 
         if (updateNode !== null) {
@@ -431,12 +434,12 @@ export class OxcCFGBuilder {
       }
 
       case 'SwitchStatement': {
-        const discriminantNode = this.addNode(node.discriminant ?? null);
+        const discriminantNode = this.addNode(toPayload(node.discriminant));
 
         this.connect(incoming, discriminantNode, EdgeType.Normal);
 
         const afterSwitch = this.addNode(null);
-        const cases = node.cases ?? [];
+        const cases = isOxcNodeArray(node.cases) ? node.cases : [];
         const caseEntries: NodeId[] = cases.map(() => this.addNode(null));
 
         for (const entry of caseEntries) {
@@ -460,7 +463,11 @@ export class OxcCFGBuilder {
             continue;
           }
 
-          const consequent = caseNode.consequent ?? [];
+          if (!isNodeRecord(caseNode)) {
+            continue;
+          }
+
+          const consequent = isOxcNodeArray(caseNode.consequent) ? caseNode.consequent : [];
           const caseTails = this.visitStatement(consequent, [caseEntry], nextLoopStack, null);
           // Note: switch `case` test expressions are not modeled as nodes.
           const nextEntry = index + 1 < caseEntries.length ? caseEntries[index + 1] : undefined;
@@ -476,39 +483,15 @@ export class OxcCFGBuilder {
       }
 
       case 'BreakStatement': {
-        const breakNode = this.addNode(node);
-
-        this.connect(incoming, breakNode, EdgeType.Normal);
-
-        const labelNode = node.label;
-        const targetLabel = getNodeName(labelNode);
-        const target = this.findBreakTarget(loopStack, targetLabel);
-
-        if (target !== null) {
-          this.cfg.addEdge(breakNode, target, EdgeType.Normal);
-        }
-
-        return [];
+        return this.visitJumpStatement(node, incoming, loopStack, true);
       }
 
       case 'ContinueStatement': {
-        const continueNode = this.addNode(node);
-
-        this.connect(incoming, continueNode, EdgeType.Normal);
-
-        const labelNode = node.label;
-        const targetLabel = getNodeName(labelNode);
-        const target = this.findContinueTarget(loopStack, targetLabel);
-
-        if (target !== null) {
-          this.cfg.addEdge(continueNode, target, EdgeType.Normal);
-        }
-
-        return [];
+        return this.visitJumpStatement(node, incoming, loopStack, false);
       }
 
       case 'ReturnStatement': {
-        const returnNode = this.addNode(node.argument ?? node);
+        const returnNode = this.addNode(toPayload(node.argument ?? node));
 
         this.connect(incoming, returnNode, EdgeType.Normal);
 
@@ -524,7 +507,7 @@ export class OxcCFGBuilder {
       }
 
       case 'ThrowStatement': {
-        const throwNode = this.addNode(node.argument ?? node);
+        const throwNode = this.addNode(toPayload(node.argument ?? node));
 
         this.connect(incoming, throwNode, EdgeType.Normal);
         this.cfg.addEdge(throwNode, this.exitId, EdgeType.Exception);
@@ -533,7 +516,8 @@ export class OxcCFGBuilder {
       }
 
       case 'TryStatement': {
-        const hasFinalizer = Boolean(node.finalizer);
+        const finalizerNode = toStatement(node.finalizer);
+        const hasFinalizer = finalizerNode !== undefined;
         const finallyEntryNormal = hasFinalizer ? this.addNode(null) : null;
         const finallyEntryReturn = hasFinalizer ? this.addNode(null) : null;
 
@@ -549,27 +533,28 @@ export class OxcCFGBuilder {
 
         this.cfg.addEdge(tryEntry, tryBlockEntry, EdgeType.Normal);
 
-        const tryTails = this.visitStatement(node.block, [tryBlockEntry], loopStack, null);
+        const tryTails = this.visitStatement(toStatement(node.block), [tryBlockEntry], loopStack, null);
         let catchTails: NodeId[] = [];
+        const handlerNode = isOxcNode(node.handler) ? node.handler : null;
 
-        if (node.handler) {
+        if (handlerNode !== null && isNodeRecord(handlerNode)) {
           const catchEntry = this.addNode(null);
 
           this.cfg.addEdge(tryEntry, catchEntry, EdgeType.Exception);
 
-          const handlerBody = node.handler.body;
+          const handlerBody = toStatement(handlerNode.body);
 
           catchTails = this.visitStatement(handlerBody, [catchEntry], loopStack, null);
         }
 
-        if (node.finalizer && finallyEntryNormal !== null && finallyEntryReturn !== null) {
+        if (finalizerNode !== undefined && finallyEntryNormal !== null && finallyEntryReturn !== null) {
           // Normal completion path.
           this.connect(tryTails, finallyEntryNormal, EdgeType.Normal);
           this.connect(catchTails, finallyEntryNormal, EdgeType.Normal);
 
-          const finallyTails = this.visitStatement(node.finalizer, [finallyEntryNormal], loopStack, null);
+          const finallyTails = this.visitStatement(finalizerNode, [finallyEntryNormal], loopStack, null);
           // Return completion path: run finalizer and then exit.
-          const finallyReturnTails = this.visitStatement(node.finalizer, [finallyEntryReturn], loopStack, null);
+          const finallyReturnTails = this.visitStatement(finalizerNode, [finallyEntryReturn], loopStack, null);
 
           for (const tail of finallyReturnTails) {
             this.cfg.addEdge(tail, this.exitId, EdgeType.Normal);
@@ -590,46 +575,10 @@ export class OxcCFGBuilder {
       default: {
         return [...incoming];
       }
+
+
     }
   }
 
-  private findBreakTarget(loopStack: readonly LoopTargets[], label: string | null): NodeId | null {
-    for (let index = loopStack.length - 1; index >= 0; index -= 1) {
-      const entry = loopStack[index];
-
-      if (!entry) {
-        continue;
-      }
-
-      if (label === null) {
-        return entry.breakTarget;
-      }
-
-      if (entry.label === label) {
-        return entry.breakTarget;
-      }
-    }
-
-    return null;
-  }
-
-  private findContinueTarget(loopStack: readonly LoopTargets[], label: string | null): NodeId | null {
-    for (let index = loopStack.length - 1; index >= 0; index -= 1) {
-      const entry = loopStack[index];
-
-      if (!entry) {
-        continue;
-      }
-
-      if (label === null) {
-        return entry.continueTarget;
-      }
-
-      if (entry.label === label) {
-        return entry.continueTarget;
-      }
-    }
-
-    return null;
-  }
+  
 }

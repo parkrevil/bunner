@@ -2,7 +2,7 @@
 
 ## A) Mechanical Status (필수)
 
-- Status: `draft`
+- Status: `in-progress`
 - Blocked reason (status=blocked): `none`
 - Review mode: `self-review`
 
@@ -12,7 +12,7 @@
 
 - Task ID: `260126_01_03_dependency-graph-smells`
 - Created at (UTC): `2026-01-26`
-- Updated at (UTC): `2026-01-26`
+- Updated at (UTC): `2026-01-29`
 - Owner: `user`
 - Reviewer: `none`
 - Target branch: `main`
@@ -164,13 +164,14 @@ Baseline 기록 (필수):
 - [ ] (skip) status=draft: `packages/firebat/src/analyses/coupling/`에 coupling(예: afferent/efferent) 분석기 스캐폴딩 추가
 - [ ] (skip) status=draft: cycle 탐지(최소 SCC 또는 DFS back-edge) 결과를 report 스키마에 매핑(`packages/firebat/src/types.ts`)
 - [ ] (skip) status=draft: fan-in/fan-out 산출(노드별 in/out degree) + 임계값/상위 N 정책을 report 스키마에 매핑
+- [ ] (skip) status=draft: cycle break를 위한 edge cut(절단 후보) 힌트를 `analyses.dependencies`에 포함하도록 report 스키마에 매핑
 - [ ] (skip) status=draft: text/json 출력 경로에 dependencies 결과를 연결(`packages/firebat/src/report.ts`)
 
 ### Implementation Details (필수)
 
 - `packages/firebat/src/analyses/dependencies/`: import edge 수집(최소: file -> imported files) 데이터 구조를 정의하고, fan-in/fan-out 및 cycle 입력으로 정규화한다.
 - `packages/firebat/src/analyses/coupling/`: dependencies 결과(그래프 사실)를 받아 hotspot/우선순위용 coupling 지표를 계산하고, report 출력용 형상으로 변환한다.
-- `packages/firebat/src/types.ts`: dependencies/coupling 결과 타입을 추가하고, report에서 참조되는 최소 스키마(필드명/배열 형상)를 고정한다.
+- `packages/firebat/src/types.ts`: dependencies/coupling 결과 타입을 추가하고, report에서 참조되는 최소 스키마(필드명/배열 형상)를 고정한다. 최소: `cycles`, `fanInTop`, `fanOutTop`, `edgeCutHints`.
 - `packages/firebat/src/report.ts`: text/json 출력 경로에 새로운 analyses 결과를 연결하고, 누락/빈 결과(예: cycle 없음)도 안정적으로 직렬화한다.
 
 ### Verification (Gate)
@@ -184,11 +185,11 @@ Baseline 기록 (필수):
 
 - Recon evidence: `none (status=draft)`
 - Diff evidence:
-  - Changed files (actual): `none (status=draft)`
+  - Changed files (actual): `packages/firebat/src/analyses/dependencies/**`, `packages/firebat/src/analyses/coupling/**`, `packages/firebat/src/firebat.ts`, `packages/firebat/src/types.ts`, `packages/firebat/src/report.ts`
 - Verification evidence:
-  - LOG-VERIFY: `none (status=draft)`
+  - LOG-VERIFY: `not-run`
 - MUST-EVID mapping:
-  - MUST-EVID-3: `none (status=draft)`
+  - MUST-EVID-3: `dependencies/coupling 분석기 구현 및 wiring 완료`
 
 ---
 
@@ -220,6 +221,7 @@ Baseline 기록 (필수):
 - JSON 리포트에 dependencies 분석 결과가 포함된다(최소: cycle 목록 + fan-in/out 상위 항목 목록).
 - cycle 항목은 “경로”를 갖는다(예: `["a.ts", "b.ts", "c.ts", "a.ts"]` 같은 형태).
 - fan-in/out 항목은 파일(또는 모듈) 단위로 대상 + 수치(정수)를 포함한다.
+- cycle이 존재하는 경우, cycle break를 위한 edge cut(절단 후보) 힌트가 함께 포함된다(최소: from/to + score 또는 reason).
 
 ### Output Example (draft)
 
@@ -233,7 +235,10 @@ Baseline 기록 (필수):
         }
       ],
       "fanInTop": [{ "module": "src/core/index.ts", "count": 18 }],
-      "fanOutTop": [{ "module": "src/features/heavy.ts", "count": 31 }]
+      "fanOutTop": [{ "module": "src/features/heavy.ts", "count": 31 }],
+      "edgeCutHints": [
+        { "from": "src/b.ts", "to": "src/c.ts", "score": 0.72, "reason": "breaks SCC" }
+      ]
     }
   }
 }

@@ -4,16 +4,33 @@ import type { NodeRecord, NodeValue, NodeWithValue } from './types';
 
 import { hashString } from './hasher';
 
-const isOxcNode = (value: NodeValue): value is Node => typeof value === 'object' && value !== null && !Array.isArray(value);
+const isOxcNode = (value: NodeValue): value is Node =>
+  typeof value === 'object' &&
+  value !== null &&
+  !Array.isArray(value) &&
+  'type' in value &&
+  typeof (value).type === 'string';
 
-const isOxcNodeArray = (value: NodeValue): value is ReadonlyArray<Node> => Array.isArray(value);
+const isOxcNodeArray = (value: NodeValue): value is ReadonlyArray<NodeValue> => {
+  if (!Array.isArray(value)) {
+    return false;
+  }
+
+  return true;
+};
 
 const isNodeRecord = (node: Node): node is NodeRecord => typeof node === 'object' && node !== null;
 
 const isLiteralNode = (node: Node): node is NodeWithValue => node.type === 'Literal' && 'value' in node;
 
-const pushLiteralValue = (node: Node, diffs: string[]): void => {
+const pushLiteralValue = (node: Node, diffs: string[], includeLiteralValues: boolean): void => {
   if (!isLiteralNode(node)) {
+    return;
+  }
+
+  if (!includeLiteralValues) {
+    diffs.push('literal');
+
     return;
   }
 
@@ -53,7 +70,7 @@ const pushLiteralValue = (node: Node, diffs: string[]): void => {
 // Ignore names, locations, comments.
 // Focus on structure: types, operators, literals (optional, maybe normalized).
 
-export const createOxcFingerprint = (node: NodeValue): string => {
+const createOxcFingerprintCore = (node: NodeValue, includeLiteralValues: boolean): string => {
   const diffs: string[] = [];
 
   const visit = (n: NodeValue) => {
@@ -74,7 +91,7 @@ export const createOxcFingerprint = (node: NodeValue): string => {
       diffs.push(n.type);
     }
 
-    pushLiteralValue(n, diffs);
+    pushLiteralValue(n, diffs, includeLiteralValues);
 
     // push specific semantic properties
     // e.g. Operator for BinaryExpression
@@ -126,3 +143,7 @@ export const createOxcFingerprint = (node: NodeValue): string => {
 
   return hashString(diffs.join('|'));
 };
+
+export const createOxcFingerprint = (node: NodeValue): string => createOxcFingerprintCore(node, true);
+
+export const createOxcFingerprintShape = (node: NodeValue): string => createOxcFingerprintCore(node, false);

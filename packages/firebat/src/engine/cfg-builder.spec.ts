@@ -1,19 +1,20 @@
 import { describe, expect, it } from 'bun:test';
 
-import type { NodeRecord, NodeValue, NodeWithBody, OxcBuiltFunctionCfg } from './types';
+import type { NodeRecord, NodeWithBody, OxcBuiltFunctionCfg } from './types';
 
 import { OxcCFGBuilder } from './cfg-builder';
+import { isNodeRecord, isOxcNode, isOxcNodeArray } from './oxc-ast-utils';
 import { parseSource } from './parse-source';
-
-const isOxcNode = (value: NodeValue): value is NodeRecord => typeof value === 'object' && value !== null && !Array.isArray(value);
-
-const isOxcNodeArray = (value: NodeValue): value is ReadonlyArray<NodeValue> => Array.isArray(value);
 
 const getFunctionBody = (fn: NodeWithBody): NodeRecord => {
   const body = fn.body;
 
   if (!isOxcNode(body) || body.type !== 'BlockStatement') {
-    throw new Error('Expected function body');
+    throw new Error('Expected BlockStatement');
+  }
+
+  if (!isNodeRecord(body)) {
+    throw new Error('Expected node record');
   }
 
   return body;

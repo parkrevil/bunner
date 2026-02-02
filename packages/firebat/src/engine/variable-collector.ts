@@ -1,36 +1,11 @@
 import type { Node } from 'oxc-parser';
 
-import type { NodeRecord, NodeValue, VariableCollectorOptions, VariableUsage } from './types';
+import type { NodeValue, VariableCollectorOptions, VariableUsage } from './types';
 
-const isOxcNode = (value: NodeValue): value is Node => typeof value === 'object' && value !== null && !Array.isArray(value);
-
-const getNodeType = (node: Node): string => node.type;
-
-const isOxcNodeArray = (value: NodeValue): value is ReadonlyArray<Node> => Array.isArray(value);
-
-const isNodeRecord = (node: Node): node is NodeRecord => typeof node === 'object' && node !== null;
-
-const getNodeName = (node: Node): string | null => {
-  if ('name' in node && typeof node.name === 'string') {
-    return node.name;
-  }
-
-  return null;
-};
+import { getLiteralString, getNodeName, getNodeType, isNodeRecord, isOxcNode, isOxcNodeArray } from './oxc-ast-utils';
+import { evalStaticTruthiness, unwrapExpression } from './oxc-expression-utils';
 
 const getNodeStart = (node: Node): number => node.start;
-
-const getLiteralString = (node: Node): string | null => {
-  if (node.type !== 'Literal') {
-    return null;
-  }
-
-  if ('value' in node && typeof node.value === 'string') {
-    return node.value;
-  }
-
-  return null;
-};
 
 const isFunctionNode = (node: NodeValue): boolean => {
   if (!isOxcNode(node)) {
@@ -40,85 +15,6 @@ const isFunctionNode = (node: NodeValue): boolean => {
   const nodeType = getNodeType(node);
 
   return nodeType === 'ArrowFunctionExpression' || nodeType === 'FunctionDeclaration' || nodeType === 'FunctionExpression';
-};
-
-const unwrapExpression = (node: NodeValue): Node | null => {
-  let current = isOxcNode(node) ? node : null;
-
-  while (current !== null) {
-    const nodeType = current.type;
-
-    if (nodeType === 'ParenthesizedExpression') {
-      const expression = current.expression;
-
-      current = isOxcNode(expression) ? expression : null;
-
-      continue;
-    }
-
-    if (nodeType === 'ChainExpression') {
-      const expression = current.expression;
-
-      current = isOxcNode(expression) ? expression : null;
-
-      continue;
-    }
-
-    break;
-  }
-
-  return current;
-};
-
-const evalStaticTruthiness = (node: NodeValue): boolean | null => {
-  const n = unwrapExpression(node);
-
-  if (n === null) {
-    return null;
-  }
-
-  if (n.type === 'Literal') {
-    const value = n.value;
-
-    if (typeof value === 'boolean') {
-      return value;
-    }
-
-    if (typeof value === 'number') {
-      return value !== 0;
-    }
-
-    if (typeof value === 'bigint') {
-      return value !== 0n;
-    }
-
-    if (typeof value === 'string') {
-      return value.length > 0;
-    }
-
-    if (value === null) {
-      return false;
-    }
-
-    return null;
-  }
-
-  if (n.type === 'UnaryExpression') {
-    const operator = typeof n.operator === 'string' ? n.operator : '';
-    const argument = n.argument;
-
-    if (operator === 'void') {
-      return false;
-    }
-
-    if (operator === '!') {
-      const inner = evalStaticTruthiness(argument);
-
-      return inner === null ? null : !inner;
-    }
-  }
-
-  return null;
 };
 
 const getStaticObjectExpressionKeys = (node: NodeValue): Set<string> | null => {
@@ -168,17 +64,16 @@ const getStaticObjectExpressionKeys = (node: NodeValue): Set<string> | null => {
 
 export const collectVariables = (node: NodeValue, options: VariableCollectorOptions = {}): VariableUsage[] => {
   const usages: VariableUsage[] = [];
-  const includeNestedFunctions = options.includeNestedFunctions !== false;
 
   const visit = (
     current: NodeValue,
+    allowNestedFunctions: boolean,
     isWriteContext: boolean = false,
-    allowNestedFunctions: boolean = includeNestedFunctions,
     writeKind?: VariableUsage['writeKind'],
   ) => {
     if (isOxcNodeArray(current)) {
       for (const item of current) {
-        visit(item, isWriteContext, allowNestedFunctions);
+        visit(item, allowNestedFunctions, isWriteContext);
       }
 
       return;
@@ -222,7 +117,7 @@ export const collectVariables = (node: NodeValue, options: VariableCollectorOpti
     // IdentifierReference/BindingIdentifier/AssignmentTargetIdentifier are represented as Identifier nodes.
 
     if (current.type === 'ChainExpression') {
-      visit(current.expression, false, allowNestedFunctions);
+      visit(current.expression, allowNestedFunctions, false);
 
       return;
     }
@@ -233,14 +128,14 @@ export const collectVariables = (node: NodeValue, options: VariableCollectorOpti
       const objectNode = current.object;
 
       if (objectNode !== undefined && objectNode !== null) {
-        visit(objectNode, false, allowNestedFunctions);
+        visit(objectNode, allowNestedFunctions, false);
       }
 
       const isComputed = current.computed;
       const propertyNode = current.property;
 
       if (isComputed && propertyNode !== undefined && propertyNode !== null) {
-        visit(propertyNode, false, allowNestedFunctions);
+        visit(propertyNode, allowNestedFunctions, false);
       }
 
       return;
@@ -253,7 +148,7 @@ export const collectVariables = (node: NodeValue, options: VariableCollectorOpti
       const right = current.right;
 
       // Left is always evaluated.
-      visit(left, false, allowNestedFunctions);
+      visit(left, allowNestedFunctions, false);
 
       const leftTruthiness = evalStaticTruthiness(left);
 
@@ -262,7 +157,7 @@ export const collectVariables = (node: NodeValue, options: VariableCollectorOpti
           return;
         }
 
-        visit(right, false, allowNestedFunctions);
+        visit(right, allowNestedFunctions, false);
 
         return;
       }
@@ -272,13 +167,13 @@ export const collectVariables = (node: NodeValue, options: VariableCollectorOpti
           return;
         }
 
-        visit(right, false, allowNestedFunctions);
+        visit(right, allowNestedFunctions, false);
 
         return;
       }
 
       // For unknown operators or unknown truthiness, be conservative.
-      visit(right, false, allowNestedFunctions);
+      visit(right, allowNestedFunctions, false);
 
       return;
     }
@@ -289,25 +184,25 @@ export const collectVariables = (node: NodeValue, options: VariableCollectorOpti
       const alternate = current.alternate;
 
       // Test is always evaluated.
-      visit(test, false, allowNestedFunctions);
+      visit(test, allowNestedFunctions, false);
 
       const truthiness = evalStaticTruthiness(test);
 
       if (truthiness === true) {
-        visit(consequent, false, allowNestedFunctions);
+        visit(consequent, allowNestedFunctions, false);
 
         return;
       }
 
       if (truthiness === false) {
-        visit(alternate, false, allowNestedFunctions);
+        visit(alternate, allowNestedFunctions, false);
 
         return;
       }
 
       // Unknown: either branch may execute.
-      visit(consequent, false, allowNestedFunctions);
-      visit(alternate, false, allowNestedFunctions);
+      visit(consequent, allowNestedFunctions, false);
+      visit(alternate, allowNestedFunctions, false);
 
       return;
     }
@@ -318,24 +213,24 @@ export const collectVariables = (node: NodeValue, options: VariableCollectorOpti
       const right = current.right;
 
       if (operator === '=') {
-        visit(left, true, allowNestedFunctions, 'assignment'); // LHS is write
-        visit(right, false, allowNestedFunctions); // RHS is read
+        visit(left, allowNestedFunctions, true, 'assignment'); // LHS is write
+        visit(right, allowNestedFunctions, false); // RHS is read
 
         return;
       }
 
       if (operator === '||=' || operator === '&&=' || operator === '??=') {
-        visit(left, false, allowNestedFunctions);
-        visit(left, true, allowNestedFunctions, 'logical-assignment');
-        visit(right, false, allowNestedFunctions);
+        visit(left, allowNestedFunctions, false);
+        visit(left, allowNestedFunctions, true, 'logical-assignment');
+        visit(right, allowNestedFunctions, false);
 
         return;
       }
 
       // Compound assignment (+=, -=, ...)
-      visit(left, false, allowNestedFunctions); // reads LHS
-      visit(left, true, allowNestedFunctions, 'compound-assignment'); // writes LHS
-      visit(right, false, allowNestedFunctions); // RHS is read
+      visit(left, allowNestedFunctions, false); // reads LHS
+      visit(left, allowNestedFunctions, true, 'compound-assignment'); // writes LHS
+      visit(right, allowNestedFunctions, false); // RHS is read
 
       return;
     }
@@ -344,8 +239,8 @@ export const collectVariables = (node: NodeValue, options: VariableCollectorOpti
       const argument = current.argument;
 
       // Treat update as both read and write.
-      visit(argument, false, allowNestedFunctions);
-      visit(argument, true, allowNestedFunctions, 'update');
+      visit(argument, allowNestedFunctions, false);
+      visit(argument, allowNestedFunctions, true, 'update');
 
       return;
     }
@@ -394,25 +289,25 @@ export const collectVariables = (node: NodeValue, options: VariableCollectorOpti
             const leftNode = valueNode.left;
             const rightNode = valueNode.right;
 
-            visit(leftNode, true, allowNestedFunctions, 'declaration');
+            visit(leftNode, allowNestedFunctions, true, 'declaration');
 
             const shouldEvaluateDefault = keyName === null ? true : !initKeys.has(keyName);
 
             if (shouldEvaluateDefault) {
-              visit(rightNode, false, allowNestedFunctions);
+              visit(rightNode, allowNestedFunctions, false);
             }
 
             continue;
           }
 
-          visit(valueNode, true, allowNestedFunctions, 'declaration');
+          visit(valueNode, allowNestedFunctions, true, 'declaration');
         }
       } else {
-        visit(id, true, allowNestedFunctions, 'declaration'); // Def
+        visit(id, allowNestedFunctions, true, 'declaration'); // Def
       }
 
       if (init !== undefined && init !== null) {
-        visit(init, false, allowNestedFunctions);
+        visit(init, allowNestedFunctions, false);
       } // Use
 
       return;
@@ -428,13 +323,13 @@ export const collectVariables = (node: NodeValue, options: VariableCollectorOpti
       const unwrappedCallee = unwrapExpression(callee);
 
       if (unwrappedCallee !== null && isFunctionNode(unwrappedCallee)) {
-        visit(unwrappedCallee, false, true);
+        visit(unwrappedCallee, true, false);
       } else {
-        visit(callee, false, allowNestedFunctions);
+        visit(callee, allowNestedFunctions, false);
       }
 
       for (const arg of args) {
-        visit(arg, false, allowNestedFunctions);
+        visit(arg, allowNestedFunctions, false);
       }
 
       return;
@@ -451,11 +346,11 @@ export const collectVariables = (node: NodeValue, options: VariableCollectorOpti
         continue;
       }
 
-      visit(value, isWriteContext, allowNestedFunctions);
+      visit(value, allowNestedFunctions, isWriteContext);
     }
   };
 
-  visit(node);
+  visit(node, options.includeNestedFunctions !== false, false);
 
   return usages.sort((left, right) => left.location - right.location);
 };

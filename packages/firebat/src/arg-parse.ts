@@ -1,10 +1,23 @@
 import * as path from 'node:path';
 
 import type { FirebatCliOptions } from './interfaces';
-import type { FirebatDetector, OutputFormat } from './types';
+import type { FirebatDetector, MinSizeOption, OutputFormat } from './types';
 
-const DEFAULT_MIN_TOKENS = 60;
-const DEFAULT_DETECTORS: ReadonlyArray<FirebatDetector> = ['duplicates', 'waste'];
+const DEFAULT_MIN_SIZE: MinSizeOption = 'auto';
+const DEFAULT_MAX_FORWARD_DEPTH = 0;
+const DEFAULT_DETECTORS: ReadonlyArray<FirebatDetector> = [
+  'duplicates',
+  'waste',
+  'typecheck',
+  'dependencies',
+  'coupling',
+  'duplication',
+  'nesting',
+  'early-return',
+  'noop',
+  'api-drift',
+  'forwarding',
+];
 
 const parseNumber = (value: string, label: string): number => {
   const parsed = Number(value);
@@ -14,6 +27,14 @@ const parseNumber = (value: string, label: string): number => {
   }
 
   return parsed;
+};
+
+const parseMinSize = (value: string): MinSizeOption => {
+  if (value === 'auto') {
+    return 'auto';
+  }
+
+  return parseNumber(value, '--min-size');
 };
 
 const parseOutputFormat = (value: string): OutputFormat => {
@@ -38,8 +59,22 @@ const parseDetectors = (value: string): ReadonlyArray<FirebatDetector> => {
   const seen = new Set<FirebatDetector>();
 
   for (const selection of selections) {
-    if (selection !== 'duplicates' && selection !== 'waste') {
-      throw new Error(`[firebat] Invalid --only: ${selection}. Expected duplicates|waste`);
+    if (
+      selection !== 'duplicates' &&
+      selection !== 'waste' &&
+      selection !== 'typecheck' &&
+      selection !== 'dependencies' &&
+      selection !== 'coupling' &&
+      selection !== 'duplication' &&
+      selection !== 'nesting' &&
+      selection !== 'early-return' &&
+      selection !== 'noop' &&
+      selection !== 'api-drift' &&
+      selection !== 'forwarding'
+    ) {
+      throw new Error(
+        `[firebat] Invalid --only: ${selection}. Expected duplicates|waste|typecheck|dependencies|coupling|duplication|nesting|early-return|noop|api-drift|forwarding`,
+      );
     }
 
     if (seen.has(selection)) {
@@ -70,7 +105,8 @@ const normalizeTarget = (raw: string): string => {
 const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
   const targets: string[] = [];
   let format: OutputFormat = 'text';
-  let minTokens = DEFAULT_MIN_TOKENS;
+  let minSize: MinSizeOption = DEFAULT_MIN_SIZE;
+  let maxForwardDepth = DEFAULT_MAX_FORWARD_DEPTH;
   let exitOnFindings = true;
   let detectors: ReadonlyArray<FirebatDetector> = DEFAULT_DETECTORS;
 
@@ -85,7 +121,8 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
       return {
         targets: [],
         format,
-        minTokens,
+        minSize,
+        maxForwardDepth,
         exitOnFindings,
         detectors,
         help: true,
@@ -106,14 +143,28 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
       continue;
     }
 
-    if (arg === '--min-tokens') {
+    if (arg === '--min-size') {
       const value = argv[i + 1];
 
       if (typeof value !== 'string') {
-        throw new Error('[firebat] Missing value for --min-tokens');
+        throw new Error('[firebat] Missing value for --min-size');
       }
 
-      minTokens = parseNumber(value, '--min-tokens');
+      minSize = parseMinSize(value);
+
+      i += 1;
+
+      continue;
+    }
+
+    if (arg === '--max-forward-depth') {
+      const value = argv[i + 1];
+
+      if (typeof value !== 'string') {
+        throw new Error('[firebat] Missing value for --max-forward-depth');
+      }
+
+      maxForwardDepth = Math.max(0, Math.round(parseNumber(value, '--max-forward-depth')));
 
       i += 1;
 
@@ -150,7 +201,8 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
   return {
     targets,
     format,
-    minTokens,
+    minSize,
+    maxForwardDepth,
     exitOnFindings,
     detectors,
     help: false,

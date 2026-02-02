@@ -1,0 +1,1 @@
+export { detectDuplicates } from './detector';

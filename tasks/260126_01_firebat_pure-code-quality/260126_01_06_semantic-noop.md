@@ -2,7 +2,7 @@
 
 ## A) Mechanical Status (필수)
 
-- Status: `draft`
+- Status: `in-progress`
 - Blocked reason (status=blocked): `none`
 - Review mode: `self-review`
 
@@ -12,7 +12,7 @@
 
 - Task ID: `260126_01_06_semantic-noop`
 - Created at (UTC): `2026-01-26`
-- Updated at (UTC): `2026-01-26`
+- Updated at (UTC): `2026-01-29`
 - Owner: `user`
 - Reviewer: `none`
 - Target branch: `main`
@@ -154,6 +154,12 @@ Baseline 기록 (필수):
 - [ ] (skip) status=draft: report 스키마에 no-op 결과를 반영(`packages/firebat/src/types.ts`)
 - [ ] (skip) status=draft: text/json 출력에 no-op 결과 렌더링/직렬화 추가(`packages/firebat/src/report.ts`)
 
+### Implementation Details (필수)
+
+- `packages/firebat/src/analyses/no-op/`: expression/조건 기반의 no-op 후보를 수집하고, finding에 `confidence`/`evidence`/`span`을 채우는 최소 필드를 고정한다.
+- `packages/firebat/src/types.ts`: `analyses.noop` 결과 타입을 정의하고, finding의 필수 필드를 명시한다.
+- `packages/firebat/src/report.ts`: text/json 출력에서 no-op 결과를 직렬화/렌더링하며, 결과가 비어도 안정적으로 출력되도록 한다.
+
 ### Verification (Gate)
 
 - Gate command(s):
@@ -167,11 +173,11 @@ Baseline 기록 (필수):
 
 - Recon evidence: `none (status=draft)`
 - Diff evidence:
-  - Changed files (actual): `none (status=draft)`
+  - Changed files (actual): `packages/firebat/src/analyses/no-op/**`, `packages/firebat/src/firebat.ts`, `packages/firebat/src/types.ts`, `packages/firebat/src/report.ts`
 - Verification evidence:
-  - LOG-VERIFY: `none (status=draft)`
+  - LOG-VERIFY: `not-run`
 - MUST-EVID mapping:
-  - MUST-EVID-6: `none (status=draft)`
+  - MUST-EVID-6: `semantic no-op 분석기 구현 및 wiring 완료`
 
 ---
 
