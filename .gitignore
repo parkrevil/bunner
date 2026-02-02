@@ -4,3 +4,4 @@ bun.lock
 **/bench/**/results
 **/.bunner/
 .lsmcp/cache
+**/.firebat/**

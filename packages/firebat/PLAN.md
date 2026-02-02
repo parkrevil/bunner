@@ -64,7 +64,7 @@ MCP
 - `src/infrastructure/` : 실제 구현(oxc, ast-grep, tsgo, oxlint, sqlite, fs)
 - `src/adapters/cli/` : argv/출력/exitcode
 - `src/adapters/mcp/` : MCP server(tool/resource/prompt) + stdio transport
-- `rules/` : ast-grep 룰팩(프로젝트 내 규칙 SSOT)
+- `rules/` : (옵션) ast-grep 룰팩. vNext 기본은 에이전트가 structured matcher/rule을 즉석 생성해 호출한다.
 
 파일명/역할 규약
 
@@ -110,8 +110,9 @@ MCP는 stdio 기반으로 제공한다.
   - 목적: ast-grep 기반 구조 검색/검토(룰 기반 매칭 결과)
   - Input(초안):
     - `targets: string[]`
-    - `ruleId?: string`
-    - `ruleYaml?: string` (inline rule)
+    - `rule?: unknown` (structured rule object; treated as `{ rule: ... }` matcher)
+    - `matcher?: unknown` (full ast-grep matcher object)
+    - `ruleName?: string` (rule id/label for reporting)
   - Output(초안):
     - `matches: Array<{ filePath, span, text, ruleId }>`
 
@@ -126,7 +127,10 @@ MCP는 stdio 기반으로 제공한다.
 ### Resources
 
 - `firebat://report/last` : 마지막 실행 report(JSON)
-- `firebat://rules/index` : 사용 가능한 ruleId + ruleset 목록
+
+NOTE: firebat은 에이전트가 inline rule을 즉석 생성해 호출하는 것을 1st-class로 취급한다.
+내장 preset 룰팩 / rules index 리소스는 필수가 아니다(프로젝트/팀 정책에 따라 별도 제공 가능).
+현재 vNext에서는 `firebat.findPattern`이 **structured matcher/rule** 입력을 1st-class로 취급하며, `ruleYaml` 입력은 제공하지 않는다.
 
 ### Prompts
 
@@ -138,7 +142,7 @@ MCP는 stdio 기반으로 제공한다.
 
 기본 저장소
 
-- DB 파일: `.bunner/firebat/cache.sqlite`
+- DB 파일: `.firebat/firebat.sqlite`
 - 준비: 디렉토리 자동 생성(없으면 생성)
 
 캐시 키
@@ -159,29 +163,19 @@ MCP는 stdio 기반으로 제공한다.
 - `bun:sqlite` prepared statement를 재사용(`db.query()` 캐시 활용)
 - 병렬 처리: 파일 읽기/oxc 파싱은 동시 처리하되, 워커 수/배치 크기 제한으로 메모리 폭주 방지
 
----
 
 ## 4) tsgo / ast-grep / oxlint 통합 방식(정확성 우선)
 
 ### tsgo (추적: 심볼/레퍼런스/타입)
 
-- `tsgo`는 **외부 바이너리**로 가정하고, Bun에서 `spawn`으로 실행한다.
 - 원칙: MCP `traceSymbol`은 `tsgo` 결과를 SSOT로 사용한다.
 - 실패 정책:
   - MCP: `tsgo` 실행 실패 시 오류를 structuredContent로 반환(서버 유지)
-  - CLI: `--require-tsgo` 옵션 시 실패하면 exit 1, 아니면 fallback(Phase 5에서 결정)
-
-### @ast-grep (룰팩 기반 구조 분석)
-
 - `@ast-grep/napi`를 사용(프로세스 외부 호출 최소화, 대량 코드에서 성능 유리)
-- 룰팩은 `rules/*.yaml`로 SSOT화하고, ruleset(그룹) 개념을 제공한다.
-- detector는 “룰 id → findings”로 매핑되는 어댑터를 둔다.
-
-### oxlint (진단 수집)
+- (옵션) 룰팩은 `rules/*.yaml`로 SSOT화하고, ruleset(그룹) 개념을 제공할 수 있다.
 
 - `oxlint`는 현재 레포에서 lint 도구로 이미 사용 중.
 - firebat 내부 detector로 편입 시:
-  - CLI 실행 + JSON 출력 파싱(지원 포맷을 확인 후 결정)
   - 결과를 firebat report 스키마로 정규화
   - type-aware 용어는 oxlint 문맥에서만 사용한다(혼용 금지).
 
@@ -248,12 +242,12 @@ MCP는 stdio 기반으로 제공한다.
 목표
 
 - `firebat.findPattern` MCP tool 제공
-- 룰팩 기반 detector가 report에 합류
+- (옵션) 룰팩 기반 detector가 report에 합류
 
 작업
 
 - deps 추가: `@ast-grep/napi` (승인 게이트 대상)
-- `rules/` 디렉토리 신설 + ruleset 인덱스(`rules/index.json` 또는 TS index)
+- (옵션) `rules/` 디렉토리 + ruleset 인덱스(`rules/index.json` 또는 TS index)
 - `src/infrastructure/ast-grep/*` 구현
 - `src/application/scan/detectors/ast-grep.detector.ts` 추가
 
@@ -275,8 +269,8 @@ MCP는 stdio 기반으로 제공한다.
 
 - `src/ports/type-info.provider.ts` 정의
 - `src/infrastructure/tsgo/tsgo-runner.ts` 구현(바이너리 탐색/실행/결과 파싱)
-- sqlite에 “project 단위” 결과 캐시
-- 그래프 스키마 정의: `TraceNode`, `TraceEdge`, `EvidenceSpan`
+- sqlite artifacts에 “project 단위” 결과 캐시
+- 그래프 스키마 고정: `graph(nodes/edges)`, `evidence(spans)`
 
 완료 기준
 
@@ -298,7 +292,7 @@ MCP는 stdio 기반으로 제공한다.
 
 - `src/ports/lint.provider.ts` 정의
 - `src/infrastructure/oxlint/oxlint-runner.ts` 구현
-- 결과 정규화(진단 코드/심각도/스팬)
+- 결과 정규화(진단 코드/심각도/스팬) — stdout JSON이면 best-effort로 파싱
 
 완료 기준
 
@@ -316,7 +310,7 @@ MCP는 stdio 기반으로 제공한다.
 
 - deps 추가: `@modelcontextprotocol/sdk` + `zod` (승인 게이트 대상)
 - `src/adapters/mcp/server.ts`에서 tool/resource/prompt 등록
-- `firebat://report/last`, `firebat://rules/index` 리소스 제공
+- `firebat://report/last` 리소스 제공
 - `firebat.review` prompt 제공
 
 완료 기준
@@ -335,6 +329,7 @@ MCP는 stdio 기반으로 제공한다.
 도구 선택
 
 - `@modelcontextprotocol/inspector`의 `--cli` 모드를 사용한다(Context7 근거).
+  - NOTE: inspector는 Node.js를 요구한다(툴 자체 요구사항). Bun-first repo에서는 기본 스킵(옵트인)으로 둔다.
 
 테스트 타깃(최소)
 
@@ -347,9 +342,10 @@ MCP는 stdio 기반으로 제공한다.
 테스트 실행 커맨드(예시, 표준화)
 
 - tools/list
-  - `bunx -y @modelcontextprotocol/inspector --cli bunx -y firebat mcp --method tools/list`
+- tools/list
+  - `npx @modelcontextprotocol/inspector --cli bun packages/firebat/index.ts mcp --method tools/list`
 - tools/call
-  - `bunx -y @modelcontextprotocol/inspector --cli bunx -y firebat mcp --method tools/call --tool-name firebat.scan --tool-arg 'targets=["<fixture>"]'`
+  - `npx @modelcontextprotocol/inspector --cli bun packages/firebat/index.ts mcp --method tools/call --tool-name firebat.scan --tool-arg 'targets=["<fixture>"]'`
 
 주의
 
@@ -358,8 +354,8 @@ MCP는 stdio 기반으로 제공한다.
 
 산출물(파일)
 
-- `test/mcp/fixtures/*` (최소 fixture 1개)
-- `test/mcp/smoke.test.ts` 또는 `scripts/mcp-smoke.ts` (Bun test 또는 스크립트)
+- `test/integration/mcp/fixtures/*` (최소 fixture 1개)
+- `test/integration/mcp/smoke.test.ts` + `test/integration/mcp/inspector-cli.test.ts` (inspector test는 env로 opt-in)
 - package script(초안): `bun run test:mcp`
 
 완료 기준
@@ -371,21 +367,8 @@ MCP는 stdio 기반으로 제공한다.
 
 ## 6) 패키지/배포: `bunx -y firebat mcp`를 성립시키는 방법
 
-현재 패키지명은 `@bunner/firebat`이다.
-요구 커맨드가 `bunx -y firebat mcp`이므로, 아래 중 하나를 반드시 선택해야 한다.
-
-Option A (권장, 리스크 낮음)
-
-- 새 “래퍼” 패키지 `packages/firebat-npm/` (name: `firebat`)를 추가한다.
-- 내용: `@bunner/firebat`에 의존하고, bin `firebat`를 그대로 노출한다.
-- 장점: 기존 스코프 패키지 유지, 내부 구조 변경 최소
-
-Option B (리스크 큼)
-
-- `@bunner/firebat`의 패키지명을 `firebat`로 변경한다.
-- 단점: 외부/내부 의존, 배포/다운스트림 영향 큼
-
-본 계획은 Option A를 기본으로 진행한다.
+`bunx -y firebat mcp`를 성립시키려면 **패키지명이 `firebat`여야 한다**.
+따라서 firebat 패키지는 스코프 패키지(`@bunner/firebat`)가 아니라 **unscoped `firebat`**로 유지한다.
 
 ---
 

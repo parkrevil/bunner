@@ -29,6 +29,36 @@ export interface SourceSpan {
   readonly end: SourcePosition;
 }
 
+export type FirebatTraceNodeKind = 'file' | 'symbol' | 'type' | 'reference' | 'unknown';
+
+export interface FirebatTraceNode {
+  readonly id: string;
+  readonly kind: FirebatTraceNodeKind;
+  readonly label: string;
+  readonly filePath?: string;
+  readonly span?: SourceSpan;
+}
+
+export type FirebatTraceEdgeKind = 'references' | 'imports' | 'exports' | 'calls' | 'type-of' | 'unknown';
+
+export interface FirebatTraceEdge {
+  readonly from: string;
+  readonly to: string;
+  readonly kind: FirebatTraceEdgeKind;
+  readonly label?: string;
+}
+
+export interface FirebatTraceGraph {
+  readonly nodes: ReadonlyArray<FirebatTraceNode>;
+  readonly edges: ReadonlyArray<FirebatTraceEdge>;
+}
+
+export interface FirebatTraceEvidenceSpan {
+  readonly filePath: string;
+  readonly span: SourceSpan;
+  readonly text?: string;
+}
+
 export interface DuplicateItem {
   readonly kind: FirebatItemKind;
   readonly header: string;
