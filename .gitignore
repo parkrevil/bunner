@@ -3,3 +3,4 @@ dist
 bun.lock
 **/bench/**/results
 **/.bunner/
+.lsmcp/cache
