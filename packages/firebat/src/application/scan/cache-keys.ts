@@ -2,16 +2,24 @@ import { hashString } from '../../engine/hasher';
 
 const normalizePath = (filePath: string): string => filePath.replaceAll('\\', '/');
 
-const computeProjectKey = (input: { toolVersion: string; cwd?: string }): string => {
+interface ComputeProjectKeyInput {
+  readonly toolVersion: string;
+  readonly cwd?: string;
+}
+
+const computeProjectKey = (input: ComputeProjectKeyInput): string => {
   const cwd = input.cwd ?? process.cwd();
+
   return hashString(`firebat|${input.toolVersion}|${normalizePath(cwd)}|${Bun.version}`);
 };
 
-const computeScanArtifactKey = (input: {
-  detectors: ReadonlyArray<string>;
-  minSize: string;
-  maxForwardDepth: number;
-}): string => {
+interface ComputeScanArtifactKeyInput {
+  readonly detectors: ReadonlyArray<string>;
+  readonly minSize: string;
+  readonly maxForwardDepth: number;
+}
+
+const computeScanArtifactKey = (input: ComputeScanArtifactKeyInput): string => {
   const normalizedDetectors = [...input.detectors].sort();
 
   return hashString(
@@ -24,14 +32,16 @@ const computeScanArtifactKey = (input: {
   );
 };
 
-const computeTraceArtifactKey = (input: {
-  entryFile: string;
-  symbol: string;
-  tsconfigPath?: string;
-  maxDepth?: number;
-}): string => {
+interface ComputeTraceArtifactKeyInput {
+  readonly entryFile: string;
+  readonly symbol: string;
+  readonly tsconfigPath?: string;
+  readonly maxDepth?: number;
+}
+
+const computeTraceArtifactKey = (input: ComputeTraceArtifactKeyInput): string => {
   const normalizedEntry = normalizePath(input.entryFile);
-  const normalizedTsconfig = input.tsconfigPath ? normalizePath(input.tsconfigPath) : '';
+  const normalizedTsconfig = input.tsconfigPath !== undefined ? normalizePath(input.tsconfigPath) : '';
 
   return hashString(
     [

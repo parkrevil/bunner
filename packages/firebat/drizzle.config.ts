@@ -1,3 +1,5 @@
+/* oxlint-disable import/no-default-export */
+
 import * as path from 'node:path';
 
 import { defineConfig } from 'drizzle-kit';

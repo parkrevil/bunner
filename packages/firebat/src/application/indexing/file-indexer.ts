@@ -2,12 +2,14 @@ import { hashString } from '../../engine/hasher';
 import { runWithConcurrency } from '../../engine/promise-pool';
 import type { FileIndexRepository } from '../../ports/file-index.repository';
 
-const indexTargets = async (input: {
-  projectKey: string;
-  targets: ReadonlyArray<string>;
-  repository: FileIndexRepository;
-  concurrency?: number;
-}): Promise<void> => {
+interface IndexTargetsInput {
+  readonly projectKey: string;
+  readonly targets: ReadonlyArray<string>;
+  readonly repository: FileIndexRepository;
+  readonly concurrency?: number;
+}
+
+const indexTargets = async (input: IndexTargetsInput): Promise<void> => {
   const concurrency = input.concurrency ?? 8;
 
   await runWithConcurrency(input.targets, concurrency, async filePath => {
@@ -15,7 +17,6 @@ const indexTargets = async (input: {
       const stats = await Bun.file(filePath).stat();
       const mtimeMs = stats.mtimeMs;
       const size = stats.size;
-
       const existing = await input.repository.getFile({ projectKey: input.projectKey, filePath });
 
       if (existing && existing.mtimeMs === mtimeMs && existing.size === size) {

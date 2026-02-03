@@ -7,20 +7,26 @@ const runWithConcurrency = async <TInput>(
 ): Promise<void> => {
   const resolvedConcurrency = Math.max(1, Math.floor(concurrency));
   let index = 0;
-
   const runners: Promise<void>[] = [];
 
   const runNext = async (): Promise<void> => {
     // eslint-disable-next-line no-constant-condition
     while (true) {
       const current = index;
+
       index += 1;
 
       if (current >= items.length) {
         return;
       }
 
-      await worker(items[current]!);
+      const item = items[current];
+
+      if (item === undefined) {
+        return;
+      }
+
+      await worker(item);
     }
   };
 

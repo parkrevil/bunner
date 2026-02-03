@@ -1,3 +1,4 @@
+// MUST: MUST-1
 import type { FirebatCliOptions } from '../../interfaces';
 import type { FirebatReport } from '../../types';
 
@@ -20,6 +21,8 @@ import { createSqliteArtifactRepository } from '../../infrastructure/sqlite/arti
 import { createSqliteFileIndexRepository } from '../../infrastructure/sqlite/file-index.repository';
 import { createInMemoryArtifactRepository } from '../../infrastructure/memory/artifact.repository';
 import { createInMemoryFileIndexRepository } from '../../infrastructure/memory/file-index.repository';
+import { createHybridArtifactRepository } from '../../infrastructure/hybrid/artifact.repository';
+import { createHybridFileIndexRepository } from '../../infrastructure/hybrid/file-index.repository';
 import { indexTargets } from '../indexing/file-indexer';
 import { computeInputsDigest } from './inputs-digest';
 import { computeProjectKey, computeScanArtifactKey } from './cache-keys';
@@ -32,18 +35,15 @@ const scanUseCase = async (options: FirebatCliOptions): Promise<FirebatReport> =
   const cacheBuster = (process.env.FIREBAT_CACHE_BUSTER ?? '').trim();
   const toolVersion = cacheBuster.length > 0 ? `${baseToolVersion}+${cacheBuster}` : `${baseToolVersion}+${defaultCacheVersion}`;
   const projectKey = computeProjectKey({ toolVersion });
-
-  const storageMode = (process.env.FIREBAT_STORAGE_MODE ?? '').toLowerCase();
-
-  const artifactRepository =
-    storageMode === 'memory' || storageMode === 'in-memory'
-      ? createInMemoryArtifactRepository()
-      : createSqliteArtifactRepository(await getOrmDb());
-
-  const fileIndexRepository =
-    storageMode === 'memory' || storageMode === 'in-memory'
-      ? createInMemoryFileIndexRepository()
-      : createSqliteFileIndexRepository(await getOrmDb());
+  const orm = await getOrmDb();
+  const artifactRepository = createHybridArtifactRepository({
+    memory: createInMemoryArtifactRepository(),
+    sqlite: createSqliteArtifactRepository(orm),
+  });
+  const fileIndexRepository = createHybridFileIndexRepository({
+    memory: createInMemoryFileIndexRepository(),
+    sqlite: createSqliteFileIndexRepository(orm),
+  });
 
   await indexTargets({
     projectKey,
@@ -57,13 +57,11 @@ const scanUseCase = async (options: FirebatCliOptions): Promise<FirebatReport> =
     targets: options.targets,
     fileIndexRepository,
   });
-
   const artifactKey = computeScanArtifactKey({
     detectors: options.detectors,
     minSize: options.minSize === 'auto' ? 'auto' : String(options.minSize),
     maxForwardDepth: options.maxForwardDepth,
   });
-
   const cached = await artifactRepository.getArtifact<FirebatReport>({
     projectKey,
     kind: 'firebat:report',
@@ -78,31 +76,24 @@ const scanUseCase = async (options: FirebatCliOptions): Promise<FirebatReport> =
   const program = await createFirebatProgram({
     targets: options.targets,
   });
-
   const resolvedMinSize =
     options.minSize === 'auto' ? computeAutoMinSize(program) : Math.max(0, Math.round(options.minSize));
-
   const duplicates = options.detectors.includes('duplicates') ? detectDuplicates(program, resolvedMinSize) : [];
   const waste = options.detectors.includes('waste') ? detectWaste(program) : [];
   const typecheck = options.detectors.includes('typecheck') ? await analyzeTypecheck(program) : createEmptyTypecheck();
-
   const shouldRunDependencies = options.detectors.includes('dependencies') || options.detectors.includes('coupling');
   const dependencies = shouldRunDependencies ? analyzeDependencies(program) : createEmptyDependencies();
   const coupling = options.detectors.includes('coupling') ? analyzeCoupling(dependencies) : createEmptyCoupling();
-
   const duplication = options.detectors.includes('duplication')
     ? analyzeDuplication(program, resolvedMinSize)
     : createEmptyDuplication();
-
   const nesting = options.detectors.includes('nesting') ? analyzeNesting(program) : createEmptyNesting();
   const earlyReturn = options.detectors.includes('early-return') ? analyzeEarlyReturn(program) : createEmptyEarlyReturn();
   const noop = options.detectors.includes('noop') ? analyzeNoop(program) : createEmptyNoop();
   const apiDrift = options.detectors.includes('api-drift') ? analyzeApiDrift(program) : createEmptyApiDrift();
-
   const forwarding = options.detectors.includes('forwarding')
     ? analyzeForwarding(program, options.maxForwardDepth)
     : createEmptyForwarding();
-
   const report: FirebatReport = {
     meta: {
       engine: 'oxc',

@@ -8,6 +8,7 @@ const main = async (): Promise<void> => {
 	try {
 		if (subcommand === 'mcp') {
 			await runMcp();
+
 			return;
 		}
 
@@ -19,6 +20,7 @@ const main = async (): Promise<void> => {
 		// MCP process constraints: do not write to stdout.
 		// When MCP startup fails, persist diagnostics to a file so callers can inspect.
 		const message = error instanceof Error ? `${error.name}: ${error.message}\n${error.stack ?? ''}` : String(error);
+
 		try {
 			await Bun.write('./.firebat-mcp-error.log', `[${new Date().toISOString()}]\n${message}\n`);
 		} catch {

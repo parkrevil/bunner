@@ -43,3 +43,56 @@ export const reports = sqliteTable(
   },
   table => [primaryKey({ columns: [table.projectKey, table.reportKey] })],
 );
+
+export const memories = sqliteTable(
+  'memories',
+  {
+    projectKey: text('projectKey').notNull(),
+    memoryKey: text('memoryKey').notNull(),
+    createdAt: integer('createdAt').notNull(),
+    updatedAt: integer('updatedAt').notNull(),
+    payloadJson: text('payloadJson').notNull(),
+  },
+  table => [
+    primaryKey({ columns: [table.projectKey, table.memoryKey] }),
+    index('idx_memories_projectKey').on(table.projectKey),
+    index('idx_memories_updatedAt').on(table.updatedAt),
+  ],
+);
+
+export const symbolFiles = sqliteTable(
+  'symbol_files',
+  {
+    projectKey: text('projectKey').notNull(),
+    filePath: text('filePath').notNull(),
+    contentHash: text('contentHash').notNull(),
+    indexedAt: integer('indexedAt').notNull(),
+    symbolCount: integer('symbolCount').notNull(),
+  },
+  table => [
+    primaryKey({ columns: [table.projectKey, table.filePath] }),
+    index('idx_symbol_files_projectKey').on(table.projectKey),
+    index('idx_symbol_files_indexedAt').on(table.indexedAt),
+  ],
+);
+
+export const symbols = sqliteTable(
+  'symbols',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    projectKey: text('projectKey').notNull(),
+    filePath: text('filePath').notNull(),
+    kind: text('kind').notNull(),
+    name: text('name').notNull(),
+    startLine: integer('startLine').notNull(),
+    startColumn: integer('startColumn').notNull(),
+    endLine: integer('endLine').notNull(),
+    endColumn: integer('endColumn').notNull(),
+    indexedAt: integer('indexedAt').notNull(),
+  },
+  table => [
+    index('idx_symbols_projectKey_name').on(table.projectKey, table.name),
+    index('idx_symbols_projectKey_filePath').on(table.projectKey, table.filePath),
+    index('idx_symbols_projectKey_kind').on(table.projectKey, table.kind),
+  ],
+);

@@ -3,6 +3,25 @@ import * as path from 'node:path';
 import { discoverDefaultTargets } from '../../target-discovery';
 import { findPatternInFiles, type AstGrepMatch } from '../../infrastructure/ast-grep/find-pattern';
 
+interface JsonObject {
+  readonly [k: string]: JsonValue;
+}
+
+type JsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | ReadonlyArray<JsonValue>
+  | JsonObject;
+
+interface FindPatternInput {
+  readonly targets?: ReadonlyArray<string>;
+  readonly rule?: JsonValue;
+  readonly matcher?: JsonValue;
+  readonly ruleName?: string;
+}
+
 const uniqueSorted = (values: ReadonlyArray<string>): string[] =>
   Array.from(new Set(values)).sort((a, b) => a.localeCompare(b));
 
@@ -26,17 +45,10 @@ const expandTargets = async (cwd: string, targets: ReadonlyArray<string>): Promi
   return uniqueSorted(matches);
 };
 
-const findPatternUseCase = async (input: {
-  targets?: ReadonlyArray<string>;
-  rule?: unknown;
-  matcher?: unknown;
-  ruleName?: string;
-}): Promise<ReadonlyArray<AstGrepMatch>> => {
+const findPatternUseCase = async (input: FindPatternInput): Promise<ReadonlyArray<AstGrepMatch>> => {
   const cwd = process.cwd();
-
-  const targetsRaw = input.targets?.length ? input.targets : await discoverDefaultTargets(cwd);
+  const targetsRaw = input.targets !== undefined && input.targets.length > 0 ? input.targets : await discoverDefaultTargets(cwd);
   const targets = await expandTargets(cwd, targetsRaw);
-
   const request: Parameters<typeof findPatternInFiles>[0] = { targets };
 
   if (input.rule !== undefined) {

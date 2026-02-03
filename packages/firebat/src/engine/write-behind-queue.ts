@@ -1,37 +1,46 @@
 type WriteJob = () => void;
 
 class WriteBehindQueue {
-  private chain: Promise<void> = Promise.resolve();
+  private chain: Promise<void> = new Promise<void>(resolve => {
+    resolve();
+  });
   private pending = 0;
-  private lastError: unknown = null;
+  private lastError: Error | null = null;
 
   enqueue(job: WriteJob): void {
     this.pending += 1;
 
-    this.chain = this.chain
-      .then(async () => {
-        try {
-          job();
-        } catch (error) {
-          this.lastError = error;
-        }
-      })
-      .finally(() => {
+    const previous = this.chain;
+
+    this.chain = (async (): Promise<void> => {
+      try {
+        await previous;
+      } catch {
+        // ignore
+      }
+
+      try {
+        job();
+      } catch (error) {
+        this.lastError = error instanceof Error ? error : new Error(String(error));
+      } finally {
         this.pending = Math.max(0, this.pending - 1);
-      });
+      }
+    })();
   }
 
   getPendingCount(): number {
     return this.pending;
   }
 
-  getLastError(): unknown {
+  getLastError(): Error | null {
     return this.lastError;
   }
 
   async flush(timeoutMs?: number): Promise<void> {
     if (timeoutMs === undefined) {
       await this.chain;
+
       return;
     }
 

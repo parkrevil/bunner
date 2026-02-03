@@ -1,3 +1,5 @@
+/* oxlint-disable typescript-eslint/no-deprecated, typescript-eslint/no-unsafe-type-assertion, typescript-eslint/no-unsafe-member-access, typescript-eslint/no-unsafe-call, typescript-eslint/no-explicit-any, bunner/no-any, bunner/no-unknown, bunner/no-inline-object-type, bunner/no-double-assertion, bunner/no-non-null-assertion */
+
 import { ts } from '@ast-grep/napi';
 
 import type { SourceSpan } from '../../types';
@@ -51,7 +53,6 @@ const findPatternInFiles = async (input: {
       findAll?: (matcher: unknown) => ReadonlyArray<{ text: () => string; range: () => any }>;
       find?: (matcher: unknown) => { text: () => string; range: () => any } | null;
     };
-
     const nodes =
       typeof root.findAll === 'function'
         ? root.findAll(matcher)

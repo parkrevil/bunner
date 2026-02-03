@@ -7,7 +7,7 @@ import { files } from './schema';
 
 const createSqliteFileIndexRepository = (db: FirebatDrizzleDb): FileIndexRepository => {
   return {
-    async getFile({ projectKey, filePath }): Promise<FileIndexEntry | null> {
+     async getFile({ projectKey, filePath }): Promise<FileIndexEntry | null> {
       const row = db
         .select({
           filePath: files.filePath,
@@ -20,10 +20,10 @@ const createSqliteFileIndexRepository = (db: FirebatDrizzleDb): FileIndexReposit
         .where(and(eq(files.projectKey, projectKey), eq(files.filePath, filePath)))
         .get();
 
-      return row ?? null;
+      return Promise.resolve(row ?? null);
     },
 
-    async upsertFile({ projectKey, filePath, mtimeMs, size, contentHash }): Promise<void> {
+     async upsertFile({ projectKey, filePath, mtimeMs, size, contentHash }): Promise<void> {
       const updatedAt = Date.now();
 
       db.insert(files)
@@ -40,10 +40,14 @@ const createSqliteFileIndexRepository = (db: FirebatDrizzleDb): FileIndexReposit
           set: { mtimeMs, size, contentHash, updatedAt },
         })
         .run();
+
+      return Promise.resolve();
     },
 
-    async deleteFile({ projectKey, filePath }): Promise<void> {
+     async deleteFile({ projectKey, filePath }): Promise<void> {
       db.delete(files).where(and(eq(files.projectKey, projectKey), eq(files.filePath, filePath))).run();
+
+      return Promise.resolve();
     },
   };
 };

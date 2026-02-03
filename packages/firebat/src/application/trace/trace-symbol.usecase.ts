@@ -1,3 +1,4 @@
+// MUST: MUST-1
 import * as path from 'node:path';
 
 import { initHasher } from '../../engine/hasher';
@@ -6,6 +7,8 @@ import { createSqliteArtifactRepository } from '../../infrastructure/sqlite/arti
 import { createSqliteFileIndexRepository } from '../../infrastructure/sqlite/file-index.repository';
 import { createInMemoryArtifactRepository } from '../../infrastructure/memory/artifact.repository';
 import { createInMemoryFileIndexRepository } from '../../infrastructure/memory/file-index.repository';
+import { createHybridArtifactRepository } from '../../infrastructure/hybrid/artifact.repository';
+import { createHybridFileIndexRepository } from '../../infrastructure/hybrid/file-index.repository';
 import { runTsgoTraceSymbol } from '../../infrastructure/tsgo/tsgo-runner';
 import type { SourceSpan } from '../../types';
 import { indexTargets } from '../indexing/file-indexer';
@@ -14,76 +17,234 @@ import { computeProjectKey, computeTraceArtifactKey } from '../scan/cache-keys';
 
 type TraceNodeKind = 'file' | 'symbol' | 'type' | 'reference' | 'unknown';
 
-type TraceNode = {
+interface JsonObject {
+  readonly [k: string]: JsonValue;
+}
+
+type JsonValue = null | boolean | number | string | ReadonlyArray<JsonValue> | JsonObject;
+
+interface StructuredTrace extends JsonObject {
+  readonly graph?: JsonValue;
+  readonly evidence?: JsonValue;
+}
+
+interface TraceNode {
   readonly id: string;
   readonly kind: TraceNodeKind;
   readonly label: string;
   readonly filePath?: string;
   readonly span?: SourceSpan;
-};
+}
 
 type TraceEdgeKind = 'references' | 'imports' | 'exports' | 'calls' | 'type-of' | 'unknown';
 
-type TraceEdge = {
+interface TraceEdge {
   readonly from: string;
   readonly to: string;
   readonly kind: TraceEdgeKind;
   readonly label?: string;
-};
+}
 
-type TraceGraph = {
+interface TraceGraph {
   readonly nodes: ReadonlyArray<TraceNode>;
   readonly edges: ReadonlyArray<TraceEdge>;
-};
+}
 
-type TraceEvidenceSpan = {
+interface TraceEvidenceSpan {
   readonly filePath: string;
   readonly span: SourceSpan;
   readonly text?: string;
-};
+}
 
-type TraceSymbolInput = {
+interface TraceSymbolInput {
   readonly entryFile: string;
   readonly symbol: string;
   readonly tsconfigPath?: string;
   readonly maxDepth?: number;
-};
+}
 
-type TraceSymbolOutput = {
+interface TraceSymbolOutput {
   readonly ok: boolean;
   readonly tool: 'tsgo';
   readonly graph: TraceGraph;
   readonly evidence: ReadonlyArray<TraceEvidenceSpan>;
   readonly error?: string;
-  readonly raw?: unknown;
+  readonly raw?: JsonValue;
+}
+
+interface NormalizeTraceInput {
+  readonly structured: JsonValue | undefined;
+}
+
+interface NormalizeTraceResult {
+  readonly graph: TraceGraph;
+  readonly evidence: TraceEvidenceSpan[];
+  readonly raw?: JsonValue;
+}
+
+const isObject = (value: JsonValue | undefined): value is JsonObject =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const getString = (obj: JsonObject, key: string): string | undefined => {
+  const value = obj[key];
+
+  return typeof value === 'string' ? value : undefined;
 };
 
-const normalizeTrace = (input: { structured: unknown }): { graph: TraceGraph; evidence: TraceEvidenceSpan[]; raw?: unknown } => {
+const getArray = (obj: JsonObject, key: string): ReadonlyArray<JsonValue> | undefined => {
+  const value = obj[key];
+
+  return Array.isArray(value) ? value : undefined;
+};
+
+const isTraceNodeKind = (value: JsonValue): value is TraceNodeKind =>
+  typeof value === 'string' &&
+  (value === 'file' || value === 'symbol' || value === 'type' || value === 'reference' || value === 'unknown');
+
+const isTraceEdgeKind = (value: JsonValue): value is TraceEdgeKind =>
+  typeof value === 'string' &&
+  (value === 'references' ||
+    value === 'imports' ||
+    value === 'exports' ||
+    value === 'calls' ||
+    value === 'type-of' ||
+    value === 'unknown');
+
+const toTraceNodes = (value: ReadonlyArray<JsonValue>): TraceNode[] => {
+  const out: TraceNode[] = [];
+
+  for (const item of value) {
+    if (!isObject(item)) {
+      continue;
+    }
+
+    const id = getString(item, 'id');
+    const label = getString(item, 'label');
+    const kindRaw = item.kind;
+    const kind = isTraceNodeKind(kindRaw) ? kindRaw : undefined;
+
+    if (id === undefined || id.length === 0 || label === undefined || label.length === 0 || kind === undefined) {
+      continue;
+    }
+
+    const filePath = getString(item, 'filePath');
+
+    out.push({ id, kind, label, ...(filePath !== undefined ? { filePath } : {}) });
+  }
+
+  return out;
+};
+
+const toTraceEdges = (value: ReadonlyArray<JsonValue>): TraceEdge[] => {
+  const out: TraceEdge[] = [];
+
+  for (const item of value) {
+    if (!isObject(item)) {
+      continue;
+    }
+
+    const from = getString(item, 'from');
+    const to = getString(item, 'to');
+    const kindRaw = item.kind;
+    const kind = isTraceEdgeKind(kindRaw) ? kindRaw : undefined;
+
+    if (from === undefined || from.length === 0 || to === undefined || to.length === 0 || kind === undefined) {
+      continue;
+    }
+
+    const label = getString(item, 'label');
+
+    out.push({ from, to, kind, ...(label !== undefined ? { label } : {}) });
+  }
+
+  return out;
+};
+
+const toSourceSpan = (value: JsonValue | undefined): SourceSpan | null => {
+  if (!isObject(value)) {
+    return null;
+  }
+
+  const start = value.start;
+  const end = value.end;
+
+  if (!isObject(start) || !isObject(end)) {
+    return null;
+  }
+
+  const startLine = start.line;
+  const startColumn = start.column;
+  const endLine = end.line;
+  const endColumn = end.column;
+
+  if (
+    typeof startLine !== 'number' ||
+    typeof startColumn !== 'number' ||
+    typeof endLine !== 'number' ||
+    typeof endColumn !== 'number'
+  ) {
+    return null;
+  }
+
+  return {
+    start: { line: startLine, column: startColumn },
+    end: { line: endLine, column: endColumn },
+  };
+};
+
+const toEvidenceSpans = (value: ReadonlyArray<JsonValue>): TraceEvidenceSpan[] => {
+  const out: TraceEvidenceSpan[] = [];
+
+  for (const item of value) {
+    if (!isObject(item)) {
+      continue;
+    }
+
+    const filePath = getString(item, 'filePath');
+    const span = toSourceSpan(item.span);
+
+    if (filePath === undefined || filePath.length === 0 || span === null) {
+      continue;
+    }
+
+    const text = getString(item, 'text');
+
+    out.push({ filePath, span, ...(text !== undefined ? { text } : {}) });
+  }
+
+  return out;
+};
+
+const normalizeTrace = (input: NormalizeTraceInput): NormalizeTraceResult => {
   const empty: TraceGraph = { nodes: [], edges: [] };
 
-  if (!input.structured || typeof input.structured !== 'object') {
+  if (!isObject(input.structured)) {
     return { graph: empty, evidence: [], raw: input.structured };
   }
 
+  const structured = input.structured as StructuredTrace;
   // Best-effort: if caller already returns {graph, evidence}
-  const asAny = input.structured as any;
+  const graph = isObject(structured.graph) ? structured.graph : undefined;
+  const nodes = graph ? getArray(graph, 'nodes') : undefined;
+  const edges = graph ? getArray(graph, 'edges') : undefined;
 
-  if (asAny.graph && typeof asAny.graph === 'object' && Array.isArray(asAny.graph.nodes) && Array.isArray(asAny.graph.edges)) {
+  if (graph !== undefined && nodes !== undefined && edges !== undefined) {
     return {
-      graph: { nodes: asAny.graph.nodes as TraceNode[], edges: asAny.graph.edges as TraceEdge[] },
-      evidence: Array.isArray(asAny.evidence) ? (asAny.evidence as TraceEvidenceSpan[]) : [],
-      raw: input.structured,
+      graph: { nodes: toTraceNodes(nodes), edges: toTraceEdges(edges) },
+      evidence: Array.isArray(structured.evidence) ? toEvidenceSpans(structured.evidence) : [],
+      raw: structured,
     };
   }
 
-  return { graph: empty, evidence: [], raw: input.structured };
+  return { graph: empty, evidence: [], raw: structured };
 };
 
 const resolveRelatedFiles = async (input: TraceSymbolInput): Promise<string[]> => {
   const files: string[] = [path.resolve(process.cwd(), input.entryFile)];
 
-  if (input.tsconfigPath) {
+  if (input.tsconfigPath !== undefined && input.tsconfigPath.trim().length > 0) {
     const tsconfig = path.resolve(process.cwd(), input.tsconfigPath);
+
     try {
       await Bun.file(tsconfig).stat();
       files.push(tsconfig);
@@ -103,19 +264,15 @@ const traceSymbolUseCase = async (input: TraceSymbolInput): Promise<TraceSymbolO
   const cacheBuster = (process.env.FIREBAT_CACHE_BUSTER ?? '').trim();
   const toolVersion = cacheBuster.length > 0 ? `${baseToolVersion}+${cacheBuster}` : `${baseToolVersion}+${defaultCacheVersion}`;
   const projectKey = computeProjectKey({ toolVersion });
-
-  const storageMode = (process.env.FIREBAT_STORAGE_MODE ?? '').toLowerCase();
-
-  const artifactRepository =
-    storageMode === 'memory' || storageMode === 'in-memory'
-      ? createInMemoryArtifactRepository()
-      : createSqliteArtifactRepository(await getOrmDb());
-
-  const fileIndexRepository =
-    storageMode === 'memory' || storageMode === 'in-memory'
-      ? createInMemoryFileIndexRepository()
-      : createSqliteFileIndexRepository(await getOrmDb());
-
+  const orm = await getOrmDb();
+  const artifactRepository = createHybridArtifactRepository({
+    memory: createInMemoryArtifactRepository(),
+    sqlite: createSqliteArtifactRepository(orm),
+  });
+  const fileIndexRepository = createHybridFileIndexRepository({
+    memory: createInMemoryFileIndexRepository(),
+    sqlite: createSqliteFileIndexRepository(orm),
+  });
   const relatedFiles = await resolveRelatedFiles(input);
 
   await indexTargets({ projectKey, targets: relatedFiles, repository: fileIndexRepository, concurrency: 4 });
@@ -125,14 +282,12 @@ const traceSymbolUseCase = async (input: TraceSymbolInput): Promise<TraceSymbolO
     targets: relatedFiles,
     fileIndexRepository,
   });
-
   const artifactKey = computeTraceArtifactKey({
     entryFile: relatedFiles[0] ?? input.entryFile,
     symbol: input.symbol,
     ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}),
     ...(input.maxDepth !== undefined ? { maxDepth: input.maxDepth } : {}),
   });
-
   const cached = await artifactRepository.getArtifact<TraceSymbolOutput>({
     projectKey,
     kind: 'tsgo:traceSymbol',
@@ -150,18 +305,15 @@ const traceSymbolUseCase = async (input: TraceSymbolInput): Promise<TraceSymbolO
     ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}),
     ...(input.maxDepth !== undefined ? { maxDepth: input.maxDepth } : {}),
   };
-
   const result = await runTsgoTraceSymbol(tsgoRequest);
-
-  const normalized = normalizeTrace({ structured: result.structured });
-
+  // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+  const normalized = normalizeTrace({ structured: result.structured as JsonValue | undefined });
   const outputBase = {
     ok: result.ok,
     tool: 'tsgo' as const,
     graph: normalized.graph,
     evidence: normalized.evidence,
   };
-
   const output: TraceSymbolOutput = {
     ...outputBase,
     ...(result.error !== undefined ? { error: result.error } : {}),

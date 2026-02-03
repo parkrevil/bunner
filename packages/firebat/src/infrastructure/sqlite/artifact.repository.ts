@@ -1,18 +1,19 @@
-import type { ArtifactRepository } from '../../ports/artifact.repository';
+import type { ArtifactRepository, GetArtifactInput, SetArtifactInput } from '../../ports/artifact.repository';
 
 import { and, eq } from 'drizzle-orm';
 
 import type { FirebatDrizzleDb } from './drizzle-db';
 import { artifacts } from './schema';
 
+interface JsonObject {
+  readonly [k: string]: JsonValue;
+}
+
+type JsonValue = null | boolean | number | string | ReadonlyArray<JsonValue> | JsonObject;
+
 const createSqliteArtifactRepository = (db: FirebatDrizzleDb): ArtifactRepository => {
   return {
-    async getArtifact<T>(input: {
-      projectKey: string;
-      kind: string;
-      artifactKey: string;
-      inputsDigest: string;
-    }): Promise<T | null> {
+     async getArtifact<T>(input: GetArtifactInput): Promise<T | null> {
       const { projectKey, kind, artifactKey, inputsDigest } = input;
       const row = db
         .select({ payloadJson: artifacts.payloadJson })
@@ -28,23 +29,23 @@ const createSqliteArtifactRepository = (db: FirebatDrizzleDb): ArtifactRepositor
         .get();
 
       if (!row) {
-        return null;
+        return Promise.resolve(null);
       }
+
+      let parsed: JsonValue;
 
       try {
-        return JSON.parse(row.payloadJson) as T;
+        // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+        parsed = JSON.parse(row.payloadJson) as JsonValue;
       } catch {
-        return null;
+        return Promise.resolve(null);
       }
+
+      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+      return Promise.resolve(parsed as T);
     },
 
-    async setArtifact<T>(input: {
-      projectKey: string;
-      kind: string;
-      artifactKey: string;
-      inputsDigest: string;
-      value: T;
-    }): Promise<void> {
+    async setArtifact<T>(input: SetArtifactInput<T>): Promise<void> {
       const { projectKey, kind, artifactKey, inputsDigest, value } = input;
       const createdAt = Date.now();
       const payloadJson = JSON.stringify(value);
@@ -63,6 +64,8 @@ const createSqliteArtifactRepository = (db: FirebatDrizzleDb): ArtifactRepositor
           set: { createdAt, payloadJson },
         })
         .run();
+
+      return Promise.resolve();
     },
   };
 };

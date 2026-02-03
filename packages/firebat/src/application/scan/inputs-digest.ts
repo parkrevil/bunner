@@ -3,11 +3,13 @@ import type { FileIndexRepository } from '../../ports/file-index.repository';
 
 const normalizePath = (filePath: string): string => filePath.replaceAll('\\', '/');
 
-const computeInputsDigest = async (input: {
-  projectKey: string;
-  targets: ReadonlyArray<string>;
-  fileIndexRepository: FileIndexRepository;
-}): Promise<string> => {
+interface ComputeInputsDigestInput {
+  readonly projectKey: string;
+  readonly targets: ReadonlyArray<string>;
+  readonly fileIndexRepository: FileIndexRepository;
+}
+
+const computeInputsDigest = async (input: ComputeInputsDigestInput): Promise<string> => {
   const normalizedTargets = [...input.targets].map(normalizePath).sort();
   const parts: string[] = [];
 
@@ -17,6 +19,7 @@ const computeInputsDigest = async (input: {
 
       if (entry) {
         parts.push(`file:${filePath}:${entry.contentHash}`);
+
         continue;
       }
 

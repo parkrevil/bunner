@@ -1,4 +1,10 @@
-export interface OxlintDiagnostic {
+interface JsonObject {
+  readonly [k: string]: JsonValue;
+}
+
+type JsonValue = null | boolean | number | string | ReadonlyArray<JsonValue> | JsonObject;
+
+interface OxlintDiagnostic {
   readonly filePath?: string;
   readonly message: string;
   readonly code?: string;
@@ -7,7 +13,7 @@ export interface OxlintDiagnostic {
   readonly column?: number;
 }
 
-export interface OxlintRunResult {
+interface OxlintRunResult {
   readonly ok: boolean;
   readonly tool: 'oxlint';
   readonly exitCode?: number;
@@ -17,45 +23,52 @@ export interface OxlintRunResult {
   readonly diagnostics?: ReadonlyArray<OxlintDiagnostic>;
 }
 
+interface RunOxlintInput {
+  readonly targets: ReadonlyArray<string>;
+  readonly configPath?: string;
+}
+
 const splitCommand = (value: string): string[] => value.split(/\s+/).filter(Boolean);
 
-const asString = (value: unknown): string | undefined => (typeof value === 'string' ? value : undefined);
-const asNumber = (value: unknown): number | undefined => (typeof value === 'number' ? value : undefined);
+const asString = (value: JsonValue | undefined): string | undefined => (typeof value === 'string' ? value : undefined);
 
-const normalizeDiagnosticsFromJson = (value: unknown): ReadonlyArray<OxlintDiagnostic> => {
-  if (!value || typeof value !== 'object') {
+const asNumber = (value: JsonValue | undefined): number | undefined => (typeof value === 'number' ? value : undefined);
+
+const isObject = (value: JsonValue | undefined): value is JsonObject =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const isArray = (value: JsonValue | undefined): value is ReadonlyArray<JsonValue> => Array.isArray(value);
+
+const getProp = (obj: JsonObject, key: string): JsonValue | undefined => obj[key];
+
+const normalizeDiagnosticsFromJson = (value: JsonValue): ReadonlyArray<OxlintDiagnostic> => {
+  if (!isObject(value) && !isArray(value)) {
     return [];
   }
 
-  const rawList: unknown[] = Array.isArray(value)
-    ? value
-    : Array.isArray((value as any).diagnostics)
-      ? ((value as any).diagnostics as unknown[])
-      : [];
-
+  const diagnosticsProp = isObject(value) ? getProp(value, 'diagnostics') : undefined;
+  const rawList: ReadonlyArray<JsonValue> = isArray(value) ? value : isArray(diagnosticsProp) ? diagnosticsProp : [];
   const out: OxlintDiagnostic[] = [];
 
   for (const item of rawList) {
-    if (!item || typeof item !== 'object') {
+    if (!isObject(item)) {
       continue;
     }
 
-    const message = asString((item as any).message) ?? asString((item as any).text) ?? 'oxlint diagnostic';
-    const code = asString((item as any).code) ?? asString((item as any).ruleId) ?? asString((item as any).rule);
-    const severityRaw = asString((item as any).severity) ?? asString((item as any).level);
+    const message = asString(getProp(item, 'message')) ?? asString(getProp(item, 'text')) ?? 'oxlint diagnostic';
+    const code =
+      asString(getProp(item, 'code')) ?? asString(getProp(item, 'ruleId')) ?? asString(getProp(item, 'rule'));
+    const severityRaw = asString(getProp(item, 'severity')) ?? asString(getProp(item, 'level'));
     const severity: OxlintDiagnostic['severity'] =
       severityRaw === 'error' || severityRaw === 'warning' || severityRaw === 'info' ? severityRaw : 'warning';
-
     const filePath =
-      asString((item as any).filePath) ??
-      asString((item as any).path) ??
-      asString((item as any).file) ??
-      asString((item as any).filename);
-
-    const line = asNumber((item as any).line) ?? asNumber((item as any).row) ?? asNumber((item as any).startLine);
+      asString(getProp(item, 'filePath')) ??
+      asString(getProp(item, 'path')) ??
+      asString(getProp(item, 'file')) ??
+      asString(getProp(item, 'filename'));
+    const line = asNumber(getProp(item, 'line')) ?? asNumber(getProp(item, 'row')) ?? asNumber(getProp(item, 'startLine'));
     const column =
-      asNumber((item as any).column) ?? asNumber((item as any).col) ?? asNumber((item as any).startColumn);
-
+      asNumber(getProp(item, 'column')) ?? asNumber(getProp(item, 'col')) ?? asNumber(getProp(item, 'startColumn'));
     const base: OxlintDiagnostic = { message, severity };
     const normalized: OxlintDiagnostic = {
       ...base,
@@ -71,10 +84,7 @@ const normalizeDiagnosticsFromJson = (value: unknown): ReadonlyArray<OxlintDiagn
   return out;
 };
 
-export const runOxlint = async (input: {
-  targets: ReadonlyArray<string>;
-  configPath?: string;
-}): Promise<OxlintRunResult> => {
+const runOxlint = async (input: RunOxlintInput): Promise<OxlintRunResult> => {
   const cmdRaw = (process.env.FIREBAT_OXLINT_CMD ?? '').trim();
 
   if (cmdRaw.length === 0) {
@@ -88,7 +98,7 @@ export const runOxlint = async (input: {
   const cmd = splitCommand(cmdRaw);
   const args: string[] = [];
 
-  if (input.configPath) {
+  if (input.configPath !== undefined && input.configPath.trim().length > 0) {
     args.push('--config', input.configPath);
   }
 
@@ -103,7 +113,6 @@ export const runOxlint = async (input: {
     stderr: 'pipe',
     stdin: 'ignore',
   });
-
   const [stdout, stderr, exitCode] = await Promise.all([
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),
@@ -118,8 +127,10 @@ export const runOxlint = async (input: {
 
   if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
     try {
-      const parsed = JSON.parse(trimmed) as unknown;
+      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+      const parsed = JSON.parse(trimmed) as JsonValue;
       const diagnostics = normalizeDiagnosticsFromJson(parsed);
+
       return { ok: true, tool: 'oxlint', exitCode, rawStdout: stdout, rawStderr: stderr, diagnostics };
     } catch {
       // fallthrough
@@ -128,3 +139,6 @@ export const runOxlint = async (input: {
 
   return { ok: true, tool: 'oxlint', exitCode, rawStdout: stdout, rawStderr: stderr, diagnostics: [] };
 };
+
+export { runOxlint };
+export type { OxlintDiagnostic, OxlintRunResult, RunOxlintInput };

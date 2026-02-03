@@ -1,16 +1,22 @@
-import type { FileIndexEntry, FileIndexRepository } from '../../ports/file-index.repository';
+import type {
+  DeleteFileInput,
+  FileIndexEntry,
+  FileIndexRepository,
+  GetFileInput,
+  UpsertFileInput,
+} from '../../ports/file-index.repository';
 
-const keyOf = (input: { projectKey: string; filePath: string }): string => `${input.projectKey}|${input.filePath}`;
+const keyOf = (input: GetFileInput): string => `${input.projectKey}|${input.filePath}`;
 
 const createInMemoryFileIndexRepository = (): FileIndexRepository => {
   const store = new Map<string, FileIndexEntry>();
 
   return {
-    async getFile({ projectKey, filePath }): Promise<FileIndexEntry | null> {
-      return store.get(keyOf({ projectKey, filePath })) ?? null;
+    async getFile({ projectKey, filePath }: GetFileInput): Promise<FileIndexEntry | null> {
+      return Promise.resolve(store.get(keyOf({ projectKey, filePath })) ?? null);
     },
 
-    async upsertFile({ projectKey, filePath, mtimeMs, size, contentHash }): Promise<void> {
+    async upsertFile({ projectKey, filePath, mtimeMs, size, contentHash }: UpsertFileInput): Promise<void> {
       store.set(keyOf({ projectKey, filePath }), {
         filePath,
         mtimeMs,
@@ -18,10 +24,14 @@ const createInMemoryFileIndexRepository = (): FileIndexRepository => {
         contentHash,
         updatedAt: Date.now(),
       });
+
+      return Promise.resolve();
     },
 
-    async deleteFile({ projectKey, filePath }): Promise<void> {
+    async deleteFile({ projectKey, filePath }: DeleteFileInput): Promise<void> {
       store.delete(keyOf({ projectKey, filePath }));
+
+      return Promise.resolve();
     },
   };
 };

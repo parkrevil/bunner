@@ -68,6 +68,7 @@ const runCli = async (argv: readonly string[]): Promise<number> => {
 
   if (options.help) {
     printHelp();
+
     return 0;
   }
 

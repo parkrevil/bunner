@@ -1,6 +1,17 @@
 import type { FirebatReport } from '../types';
 
+export interface GetReportInput {
+  readonly projectKey: string;
+  readonly reportKey: string;
+}
+
+export interface SetReportInput {
+  readonly projectKey: string;
+  readonly reportKey: string;
+  readonly report: FirebatReport;
+}
+
 export interface CacheRepository {
-  getReport(input: { projectKey: string; reportKey: string }): Promise<FirebatReport | null>;
-  setReport(input: { projectKey: string; reportKey: string; report: FirebatReport }): Promise<void>;
+  getReport(input: GetReportInput): Promise<FirebatReport | null>;
+  setReport(input: SetReportInput): Promise<void>;
 }

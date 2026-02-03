@@ -1,36 +1,39 @@
-import type { ArtifactRepository } from '../../ports/artifact.repository';
+import type { ArtifactRepository, GetArtifactInput, SetArtifactInput } from '../../ports/artifact.repository';
 
-type ArtifactRow = {
-  value: unknown;
-};
+interface ArtifactRow {
+  readonly payloadJson: string;
+}
 
-const keyOf = (input: { projectKey: string; kind: string; artifactKey: string; inputsDigest: string }): string =>
+const keyOf = (input: GetArtifactInput): string =>
   `${input.projectKey}|${input.kind}|${input.artifactKey}|${input.inputsDigest}`;
 
 const createInMemoryArtifactRepository = (): ArtifactRepository => {
   const store = new Map<string, ArtifactRow>();
 
   return {
-    async getArtifact<T>(input: {
-      projectKey: string;
-      kind: string;
-      artifactKey: string;
-      inputsDigest: string;
-    }): Promise<T | null> {
-      const { projectKey, kind, artifactKey, inputsDigest } = input;
-      const row = store.get(keyOf({ projectKey, kind, artifactKey, inputsDigest }));
-      return (row?.value as T | undefined) ?? null;
+     async getArtifact<T>(input: GetArtifactInput): Promise<T | null> {
+      const row = store.get(keyOf(input));
+
+      if (!row) {
+        return Promise.resolve(null);
+      }
+
+        let parsed: T;
+
+        try {
+          // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+          parsed = JSON.parse(row.payloadJson) as T;
+        } catch {
+          return Promise.resolve(null);
+        }
+
+        return Promise.resolve(parsed);
     },
 
-    async setArtifact<T>(input: {
-      projectKey: string;
-      kind: string;
-      artifactKey: string;
-      inputsDigest: string;
-      value: T;
-    }): Promise<void> {
-      const { projectKey, kind, artifactKey, inputsDigest, value } = input;
-      store.set(keyOf({ projectKey, kind, artifactKey, inputsDigest }), { value });
+     async setArtifact<T>(input: SetArtifactInput<T>): Promise<void> {
+      store.set(keyOf(input), { payloadJson: JSON.stringify(input.value) });
+
+      return Promise.resolve();
     },
   };
 };
