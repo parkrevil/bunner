@@ -122,7 +122,6 @@ describe('adapter-spec-resolver', () => {
 
     const parser = new AstParser();
     const fileMap = new Map<string, FileAnalysis>();
-
     const controllerParse = parser.parse(controllerFile, controllerCode);
     const controllerAnalysis: FileAnalysis = {
       filePath: controllerFile,
@@ -150,13 +149,15 @@ describe('adapter-spec-resolver', () => {
     };
 
     applyParseToAnalysis(entryAnalysis, entryParse);
+
     entryAnalysis.exportedValues = {
-      ...(entryAnalysis.exportedValues ?? {}),
+      ...entryAnalysis.exportedValues,
       adapterSpec: {
         __bunner_call: 'defineAdapter',
         args: [{ __bunner_ref: 'TestAdapter' }],
       } as any,
     };
+
     fileMap.set(entryFile, entryAnalysis);
 
     // Act

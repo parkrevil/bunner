@@ -1,4 +1,4 @@
-/* oxlint-disable import/exports-last, bunner/single-exported-class, bunner/no-inline-object-type */
+/* oxlint-disable import/exports-last, firebat/single-exported-class, firebat/no-inline-object-type */
 
 export interface IFoo {
   x: number;

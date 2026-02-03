@@ -1,4 +1,4 @@
-/* oxlint-disable bunner/no-any, bunner/no-inline-object-type, typescript-eslint/no-explicit-any, typescript-eslint/no-unsafe-assignment, typescript-eslint/no-unsafe-argument, typescript-eslint/no-unsafe-member-access, typescript-eslint/no-unsafe-type-assertion, typescript-eslint/strict-boolean-expressions, typescript-eslint/require-await */
+/* oxlint-disable firebat/no-any, firebat/no-inline-object-type, typescript-eslint/no-explicit-any, typescript-eslint/no-unsafe-assignment, typescript-eslint/no-unsafe-argument, typescript-eslint/no-unsafe-member-access, typescript-eslint/no-unsafe-type-assertion, typescript-eslint/strict-boolean-expressions, typescript-eslint/require-await */
 import * as z from 'zod';
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';

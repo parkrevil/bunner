@@ -11,6 +11,7 @@ import type { AnalyzerValue, AnalyzerValueRecord } from '../analyzer/types';
 import type { DeepFreezeModule, GeneratedBlockParams, MetadataRegistryModule, ScopedKeysMapModule } from './types';
 
 import { ModuleGraph } from '../analyzer/graph/module-graph';
+
 const require = createRequire(import.meta.url);
 const actualPath = require('path');
 const actualAnalyzer = require('../analyzer');
@@ -520,7 +521,6 @@ describe('ManifestGenerator', () => {
     const fileMap = new Map<string, FileAnalysis>();
     const graph = new ModuleGraph(fileMap, '__module__.ts');
     const gen = new ManifestGenerator();
-
     // Act
     const json = gen.generateJson({
       graph,
@@ -597,7 +597,6 @@ describe('ManifestGenerator', () => {
     // Arrange
     const graph = createSingleModuleGraph();
     const gen = new ManifestGenerator();
-
     // Act
     const json = gen.generateJson({
       graph,
@@ -620,7 +619,6 @@ describe('ManifestGenerator', () => {
     // Arrange
     const graph = createSingleModuleGraph();
     const gen = new ManifestGenerator();
-
     // Act
     const json = gen.generateJson({
       graph,
@@ -636,10 +634,9 @@ describe('ManifestGenerator', () => {
     });
     const parsed = JSON.parse(json);
     const parsedRecord = assertRecordValue(parsed as AnalyzerValue);
-
     // Assert
-    const config = assertRecordValue(parsedRecord.config as AnalyzerValue);
-    const resolvedModuleConfig = assertRecordValue(config.resolvedModuleConfig as AnalyzerValue);
+    const config = assertRecordValue(parsedRecord.config);
+    const resolvedModuleConfig = assertRecordValue(config.resolvedModuleConfig);
 
     expect(config.sourcePath).toBe('/app/bunner.json');
     expect(config.sourceFormat).toBe('json');
@@ -653,7 +650,6 @@ describe('ManifestGenerator', () => {
     // Arrange
     const graph = createSingleModuleGraph();
     const gen = new ManifestGenerator();
-
     // Act
     const json = gen.generateJson({
       graph,
@@ -676,7 +672,6 @@ describe('ManifestGenerator', () => {
     // Arrange
     const gen = new ManifestGenerator();
     const graph = createSingleModuleGraph();
-
     // Act
     const json = gen.generateJson({
       graph,
@@ -699,7 +694,6 @@ describe('ManifestGenerator', () => {
     // Arrange
     const gen = new ManifestGenerator();
     const graph = createSingleModuleGraph();
-
     // Act
     const json = gen.generateJson({
       graph,
@@ -722,7 +716,6 @@ describe('ManifestGenerator', () => {
     // Arrange
     const gen = new ManifestGenerator();
     const graph = createSingleModuleGraph();
-
     // Act
     const json = gen.generateJson({
       graph,
@@ -745,7 +738,6 @@ describe('ManifestGenerator', () => {
     // Arrange
     const gen = new ManifestGenerator();
     const graph = createSingleModuleGraph();
-
     // Act
     const json = gen.generateJson({
       graph,
@@ -779,7 +771,6 @@ describe('ManifestGenerator', () => {
       adapterStaticSpecs: {},
       handlerIndex: [],
     };
-
     // Act
     const json1a = gen.generateJson({ graph: graph1, ...params });
     const json1b = gen.generateJson({ graph: graph1, ...params });

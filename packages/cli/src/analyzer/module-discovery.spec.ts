@@ -34,7 +34,6 @@ describe('ModuleDiscovery', () => {
       '/app/src/a/sub/feature.ts',
       '/app/src/root.ts',
     ];
-
     const discovery = new ModuleDiscovery(files, '__module__.ts');
     const result = discovery.discover();
     const rootModuleFiles = result.get('/app/src/__module__.ts');
@@ -67,7 +66,6 @@ describe('ModuleDiscovery', () => {
       '/app/src/features/shared.ts',
       '/app/src/app.ts',
     ];
-
     const discovery = new ModuleDiscovery(files, '__module__.ts');
     const result = discovery.discover();
     const rootModuleFiles = result.get('/app/src/__module__.ts');
@@ -85,7 +83,6 @@ describe('ModuleDiscovery', () => {
       '/app/src/features/__module__.ts',
       '/app/src/features/service.ts',
     ];
-
     const discovery = new ModuleDiscovery(files, '__module__.ts');
     const result = discovery.discover();
     const rootModuleFiles = result.get('/app/src/__module__.ts');
@@ -97,7 +94,6 @@ describe('ModuleDiscovery', () => {
 
   it('should handle empty file list when no files are provided', () => {
     const files: string[] = [];
-
     const discovery = new ModuleDiscovery(files, '__module__.ts');
     const result = discovery.discover();
 
@@ -110,7 +106,6 @@ describe('ModuleDiscovery', () => {
       '/app/src/__module__.ts',
       '/app/src/features/__module__.ts',
     ];
-
     const discovery = new ModuleDiscovery(files, '__module__.ts');
     const result = discovery.discover();
 
@@ -127,7 +122,6 @@ describe('ModuleDiscovery', () => {
       '/app/src/mod/service.ts',
       '/app/src/module/service.ts',
     ];
-
     const discovery = new ModuleDiscovery(files, '__module__.ts');
     const result = discovery.discover();
     const modModuleFiles = result.get('/app/src/mod/__module__.ts');

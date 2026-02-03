@@ -1,4 +1,4 @@
-/* oxlint-disable typescript-eslint/no-unsafe-assignment, typescript-eslint/no-unsafe-member-access, typescript-eslint/no-unsafe-argument, typescript-eslint/no-unsafe-call, typescript-eslint/no-unsafe-type-assertion, typescript-eslint/no-unsafe-return, typescript-eslint/no-explicit-any, bunner/no-any, bunner/no-inline-object-type, bunner/no-double-assertion, bunner/no-non-null-assertion, typescript-eslint/strict-boolean-expressions */
+/* oxlint-disable typescript-eslint/no-unsafe-assignment, typescript-eslint/no-unsafe-member-access, typescript-eslint/no-unsafe-argument, typescript-eslint/no-unsafe-call, typescript-eslint/no-unsafe-type-assertion, typescript-eslint/no-unsafe-return, typescript-eslint/no-explicit-any, firebat/no-any, firebat/no-inline-object-type, firebat/no-double-assertion, firebat/no-non-null-assertion, typescript-eslint/strict-boolean-expressions */
 
 import * as path from 'node:path';
 import { readFile, writeFile } from 'node:fs/promises';

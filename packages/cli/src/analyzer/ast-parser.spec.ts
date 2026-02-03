@@ -50,7 +50,6 @@ describe('AstParser', () => {
       'bunner.createApplication(AppModule);',
       'createApplication(AppModule);',
     ].join('\n');
-
     const parser = new AstParser();
     const result = parser.parse('/app/src/main.ts', source);
     const calls = result.createApplicationCalls ?? [];
@@ -68,7 +67,6 @@ describe('AstParser', () => {
       'const app = createApplication(AppModule);',
       'export const exportedApp = alias(AppModule);',
     ].join('\n');
-
     const parser = new AstParser();
     const result = parser.parse('/app/src/main.ts', source);
     const calls = result.createApplicationCalls ?? [];
@@ -85,7 +83,6 @@ describe('AstParser', () => {
       'export const appModule = defineModule({});',
       'export const otherModule = bunner.defineModule({});',
     ].join('\n');
-
     const parser = new AstParser();
     const result = parser.parse('/app/src/__module__.ts', source);
     const calls = result.defineModuleCalls ?? [];
@@ -94,6 +91,7 @@ describe('AstParser', () => {
     expect(calls.map(call => call.exportedName)).toEqual(['appModule', 'otherModule']);
     expect(calls.every(call => call.importSource === '@bunner/core')).toBe(true);
   });
+
   it('should collect inject calls when inject is imported from @bunner/common', () => {
     const source = [
       "import { inject } from '@bunner/common';",
@@ -106,7 +104,6 @@ describe('AstParser', () => {
       'inject(() => TokenA);',
       'inject(function () { return TokenA; });',
     ].join('\n');
-
     const parser = new AstParser();
     const result = parser.parse('/app/src/main.ts', source);
     const calls = result.injectCalls ?? [];
@@ -124,7 +121,6 @@ describe('AstParser', () => {
       '',
       'inject(TokenA, TokenA);',
     ].join('\n');
-
     const parser = new AstParser();
     const result = parser.parse('/app/src/main.ts', source);
     const calls = result.injectCalls ?? [];
@@ -142,7 +138,6 @@ describe('AstParser', () => {
       "@Injectable({ visibility: 'module', scope: 'singleton' })",
       'export class MyService {}',
     ].join('\n');
-
     const parser = new AstParser();
     const result = parser.parse('/app/src/service.ts', source);
 
@@ -157,7 +152,6 @@ describe('AstParser', () => {
       "export { MyService } from './services/my.service';",
       "export * from './utils';",
     ].join('\n');
-
     const parser = new AstParser();
     const result = parser.parse('/app/src/index.ts', source);
 

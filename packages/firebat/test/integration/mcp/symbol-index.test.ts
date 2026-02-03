@@ -1,4 +1,4 @@
-/* oxlint-disable typescript-eslint/no-unsafe-assignment, typescript-eslint/no-unsafe-member-access, typescript-eslint/no-unsafe-argument, typescript-eslint/no-unsafe-call, typescript-eslint/no-unsafe-type-assertion, typescript-eslint/strict-boolean-expressions, bunner/no-any, bunner/no-inline-object-type, bunner/no-unknown */
+/* oxlint-disable typescript-eslint/no-unsafe-assignment, typescript-eslint/no-unsafe-member-access, typescript-eslint/no-unsafe-argument, typescript-eslint/no-unsafe-call, typescript-eslint/no-unsafe-type-assertion, typescript-eslint/strict-boolean-expressions, firebat/no-any, firebat/no-inline-object-type, firebat/no-unknown */
 
 import * as os from 'node:os';
 import * as path from 'node:path';

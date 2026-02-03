@@ -1,4 +1,4 @@
-/* oxlint-disable bunner/no-unknown */
+/* oxlint-disable firebat/no-unknown */
 
 import type { Node } from 'oxc-parser';
 

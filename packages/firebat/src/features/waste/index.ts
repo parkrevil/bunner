@@ -1,1 +1,0 @@
-export { detectWaste } from './detector';
