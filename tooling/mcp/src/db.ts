@@ -1,32 +1,24 @@
+import { drizzle } from 'drizzle-orm/bun-sql';
+import type { SQL as DrizzleSql } from 'drizzle-orm';
+import { SQL as BunSql } from 'bun';
+
 export type Db = {
-  query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }>;
+  execute: (statement: DrizzleSql) => Promise<{ rows: unknown[] }>;
 };
 
 // MUST: MUST-1
 
 export async function createDb(databaseUrl: string): Promise<Db> {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const postgresMod = await import('postgres');
-    const postgres = (postgresMod as { default: (url: string, options?: unknown) => unknown }).default;
+  const client = new BunSql(databaseUrl);
+  const db = drizzle({ client });
 
-    const sqlClient = postgres(databaseUrl, {
-      prepare: false,
-      max: 5,
-      idle_timeout: 10,
-    });
-
-    return {
-      query: async (sql, params = []) => {
-        const client = sqlClient as (strings: TemplateStringsArray, ...values: unknown[]) => Promise<unknown[]>;
-        const resultRows = (await client([sql] as unknown as TemplateStringsArray, ...params)) as unknown[];
-        return { rows: resultRows };
-      },
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(
-      `Postgres client not available. Install the 'postgres' package or provide a DB adapter. Original error: ${message}`,
-    );
-  }
+  return {
+    execute: async (statement) => {
+      const result = await db.execute(statement);
+      const maybeRows = (result as { rows?: unknown[] } | null | undefined)?.rows;
+      if (Array.isArray(maybeRows)) return { rows: maybeRows };
+      if (Array.isArray(result)) return { rows: result as unknown[] };
+      return { rows: [] };
+    },
+  };
 }

@@ -11,12 +11,6 @@
       "type": "stdio",
       "command": "bunx",
       "args": ["-y", "@upstash/context7-mcp", "--api-key", "${env:CONTEXT7_API_KEY}"]
-    },
-    "firebat": {
-      "type": "stdio",
-      "command": "bun",
-      "args": ["index.ts", "mcp"],
-      "cwd": "${workspaceFolder}/packages/firebat"
     }
   }
 }

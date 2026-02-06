@@ -1,5 +1,6 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 
 // MUST: MUST-1
@@ -61,12 +62,12 @@ server.setRequestHandler('tools/call', async (request) => {
   switch (request.params.name) {
     case 'list_packages': {
       listPackagesInput.parse(request.params.arguments ?? {});
-      const result = await db.query(
-        `SELECT DISTINCT package_name
-         FROM entity
-         WHERE package_name IS NOT NULL
-         ORDER BY package_name ASC`,
-      );
+      const result = await db.execute(sql`
+        SELECT DISTINCT package_name
+        FROM entity
+        WHERE package_name IS NOT NULL
+        ORDER BY package_name ASC
+      `);
       return {
         content: [
           {
@@ -79,22 +80,21 @@ server.setRequestHandler('tools/call', async (request) => {
 
     case 'search': {
       const { query, limit } = searchInput.parse(request.params.arguments ?? {});
-      const result = await db.query(
-        `SELECT
-           c.id,
-           e.entity_key,
-           ct.name AS chunk_type,
-           c.payload_text,
-           c.payload_json,
-           c.pointer_id
-         FROM chunk c
-         JOIN entity e ON e.id = c.entity_id
-         JOIN chunk_type ct ON ct.id = c.chunk_type_id
-         WHERE c.payload_tsv @@ plainto_tsquery('simple', $1)
-         ORDER BY ts_rank_cd(c.payload_tsv, plainto_tsquery('simple', $1)) DESC
-         LIMIT $2`,
-        [query, limit],
-      );
+      const result = await db.execute(sql`
+        SELECT
+          c.id,
+          e.entity_key,
+          ct.name AS chunk_type,
+          c.payload_text,
+          c.payload_json,
+          c.pointer_id
+        FROM chunk c
+        JOIN entity e ON e.id = c.entity_id
+        JOIN chunk_type ct ON ct.id = c.chunk_type_id
+        WHERE c.payload_tsv @@ plainto_tsquery('simple', ${query})
+        ORDER BY ts_rank_cd(c.payload_tsv, plainto_tsquery('simple', ${query})) DESC
+        LIMIT ${limit}
+      `);
       return {
         content: [
           {
@@ -107,19 +107,18 @@ server.setRequestHandler('tools/call', async (request) => {
 
     case 'describe': {
       const { entityKey } = describeInput.parse(request.params.arguments ?? {});
-      const result = await db.query(
-        `SELECT
-           e.entity_key,
-           et.name AS entity_type,
-           e.package_name,
-           e.display_name,
-           e.summary_text,
-           e.pointer_id
-         FROM entity e
-         JOIN entity_type et ON et.id = e.entity_type_id
-         WHERE e.entity_key = $1`,
-        [entityKey],
-      );
+      const result = await db.execute(sql`
+        SELECT
+          e.entity_key,
+          et.name AS entity_type,
+          e.package_name,
+          e.display_name,
+          e.summary_text,
+          e.pointer_id
+        FROM entity e
+        JOIN entity_type et ON et.id = e.entity_type_id
+        WHERE e.entity_key = ${entityKey}
+      `);
       return {
         content: [
           {
@@ -132,24 +131,23 @@ server.setRequestHandler('tools/call', async (request) => {
 
     case 'relations': {
       const { entityKey, limit } = relationsInput.parse(request.params.arguments ?? {});
-      const result = await db.query(
-        `SELECT
-           src.entity_key AS src_entity_key,
-           dst.entity_key AS dst_entity_key,
-           et.name AS edge_type,
-           st.name AS strength,
-           e.pointer_id,
-           e.id AS edge_id
-         FROM edge e
-         JOIN entity src ON src.id = e.src_entity_id
-         JOIN entity dst ON dst.id = e.dst_entity_id
-         JOIN edge_type et ON et.id = e.edge_type_id
-         JOIN strength_type st ON st.id = e.strength_type_id
-         WHERE src.entity_key = $1 OR dst.entity_key = $1
-         ORDER BY e.created_at DESC
-         LIMIT $2`,
-        [entityKey, limit],
-      );
+      const result = await db.execute(sql`
+        SELECT
+          src.entity_key AS src_entity_key,
+          dst.entity_key AS dst_entity_key,
+          et.name AS edge_type,
+          st.name AS strength,
+          e.pointer_id,
+          e.id AS edge_id
+        FROM edge e
+        JOIN entity src ON src.id = e.src_entity_id
+        JOIN entity dst ON dst.id = e.dst_entity_id
+        JOIN edge_type et ON et.id = e.edge_type_id
+        JOIN strength_type st ON st.id = e.strength_type_id
+        WHERE src.entity_key = ${entityKey} OR dst.entity_key = ${entityKey}
+        ORDER BY e.created_at DESC
+        LIMIT ${limit}
+      `);
       return {
         content: [
           {
