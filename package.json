@@ -28,15 +28,11 @@
   "type": "module",
   "scripts": {
     "firebat": "firebat",
-    "format": "oxfmt --config .oxfmtrc.jsonc --write .",
     "knip": "knip",
-    "lint": "(cd packages/firebat && bun run build) && oxlint --config .oxlintrc.jsonc --type-aware --fix .",
-    "prepare": "husky && (cd packages/firebat && bun run build)",
+    "deps": "depcruise packages",
+    "prepare": "husky",
     "test": "bun test",
-    "test:coverage": "bun test --coverage",
-    "tools:update": "(cd ./packages/firebat && bun run build) && bun install",
-    "tsc": "bunx tsgo --noEmit",
-    "verify": "bun run tooling/verify"
+    "test:coverage": "bun test --coverage"
   },
   "dependencies": {},
   "devDependencies": {
@@ -51,7 +47,6 @@
     "lint-staged": "^16.1.6",
     "oxfmt": "^0.26.0",
     "oxlint": "^1.41.0",
-    "oxlint-tsgolint": "^0.11.1",
-    "typescript": "^5"
+    "oxlint-tsgolint": "^0.11.1"
   }
 }
