@@ -29,6 +29,7 @@ mock.module('path', () => {
     relative: (...args: unknown[]) => actualPath.relative(...args),
   };
 });
+
 // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
 const { ProjectWatcher } = require('./project-watcher');
 
@@ -39,6 +40,7 @@ describe('ProjectWatcher', () => {
 
   beforeEach(() => {
     watchCallback = undefined;
+
     closeMock.mockClear();
     watchMock.mockClear();
 
@@ -81,6 +83,7 @@ describe('ProjectWatcher', () => {
     it('should emit relative .ts changes when filename is a relative .ts path', () => {
       // Arrange
       const onChange = mock(() => {});
+
       watcher.start(onChange);
 
       // Act
@@ -94,6 +97,7 @@ describe('ProjectWatcher', () => {
     it('should normalize absolute paths to relative paths when filename is absolute', () => {
       // Arrange
       const onChange = mock(() => {});
+
       watcher.start(onChange);
 
       // Act
@@ -107,6 +111,7 @@ describe('ProjectWatcher', () => {
     it('should ignore declaration files when filename ends with .d.ts', () => {
       // Arrange
       const onChange = mock(() => {});
+
       watcher.start(onChange);
 
       // Act
@@ -119,6 +124,7 @@ describe('ProjectWatcher', () => {
     it('should ignore non-ts files when filename does not end with .ts', () => {
       // Arrange
       const onChange = mock(() => {});
+
       watcher.start(onChange);
 
       // Act
@@ -131,7 +137,9 @@ describe('ProjectWatcher', () => {
     it('should ignore filtered directories when filename is within dependency directories', () => {
       // Arrange
       const onChange = mock(() => {});
+
       watcher.start(onChange);
+
       const dependencyDirectorySegment = ['node', 'modules'].join('_');
 
       // Act
@@ -154,6 +162,7 @@ describe('ProjectWatcher', () => {
     it('should close the underlying watcher when close is called after start', () => {
       // Arrange
       const onChange = mock(() => {});
+
       watcher.start(onChange);
 
       // Act

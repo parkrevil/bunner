@@ -8,6 +8,7 @@ import type { FileAnalysis } from '../analyzer/graph/interfaces';
 
 import { ModuleGraph } from '../analyzer/graph/module-graph';
 import { ImportRegistry } from './import-registry';
+
 const require = createRequire(import.meta.url);
 const actualAnalyzer = require('../analyzer');
 const actualCommon = require('../common');
@@ -73,7 +74,6 @@ describe('InjectorGenerator', () => {
       const graph = createEmptyGraph();
       const registry = new ImportRegistry('/app/src');
       const generator = new InjectorGenerator();
-
       // Act
       const result = generator.generate(graph, registry);
 
@@ -87,7 +87,6 @@ describe('InjectorGenerator', () => {
       const graph = createSingleModuleGraph();
       const registry = new ImportRegistry('/app/src');
       const generator = new InjectorGenerator();
-
       // Act
       const result = generator.generate(graph, registry);
 
@@ -101,7 +100,6 @@ describe('InjectorGenerator', () => {
       const graph = createSingleModuleGraph();
       const registry = new ImportRegistry('/app/src');
       const generator = new InjectorGenerator();
-
       // Act
       const result = generator.generate(graph, registry);
       const importLines = result
@@ -118,7 +116,6 @@ describe('InjectorGenerator', () => {
       const graph = createSingleModuleGraph();
       const registry = new ImportRegistry('/app/src');
       const generator = new InjectorGenerator();
-
       // Act
       const result1 = generator.generate(graph, registry);
       const result2 = generator.generate(graph, registry);

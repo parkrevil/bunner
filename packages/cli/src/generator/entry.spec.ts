@@ -6,7 +6,6 @@ describe('EntryGenerator', () => {
   it('should inline bootstrap when generating runtime entry code', () => {
     // Arrange
     const gen = new EntryGenerator();
-
     // Act
     const code = gen.generate('./src/main.ts', false);
 

@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["unicorn", "typescript", "oxc", "import", "promise", "node", "jsdoc", "jest"],
-  "jsPlugins": ["@bunner/oxlint-plugin"],
+  "jsPlugins": ["firebat/oxlint-plugin"],
   "rules": {
     "unicorn/no-new-array": "off",
     "unicorn/no-null": "off",
@@ -153,9 +153,9 @@
     "unicorn/prefer-array-find": "error",
     "unicorn/prefer-set-has": "error",
     "unicorn/prefer-set-size": "error",
-    "bunner/unused-imports": "error",
-    "bunner/blank-lines-between-statement-groups": "error",
-    "bunner/member-ordering": [
+    "firebat/unused-imports": "error",
+    "firebat/blank-lines-between-statement-groups": "error",
+    "firebat/member-ordering": [
       "error",
       {
         "default": [
@@ -188,8 +188,8 @@
         ],
       },
     ],
-    "bunner/padding-line-between-statements": "error",
-    "bunner/no-unmodified-loop-condition": "error",
+    "firebat/padding-line-between-statements": "error",
+    "firebat/no-unmodified-loop-condition": "error",
     "no-eval": "error",
     "no-restricted-globals": ["error", "Reflect", "Proxy"],
     "no-restricted-imports": [
@@ -209,24 +209,24 @@
         ],
       },
     ],
-    "bunner/no-unknown": "error",
-    "bunner/no-double-assertion": "error",
-    "bunner/no-non-null-assertion": "error",
-    "bunner/no-ts-ignore": "error",
-    "bunner/no-inline-object-type": "error",
-    "bunner/no-bracket-notation": [
+    "firebat/no-unknown": "error",
+    "firebat/no-double-assertion": "error",
+    "firebat/no-non-null-assertion": "error",
+    "firebat/no-ts-ignore": "error",
+    "firebat/no-inline-object-type": "error",
+    "firebat/no-bracket-notation": [
       "error",
       {
         "allow": [],
       },
     ],
-    "bunner/no-dynamic-import": "error",
-    "bunner/no-globalthis-mutation": "error",
-    "bunner/no-any": "error",
-    "bunner/no-umbrella-types": "error",
-    "bunner/no-create-require": "error",
-    "bunner/no-tombstone": "error",
-    "bunner/single-exported-class": "error",
+    "firebat/no-dynamic-import": "error",
+    "firebat/no-globalthis-mutation": "error",
+    "firebat/no-any": "error",
+    "firebat/no-umbrella-types": "error",
+    "firebat/no-create-require": "error",
+    "firebat/no-tombstone": "error",
+    "firebat/single-exported-class": "error",
   },
   "overrides": [
     {
@@ -254,10 +254,20 @@
         "jest/valid-describe-callback": "error",
         "jest/valid-expect": "error",
         "jest/valid-title": "error",
-        "bunner/test-aaa-comments": "error",
-        "bunner/test-bdd-title": "error",
-        "bunner/test-describe-sut-name": "error",
-        "bunner/test-unit-file-mapping": "error",
+        "firebat/test-aaa-comments": "error",
+        "firebat/test-bdd-title": "error",
+        "firebat/test-describe-sut-name": "error",
+        "firebat/test-unit-file-mapping": "error",
+      },
+    },
+    {
+      "files": ["packages/firebat/src/oxlint-plugin/**/*.spec.ts"],
+      "rules": {
+        "typescript-eslint/no-unsafe-assignment": "off",
+        "typescript-eslint/no-unsafe-member-access": "off",
+        "typescript-eslint/no-unsafe-call": "off",
+        "typescript-eslint/no-unsafe-argument": "off",
+        "typescript-eslint/no-unsafe-return": "off",
       },
     },
   ],
