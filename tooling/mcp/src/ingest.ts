@@ -5,7 +5,6 @@ import { sql } from 'drizzle-orm';
 
 import { createDb } from './db';
 import { readEnv } from './env';
-import { readQuery } from './queries';
 import { createKb } from './kb';
 import { parseSpecMarkdown } from './spec-parser';
 
@@ -18,6 +17,35 @@ type CliOptions = {
   sinceRev?: string;
   toolVersion: string;
 };
+
+export type IngestOptions = {
+  dryRun?: boolean;
+  only?: OnlyMode;
+  repoRev?: string;
+  sinceRev?: string;
+  toolVersion?: string;
+};
+
+export type IngestResult =
+  | {
+      mode: 'dry-run';
+      repoRev: string;
+      only: OnlyMode;
+      sinceRev?: string;
+      changedCount?: number;
+      specs?: { specs: number; rules: number; diagnostics: number; edges: number };
+      code?: { packages: number; chunks: number };
+      tests?: { tests: number };
+    }
+  | {
+      mode: 'ingest';
+      repoRev: string;
+      only: OnlyMode;
+      sinceRev?: string;
+      changedCount?: number;
+      runId: number;
+      meta: Record<string, unknown>;
+    };
 
 function parseArgs(argv: string[]): CliOptions {
   const options: CliOptions = {
@@ -92,6 +120,59 @@ function computeChangedPaths(params: {
     return new Set(paths);
   } catch {
     return null;
+  }
+}
+
+async function assertKbSchemaPresent(db: Awaited<ReturnType<typeof createDb>>): Promise<void> {
+  const { rows } = await db.execute(sql`
+    select
+      (select 1 from pg_extension where extname = 'vector' limit 1) as has_vector,
+      to_regclass('public.ingest_run') as ingest_run,
+      to_regclass('public.entity_type') as entity_type,
+      to_regclass('public.chunk_type') as chunk_type,
+      to_regclass('public.edge_type') as edge_type,
+      to_regclass('public.strength_type') as strength_type,
+      to_regclass('public.pointer') as pointer,
+      to_regclass('public.entity') as entity,
+      to_regclass('public.chunk') as chunk,
+      to_regclass('public.edge') as edge,
+      to_regclass('public.edge_evidence') as edge_evidence
+  `);
+
+  const row = (rows[0] ?? null) as Record<string, unknown> | null;
+  const missing: string[] = [];
+
+  if (!row || row.has_vector == null) missing.push('extension: vector');
+
+  const requiredTables: Array<[string, string]> = [
+    ['ingest_run', 'ingest_run'],
+    ['entity_type', 'entity_type'],
+    ['chunk_type', 'chunk_type'],
+    ['edge_type', 'edge_type'],
+    ['strength_type', 'strength_type'],
+    ['pointer', 'pointer'],
+    ['entity', 'entity'],
+    ['chunk', 'chunk'],
+    ['edge', 'edge'],
+    ['edge_evidence', 'edge_evidence'],
+  ];
+
+  for (const [col, name] of requiredTables) {
+    if (!row || row[col] == null) missing.push(`table: ${name}`);
+  }
+
+  if (missing.length > 0) {
+    throw new Error(
+      [
+        '[kb] KB schema is missing in the target database.',
+        `Missing: ${missing.join(', ')}`,
+        '',
+        'Apply migrations first (schema is SSOT):',
+        '  bunx drizzle-kit migrate --config tooling/mcp/drizzle.config.ts',
+        '',
+        'Make sure BUNNER_KB_* variables point at the PRIMARY database.',
+      ].join('\n'),
+    );
   }
 }
 
@@ -458,26 +539,26 @@ async function ingestTests(params: {
   return { tests };
 }
 
-async function main() {
-  const options = parseArgs(process.argv);
-  const repoRev = options.repoRev ?? getRepoRevFallback();
+export async function runIngest(options: IngestOptions, envVars: Record<string, string | undefined>): Promise<IngestResult> {
+  const resolved: CliOptions = {
+    dryRun: options.dryRun ?? false,
+    only: options.only ?? 'all',
+    toolVersion: options.toolVersion ?? '0.1.0',
+    ...(options.repoRev ? { repoRev: options.repoRev } : {}),
+    ...(options.sinceRev ? { sinceRev: options.sinceRev } : {}),
+  };
 
-  const changedPaths = options.sinceRev
+  const repoRev = resolved.repoRev ?? getRepoRevFallback();
+
+  const changedPaths = resolved.sinceRev
     ? computeChangedPaths({
-        sinceRev: options.sinceRev,
+        sinceRev: resolved.sinceRev,
         repoRev,
         pathspecs: ['docs/30_SPEC', 'packages'],
       })
     : null;
 
-  if (options.dryRun) {
-    // eslint-disable-next-line no-console
-    console.log(
-      `[kb] dry-run: scanning only (rev=${repoRev}, only=${options.only}${options.sinceRev ? `, since=${options.sinceRev}` : ''})`,
-    );
-  }
-
-  if (options.dryRun) {
+  if (resolved.dryRun) {
     const fake = {
       ensureType: async () => 0,
       upsertPointer: async () => 0,
@@ -490,42 +571,39 @@ async function main() {
 
     const runId = 0;
 
-    if (options.only === 'specs' || options.only === 'all') {
-      const res = await ingestSpecs({ kb: fake, runId, repoRev, dryRun: true, changedPaths });
-      // eslint-disable-next-line no-console
-      console.log('[kb] specs', res);
+    const out: IngestResult = {
+      mode: 'dry-run',
+      repoRev,
+      only: resolved.only,
+      ...(resolved.sinceRev ? { sinceRev: resolved.sinceRev } : {}),
+      ...(changedPaths ? { changedCount: changedPaths.size } : {}),
+    };
+
+    if (resolved.only === 'specs' || resolved.only === 'all') {
+      out.specs = await ingestSpecs({ kb: fake, runId, repoRev, dryRun: true, changedPaths });
     }
-    if (options.only === 'code' || options.only === 'all') {
-      const res = await ingestCodeIndex({ kb: fake, runId, repoRev, dryRun: true, changedPaths });
-      // eslint-disable-next-line no-console
-      console.log('[kb] code', res);
+    if (resolved.only === 'code' || resolved.only === 'all') {
+      out.code = await ingestCodeIndex({ kb: fake, runId, repoRev, dryRun: true, changedPaths });
     }
-    if (options.only === 'tests' || options.only === 'all') {
-      const res = await ingestTests({ kb: fake, runId, repoRev, dryRun: true, changedPaths });
-      // eslint-disable-next-line no-console
-      console.log('[kb] tests', res);
+    if (resolved.only === 'tests' || resolved.only === 'all') {
+      out.tests = await ingestTests({ kb: fake, runId, repoRev, dryRun: true, changedPaths });
     }
 
-    return;
+    return out;
   }
 
-  const env = readEnv(process.env);
-
-  const db = await createDb(env.BUNNER_KB_DATABASE_URL);
-
-  // Ensure schema exists
-  await db.execute(sql.raw(await readQuery('001_extensions')));
-  await db.execute(sql.raw(await readQuery('010_kb_schema')));
-
+  const env = readEnv(envVars);
+  const db = await createDb(env.kbDatabaseUrl);
+  await assertKbSchemaPresent(db);
   const kb = createKb(db);
 
   const runId = await kb.beginRun({
     repoRev,
     tool: 'kb-ingest',
-    toolVersion: options.toolVersion,
+    toolVersion: resolved.toolVersion,
     meta: {
-      only: options.only,
-      ...(options.sinceRev ? { since: options.sinceRev } : {}),
+      only: resolved.only,
+      ...(resolved.sinceRev ? { since: resolved.sinceRev } : {}),
       ...(changedPaths ? { changedCount: changedPaths.size } : {}),
     },
   });
@@ -533,17 +611,26 @@ async function main() {
   try {
     const meta: Record<string, unknown> = {};
 
-    if (options.only === 'specs' || options.only === 'all') {
+    if (resolved.only === 'specs' || resolved.only === 'all') {
       meta.specs = await ingestSpecs({ kb, runId, repoRev, dryRun: false, changedPaths });
     }
-    if (options.only === 'code' || options.only === 'all') {
+    if (resolved.only === 'code' || resolved.only === 'all') {
       meta.code = await ingestCodeIndex({ kb, runId, repoRev, dryRun: false, changedPaths });
     }
-    if (options.only === 'tests' || options.only === 'all') {
+    if (resolved.only === 'tests' || resolved.only === 'all') {
       meta.tests = await ingestTests({ kb, runId, repoRev, dryRun: false, changedPaths });
     }
 
     await kb.finishRun(runId, 'succeeded', meta);
+    return {
+      mode: 'ingest',
+      repoRev,
+      only: resolved.only,
+      ...(resolved.sinceRev ? { sinceRev: resolved.sinceRev } : {}),
+      ...(changedPaths ? { changedCount: changedPaths.size } : {}),
+      runId,
+      meta,
+    };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await kb.finishRun(runId, 'failed', { error: message });
@@ -551,4 +638,23 @@ async function main() {
   }
 }
 
-await main();
+async function main() {
+  const options = parseArgs(process.argv);
+  const result = await runIngest(
+    {
+      dryRun: options.dryRun,
+      only: options.only,
+      toolVersion: options.toolVersion,
+      ...(options.repoRev ? { repoRev: options.repoRev } : {}),
+      ...(options.sinceRev ? { sinceRev: options.sinceRev } : {}),
+    },
+    Bun.env,
+  );
+
+  // eslint-disable-next-line no-console
+  console.log(JSON.stringify(result, null, 2));
+}
+
+if (import.meta.main) {
+  await main();
+}

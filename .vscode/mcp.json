@@ -9,8 +9,13 @@
     },
     "context7": {
       "type": "stdio",
-      "command": "bunx",
-      "args": ["-y", "@upstash/context7-mcp", "--api-key", "${env:CONTEXT7_API_KEY}"]
+      "command": "bun",
+      "args": ["--env-file=.env", "x", "-y", "@upstash/context7-mcp"]
+    },
+    "bunner-kb": {
+      "type": "stdio",
+      "command": "bun",
+      "args": ["--env-file=.env", "tooling/mcp/src/server.ts"]
     }
   }
 }

@@ -6,3 +6,4 @@ bun.lock
 .lsmcp/cache
 **/.firebat/**
 .volumes
+.env
