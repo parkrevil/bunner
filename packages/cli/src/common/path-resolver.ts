@@ -9,7 +9,7 @@ export class PathResolver {
       relativePath = `./${relativePath}`;
     }
 
-    return relativePath.replace(/\.(ts|js|tsx|jsx)$/, '');
+    return relativePath.replace(/\.(ts|js|jsx)$/, '');
   }
 
   static normalize(path: string): string {

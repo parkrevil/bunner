@@ -1,29 +1,8 @@
-import { describe, expect, it, mock } from 'bun:test';
-import { createRequire } from 'node:module';
+import { describe, expect, it } from 'bun:test';
 
 // MUST: MUST-3 (defineModule 검증)
 
-const require = createRequire(import.meta.url);
-const actualPath = require('path');
-const actualCommon = require('../common');
-
-mock.module('path', () => {
-  return {
-    ...actualPath,
-    basename: (...args: unknown[]) => actualPath.basename(...args),
-    dirname: (...args: unknown[]) => actualPath.dirname(...args),
-    sep: actualPath.sep,
-  };
-});
-
-mock.module('../common', () => {
-  return {
-    ...actualCommon,
-    compareCodePoint: (...args: unknown[]) => actualCommon.compareCodePoint(...args),
-  };
-});
-
-const { ModuleDiscovery } = require('./module-discovery');
+import { ModuleDiscovery } from './module-discovery';
 
 describe('ModuleDiscovery', () => {
   it('should assign files to the closest module directory when nested modules exist', () => {

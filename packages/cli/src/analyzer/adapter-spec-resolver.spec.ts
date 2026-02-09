@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
-import { createRequire } from 'node:module';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+import { join } from 'path';
 import type { FileAnalysis } from './graph/interfaces';
 import type { FileSetup } from '../../test/shared/interfaces';
 
@@ -8,34 +8,9 @@ import type { AstParseResult } from './test/types';
 
 import { createBunFileStub } from '../../test/shared/stubs';
 
-const require = createRequire(import.meta.url);
-const actualOxcParser = require('oxc-parser');
-const actualPath = require('path');
-const actualCommon = require('../common');
-const actualAstParser = require('./ast-parser');
-const { PathResolver } = actualCommon;
-const { join } = actualPath;
-
-mock.module('oxc-parser', () => {
-  return {
-    parseSync: (...args: unknown[]) => actualOxcParser.parseSync(...args),
-  };
-});
-
-mock.module('../common', () => {
-  return {
-    ...actualCommon,
-    PathResolver: actualCommon.PathResolver,
-  };
-});
-
-mock.module('./ast-parser', () => {
-  return {
-    AstParser: actualAstParser.AstParser,
-  };
-});
-
-const { AdapterSpecResolver, AstParser } = require('./index');
+import { PathResolver } from '../common';
+import { AstParser } from './ast-parser';
+import { AdapterSpecResolver } from './adapter-spec-resolver';
 
 const applyParseToAnalysis = (analysis: FileAnalysis, parseResult: AstParseResult): FileAnalysis => {
   if (parseResult.imports !== undefined) {

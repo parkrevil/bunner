@@ -709,9 +709,7 @@ export class ModuleGraph {
     const candidates = [
       importSource,
       `${importSource}.ts`,
-      `${importSource}.tsx`,
       `${importSource}/index.ts`,
-      `${importSource}/index.tsx`,
     ];
 
     for (const candidate of candidates) {

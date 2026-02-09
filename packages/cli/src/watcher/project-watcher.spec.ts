@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
+import { afterAll, afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 import { createRequire } from 'node:module';
 
 // MUST: MUST-4 (모듈 경계 판정 deterministic)
@@ -28,6 +28,11 @@ mock.module('path', () => {
     isAbsolute: (...args: unknown[]) => actualPath.isAbsolute(...args),
     relative: (...args: unknown[]) => actualPath.relative(...args),
   };
+});
+
+afterAll(() => {
+  mock.restore();
+  mock.clearAllMocks();
 });
 
 // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment

@@ -1,18 +1,6 @@
-import { describe, expect, it, mock } from 'bun:test';
-import { createRequire } from 'node:module';
+import { describe, expect, it } from 'bun:test';
 
-const require = createRequire(import.meta.url);
-const actualCommon = require('../common');
-
-mock.module('../common', () => {
-  return {
-    ...actualCommon,
-    PathResolver: actualCommon.PathResolver,
-    compareCodePoint: (...args: unknown[]) => actualCommon.compareCodePoint(...args),
-  };
-});
-
-const { ImportRegistry } = require('./import-registry');
+import { ImportRegistry } from './import-registry';
 
 describe('ImportRegistry', () => {
   it('should be deterministic when insertion order differs', () => {

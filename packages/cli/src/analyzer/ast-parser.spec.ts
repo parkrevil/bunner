@@ -1,42 +1,8 @@
-import { describe, expect, it, mock } from 'bun:test';
-import { createRequire } from 'node:module';
+import { describe, expect, it } from 'bun:test';
 
 // MUST: MUST-1 (createApplication 식별)
 
-const require = createRequire(import.meta.url);
-const actualOxcParser = require('oxc-parser');
-const actualPath = require('path');
-const actualCommon = require('../common');
-const actualAstTypeResolver = require('./ast-type-resolver');
-
-mock.module('oxc-parser', () => {
-  return {
-    parseSync: (...args: unknown[]) => actualOxcParser.parseSync(...args),
-  };
-});
-
-mock.module('path', () => {
-  return {
-    ...actualPath,
-    dirname: (...args: unknown[]) => actualPath.dirname(...args),
-    resolve: (...args: unknown[]) => actualPath.resolve(...args),
-  };
-});
-
-mock.module('../common', () => {
-  return {
-    ...actualCommon,
-    compareCodePoint: (...args: unknown[]) => actualCommon.compareCodePoint(...args),
-  };
-});
-
-mock.module('./ast-type-resolver', () => {
-  return {
-    AstTypeResolver: actualAstTypeResolver.AstTypeResolver,
-  };
-});
-
-const { AstParser } = require('./ast-parser');
+import { AstParser } from './ast-parser';
 
 describe('AstParser', () => {
   it('should collect createApplication calls when createApplication is imported from @bunner/core', () => {

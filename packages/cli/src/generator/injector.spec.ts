@@ -1,5 +1,4 @@
-import { describe, expect, it, mock } from 'bun:test';
-import { createRequire } from 'node:module';
+import { describe, expect, it } from 'bun:test';
 
 // MUST: MUST-1 (createApplication 식별)
 // MUST: MUST-5 (DI cycle 존재 시 build failure)
@@ -8,25 +7,7 @@ import type { FileAnalysis } from '../analyzer/graph/interfaces';
 
 import { ModuleGraph } from '../analyzer/graph/module-graph';
 import { ImportRegistry } from './import-registry';
-
-const require = createRequire(import.meta.url);
-const actualAnalyzer = require('../analyzer');
-const actualCommon = require('../common');
-
-mock.module('../analyzer', () => {
-  return {
-    ...actualAnalyzer,
-  };
-});
-
-mock.module('../common', () => {
-  return {
-    ...actualCommon,
-    compareCodePoint: (...args: unknown[]) => actualCommon.compareCodePoint(...args),
-  };
-});
-
-const { InjectorGenerator } = require('./injector');
+import { InjectorGenerator } from './injector';
 
 function createEmptyGraph(): ModuleGraph {
   const fileMap = new Map<string, FileAnalysis>();

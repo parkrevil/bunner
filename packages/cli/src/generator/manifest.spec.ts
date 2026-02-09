@@ -1,5 +1,4 @@
-import { describe, expect, it, mock } from 'bun:test';
-import { createRequire } from 'node:module';
+import { describe, expect, it } from 'bun:test';
 
 // MUST: MUST-8 (manifest sorting deterministic)
 
@@ -12,55 +11,7 @@ import type { DeepFreezeModule, GeneratedBlockParams, MetadataRegistryModule, Sc
 
 import { ModuleGraph } from '../analyzer/graph/module-graph';
 
-const require = createRequire(import.meta.url);
-const actualPath = require('path');
-const actualAnalyzer = require('../analyzer');
-const actualCommon = require('../common');
-const actualImportRegistry = require('./import-registry');
-const actualInjector = require('./injector');
-const actualMetadata = require('./metadata');
-
-mock.module('path', () => {
-  return {
-    ...actualPath,
-    dirname: (...args: unknown[]) => actualPath.dirname(...args),
-    relative: (...args: unknown[]) => actualPath.relative(...args),
-  };
-});
-
-mock.module('../analyzer', () => {
-  return {
-    ...actualAnalyzer,
-  };
-});
-
-mock.module('../common', () => {
-  return {
-    ...actualCommon,
-    compareCodePoint: (...args: unknown[]) => actualCommon.compareCodePoint(...args),
-    PathResolver: actualCommon.PathResolver,
-  };
-});
-
-mock.module('./import-registry', () => {
-  return {
-    ImportRegistry: actualImportRegistry.ImportRegistry,
-  };
-});
-
-mock.module('./injector', () => {
-  return {
-    InjectorGenerator: actualInjector.InjectorGenerator,
-  };
-});
-
-mock.module('./metadata', () => {
-  return {
-    MetadataGenerator: actualMetadata.MetadataGenerator,
-  };
-});
-
-const { ManifestGenerator } = require('./manifest');
+import { ManifestGenerator } from './manifest';
 
 const isAnalyzerValueRecord = (value: AnalyzerValue): value is AnalyzerValueRecord => {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

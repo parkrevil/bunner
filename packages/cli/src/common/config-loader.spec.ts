@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
-import { createRequire } from 'node:module';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+import { join } from 'path';
 
 // MUST: MUST-10 (config source 선택)
 // MUST: MUST-11 (json/jsonc 파싱)
@@ -8,31 +8,8 @@ import { createRequire } from 'node:module';
 import type { FileSetup } from '../../test/shared/interfaces';
 
 import { createBunFileStub } from '../../test/shared/stubs';
-
-const require = createRequire(import.meta.url);
-const actualPath = require('path');
-const actualErrors = require('./errors');
-const { join } = actualPath;
-
-mock.module('path', () => {
-  return {
-    ...actualPath,
-    basename: (...args: unknown[]) => actualPath.basename(...args),
-    join: (...args: unknown[]) => actualPath.join(...args),
-    relative: (...args: unknown[]) => actualPath.relative(...args),
-    resolve: (...args: unknown[]) => actualPath.resolve(...args),
-    sep: actualPath.sep,
-  };
-});
-
-mock.module('./errors', () => {
-  return {
-    ConfigLoadError: actualErrors.ConfigLoadError,
-  };
-});
-
-const { ConfigLoader } = require('./config-loader');
-const { ConfigLoadError } = actualErrors;
+import { ConfigLoader } from './config-loader';
+import { ConfigLoadError } from './errors';
 
 describe('ConfigLoader', () => {
   const projectRoot = '/project';
