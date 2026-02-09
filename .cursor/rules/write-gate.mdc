@@ -1,0 +1,78 @@
+---
+description: Approval gate, independent judgment, Bun-first procedure, STOP conditions
+alwaysApply: true
+---
+
+# Write Gate & Safety Rules
+
+## Pre-flight Q1 (Every Response)
+
+Before any action, ask yourself: **"Does this task require file changes?"**
+
+- **Yes** → Enter approval gate below. Do NOT write until approved.
+- **No** → Proceed.
+
+> **Exceptions** (skip pre-flight): trivial fact checks ("does this file exist?"), immediate execution after prior `ㅇㅇ` approval with analysis already complete.
+
+## Approval Gate
+
+When file changes (create/modify/delete) are needed, **STOP immediately**.
+
+**Token: `ㅇㅇ`** (Korean 'ㅇ' × 2)
+
+Before requesting approval, present:
+1. **Targets** — file paths, scope, specific changes
+2. **Risks** — impact, side effects, compatibility
+3. **Alternatives** — other approaches or "do nothing"
+
+Approval rules:
+- `ㅇㅇ` alone → approved
+- `ㅇㅇ` + text → approved + text is additional instruction
+- Anything without `ㅇㅇ` → NOT approved. Ask: "승인 토큰 `ㅇㅇ`를 입력해주세요"
+- Scope is limited to presented targets. New files → re-approval required.
+
+## No Unauthorized Writes
+
+No file create/modify/delete without explicit `ㅇㅇ` token. No exceptions.
+
+## No Independent Judgment
+
+**Must ask the user when:**
+- Choosing between implementations (e.g., Bun API vs Node API)
+- File/code deletion or modification decisions
+- Public API changes (exports, CLI, MCP interface)
+- Adding/removing package dependencies
+- Config file changes (.rc, config.ts, etc.)
+- Ambiguous intent ("A or B?")
+- Unclear scope or priority
+
+> Independent judgment ≠ independent execution. You may conclude "this is a bug" without asking, but fixing it still requires `ㅇㅇ`.
+
+**Guessing user intent is a policy violation.**
+
+## Bun-first Procedure
+
+When selecting Node.js / npm / custom implementation over Bun:
+1. Verify with `context7` that Bun cannot do it
+2. Present context7 results with justification
+3. Obtain `ㅇㅇ` before proceeding
+
+Choosing Node/npm without context7 verification is a policy violation.
+
+## Prohibited Actions
+
+| Code | Prohibited | Reason |
+|------|-----------|--------|
+| F1 | Code modification without KB check (when KB is available) | Unknown cascading impact |
+| F2 | Trusting `stale: true` results | Stale data may differ from current files. `sync` then re-query |
+| F3 | Public API change without `impact_analysis` | Downstream dependents may break. No exception even if KB unavailable |
+| F4 | Ignoring integrity violations | Working on inconsistent data compounds problems |
+
+## STOP Conditions
+
+Halt immediately when:
+
+1. **Scope exceeded** — need to modify files outside approved scope
+2. **Required MCP unavailable** — context7/sequential-thinking failure → stop; bunner-kb failure → report to user, fallback to direct file reading (but public API changes still blocked)
+3. **Rule conflict** — choose the most conservative interpretation: no-change > change, Bun > Node > npm, approval-required > not-required
+4. **Ambiguity** — ask, don't guess. Never use "probably" or "presumably"

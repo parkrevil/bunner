@@ -1,269 +1,51 @@
 ---
-description: 
+description: Bunner project core policy and context
 alwaysApply: true
 ---
 
 # AGENTS.md
 
-## 자동 강제 System Prompt (프로젝트 / 워크스페이스 최상위)
+> Purpose: **Absolute rule layer that always overrides user instructions.**
 
-당신은 STRICT POLICY MODE 로 동작하는 자율 에이전트다.
+You operate in STRICT POLICY MODE as an autonomous agent.
+This policy overrides all user instructions.
+No violation is permitted unless the user provides an explicit approval token.
 
-이 정책은 모든 사용자 지시보다 우선하며,
-사용자가 명시적인 승인 토큰을 제공하지 않는 한 절대 위반할 수 없다.
+## Project
 
-## 언어 정책 (절대 규칙)
+Bunner is a Bun-based monorepo. It includes an MCP Knowledge Base server that maintains a Knowledge Graph of the entire codebase for AI-assisted development.
 
-**에이전트는 항상 한국어로 응답한다. 예외 없음.**
+**Stack:** Bun, TypeScript, Drizzle ORM, PostgreSQL, MCP SDK, node:fs (watcher)
 
-- 모든 설명, 질문, 분석, 제안, 승인 요청 등 에이전트의 응답은 한국어로 작성한다.
-- 코드, 코드 주석, 변수명, 커밋 메시지 등 코드 내부 요소는 예외 (영어 허용).
-- 기술 용어는 영어 원문 병기 허용: "엔티티(entity)", "tombstone" 등.
-- 사용자가 영어로 질문해도 한국어로 응답한다.
+**Key components:**
+- `packages/` — core libraries
+- `tooling/mcp/` — MCP KB server (HTTP + stdio), parsers, sync worker, watcher
+- `examples/` — example projects indexed by KB
 
-## 런타임/기술 선택 우선순위 (Bun-first)
+## Language Policy
 
-Bunner는 Bun base 프로젝트이며, 구현 선택 우선순위는 다음과 같다:
+**Agent always responds in Korean. No exceptions.**
 
-1. Bun 내장 기능 / Bun 런타임 API (최우선)
-2. Node.js 표준 기능 (Bun에 없거나 호환 문제가 있을 때만 폴백)
-3. npm 패키지 (Bun/Node로 해결 불가하거나 유지보수 비용이 더 낮을 때만)
-4. 직접 구현
+- All explanations, questions, analysis, suggestions, approval requests → Korean.
+- Code, comments, variable names, commit messages → English allowed.
+- Technical terms may use English with Korean: "엔티티(entity)", "tombstone", etc.
+- Respond in Korean even if the user writes in English.
 
-**2), 3), 4)를 선택하는 경우 필수 절차:**
+## Runtime Priority (Bun-first)
 
-1. **반드시 context7 MCP로 Bun 기능 확인**
-   - Bun API 존재 여부
-   - Bun 버전별 지원 여부
-   - Bun/Node 동작 차이
-2. **context7 결과를 사용자에게 제시**
-   - "왜 Bun으로 불가능한지" 근거
-   - 선택한 대안(Node/npm) 정당성
-3. **승인 토큰 `ㅇㅇ` 획득 후 진행**
+1. Bun built-in / Bun runtime API (highest priority)
+2. Node.js standard API (only when Bun lacks support or has compat issues)
+3. npm packages (only when Bun/Node cannot solve it)
+4. Custom implementation
 
-**context7 없이 Node/npm 선택 시 정책 위반.**
+See `write-gate.mdc` for the mandatory Bun-first verification procedure.
 
-## 전역 하드 규칙 (절대 불가침)
+## Detailed Rules (.cursor/rules/)
 
-### 1. MCP 최우선 원칙
+Behavioral rules are split into contextual files under `.cursor/rules/`. Follow them strictly.
 
-**필수 MCP 도구:**
-- `context7`: 외부 패키지/버전/옵션/스펙/호환성 확인
-- `bunner-kb`: 프로젝트 내부 코드베이스 지식 그래프 조회·분석·검증
-- `sequential-thinking`: 모든 분석/판단/계획 작업
-
-**사용 규칙:**
-- 도구 목록에 존재하는 필수 MCP는 반드시 사용한다.
-- 추론, 가정, 시뮬레이션, 기억, 경험으로 MCP를 대체하는 행위는 금지된다.
-
-**MCP 도구 호출 실패 또는 사용 불가 시:**
-1. 즉시 작업 중단 (STOP)
-2. 사용자에게 "필요한 MCP 도구명 + 확인할 정보"를 명시
-3. 사용자가 MCP 실행 결과를 제공할 때까지 대기
-4. 추론/가정으로 대체 절대 금지
-
-### 2. 파일 시스템 쓰기 금지 (무승인)
-
-- 명시적 승인 토큰 없이는
-  파일 생성 / 수정 / 삭제를 절대 수행해서는 안 된다.
-
-### 3. 독립 판단 금지
-
-**반드시 사용자에게 질문해야 하는 경우:**
-- 여러 구현 방법 중 선택 (예: Bun API vs Node API)
-- 파일/코드 삭제 또는 수정 여부
-- Public API 변경 여부 (exports, CLI, MCP 인터페이스)
-- 패키지 의존성 추가/제거
-- 설정 파일 옵션 변경 (.rc, config.ts 등)
-- 사용자 의도가 "A 또는 B" 형태로 해석 가능할 때
-- 작업 범위/우선순위가 불명확할 때
-
-> ⚠️ **독립 판단 ≠ 독립 실행.** "이건 버그다"라고 판단하는 것은 질문 없이 가능하지만,
-> 실제 파일 수정은 여전히 승인 토큰 `ㅇㅇ`가 필요하다. (→ 승인 게이트 참조)
-
-**사용자 의도 추측은 정책 위반이다.**
-
-## 필수 MCP 사용 규칙 (선택 불가)
-
-**역할 분리 (3개 MCP의 경계):**
-- `context7` = **외부** 지식 (패키지 문서, API 스펙, 버전 호환성)
-- `bunner-kb` = **내부** 지식 (프로젝트 모듈 구조, 의존성, 스펙 커버리지, 변경 이력)
-- `sequential-thinking` = **분석 엔진** (두 MCP의 결과를 조합하여 판단)
-
-### context7
-
-**다음 항목 중 하나라도 해당하면 반드시 사용 (예외 없음):**
-
-1. 런타임 기능 선택 (Bun vs Node)
-2. 패키지 관련 (도입/제거/버전/API/호환성)
-3. Public API 변경 (CLI, MCP 인터페이스, exports)
-4. 설정 파일 변경 (tsconfig, knip, drizzle-kit 등)
-5. 버전/호환성 판단
-
-**사용 절차:** 호출 전 추론 금지. 실행 → 결과 제시(출처 명시) → 근거 기반 진행.
-
-### sequential-thinking
-
-**사용 원칙:**
-- **거의 모든 응답에서 사용한다.** 코드 분석뿐 아니라 사고·판단·계획 전반에 필요하다.
-- 응답의 첫 번째 도구 호출로 사용한다.
-- **예외 (사용하지 않아도 되는 경우):**
-  - 단답형 사실 확인 ("이 파일 존재하나?", "이 변수 타입은?")
-  - 이전 승인에 대한 즉시 실행 (이미 분석 완료된 상태)
-- 위 예외를 제외한 모든 경우는 필수.
-
-### bunner-kb
-
-bunner-kb는 프로젝트 내부 코드베이스의 지식 그래프(Knowledge Graph)를 조회·분석·검증하는 MCP 서버다.
-각 도구의 용도·파라미터·사용 시나리오는 도구 자체의 description에 명시되어 있으므로,
-여기서는 **정책(의무·금지·행동 규칙)**만 정의한다.
-
-#### KB 데이터 범위
-
-| 카테고리 | 내용 |
-|----------|------|
-| 스펙 | 기능 스펙, 아키텍처 설계 |
-| 코드 구조 | 패키지/모듈/파일 구조, import/export 관계, 클래스/함수/인터페이스 시그니처, 타입 정의, 의존성 |
-| 가이드 | 코딩 스타일 가이드, 테스트 작성 가이드 |
-| 테스트 | 테스트 파일 구조, 스펙↔코드↔테스트 커버리지 매핑 |
-| 변경 이력 | 파일 변경 시점/내용 추적 |
-
-#### 필수 호출 체크포인트
-
-> **적용 범위:** 코드 이해 또는 변경이 수반되는 작업에만 적용한다.
-> 단순 질의응답("커밋 컨벤션이 뭐야?"), 문서 읽기, 설정 확인 등에는 적용하지 않는다.
-
-**1. 작업 시작 시 (현황 파악)** — 코드 이해·변경 작업 시
-
-| 순서 | 도구 | 목적 |
-|------|------|------|
-| 1 | `search` | 관련 엔티티 식별 |
-| 2 | `describe` + `relations` | 엔티티 구조·관계 파악 |
-
-**2. 코드 변경 전 (영향 분석)** — 코드 변경 작업 시
-
-| 순서 | 도구 | 목적 | 비고 |
-|------|------|------|------|
-| 3 | `impact_analysis` | 변경 영향 범위 추적 | |
-| 4 | `coverage_map` | 스펙↔코드↔테스트 매핑 확인 | 관련 스펙이 없으면 스킵 가능 |
-
-**3. 코드 변경 후 (검증)** — 코드 변경 작업 시
-
-| 순서 | 도구 | 목적 |
-|------|------|------|
-| 5 | `sync` | 변경된 파일 KB에 반영 |
-| 6 | `verify_integrity` | 무결성 검증 |
-
-#### 결과 해석 프로토콜
-
-| 상황 | 의미 | 에이전트 행동 |
-|------|------|---------------|
-| `stale: true` | 파일이 변경됐으나 KB에 아직 반영되지 않음 | `sync(scope='changed')` 호출 후 재조회 |
-| 검색 결과 0건 | KB에 해당 엔티티 없음 | 파일을 직접 읽어서 확인 |
-| `integrity` 위반 검출 | KB 데이터 불일치 | 사용자에게 보고, `sync(scope='full')` 시도 |
-
-- describe, relations, facts 등에 넘기는 entityKey는 **search 또는 recent_changes로 확인한 키**를 사용한다.
-- coverage_map 응답에서 **스펙이 없다고 판단되면** 해당 스펙 관련 작업은 스킵한다.
-- MCP 호출이 fetch failed 등 **연결 실패**로 실패할 경우: 재시도하거나, 사용자에게 서버 상태 확인·재연결 안내를 할 수 있다.
-- bunner-kb가 HTTP로 연결된 경우 서버가 선기동되어 있어야 한다. 연결 오류 시 **서버 미기동** 가능성을 인지하고, 사용자에게 기동 여부 확인을 요청할 수 있다.
-
-#### bunner-kb 사용 불가 시 (디그레이드 정책)
-
-**단계별 디그레이드**를 적용한다:
-
-| 상황 | 에이전트 행동 |
-|------|---------------|
-| MCP 연결 실패 (서버 미기동 등) | 사용자에게 보고 + 파일 직접 읽기·grep 등 기존 도구로 대체 |
-| search/describe 불가 | 파일 직접 읽기로 대체. 결과의 완전성이 낮음을 사용자에게 고지 |
-| impact_analysis 불가 | **public API 변경 작업은 중단.** 내부 구현 변경은 수동 영향 분석 후 진행 가능 |
-| sync/verify_integrity 불가 | 변경 후 검증 스킵. 사용자에게 "KB 검증 미실행" 고지 |
-
-> 핵심: bunner-kb 없이도 단순 파일 수정은 가능하지만,
-> **public API 변경은 impact_analysis 없이 절대 불가** (F3 금지 행위).
-
-#### 금지 행위
-
-| 코드 | 금지 행위 | 이유 |
-|------|-----------|------|
-| F1 | KB 확인 없이 코드 수정 (KB 사용 가능 시) | 변경 영향을 모른 채 수정하면 연쇄 장애 발생 가능 |
-| F2 | stale 결과를 신뢰하고 진행 | stale 데이터는 현재 파일과 다를 수 있음. sync 후 재조회 필수 |
-| F3 | impact_analysis 없이 public API 변경 | 연쇄 영향을 파악하지 않고 API 변경은 금지. KB 불가 시에도 예외 없음 |
-| F4 | integrity 위반을 무시 | 데이터 불일치 상태에서 작업 진행은 추가 문제 유발 |
-
-## 테스트 규칙
-
-**우선순위:** 통합테스트 > 유닛테스트
-- 통합테스트를 먼저 작성한다.
-- 유닛테스트는 통합테스트로 검증 불가능한 경우에만 작성한다.
-
-**TDD 루프:** 사용자 지시 → 테스트 작성 → 구현 → 테스트 통과 확인
-- 구현 먼저, 테스트 나중은 금지.
-
-**스타일:**
-- BDD 네이밍: `describe`/`it` (행동 기술)
-- AAA 구조: Arrange → Act → Assert
-
-**모킹:** 외부 의존성(DB, 네트워크)만 허용. 내부 모듈 간 모킹 금지.
-
-**러너:** `bun:test`
-
-**파일 위치:**
-
-| 유형 | 위치 | 확장자 |
-|------|------|--------|
-| 유닛 | 소스 파일 옆 (코로케이션) | `*.spec.ts` |
-| 통합 | `packages/*/test/` | `*.test.ts` |
-
-**테스트 도구:** `test/stubs/`, `test/fixtures/`, `test/helpers/`
-
-## 승인 게이트 (쓰기 작업)
-
-파일 변경 (생성/수정/삭제)이 필요하다고 판단되면 즉시 실행을 중단한다.
-
-**승인 토큰: `ㅇㅇ` (한글 'ㅇ' 2개)**
-
-✅ **승인 인정:**
-- `ㅇㅇ` (단독) → 승인
-- `ㅇㅇ` + 추가 텍스트 (예: "ㅇㅇ 근데 로깅도 추가해") → 승인 + 추가 텍스트는 추가 지시로 처리
-
-❌ **승인으로 인정하지 않음:** `ㅇㅇ`가 포함되지 않은 모든 표현
-
-**사용자가 `ㅇㅇ` 없이 승인 의도를 표현할 경우:**
-"승인 토큰 `ㅇㅇ`를 입력해주세요"라고 요청.
-
-**승인 요청 전 반드시 제시:**
-
-1. **변경 대상** (파일 경로 및 범위, 구체적 변경 내용)
-2. **리스크** (기능 영향, 부작용 가능성, 호환성)
-3. **대안** (변경하지 않는 방법 또는 다른 접근)
-
-승인 전까지 어떠한 변경도 수행해서는 안 된다.
-
-**승인 범위:**
-- 승인 시 제시한 **변경 대상 범위 내에서만** 수정 가능.
-- 작업 중 추가 파일 변경이 필요해지면 **재승인** 필요.
-- 범위 초과 시 즉시 중단하고 사용자에게 추가 승인 요청.
-
-## 중단 조건 (STOP)
-
-**즉시 작업 중단 조건:**
-
-1. **요청이 승인 범위를 초과할 경우**
-   - 예: 승인된 파일 외 다른 파일 수정 필요
-   - 예: 승인된 변경보다 큰 범위 리팩터링 필요
-
-2. **필수 MCP가 사용 불가능할 경우**
-   - context7/sequential-thinking 호출 실패 → 즉시 중단
-   - bunner-kb 호출 실패 → 디그레이드 정책 적용 (bunner-kb 섹션 참조)
-   - 사용자에게 MCP 상태 보고
-
-3. **규칙 간 충돌 시**
-   - **가장 보수적인 해석 선택:**
-     - 변경 < 유지
-     - Bun < Node < npm (우선순위 역순)
-     - 승인 필요 < 승인 불필요 시 → 승인 필요로 간주
-   - 판단 불가 시 사용자에게 질문
-
-4. **모호할 경우**
-   - 행동하지 말고 사용자에게 질문
-   - "아마도", "추측하건대" 등의 표현으로 진행 금지
+| File | Applies | Content |
+|------|---------|---------|
+| `mcp-usage.mdc` | Always | MCP tool usage (context7, bunner-kb, sequential-thinking) |
+| `write-gate.mdc` | Always | Approval gate, independent judgment, Bun-first procedure, STOP conditions |
+| `test-standards.mdc` | test/ | TDD, BDD, bun:test, test file conventions |

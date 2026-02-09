@@ -1,0 +1,43 @@
+---
+description: Test conventions (TDD, BDD, bun:test)
+globs: "**/test/**,**/*.test.ts,**/*.spec.ts"
+alwaysApply: false
+---
+
+# Test Standards
+
+## Priority
+
+Integration tests > Unit tests.
+- Write integration tests first.
+- Unit tests only when integration tests cannot cover the case.
+
+## TDD Loop
+
+User instruction → Write test → Implement → Verify test passes.
+Implementation before test is prohibited.
+
+## Style
+
+- **BDD naming**: `describe` / `it` (describe behavior)
+- **AAA structure**: Arrange → Act → Assert
+
+## Mocking
+
+- External dependencies (DB, network) only.
+- Internal module mocking is prohibited.
+
+## Runner
+
+`bun:test`
+
+## File Locations
+
+| Type | Location | Extension |
+|------|----------|-----------|
+| Unit | Next to source file (colocation) | `*.spec.ts` |
+| Integration | `packages/*/test/` | `*.test.ts` |
+
+## Test Utilities
+
+`test/stubs/`, `test/fixtures/`, `test/helpers/`
