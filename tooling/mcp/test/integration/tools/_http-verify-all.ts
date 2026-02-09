@@ -9,8 +9,10 @@ const BASE = process.env.BUNNER_HTTP_BASE ?? 'http://127.0.0.1:9242';
 async function getTools(): Promise<string[]> {
 	const r = await fetch(`${BASE}/tools`);
 	if (!r.ok) throw new Error(`GET /tools failed: ${r.status}`);
-	const j = (await r.json()) as { tools?: string[] };
-	return j.tools ?? [];
+	const j = (await r.json()) as { tools?: Array<{ name?: string }>; count?: number };
+	const defs = j.tools ?? [];
+	const names = defs.map((t) => t.name).filter((n): n is string => typeof n === 'string' && n.length > 0);
+	return names;
 }
 
 async function callTool(name: string, args: Record<string, unknown> = {}): Promise<{ ok: boolean; status: number; text: string }> {

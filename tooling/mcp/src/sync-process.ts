@@ -116,23 +116,57 @@ function sendStatus(): void {
 
 async function init(env: SyncWorkerEnv): Promise<void> {
 	try {
+		const initStart = Date.now();
+		sendLog('info', 'sync-process', 'Init start', {
+			workspaceId: env.workspaceId,
+			repoRoot: env.repoRoot,
+		});
+
 		// 1. DB 풀 (별도 프로세스 — 완전 독립)
+		const tDbStart = Date.now();
+		try {
+			const url = new URL(env.databaseUrl);
+			const database = url.pathname.startsWith('/') ? url.pathname.slice(1) : url.pathname;
+			sendLog('info', 'sync-process', 'DB connect start', {
+				primary: {
+					protocol: url.protocol,
+					host: url.hostname,
+					port: url.port,
+					database,
+					user: url.username ? decodeURIComponent(url.username) : undefined,
+					hasPassword: Boolean(url.password),
+				},
+				pool: env.pool,
+			});
+		} catch (err) {
+			sendLog('warn', 'sync-process', 'DB url parse failed', {
+				error: err instanceof Error ? err.message : String(err),
+			});
+		}
 		db = await createDb(env.databaseUrl, env.pool);
+		sendLog('info', 'sync-process', 'DB connect ready', { durationMs: Date.now() - tDbStart });
 
 		// 2. Config
+		const tConfigStart = Date.now();
 		config = env.config;
 		repoRoot = env.repoRoot;
+		sendLog('info', 'sync-process', 'Config ready', { durationMs: Date.now() - tConfigStart });
 
 		// 3. Infrastructure
+		const tInfraStart = Date.now();
 		queue = new SyncQueue();
 		hashCache = new HashCache();
 		const registry = createDefaultRegistry();
+		sendLog('info', 'sync-process', 'Infrastructure ready', { durationMs: Date.now() - tInfraStart });
 
 		// 4. FileWatcher (별도 프로세스 내에서 직접 watch)
+		const tWatcherStart = Date.now();
 		watcher = new FileWatcher({ queue, hashCache, config, repoRoot });
 		watcher.start();
+		sendLog('info', 'sync-process', 'Watcher started', { durationMs: Date.now() - tWatcherStart });
 
 		// 5. SyncWorker
+		const tWorkerCreateStart = Date.now();
 		worker = new SyncWorker({
 			db,
 			queue,
@@ -142,6 +176,7 @@ async function init(env: SyncWorkerEnv): Promise<void> {
 			workspaceId: env.workspaceId,
 			repoRoot,
 		});
+		sendLog('info', 'sync-process', 'Worker created', { durationMs: Date.now() - tWorkerCreateStart });
 
 		// 6. 주기적 상태 보고 (1초 간격)
 		statusInterval = setInterval(sendStatus, 1000);
@@ -153,6 +188,7 @@ async function init(env: SyncWorkerEnv): Promise<void> {
 
 		send({ type: 'ready' });
 		sendLog('info', 'sync-process', 'Sync subprocess initialized', {
+			durationMs: Date.now() - initStart,
 			workspaceId: env.workspaceId,
 			repoRoot,
 		});

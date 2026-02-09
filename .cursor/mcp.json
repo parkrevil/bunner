@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "bunner-kb": {
-      "url": "http://127.0.0.1:9242/mcp"
+      "url": "http://127.0.0.1:9432/tools"
     }
   }
 }

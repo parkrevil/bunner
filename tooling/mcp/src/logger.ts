@@ -1,21 +1,12 @@
 /**
- * Structured Logger — §8.3 관측성 (Structured Logging)
+ * Logger — human-friendly console formatting.
  *
- * sync events, query events, errors → JSON format.
- * MCP 서버는 stdio transport를 사용하므로 로그는 stderr로 출력.
- *
- * @see MCP_PLAN §8.3
+ * Policy:
+ * - Pretty formatting for humans (agent/operator).
+ * - HTTP-only is the primary runtime; logs go through console.
  */
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
-
-export type LogEntry = {
-	timestamp: string;
-	level: LogLevel;
-	module: string;
-	message: string;
-	[key: string]: unknown;
-};
 
 const LEVEL_PRIORITY: Record<LogLevel, number> = {
 	debug: 0,
@@ -33,27 +24,38 @@ export function setLogLevel(level: LogLevel): void {
 	minLevel = level;
 }
 
-/**
- * 구조화된 JSON 로그를 stderr로 출력.
- * MCP stdio transport (stdout)와 간섭하지 않음.
- */
-function emit(entry: LogEntry): void {
-	if (LEVEL_PRIORITY[entry.level] < LEVEL_PRIORITY[minLevel]) return;
-	const line = JSON.stringify(entry);
-	process.stderr.write(`${line}\n`);
+function safeStringify(value: unknown): string {
+	try {
+		return JSON.stringify(value);
+	} catch {
+		return String(value);
+	}
+}
+
+function formatExtra(extra?: Record<string, unknown>): string {
+	if (!extra) return '';
+	const keys = Object.keys(extra);
+	if (keys.length === 0) return '';
+	// stable-ish formatting: sorted keys, single-line JSON values
+	keys.sort();
+	const parts = keys.map((k) => `${k}=${safeStringify(extra[k])}`);
+	return ` { ${parts.join(' ')} }`;
 }
 
 /**
  * 범용 로그 함수.
  */
 function log(level: LogLevel, module: string, message: string, extra?: Record<string, unknown>): void {
-	emit({
-		timestamp: new Date().toISOString(),
-		level,
-		module,
-		message,
-		...extra,
-	});
+	if (LEVEL_PRIORITY[level] < LEVEL_PRIORITY[minLevel]) return;
+	const ts = new Date().toISOString();
+	const lvl = level.toUpperCase().padEnd(5);
+	const mod = module.padEnd(12);
+	const line = `${ts} ${lvl} ${mod} ${message}${formatExtra(extra)}`;
+	if (level === 'warn' || level === 'error') {
+		console.error(line);
+	} else {
+		console.log(line);
+	}
 }
 
 // ── Public API ──────────────────────────────────────────────

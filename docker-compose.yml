@@ -3,12 +3,12 @@ services:
     image: pgvector/pgvector:0.8.1-pg17
     container_name: postgres-primary
     environment:
-      POSTGRES_DB: ${BUNNER_KB_DB:-bunner_kb}
-      POSTGRES_USER: ${BUNNER_KB_USER:-postgres}
-      POSTGRES_PASSWORD: ${BUNNER_KB_PASSWORD:-postgres}
+      POSTGRES_DB: ${BUNNER_KB_DB_NAME:-bunner_kb}
+      POSTGRES_USER: ${BUNNER_KB_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${BUNNER_KB_DB_PASSWORD:-postgres}
       POSTGRES_HOST_AUTH_METHOD: ${POSTGRES_HOST_AUTH_METHOD:-trust}
     ports:
-      - "${BUNNER_KB_PRIMARY_PORT:-5432}:5432"
+      - "${BUNNER_KB_DB_PRIMARY_PORT:-5432}:5432"
     volumes:
       - ./.volumes/postgres/primary:/var/lib/postgresql/data
     entrypoint:
@@ -64,12 +64,12 @@ services:
       postgres-primary:
         condition: service_healthy
     environment:
-      POSTGRES_DB: ${BUNNER_KB_DB:-bunner_kb}
-      POSTGRES_USER: ${BUNNER_KB_USER:-postgres}
-      POSTGRES_PASSWORD: ${BUNNER_KB_PASSWORD:-postgres}
+      POSTGRES_DB: ${BUNNER_KB_DB_NAME:-bunner_kb}
+      POSTGRES_USER: ${BUNNER_KB_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${BUNNER_KB_DB_PASSWORD:-postgres}
       POSTGRES_HOST_AUTH_METHOD: ${POSTGRES_HOST_AUTH_METHOD:-trust}
     ports:
-      - "${BUNNER_KB_REPLICA1_PORT:-5433}:5432"
+      - "${BUNNER_KB_DB_REPLICA1_PORT:-5433}:5432"
     volumes:
       - ./.volumes/postgres/replica1:/var/lib/postgresql/data
     command:
@@ -126,12 +126,12 @@ services:
       postgres-primary:
         condition: service_healthy
     environment:
-      POSTGRES_DB: ${BUNNER_KB_DB:-bunner_kb}
-      POSTGRES_USER: ${BUNNER_KB_USER:-postgres}
-      POSTGRES_PASSWORD: ${BUNNER_KB_PASSWORD:-postgres}
+      POSTGRES_DB: ${BUNNER_KB_DB_NAME:-bunner_kb}
+      POSTGRES_USER: ${BUNNER_KB_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${BUNNER_KB_DB_PASSWORD:-postgres}
       POSTGRES_HOST_AUTH_METHOD: ${POSTGRES_HOST_AUTH_METHOD:-trust}
     ports:
-      - "${BUNNER_KB_REPLICA2_PORT:-5434}:5432"
+      - "${BUNNER_KB_DB_REPLICA2_PORT:-5434}:5432"
     volumes:
       - ./.volumes/postgres/replica2:/var/lib/postgresql/data
     command:

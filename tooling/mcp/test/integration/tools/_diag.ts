@@ -7,12 +7,13 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createBunnerKbServer } from '../../../src/server';
 
 const hermeticEnv = {
-	BUNNER_KB_DB: 'bunner_test_hermetic',
-	BUNNER_KB_USER: 'test_user',
-	BUNNER_KB_PASSWORD: 'test_pw',
-	BUNNER_KB_PRIMARY_PORT: '1',
-	BUNNER_KB_REPLICA1_PORT: '2',
-	BUNNER_KB_REPLICA2_PORT: '3',
+	BUNNER_KB_DB_NAME: 'bunner_test_hermetic',
+	BUNNER_KB_DB_USER: 'test_user',
+	BUNNER_KB_DB_PASSWORD: 'test_pw',
+	BUNNER_KB_DB_HOST: 'localhost',
+	BUNNER_KB_DB_PRIMARY_PORT: '1',
+	BUNNER_KB_DB_REPLICA1_PORT: '2',
+	BUNNER_KB_DB_REPLICA2_PORT: '3',
 };
 
 const timeout = (ms: number, label: string) =>

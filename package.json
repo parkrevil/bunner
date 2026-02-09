@@ -33,8 +33,7 @@
     "test": "bun test",
     "test:coverage": "bun test --coverage",
     "kb:migrate": "bunx drizzle-kit migrate --config tooling/mcp/drizzle.config.ts",
-    "kb:mcp": "bun --env-file=.env tooling/mcp/src/server.ts",
-    "kb:http": "bun --env-file=.env tooling/mcp/src/http-server.ts",
+    "kb:http": "bun tooling/mcp/src/http-server.ts",
     "kb:http:verify": "bun --env-file=.env tooling/mcp/test/integration/tools/_http-verify-all.ts"
   },
   "dependencies": {},

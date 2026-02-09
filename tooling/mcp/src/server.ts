@@ -4,7 +4,7 @@
  * §6 MCP Interface + §8.1 Startup sequence:
  *   load config → create DB → compute workspace → init modules → register MCP tools → start background sync
  *
- * 19 MCP tools (§6.1–§6.5):
+ * 18 tools (§6.1–§6.5):
  *   Query(5): search, describe, relations, facts, evidence
  *   Analysis(6): impact_analysis, dependency_graph, trace_chain, coverage_map, inconsistency_report, find_orphans
  *   Temporal(2): recent_changes, changelog
@@ -18,7 +18,6 @@
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 
 import { createDb, type Db } from './db';
@@ -41,6 +40,32 @@ function formatUnknownError(value: unknown): { message: string; stack?: string }
 		return value.stack ? { message: value.message, stack: value.stack } : { message: value.message };
 	}
 	return { message: String(value) };
+}
+
+function describeDatabaseUrl(urlString: string): {
+	protocol?: string;
+	host?: string;
+	port?: string;
+	database?: string;
+	user?: string;
+	hasPassword?: boolean;
+	parseError?: string;
+} {
+	try {
+		const url = new URL(urlString);
+		const database = url.pathname.startsWith('/') ? url.pathname.slice(1) : url.pathname;
+		const user = url.username ? decodeURIComponent(url.username) : undefined;
+		return {
+			protocol: url.protocol,
+			host: url.hostname,
+			port: url.port,
+			database,
+			...(user ? { user } : {}),
+			hasPassword: Boolean(url.password),
+		};
+	} catch (err) {
+		return { parseError: err instanceof Error ? err.message : String(err) };
+	}
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
@@ -335,6 +360,30 @@ entityKey: { type: 'string', minLength: 1, description: '엔티티 키. 형식: 
 	},
 ] as const;
 
+function assertToolDefinitionsComplete(defs: readonly unknown[]): void {
+	const missing: string[] = [];
+	for (const def of defs as Array<{ name?: unknown; description?: unknown; inputSchema?: any }>) {
+		const name = typeof def.name === 'string' ? def.name : '<unknown>';
+		if (typeof def.description !== 'string' || def.description.trim().length === 0) {
+			missing.push(`${name}: missing tool.description`);
+		}
+		const props = def.inputSchema?.properties;
+		if (props && typeof props === 'object') {
+			for (const [key, value] of Object.entries(props as Record<string, any>)) {
+				const desc = value?.description;
+				if (typeof desc !== 'string' || desc.trim().length === 0) {
+					missing.push(`${name}: missing inputSchema.properties.${key}.description`);
+				}
+			}
+		}
+	}
+	if (missing.length > 0) {
+		throw new Error(`TOOL_DEFINITIONS missing descriptions:\n- ${missing.join('\n- ')}`);
+	}
+}
+
+assertToolDefinitionsComplete(TOOL_DEFINITIONS);
+
 // ── Server Factory ──────────────────────────────────────────
 
 export function createBunnerKbServer(options?: { envSource?: Record<string, string | undefined> }) {
@@ -355,6 +404,7 @@ export function createBunnerKbServer(options?: { envSource?: Record<string, stri
 	let repoRoot: string;
 	let hashCache: HashCache;
 	let syncProcess: ReturnType<typeof Bun.spawn> | null = null;
+	let syncInitSentAt: number | null = null;
 	let latestWorkerStatus: SyncWorkerStatus = {
 		workerStatus: 'idle',
 		queueDepth: 0,
@@ -381,7 +431,9 @@ export function createBunnerKbServer(options?: { envSource?: Record<string, stri
 	function handleIpcMessage(msg: SyncEvent): void {
 		switch (msg.type) {
 			case 'ready':
-				kbLog.info('server', 'Sync subprocess ready');
+				kbLog.info('server', 'Sync subprocess ready', {
+					waitMs: syncInitSentAt ? Date.now() - syncInitSentAt : undefined,
+				});
 				break;
 			case 'status':
 				latestWorkerStatus = msg.status;
@@ -434,89 +486,154 @@ export function createBunnerKbServer(options?: { envSource?: Record<string, stri
 		initPromise = (async () => {
 			if (initialized) return;
 
-			// 1. Environment → DB (메인 프로세스)
-		const envSource = options?.envSource ?? Bun.env;
-		const env = readEnv(envSource as Record<string, string | undefined>);
-		primaryDb = await createDb(env.kbDatabaseUrl, env.pool);
-		replicaDbs = await Promise.all(
-			env.kbDatabaseUrlReplicas.map((url) => createDb(url, env.pool)),
-		);
-		readDb = createReadRouter(primaryDb, replicaDbs);
+			const initStart = Date.now();
+			kbLog.info('server', 'Init start', {
+				envSource: options?.envSource ? 'custom' : 'Bun.env',
+			});
 
-		// 2. Workspace
-		repoRoot = process.cwd();
-		workspaceId = computeWorkspaceId(repoRoot);
-
-		// 3. Config
-		config = await loadConfig(repoRoot);
-
-		// 4. Main-process infrastructure (읽기 전용)
-		hashCache = new HashCache();
-
-		validator = new ReadThroughValidator({
-			hashCache,
-			enqueueForSync: (filePath: string) => {
-				sendToWorker({ type: 'enqueue', files: [filePath], trigger: 'read_through' });
-			},
-			repoRoot,
-			enabled: config.sync.readThroughValidation,
-		});
-
-		// 5. Tool classes (읽기=replica, 쓰기=primary)
-		queryTools = new QueryTools(readDb, validator, workspaceId);
-		analysisTools = new AnalysisTools(readDb, workspaceId);
-		temporalTools = new TemporalTools(readDb, workspaceId);
-		operationsTools = new OperationsTools(primaryDb, workspaceId, {
-			getStatus: () => latestWorkerStatus,
-			sendCommand: sendToWorker,
-			hashCache,
-			config,
-			repoRoot,
-		});
-
-		// 6. Subprocess 생성 — 완전 격리된 별도 프로세스 (I/O 분리)
-		const syncProcessPath = new URL('./sync-process.ts', import.meta.url).pathname;
-		syncProcess = Bun.spawn(['bun', syncProcessPath], {
-			stdio: ['ignore', 'ignore', 'inherit'],
-			env: process.env as Record<string, string>,
-			ipc: handleIpcMessage as (message: unknown) => void,
-			onExit(_proc, exitCode, signalCode, error) {
-				kbLog.error('sync-process', `Subprocess exited`, {
-					exitCode,
-					signalCode: signalCode ?? undefined,
-					error: error?.message,
+			try {
+				// 1. Environment → DB (메인 프로세스)
+				const tEnvStart = Date.now();
+				const envSource = options?.envSource ?? Bun.env;
+				const env = readEnv(envSource as Record<string, string | undefined>);
+				const primaryInfo = describeDatabaseUrl(env.kbDatabaseUrl);
+				const replicaInfos = env.kbDatabaseUrlReplicas.map(describeDatabaseUrl);
+				kbLog.info('server', 'Env parsed', {
+					durationMs: Date.now() - tEnvStart,
+					primary: primaryInfo,
+					replicas: replicaInfos,
+					pool: env.pool,
 				});
-				syncProcess = null;
-				latestWorkerStatus = {
-					workerStatus: 'stopped',
-					queueDepth: 0,
-					lastSyncAt: null,
-					lastSyncDurationMs: 0,
-					startupScanComplete: false,
-					filesProcessed: 0,
-					hashCacheSize: 0,
-					watchHealthy: false,
-					watchedDirs: [],
-				};
-			},
-		});
 
-		// 7. Subprocess 초기화 명령 전송
-		sendToWorker({
-			type: 'init',
-			env: {
-				databaseUrl: env.kbDatabaseUrl,
-				pool: env.pool,
-				workspaceId,
-				repoRoot,
-				config,
-			},
-		});
+				const tPrimaryDbStart = Date.now();
+				kbLog.info('server', 'DB connect (primary) start', { primary: primaryInfo });
+				primaryDb = await createDb(env.kbDatabaseUrl, env.pool);
+				kbLog.info('server', 'DB connect (primary) ready', {
+					durationMs: Date.now() - tPrimaryDbStart,
+					primary: primaryInfo,
+				});
 
-		kbLog.info('server', 'KB server initialized (subprocess mode)', { workspaceId, repoRoot });
-		initialized = true;
+				const tReplicaDbStart = Date.now();
+				kbLog.info('server', 'DB connect (replicas) start', { count: env.kbDatabaseUrlReplicas.length });
+				replicaDbs = await Promise.all(env.kbDatabaseUrlReplicas.map((url) => createDb(url, env.pool)));
+				kbLog.info('server', 'DB connect (replicas) ready', {
+					durationMs: Date.now() - tReplicaDbStart,
+					count: replicaDbs.length,
+				});
+
+				readDb = createReadRouter(primaryDb, replicaDbs);
+
+				// 2. Workspace
+				const tWorkspaceStart = Date.now();
+				repoRoot = process.cwd();
+				workspaceId = computeWorkspaceId(repoRoot);
+				kbLog.info('server', 'Workspace ready', {
+					durationMs: Date.now() - tWorkspaceStart,
+					workspaceId,
+					repoRoot,
+				});
+
+				// 3. Config
+				const tConfigStart = Date.now();
+				kbLog.info('server', 'Config load start', { repoRoot });
+				config = await loadConfig(repoRoot);
+				kbLog.info('server', 'Config load ready', { durationMs: Date.now() - tConfigStart });
+
+				// 4. Main-process infrastructure (읽기 전용)
+				const tInfraStart = Date.now();
+				hashCache = new HashCache();
+				validator = new ReadThroughValidator({
+					hashCache,
+					enqueueForSync: (filePath: string) => {
+						sendToWorker({ type: 'enqueue', files: [filePath], trigger: 'read_through' });
+					},
+					repoRoot,
+					enabled: config.sync.readThroughValidation,
+				});
+				kbLog.info('server', 'Infrastructure ready', {
+					durationMs: Date.now() - tInfraStart,
+					readThroughValidation: config.sync.readThroughValidation,
+				});
+
+				// 5. Tool classes (읽기=replica, 쓰기=primary)
+				const tToolsStart = Date.now();
+				queryTools = new QueryTools(readDb, validator, workspaceId);
+				analysisTools = new AnalysisTools(readDb, workspaceId);
+				temporalTools = new TemporalTools(readDb, workspaceId);
+				operationsTools = new OperationsTools(primaryDb, workspaceId, {
+					getStatus: () => latestWorkerStatus,
+					sendCommand: sendToWorker,
+					hashCache,
+					config,
+					repoRoot,
+				});
+				kbLog.info('server', 'Tools ready', { durationMs: Date.now() - tToolsStart });
+
+				// 6. Subprocess 생성 — 완전 격리된 별도 프로세스 (I/O 분리)
+				const tSpawnStart = Date.now();
+				const syncProcessPath = new URL('./sync-process.ts', import.meta.url).pathname;
+				kbLog.info('server', 'Sync subprocess spawn start', { syncProcessPath });
+				syncProcess = Bun.spawn(['bun', syncProcessPath], {
+					stdio: ['ignore', 'ignore', 'inherit'],
+					env: process.env as Record<string, string>,
+					ipc: handleIpcMessage as (message: unknown) => void,
+					onExit(_proc, exitCode, signalCode, error) {
+						kbLog.error('sync-process', `Subprocess exited`, {
+							exitCode,
+							signalCode: signalCode ?? undefined,
+							error: error?.message,
+						});
+						syncProcess = null;
+						latestWorkerStatus = {
+							workerStatus: 'stopped',
+							queueDepth: 0,
+							lastSyncAt: null,
+							lastSyncDurationMs: 0,
+							startupScanComplete: false,
+							filesProcessed: 0,
+							hashCacheSize: 0,
+							watchHealthy: false,
+							watchedDirs: [],
+						};
+					},
+				});
+				kbLog.info('server', 'Sync subprocess spawn ready', {
+					durationMs: Date.now() - tSpawnStart,
+					pid: (syncProcess as unknown as { pid?: number }).pid,
+				});
+
+				// 7. Subprocess 초기화 명령 전송
+				syncInitSentAt = Date.now();
+				kbLog.info('server', 'Sync subprocess init send', {
+					workspaceId,
+					repoRoot,
+					primary: primaryInfo,
+					pool: env.pool,
+				});
+				sendToWorker({
+					type: 'init',
+					env: {
+						databaseUrl: env.kbDatabaseUrl,
+						pool: env.pool,
+						workspaceId,
+						repoRoot,
+						config,
+					},
+				});
+
+				kbLog.info('server', 'Init ready', { durationMs: Date.now() - initStart, workspaceId, repoRoot });
+				initialized = true;
+			} catch (err) {
+				const { message, stack } = formatUnknownError(err);
+				kbLog.error('server', 'Init failed', { detail: message, stack });
+				throw err;
+			}
 		})();
 		await initPromise;
+	}
+
+	async function bootstrap(): Promise<void> {
+		await ensureInit();
 	}
 
 	// ── Cleanup on server close ─────────────────────────────
@@ -746,23 +863,5 @@ export function createBunnerKbServer(options?: { envSource?: Record<string, stri
 		return handleToolCall(request.params.name, request.params.arguments ?? {}, options);
 	});
 
-	return { server, callTool: handleToolCall };
-}
-
-if (import.meta.main) {
-	process.on('uncaughtException', (err) => {
-		const { message, stack } = formatUnknownError(err);
-		kbLog.error('server', '[FATAL] uncaughtException', { detail: message, stack });
-		process.exit(1);
-	});
-
-	process.on('unhandledRejection', (reason) => {
-		const { message, stack } = formatUnknownError(reason);
-		kbLog.error('server', '[FATAL] unhandledRejection', { detail: message, stack });
-		process.exit(1);
-	});
-
-	const { server } = createBunnerKbServer();
-	const transport = new StdioServerTransport();
-	await server.connect(transport);
+	return { server, callTool: handleToolCall, bootstrap };
 }
