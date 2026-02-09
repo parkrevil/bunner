@@ -6,8 +6,8 @@
  * @see MCP_PLAN §5, §6.1, §6.5, §6.7
  */
 
-import { sql } from 'drizzle-orm';
 import type { Db } from '../db';
+import { createRepos } from '../repo';
 import type { ReadThroughValidator } from '../read-through';
 
 // ── Response Types (§6.7) ────────────────────────────────────
@@ -70,6 +70,10 @@ export class QueryTools {
 		private workspaceId: string,
 	) {}
 
+	private static sourcePairKey(filePath: string, contentHash: string) {
+		return `${filePath}\0${contentHash}`;
+	}
+
 	/**
 	 * search — §5.1 Lexical search (FTS + ts_rank_cd)
 	 */
@@ -80,154 +84,210 @@ export class QueryTools {
 		factType?: string;
 		includeDeleted?: boolean;
 	}): Promise<SearchResult> {
-		const limit = params.limit ?? 10;
-		const tsQuery = params.query.split(/\s+/).filter(Boolean).join(' & ');
-
-		let whereClause = sql`e.workspace_id = ${this.workspaceId}`;
-		if (!params.includeDeleted) {
-			whereClause = sql`${whereClause} AND e.is_deleted = false`;
-		}
-		if (params.entityType) {
-			whereClause = sql`${whereClause} AND et.name = ${params.entityType}`;
-		}
-		if (params.factType) {
-			whereClause = sql`${whereClause} AND ft.name = ${params.factType}`;
+		const rawQuery = typeof params.query === 'string' ? params.query.trim() : '';
+		if (rawQuery.length === 0) {
+			return { matches: [], totalMatches: 0 };
 		}
 
-		const result = await this.db.execute(sql`
-			SELECT
-				e.entity_key, et.name as entity_type, e.summary as entity_summary,
-				f.id as fact_id, f.fact_key, ft.name as fact_type,
-				f.payload_text,
-				ts_rank_cd(f.payload_tsv, to_tsquery('simple', ${tsQuery})) as rank
-			FROM fact f
-			JOIN entity e ON e.id = f.entity_id
-			JOIN entity_type et ON et.id = e.entity_type_id
-			JOIN fact_type ft ON ft.id = f.fact_type_id
-			WHERE ${whereClause}
-			  AND f.payload_tsv @@ to_tsquery('simple', ${tsQuery})
-			ORDER BY rank DESC
-			LIMIT ${limit}
-		`);
+		const data = await this.db.transaction(async (tx) => {
+			const repos = createRepos(tx);
+			const limit = params.limit ?? 10;
 
-		// group by entity
-		const entityMap = new Map<string, SearchMatch>();
-
-		for (const row of result.rows as Array<{
-			entity_key: string; entity_type: string; entity_summary: string;
-			fact_key: string; fact_type: string; payload_text: string;
-			rank: number;
-		}>) {
-			let entry = entityMap.get(row.entity_key);
-			if (!entry) {
-				entry = {
-					entity: { key: row.entity_key, type: row.entity_type, summary: row.entity_summary ?? '' },
-					facts: [],
-					score: row.rank,
-					stale: false,
-				};
-				entityMap.set(row.entity_key, entry);
+			const includeDeleted = params.includeDeleted ?? false;
+			const entityTypeId = params.entityType
+				? await repos.types.getEntityTypeIdByName(params.entityType)
+				: null;
+			if (params.entityType && entityTypeId == null) {
+				return { matches: [], totalMatches: 0, entitySources: [] };
 			}
-			entry.facts.push({
-				factKey: row.fact_key,
-				factType: row.fact_type,
-				payloadText: row.payload_text ?? '',
+			const factTypeId = params.factType
+				? await repos.types.getFactTypeIdByName(params.factType)
+				: null;
+			if (params.factType && factTypeId == null) {
+				return { matches: [], totalMatches: 0, entitySources: [] };
+			}
+
+			const rows = await repos.fact.searchFacts({
+				workspaceId: this.workspaceId,
+				query: rawQuery,
+				limit,
+				...(entityTypeId != null ? { entityTypeId } : {}),
+				...(factTypeId != null ? { factTypeId } : {}),
+				includeDeleted,
 			});
-			if (row.rank > entry.score) entry.score = row.rank;
+
+			// group by entity
+			type InterimMatch = {
+				entityKey: string;
+				entityTypeId: number;
+				entitySummary: string | null;
+				facts: { factKey: string; factTypeId: number; payloadText: string | null }[];
+				score: number;
+				stale: boolean;
+			};
+			const entityMap = new Map<string, InterimMatch>();
+			for (const row of rows) {
+				let entry = entityMap.get(row.entityKey);
+				if (!entry) {
+					entry = {
+						entityKey: row.entityKey,
+						entityTypeId: row.entityTypeId,
+						entitySummary: row.entitySummary,
+						facts: [],
+						score: row.rank,
+						stale: false,
+					};
+					entityMap.set(row.entityKey, entry);
+				}
+				entry.facts.push({
+					factKey: row.factKey,
+					factTypeId: row.factTypeId,
+					payloadText: row.payloadText,
+				});
+				if (row.rank > entry.score) entry.score = row.rank;
+			}
+
+			const interimMatches = Array.from(entityMap.values());
+			if (interimMatches.length === 0) return { matches: [], totalMatches: 0, entitySources: [] };
+
+			const entityTypeIds = Array.from(new Set(interimMatches.map((m) => m.entityTypeId)));
+			const factTypeIds = Array.from(
+				new Set(interimMatches.flatMap((m) => m.facts.map((f) => f.factTypeId))),
+			);
+			const entityTypeNames = await repos.types.getEntityTypeNamesByIds(entityTypeIds);
+			const factTypeNames = await repos.types.getFactTypeNamesByIds(factTypeIds);
+
+			const matches: SearchMatch[] = interimMatches.map((m) => ({
+				entity: {
+					key: m.entityKey,
+					type: entityTypeNames.get(m.entityTypeId) ?? '',
+					summary: m.entitySummary ?? '',
+				},
+				facts: m.facts.map((f) => ({
+					factKey: f.factKey,
+					factType: factTypeNames.get(f.factTypeId) ?? '',
+					payloadText: f.payloadText ?? '',
+				})),
+				score: m.score,
+				stale: m.stale,
+			}));
+
+			// Read-through validation은 트랜잭션 밖에서 수행한다.
+			let entitySources: Array<{ entityKey: string; filePath: string; contentHash: string }> = [];
+			if (matches.length > 0) {
+				const entities = await repos.entity.findIdsByKeys({
+					workspaceId: this.workspaceId,
+					entityKeys: matches.map((m) => m.entity.key),
+					includeDeleted: true,
+				});
+				const idByKey = new Map<string, number>();
+				for (const e of entities) idByKey.set(e.entityKey, e.id);
+				const keyById = new Map<number, string>();
+				for (const e of entities) keyById.set(e.id, e.entityKey);
+				const sources = await repos.source.listByEntityIds({ entityIds: entities.map((e) => e.id) });
+				entitySources = sources.map((s) => ({
+					entityKey: keyById.get(s.entityId) ?? '',
+					filePath: s.filePath,
+					contentHash: s.contentHash,
+				})).filter((s) => s.entityKey.length > 0);
+				// idByKey는 이후 stale 플래그 적용 시 정확도를 위해 유지
+				void idByKey;
+			}
+
+			return { matches, totalMatches: matches.length, entitySources };
+		});
+
+		if (data.matches.length === 0 || data.entitySources.length === 0) {
+			return { matches: data.matches, totalMatches: data.totalMatches };
 		}
 
-		// Read-through validation for sources
-		const matches = Array.from(entityMap.values());
-		for (const m of matches) {
-			const sources = await this.getEntitySources(m.entity.key);
-			for (const s of sources) {
-				const check = await this.validator.validateSource(s.filePath, s.contentHash);
-				if (check.stale) {
+		const checks = await this.validator.validateSourcePairs(
+			data.entitySources.map((s) => ({ filePath: s.filePath, contentHash: s.contentHash })),
+			{ concurrency: 16 },
+		);
+		const sourcesByEntityKey = new Map<string, Array<{ filePath: string; contentHash: string }>>();
+		for (const s of data.entitySources) {
+			const list = sourcesByEntityKey.get(s.entityKey) ?? [];
+			list.push({ filePath: s.filePath, contentHash: s.contentHash });
+			sourcesByEntityKey.set(s.entityKey, list);
+		}
+
+		for (const m of data.matches) {
+			const entitySources = sourcesByEntityKey.get(m.entity.key) ?? [];
+			for (const s of entitySources) {
+				const check = checks.get(QueryTools.sourcePairKey(s.filePath, s.contentHash));
+				if (check?.stale) {
 					m.stale = true;
 					break;
 				}
 			}
 		}
 
-		return { matches, totalMatches: matches.length };
+		return { matches: data.matches, totalMatches: data.totalMatches };
 	}
 
 	/**
 	 * describe — §6.1 entity + sources + facts 요약
 	 */
 	async describe(entityKey: string): Promise<DescribeResult | null> {
-		const entityResult = await this.db.execute(sql`
-			SELECT e.id, e.entity_key, et.name as entity_type, e.summary,
-				   e.meta, e.is_deleted
-			FROM entity e
-			JOIN entity_type et ON et.id = e.entity_type_id
-			WHERE e.workspace_id = ${this.workspaceId} AND e.entity_key = ${entityKey}
-			LIMIT 1
-		`);
+		const data = await this.db.transaction(async (tx) => {
+			const repos = createRepos(tx);
+			const entity = await repos.entity.findByWorkspaceKey({ workspaceId: this.workspaceId, entityKey });
+			if (!entity) return null;
+			const entityType = (await repos.types.getEntityTypeNameById(entity.entityTypeId)) ?? '';
 
-		if (entityResult.rows.length === 0) return null;
-		const entity = entityResult.rows[0] as {
-			id: number; entity_key: string; entity_type: string;
-			summary: string; meta: Record<string, unknown>; is_deleted: boolean;
-		};
+			const sourcesRows = await repos.source.listByEntityId({ entityId: entity.id });
+			const factsRows = await repos.fact.listByEntityId({ entityId: entity.id });
+			const counts = await repos.relation.countIncomingOutgoing({ entityId: entity.id });
 
-		// Sources + read-through validation
-		const sourcesResult = await this.db.execute(sql`
-			SELECT s.file_path, s.kind, s.content_hash
-			FROM source s
-			WHERE s.entity_id = ${entity.id}
-		`);
+			// Facts
+			const factTypeIds = Array.from(new Set(factsRows.map((f) => f.factTypeId)));
+			const factTypeNames = await repos.types.getFactTypeNamesByIds(factTypeIds);
+			const facts = factsRows.map((f) => ({
+				factKey: f.factKey,
+				factType: factTypeNames.get(f.factTypeId) ?? '',
+				payloadText: f.payloadText ?? '',
+				payloadJson: f.payloadJson ?? null,
+			}));
 
-		const sources: DescribeResult['sources'] = [];
-		for (const s of sourcesResult.rows as Array<{ file_path: string; kind: string; content_hash: string }>) {
-			const check = await this.validator.validateSource(s.file_path, s.content_hash);
-			sources.push({
-				filePath: s.file_path,
+			return {
+				entity: {
+					key: entity.entityKey,
+					type: entityType,
+					summary: entity.summary ?? '',
+					meta: entity.meta ?? {},
+					isDeleted: entity.isDeleted,
+				},
+				sourcesRows,
+				facts,
+				counts,
+			};
+		});
+
+		if (!data) return null;
+
+		const checks = await this.validator.validateSourcePairs(
+			data.sourcesRows.map((s) => ({ filePath: s.filePath, contentHash: s.contentHash })),
+			{ concurrency: 16 },
+		);
+
+		const sources: DescribeResult['sources'] = data.sourcesRows.map((s) => {
+			const check = checks.get(QueryTools.sourcePairKey(s.filePath, s.contentHash));
+			return {
+				filePath: s.filePath,
 				kind: s.kind,
-				contentHash: s.content_hash,
-				stale: check.stale,
-			});
-		}
-
-		// Facts
-		const factsResult = await this.db.execute(sql`
-			SELECT f.fact_key, ft.name as fact_type, f.payload_text, f.payload_json
-			FROM fact f
-			JOIN fact_type ft ON ft.id = f.fact_type_id
-			WHERE f.entity_id = ${entity.id}
-		`);
-
-		const facts = (factsResult.rows as Array<{
-			fact_key: string; fact_type: string;
-			payload_text: string | null; payload_json: Record<string, unknown>;
-		}>).map((f) => ({
-			factKey: f.fact_key,
-			factType: f.fact_type,
-			payloadText: f.payload_text ?? '',
-			payloadJson: f.payload_json ?? null,
-		}));
-
-		// Relation summary
-		const incoming = await this.db.execute(sql`
-			SELECT COUNT(*) as cnt FROM relation WHERE dst_entity_id = ${entity.id}
-		`);
-		const outgoing = await this.db.execute(sql`
-			SELECT COUNT(*) as cnt FROM relation WHERE src_entity_id = ${entity.id}
-		`);
+				contentHash: s.contentHash,
+				stale: check?.stale ?? false,
+			};
+		});
 
 		return {
-			entity: {
-				key: entity.entity_key,
-				type: entity.entity_type,
-				summary: entity.summary ?? '',
-				meta: entity.meta ?? {},
-				isDeleted: entity.is_deleted,
-			},
+			entity: data.entity,
 			sources,
-			facts,
+			facts: data.facts,
 			relationSummary: {
-				incoming: Number((incoming.rows[0] as { cnt: unknown })?.cnt ?? 0),
-				outgoing: Number((outgoing.rows[0] as { cnt: unknown })?.cnt ?? 0),
+				incoming: data.counts.incoming,
+				outgoing: data.counts.outgoing,
 			},
 		};
 	}
@@ -242,220 +302,308 @@ export class QueryTools {
 		depth?: number;
 		limit?: number;
 	}): Promise<RelationItem[]> {
-		const direction = params.direction ?? 'both';
-		const limit = params.limit ?? 50;
+		return this.db.transaction(async (tx) => {
+			const repos = createRepos(tx);
+			const direction = params.direction ?? 'both';
+			const limit = params.limit ?? 50;
+			const relationTypeId = params.relationType
+				? await repos.types.getRelationTypeIdByName(params.relationType)
+				: null;
+			if (params.relationType && relationTypeId == null) return [];
 
-		// Get entity id
-		const entityId = await this.resolveEntityId(params.entityKey);
-		if (!entityId) return [];
+			// Get entity id
+			const entityId = await repos.entity.resolveIdByKey({
+				workspaceId: this.workspaceId,
+				entityKey: params.entityKey,
+				includeDeleted: true,
+			});
+			if (!entityId) return [];
 
-		const results: RelationItem[] = [];
-		const visited = new Set<number>([entityId]);
-		const maxDepth = params.depth ?? 1;
+			type InterimRelation = {
+				relationId: number;
+				meta: Record<string, unknown>;
+				src: { key: string; typeId: number; summary: string | null };
+				dst: { key: string; typeId: number; summary: string | null };
+				relationTypeId: number;
+				strengthTypeId: number;
+				neighborId: number;
+			};
+			const results: InterimRelation[] = [];
+			const visited = new Set<number>([entityId]);
+			const maxDepth = params.depth ?? 1;
 
-		await this.walkRelations(entityId, direction, params.relationType, maxDepth, 0, visited, results, limit);
+			let frontier: number[] = [entityId];
+			let currentDepth = 0;
+			while (frontier.length > 0 && currentDepth < maxDepth && results.length < limit) {
+				const remaining = limit - results.length;
+				const nextFrontier: number[] = [];
 
-		return results.slice(0, limit);
-	}
-
-	private async walkRelations(
-		entityId: number,
-		direction: 'incoming' | 'outgoing' | 'both',
-		relationType: string | undefined,
-		maxDepth: number,
-		currentDepth: number,
-		visited: Set<number>,
-		results: RelationItem[],
-		limit: number,
-	): Promise<void> {
-		if (currentDepth >= maxDepth || results.length >= limit) return;
-
-		let whereClause = sql`true`;
-		if (relationType) {
-			whereClause = sql`${whereClause} AND rt.name = ${relationType}`;
-		}
-
-		const queries: Array<ReturnType<typeof this.db.execute>> = [];
-
-		if (direction === 'outgoing' || direction === 'both') {
-			queries.push(this.db.execute(sql`
-				SELECT r.id, r.meta,
-					   se.entity_key as src_key, set2.name as src_type, se.summary as src_summary,
-					   de.entity_key as dst_key, det.name as dst_type, de.summary as dst_summary,
-					   rt.name as relation_type, st.name as strength,
-					   de.id as neighbor_id
-				FROM relation r
-				JOIN entity se ON se.id = r.src_entity_id
-				JOIN entity_type set2 ON set2.id = se.entity_type_id
-				JOIN entity de ON de.id = r.dst_entity_id
-				JOIN entity_type det ON det.id = de.entity_type_id
-				JOIN relation_type rt ON rt.id = r.relation_type_id
-				JOIN strength_type st ON st.id = r.strength_type_id
-				WHERE r.src_entity_id = ${entityId} AND ${whereClause}
-				LIMIT ${limit}
-			`));
-		}
-
-		if (direction === 'incoming' || direction === 'both') {
-			queries.push(this.db.execute(sql`
-				SELECT r.id, r.meta,
-					   se.entity_key as src_key, set2.name as src_type, se.summary as src_summary,
-					   de.entity_key as dst_key, det.name as dst_type, de.summary as dst_summary,
-					   rt.name as relation_type, st.name as strength,
-					   se.id as neighbor_id
-				FROM relation r
-				JOIN entity se ON se.id = r.src_entity_id
-				JOIN entity_type set2 ON set2.id = se.entity_type_id
-				JOIN entity de ON de.id = r.dst_entity_id
-				JOIN entity_type det ON det.id = de.entity_type_id
-				JOIN relation_type rt ON rt.id = r.relation_type_id
-				JOIN strength_type st ON st.id = r.strength_type_id
-				WHERE r.dst_entity_id = ${entityId} AND ${whereClause}
-				LIMIT ${limit}
-			`));
-		}
-
-		const queryResults = await Promise.all(queries);
-		const neighborIds: number[] = [];
-
-		for (const qr of queryResults) {
-			for (const row of qr.rows as Array<{
-				id: number; meta: Record<string, unknown>;
-				src_key: string; src_type: string; src_summary: string;
-				dst_key: string; dst_type: string; dst_summary: string;
-				relation_type: string; strength: string;
-				neighbor_id: number;
-			}>) {
-				results.push({
-					id: row.id,
-					srcEntity: { key: row.src_key, type: row.src_type, summary: row.src_summary ?? '' },
-					dstEntity: { key: row.dst_key, type: row.dst_type, summary: row.dst_summary ?? '' },
-					relationType: row.relation_type,
-					strength: row.strength,
-					meta: row.meta ?? {},
-				});
-
-				if (!visited.has(row.neighbor_id)) {
-					visited.add(row.neighbor_id);
-					neighborIds.push(row.neighbor_id);
+				if (direction === 'outgoing' || direction === 'both') {
+					const outgoing = await repos.relation.listOutgoingForFrontier({
+						srcEntityIds: frontier,
+						...(relationTypeId != null ? { relationTypeId } : {}),
+						limit: remaining,
+					});
+					for (const row of outgoing) {
+						results.push({
+							relationId: row.relationId,
+							meta: row.meta,
+							src: { key: row.src.key, typeId: row.src.typeId, summary: row.src.summary },
+							dst: { key: row.dst.key, typeId: row.dst.typeId, summary: row.dst.summary },
+							relationTypeId: row.relationTypeId,
+							strengthTypeId: row.strengthTypeId,
+							neighborId: row.neighborId,
+						});
+						if (!visited.has(row.neighborId)) {
+							visited.add(row.neighborId);
+							nextFrontier.push(row.neighborId);
+						}
+					}
 				}
-			}
-		}
 
-		// Multi-hop
-		for (const neighborId of neighborIds) {
-			await this.walkRelations(neighborId, direction, relationType, maxDepth, currentDepth + 1, visited, results, limit);
-		}
+				if (direction === 'incoming' || direction === 'both') {
+					const incoming = await repos.relation.listIncomingForFrontier({
+						dstEntityIds: frontier,
+						...(relationTypeId != null ? { relationTypeId } : {}),
+						limit: remaining,
+					});
+					for (const row of incoming) {
+						results.push({
+							relationId: row.relationId,
+							meta: row.meta,
+							src: { key: row.src.key, typeId: row.src.typeId, summary: row.src.summary },
+							dst: { key: row.dst.key, typeId: row.dst.typeId, summary: row.dst.summary },
+							relationTypeId: row.relationTypeId,
+							strengthTypeId: row.strengthTypeId,
+							neighborId: row.neighborId,
+						});
+						if (!visited.has(row.neighborId)) {
+							visited.add(row.neighborId);
+							nextFrontier.push(row.neighborId);
+						}
+					}
+				}
+
+				frontier = nextFrontier;
+				currentDepth += 1;
+			}
+
+			const entityTypeIds = Array.from(
+				new Set(results.flatMap((r) => [r.src.typeId, r.dst.typeId])),
+			);
+			const relationTypeIds = Array.from(new Set(results.map((r) => r.relationTypeId)));
+			const strengthTypeIds = Array.from(new Set(results.map((r) => r.strengthTypeId)));
+			const entityTypeNames = await repos.types.getEntityTypeNamesByIds(entityTypeIds);
+			const relationTypeNames = await repos.types.getRelationTypeNamesByIds(relationTypeIds);
+			const strengthTypeNames = await repos.types.getStrengthTypeNamesByIds(strengthTypeIds);
+
+			return results.slice(0, limit).map((r) => ({
+				id: r.relationId,
+				srcEntity: {
+					key: r.src.key,
+					type: entityTypeNames.get(r.src.typeId) ?? '',
+					summary: r.src.summary ?? '',
+				},
+				dstEntity: {
+					key: r.dst.key,
+					type: entityTypeNames.get(r.dst.typeId) ?? '',
+					summary: r.dst.summary ?? '',
+				},
+				relationType: relationTypeNames.get(r.relationTypeId) ?? '',
+				strength: strengthTypeNames.get(r.strengthTypeId) ?? '',
+				meta: r.meta ?? {},
+			}));
+		});
 	}
 
 	/**
-	 * facts — §6.1 entity의 fact 목록
+	 * facts — §6.1 entity fact 목록
 	 */
 	async facts(params: {
 		entityKey: string;
 		factType?: string;
 		limit?: number;
 	}): Promise<FactItem[]> {
-		const entityId = await this.resolveEntityId(params.entityKey);
-		if (!entityId) return [];
+		return this.db.transaction(async (tx) => {
+			const repos = createRepos(tx);
+			const entityId = await repos.entity.resolveIdByKey({
+				workspaceId: this.workspaceId,
+				entityKey: params.entityKey,
+				includeDeleted: true,
+			});
+			if (!entityId) return [];
 
-		const limit = params.limit ?? 100;
+			const limit = params.limit ?? 100;
+			const factTypeId = params.factType
+				? await repos.types.getFactTypeIdByName(params.factType)
+				: null;
+			if (params.factType && factTypeId == null) return [];
 
-		let whereClause = sql`f.entity_id = ${entityId}`;
-		if (params.factType) {
-			whereClause = sql`${whereClause} AND ft.name = ${params.factType}`;
-		}
-
-		const result = await this.db.execute(sql`
-			SELECT f.id, f.fact_key, ft.name as fact_type, f.payload_text, f.payload_json
-			FROM fact f
-			JOIN fact_type ft ON ft.id = f.fact_type_id
-			WHERE ${whereClause}
-			LIMIT ${limit}
-		`);
-
-		return (result.rows as Array<{
-			id: number; fact_key: string; fact_type: string;
-			payload_text: string | null; payload_json: Record<string, unknown>;
-		}>).map((r) => ({
-			id: r.id,
-			factKey: r.fact_key,
-			factType: r.fact_type,
-			payloadText: r.payload_text,
-			payloadJson: r.payload_json ?? {},
-		}));
+			const rows = await repos.fact.listByEntityIdFiltered({
+				entityId,
+				...(factTypeId != null ? { factTypeId } : {}),
+				limit,
+			});
+			const factTypeIds = Array.from(new Set(rows.map((r) => r.factTypeId)));
+			const factTypeNames = await repos.types.getFactTypeNamesByIds(factTypeIds);
+			return rows.map((r) => ({
+				id: r.id,
+				factKey: r.factKey,
+				factType: factTypeNames.get(r.factTypeId) ?? '',
+				payloadText: r.payloadText,
+				payloadJson: r.payloadJson ?? {},
+			}));
+		});
 	}
 
 	/**
 	 * evidence — §6.1 relation의 evidence fact 목록
 	 */
 	async evidence(relationId: number): Promise<EvidenceItem[]> {
-		const result = await this.db.execute(sql`
-			SELECT f.id as fact_id, f.fact_key, ft.name as fact_type, f.payload_text
-			FROM relation_evidence re
-			JOIN fact f ON f.id = re.fact_id
-			JOIN fact_type ft ON ft.id = f.fact_type_id
-			WHERE re.relation_id = ${relationId}
-		`);
-
-		return (result.rows as Array<{
-			fact_id: number; fact_key: string; fact_type: string; payload_text: string | null;
-		}>).map((r) => ({
-			factId: r.fact_id,
-			factKey: r.fact_key,
-			factType: r.fact_type,
-			payloadText: r.payload_text,
-		}));
+		return this.db.transaction(async (tx) => {
+			const repos = createRepos(tx);
+			const rows = await repos.relationEvidence.listEvidenceFacts({ relationId });
+			const factTypeIds = Array.from(new Set(rows.map((r) => r.factTypeId)));
+			const factTypeNames = await repos.types.getFactTypeNamesByIds(factTypeIds);
+			return rows.map((r) => ({
+				factId: r.factId,
+				factKey: r.factKey,
+				factType: factTypeNames.get(r.factTypeId) ?? '',
+				payloadText: r.payloadText,
+			}));
+		});
 	}
 
 	/**
-	 * bulk_describe — §6.5
+	 * bulk_describe — §6.5 (병렬 조회)
 	 */
 	async bulkDescribe(entityKeys: string[]): Promise<Map<string, DescribeResult>> {
-		const results = new Map<string, DescribeResult>();
-		for (const key of entityKeys) {
-			const desc = await this.describe(key);
-			if (desc) results.set(key, desc);
+		const uniqueKeys = Array.from(new Set(entityKeys)).filter(Boolean);
+		if (uniqueKeys.length === 0) return new Map();
+
+		const data = await this.db.transaction(async (tx) => {
+			const repos = createRepos(tx);
+			const entities = await repos.entity.findByKeys({
+				workspaceId: this.workspaceId,
+				entityKeys: uniqueKeys,
+				includeDeleted: true,
+			});
+			if (entities.length === 0) return new Map();
+
+			const entityIds = entities.map((e) => e.id);
+			const sourcesRows = await repos.source.listByEntityIds({ entityIds });
+			const factsRows = await repos.fact.listByEntityIds({ entityIds });
+			const countsById = await repos.relation.countIncomingOutgoingByEntityIds({ entityIds });
+
+			const entityTypeIds = Array.from(new Set(entities.map((e) => e.entityTypeId)));
+			const factTypeIds = Array.from(new Set(factsRows.map((f) => f.factTypeId)));
+			const entityTypeNames = await repos.types.getEntityTypeNamesByIds(entityTypeIds);
+			const factTypeNames = await repos.types.getFactTypeNamesByIds(factTypeIds);
+
+			const factsByEntityId = new Map<number, DescribeResult['facts']>();
+			for (const f of factsRows) {
+				const list = factsByEntityId.get(f.entityId) ?? [];
+				list.push({
+					factKey: f.factKey,
+					factType: factTypeNames.get(f.factTypeId) ?? '',
+					payloadText: f.payloadText ?? '',
+					payloadJson: f.payloadJson ?? null,
+				});
+				factsByEntityId.set(f.entityId, list);
+			}
+
+			return {
+				entities,
+				sourcesRows,
+				factsByEntityId,
+				countsById,
+				entityTypeNames,
+			};
+		});
+
+		if (data instanceof Map) return data;
+
+		const checks = await this.validator.validateSourcePairs(
+			data.sourcesRows.map((s) => ({ filePath: s.filePath, contentHash: s.contentHash })),
+			{ concurrency: 16 },
+		);
+
+		const sourcesByEntityId = new Map<number, Array<{ filePath: string; kind: string; contentHash: string; stale: boolean }>>();
+		for (const s of data.sourcesRows) {
+			const key = QueryTools.sourcePairKey(s.filePath, s.contentHash);
+			const check = checks.get(key);
+			const list = sourcesByEntityId.get(s.entityId) ?? [];
+			list.push({ filePath: s.filePath, kind: s.kind, contentHash: s.contentHash, stale: check?.stale ?? false });
+			sourcesByEntityId.set(s.entityId, list);
 		}
+
+		const results = new Map<string, DescribeResult>();
+		for (const e of data.entities) {
+			const counts = data.countsById.get(e.id) ?? { incoming: 0, outgoing: 0 };
+			results.set(e.entityKey, {
+				entity: {
+					key: e.entityKey,
+					type: data.entityTypeNames.get(e.entityTypeId) ?? '',
+					summary: e.summary ?? '',
+					meta: e.meta ?? {},
+					isDeleted: e.isDeleted,
+				},
+				sources: sourcesByEntityId.get(e.id) ?? [],
+				facts: data.factsByEntityId.get(e.id) ?? [],
+				relationSummary: {
+					incoming: counts.incoming,
+					outgoing: counts.outgoing,
+				},
+			});
+		}
+
 		return results;
 	}
 
 	/**
-	 * bulk_facts — §6.5
+	 * bulk_facts — §6.5 (병렬 조회)
 	 */
 	async bulkFacts(entityKeys: string[], factType?: string): Promise<Map<string, FactItem[]>> {
-		const results = new Map<string, FactItem[]>();
-		for (const key of entityKeys) {
-			const fParams: Parameters<typeof this.facts>[0] = { entityKey: key };
-			if (factType) fParams.factType = factType;
-			const f = await this.facts(fParams);
-			results.set(key, f);
-		}
-		return results;
-	}
+		const uniqueKeys = Array.from(new Set(entityKeys)).filter(Boolean);
+		if (uniqueKeys.length === 0) return new Map();
 
-	// ── Helpers ──────────────────────────────────────────────
+		return this.db.transaction(async (tx) => {
+			const repos = createRepos(tx);
+			const entities = await repos.entity.findIdsByKeys({
+				workspaceId: this.workspaceId,
+				entityKeys: uniqueKeys,
+				includeDeleted: true,
+			});
+			if (entities.length === 0) return new Map();
 
-	private async resolveEntityId(entityKey: string): Promise<number | undefined> {
-		const result = await this.db.execute(sql`
-			SELECT id FROM entity
-			WHERE workspace_id = ${this.workspaceId} AND entity_key = ${entityKey}
-			LIMIT 1
-		`);
-		const row = result.rows[0] as { id?: number } | undefined;
-		return row?.id;
-	}
+			const factTypeId = factType ? await repos.types.getFactTypeIdByName(factType) : null;
+			const factRows = factType && factTypeId == null
+				? []
+				: await repos.fact.listByEntityIdsFiltered({
+					entityIds: entities.map((e) => e.id),
+					...(factTypeId != null ? { factTypeId } : {}),
+				});
+			const factTypeIds = Array.from(new Set(factRows.map((r) => r.factTypeId)));
+			const factTypeNames = await repos.types.getFactTypeNamesByIds(factTypeIds);
 
-	private async getEntitySources(entityKey: string): Promise<Array<{ filePath: string; contentHash: string }>> {
-		const result = await this.db.execute(sql`
-			SELECT s.file_path, s.content_hash
-			FROM source s
-			JOIN entity e ON e.id = s.entity_id
-			WHERE e.workspace_id = ${this.workspaceId} AND e.entity_key = ${entityKey}
-		`);
-		return (result.rows as Array<{ file_path: string; content_hash: string }>).map((r) => ({
-			filePath: r.file_path,
-			contentHash: r.content_hash,
-		}));
+			const factsByEntityId = new Map<number, FactItem[]>();
+			for (const r of factRows) {
+				const list = factsByEntityId.get(r.entityId) ?? [];
+				list.push({
+					id: r.id,
+					factKey: r.factKey,
+					factType: factTypeNames.get(r.factTypeId) ?? '',
+					payloadText: r.payloadText,
+					payloadJson: r.payloadJson ?? {},
+				});
+				factsByEntityId.set(r.entityId, list);
+			}
+
+			const results = new Map<string, FactItem[]>();
+			for (const e of entities) {
+				results.set(e.entityKey, factsByEntityId.get(e.id) ?? []);
+			}
+			return results;
+		});
 	}
 }

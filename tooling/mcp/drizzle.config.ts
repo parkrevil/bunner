@@ -7,7 +7,7 @@ export default defineConfig({
   schema: './tooling/mcp/drizzle/schema.ts',
   out: './tooling/mcp/drizzle',
   dbCredentials: {
-    url: readEnv(Bun.env).kbDatabaseUrl,
+    url: readEnv(process.env).kbDatabaseUrl,
   },
   migrations: {
     schema: 'drizzle',

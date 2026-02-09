@@ -15,7 +15,7 @@
     "bunner-kb": {
       "type": "stdio",
       "command": "bun",
-      "args": ["--env-file=.env", "tooling/mcp/src/server.ts"]
+      "args": ["run", "kb:mcp"]
     }
   }
 }

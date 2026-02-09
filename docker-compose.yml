@@ -11,22 +11,46 @@ services:
       - "${BUNNER_KB_PRIMARY_PORT:-5432}:5432"
     volumes:
       - ./.volumes/postgres/primary:/var/lib/postgresql/data
-    command:
-      - postgres
+    entrypoint:
+      - bash
       - -c
-      - listen_addresses=*
-      - -c
-      - wal_level=replica
-      - -c
-      - wal_keep_size=256MB
-      - -c
-      - max_slot_wal_keep_size=1GB
-      - -c
-      - max_wal_senders=10
-      - -c
-      - max_replication_slots=10
-      - -c
-      - hot_standby=on
+      - |
+        set -euo pipefail
+        
+        # Run standard init if needed
+        if [ ! -s "$$PGDATA/PG_VERSION" ]; then
+          docker-entrypoint.sh postgres &
+          INIT_PID=$$!
+          
+          # Wait for init to complete
+          for i in $(seq 1 30); do
+            if [ -s "$$PGDATA/PG_VERSION" ]; then
+              sleep 2
+              break
+            fi
+            sleep 1
+          done
+          
+          # Stop init process
+          gosu postgres pg_ctl stop -D "$$PGDATA" -m fast || true
+          wait $$INIT_PID 2>/dev/null || true
+        fi
+        
+        # Ensure pg_hba.conf allows replication
+        if ! grep -q "host replication all 0.0.0.0/0 trust" "$$PGDATA/pg_hba.conf" 2>/dev/null; then
+          echo "host replication all 0.0.0.0/0 trust" >> "$$PGDATA/pg_hba.conf"
+          chown postgres:postgres "$$PGDATA/pg_hba.conf"
+        fi
+        
+        # Start postgres as postgres user with replication settings
+        exec gosu postgres postgres \
+          -c listen_addresses=* \
+          -c wal_level=replica \
+          -c wal_keep_size=256MB \
+          -c max_slot_wal_keep_size=1GB \
+          -c max_wal_senders=10 \
+          -c max_replication_slots=10 \
+          -c hot_standby=on
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 2s

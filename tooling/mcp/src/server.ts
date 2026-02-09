@@ -8,7 +8,7 @@
  *   Query(5): search, describe, relations, facts, evidence
  *   Analysis(6): impact_analysis, dependency_graph, trace_chain, coverage_map, inconsistency_report, find_orphans
  *   Temporal(2): recent_changes, changelog
- *   Operations(4): kb_health, verify_integrity, sync, purge_tombstones
+ *   Operations(3): verify_integrity, sync, purge_tombstones
  *   Bulk(2): bulk_describe, bulk_facts
  *
  * §6.6 Autonomous processes (background, not MCP tools):
@@ -25,22 +25,53 @@ import { createDb, type Db } from './db';
 import { readEnv } from './env';
 import { computeWorkspaceId } from './workspace';
 import { loadConfig, type KBConfig } from './config';
-import { SyncQueue } from './sync-queue';
-import { SyncWorker } from './sync-worker';
 import { HashCache } from './hash-cache';
-import { FileWatcher } from './watcher';
 import { ReadThroughValidator } from './read-through';
-import { createDefaultRegistry } from './parsers';
 import { QueryTools } from './tools/query';
 import { AnalysisTools } from './tools/analysis';
 import { TemporalTools } from './tools/temporal';
 import { OperationsTools } from './tools/operations';
 import { kbLog } from './logger';
+import type { SyncCommand, SyncEvent, SyncWorkerStatus } from './sync-ipc';
+
+// ── Safety Guards ──────────────────────────────────────────
+
+function formatUnknownError(value: unknown): { message: string; stack?: string } {
+	if (value instanceof Error) {
+		return value.stack ? { message: value.message, stack: value.stack } : { message: value.message };
+	}
+	return { message: String(value) };
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+	let timeoutId: ReturnType<typeof setTimeout> | null = null;
+	const timeoutPromise = new Promise<never>((_, reject) => {
+		timeoutId = setTimeout(() => {
+			reject(new Error(`Timeout after ${timeoutMs}ms (${label})`));
+		}, timeoutMs);
+	});
+
+	try {
+		return await Promise.race([promise, timeoutPromise]);
+	} finally {
+		if (timeoutId) clearTimeout(timeoutId);
+	}
+}
 
 // ── JSON Response Helper ────────────────────────────────────
 
+function jsonReplacer(_key: string, value: unknown) {
+	if (typeof value === 'bigint') {
+		const max = BigInt(Number.MAX_SAFE_INTEGER);
+		const min = BigInt(Number.MIN_SAFE_INTEGER);
+		if (value <= max && value >= min) return Number(value);
+		return value.toString();
+	}
+	return value;
+}
+
 function jsonResponse(data: unknown) {
-	return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+	return { content: [{ type: 'text' as const, text: JSON.stringify(data, jsonReplacer) }] };
 }
 
 function errorResponse(tool: string, detail: string) {
@@ -48,9 +79,16 @@ function errorResponse(tool: string, detail: string) {
 	return { content: [{ type: 'text' as const, text: message }], isError: true };
 }
 
+/** Normalize file:: or file: path to module: so lookup matches ingest keys (module:path). */
+function normalizeEntityKey(key: string): string {
+	if (key.startsWith('file::')) return 'module:' + key.slice(6);
+	if (key.startsWith('file:') && !key.includes('#')) return 'module:' + key.slice(5);
+	return key;
+}
+
 // ── Tool Definitions ─────────────────────────────────────────
 
-const TOOL_DEFINITIONS = [
+export const TOOL_DEFINITIONS = [
 	// ── Query ───────────────────────────────────────────────
 	{
 		name: 'search',
@@ -80,7 +118,7 @@ const TOOL_DEFINITIONS = [
 		inputSchema: {
 			type: 'object',
 			properties: {
-				entityKey: { type: 'string', minLength: 1, description: '조회할 엔티티 키. 형식: "type::name" (예: "module::@bunner/core", "file::src/app.ts")' },
+				entityKey: { type: 'string', minLength: 1, description: '엔티티 키. 형식: type:name (단일 콜론). 예: module:packages/core/src/index.ts, symbol:path/to/file.ts#exportName. 파일 경로로 조회할 때는 module:경로 사용. search 또는 recent_changes 결과의 key 값을 사용. file:: 형식은 미지원.' },
 			},
 			required: ['entityKey'],
 			additionalProperties: false,
@@ -92,7 +130,7 @@ const TOOL_DEFINITIONS = [
 		inputSchema: {
 			type: 'object',
 			properties: {
-				entityKey: { type: 'string', minLength: 1, description: '탐색 기준 엔티티 키. 형식: "type::name"' },
+				entityKey: { type: 'string', minLength: 1, description: '엔티티 키. 형식: type:name (단일 콜론). 예: module:packages/core/src/index.ts. search 또는 recent_changes 결과의 key 사용. file:: 미지원.' },
 				direction: { type: 'string', enum: ['outgoing', 'incoming', 'both'], description: 'outgoing=이 엔티티가 참조하는 것, incoming=이 엔티티를 참조하는 것, both=양방향' },
 				relationType: { type: 'string', description: '특정 관계 타입만 필터링. 예: imports, exports, implements, tests' },
 				depth: { type: 'integer', minimum: 1, maximum: 10, default: 1, description: '탐색 깊이. 1=직접 관계만, 2+=간접 관계까지 확장' },
@@ -108,8 +146,8 @@ const TOOL_DEFINITIONS = [
 		inputSchema: {
 			type: 'object',
 			properties: {
-				entityKey: { type: 'string', minLength: 1, description: '조회할 엔티티 키. 형식: "type::name"' },
-				factType: { type: 'string', description: '특정 팩트 타입만 필터링. 예: export, dependency, config, type_signature' },
+entityKey: { type: 'string', minLength: 1, description: '엔티티 키. 형식: type:name (단일 콜론). search 또는 recent_changes 결과의 key 사용. file:: 미지원.' },
+			factType: { type: 'string', description: '특정 팩트 타입만 필터링. 예: export, dependency, config, type_signature' },
 				limit: { type: 'integer', minimum: 1, maximum: 200, default: 50, description: '반환할 최대 팩트 수' },
 			},
 			required: ['entityKey'],
@@ -136,7 +174,7 @@ const TOOL_DEFINITIONS = [
 		inputSchema: {
 			type: 'object',
 			properties: {
-				entityKey: { type: 'string', minLength: 1, description: '변경 대상 엔티티 키. 형식: "type::name"' },
+				entityKey: { type: 'string', minLength: 1, description: '엔티티 키. 형식: type:name (단일 콜론). search 또는 recent_changes 결과의 key 사용. file:: 미지원.' },
 				depth: { type: 'integer', minimum: 1, maximum: 10, default: 3, description: '영향 추적 깊이. 3이면 3단계 간접 의존까지 포함' },
 			},
 			required: ['entityKey'],
@@ -149,7 +187,7 @@ const TOOL_DEFINITIONS = [
 		inputSchema: {
 			type: 'object',
 			properties: {
-				entityKey: { type: 'string', minLength: 1, description: '기준 엔티티 키. 형식: "type::name"' },
+				entityKey: { type: 'string', minLength: 1, description: '엔티티 키. 형식: type:name (단일 콜론). search 또는 recent_changes 결과의 key 사용. file:: 미지원.' },
 				direction: { type: 'string', enum: ['upstream', 'downstream', 'both'], default: 'both', description: 'upstream=내가 의존하는 것, downstream=나를 의존하는 것, both=양방향' },
 				depth: { type: 'integer', minimum: 1, maximum: 10, default: 3, description: '그래프 탐색 깊이' },
 			},
@@ -163,8 +201,8 @@ const TOOL_DEFINITIONS = [
 		inputSchema: {
 			type: 'object',
 			properties: {
-				fromKey: { type: 'string', minLength: 1, description: '출발 엔티티 키. 형식: "type::name"' },
-				toKey: { type: 'string', minLength: 1, description: '도착 엔티티 키. 형식: "type::name"' },
+				fromKey: { type: 'string', minLength: 1, description: '출발 엔티티 키. 형식: type:name (단일 콜론). search/recent_changes 결과의 key 사용.' },
+				toKey: { type: 'string', minLength: 1, description: '도착 엔티티 키. 형식: type:name (단일 콜론). search/recent_changes 결과의 key 사용.' },
 			},
 			required: ['fromKey', 'toKey'],
 			additionalProperties: false,
@@ -224,7 +262,7 @@ const TOOL_DEFINITIONS = [
 		inputSchema: {
 			type: 'object',
 			properties: {
-				entityKey: { type: 'string', minLength: 1, description: '조회할 엔티티 키. 형식: "type::name"' },
+				entityKey: { type: 'string', minLength: 1, description: '엔티티 키. 형식: type:name (단일 콜론). search 또는 recent_changes 결과의 key 사용. file:: 미지원.' },
 				limit: { type: 'integer', minimum: 1, maximum: 200, default: 50, description: '반환할 최대 이력 수' },
 			},
 			required: ['entityKey'],
@@ -233,15 +271,6 @@ const TOOL_DEFINITIONS = [
 	},
 
 	// ── Operations ──────────────────────────────────────────
-	{
-		name: 'kb_health',
-		description: 'KB 시스템 전체 상태를 한눈에 확인한다: DB 연결 상태, 파일 감시(watch) 동작 여부, 동기화 큐 깊이, 엔티티·관계·팩트 수, 캐시 적중률, 초기 스캔 완료 여부. 작업을 시작하기 전에 가장 먼저 호출하여 시스템이 정상인지 확인해야 한다.',
-		inputSchema: {
-			type: 'object',
-			properties: {},
-			additionalProperties: false,
-		},
-	},
 	{
 		name: 'verify_integrity',
 		description: 'KB 데이터의 무결성을 검증한다: 깨진 참조, stale 엔티티, 해시 불일치 등을 검출한다. 코드 변경 작업 후에 반드시 실행하여 KB가 일관된 상태인지 확인해야 한다.',
@@ -285,7 +314,7 @@ const TOOL_DEFINITIONS = [
 		inputSchema: {
 			type: 'object',
 			properties: {
-				entityKeys: { type: 'array', items: { type: 'string', minLength: 1 }, minItems: 1, maxItems: 50, description: '조회할 엔티티 키 배열. 각 항목 형식: "type::name"' },
+				entityKeys: { type: 'array', items: { type: 'string', minLength: 1 }, minItems: 1, maxItems: 50, description: '엔티티 키 배열. 각 항목 형식: type:name (단일 콜론). search/recent_changes 결과의 key 사용. file:: 미지원.' },
 			},
 			required: ['entityKeys'],
 			additionalProperties: false,
@@ -297,7 +326,7 @@ const TOOL_DEFINITIONS = [
 		inputSchema: {
 			type: 'object',
 			properties: {
-				entityKeys: { type: 'array', items: { type: 'string', minLength: 1 }, minItems: 1, maxItems: 50, description: '조회할 엔티티 키 배열. 각 항목 형식: "type::name"' },
+				entityKeys: { type: 'array', items: { type: 'string', minLength: 1 }, minItems: 1, maxItems: 50, description: '엔티티 키 배열. 각 항목 형식: type:name (단일 콜론). search/recent_changes 결과의 key 사용. file:: 미지원.' },
 				factType: { type: 'string', description: '특정 팩트 타입만 필터링. 예: export, dependency, config' },
 			},
 			required: ['entityKeys'],
@@ -316,27 +345,103 @@ export function createBunnerKbServer(options?: { envSource?: Record<string, stri
 
 	// ── Lazy-init state ──────────────────────────────────────
 	let initialized = false;
-	let db: Db;
+	/** Serialize concurrent ensureInit() so MCP overlapping requests don't double-init. */
+	let initPromise: Promise<void> | null = null;
+	let primaryDb: Db;
+	let replicaDbs: Db[] = [];
+	let readDb: Db;
 	let config: KBConfig;
 	let workspaceId: string;
 	let repoRoot: string;
-	let queue: SyncQueue;
 	let hashCache: HashCache;
-	let worker: SyncWorker;
-	let watcher: FileWatcher;
+	let syncProcess: ReturnType<typeof Bun.spawn> | null = null;
+	let latestWorkerStatus: SyncWorkerStatus = {
+		workerStatus: 'idle',
+		queueDepth: 0,
+		lastSyncAt: null,
+		lastSyncDurationMs: 0,
+		startupScanComplete: false,
+		filesProcessed: 0,
+		hashCacheSize: 0,
+		watchHealthy: false,
+		watchedDirs: [],
+	};
 	let validator: ReadThroughValidator;
 	let queryTools: QueryTools;
 	let analysisTools: AnalysisTools;
 	let temporalTools: TemporalTools;
 	let operationsTools: OperationsTools;
 
+	/** Subprocess에 IPC 명령 전송. */
+	function sendToWorker(cmd: SyncCommand): void {
+		syncProcess?.send(cmd);
+	}
+
+	/** IPC 메시지 핸들러. */
+	function handleIpcMessage(msg: SyncEvent): void {
+		switch (msg.type) {
+			case 'ready':
+				kbLog.info('server', 'Sync subprocess ready');
+				break;
+			case 'status':
+				latestWorkerStatus = msg.status;
+				break;
+			case 'error':
+				kbLog.error('sync-process', msg.detail);
+				break;
+			case 'log':
+				kbLog[msg.level](msg.module, msg.message, msg.extra);
+				break;
+		}
+	}
+
+	function createReadRouter(primary: Db, replicas: Db[]): Db {
+		let index = 0;
+		const pick = (): Db => {
+			if (replicas.length === 0) return primary;
+			const selected = replicas[index % replicas.length]!;
+			index = (index + 1) % replicas.length;
+			return selected;
+		};
+
+		const router = new Proxy(primary, {
+			get(_target, prop) {
+				if (prop === 'close') {
+					return async (options?: { timeout?: number }) => {
+						await Promise.all([
+							primary.close(options),
+							...replicas.map((db) => db.close(options)),
+						]);
+					};
+				}
+
+				const selected = pick() as any;
+				const value = selected[prop as any];
+				if (typeof value === 'function') return value.bind(selected);
+				return value;
+			},
+		});
+
+		return router as unknown as Db;
+	}
+
 	async function ensureInit(): Promise<void> {
 		if (initialized) return;
+		if (initPromise) {
+			await initPromise;
+			return;
+		}
+		initPromise = (async () => {
+			if (initialized) return;
 
-		// 1. Environment → DB
+			// 1. Environment → DB (메인 프로세스)
 		const envSource = options?.envSource ?? Bun.env;
 		const env = readEnv(envSource as Record<string, string | undefined>);
-		db = await createDb(env.kbDatabaseUrl);
+		primaryDb = await createDb(env.kbDatabaseUrl, env.pool);
+		replicaDbs = await Promise.all(
+			env.kbDatabaseUrlReplicas.map((url) => createDb(url, env.pool)),
+		);
+		readDb = createReadRouter(primaryDb, replicaDbs);
 
 		// 2. Workspace
 		repoRoot = process.cwd();
@@ -345,55 +450,88 @@ export function createBunnerKbServer(options?: { envSource?: Record<string, stri
 		// 3. Config
 		config = await loadConfig(repoRoot);
 
-		// 4. Infrastructure modules
-		queue = new SyncQueue();
+		// 4. Main-process infrastructure (읽기 전용)
 		hashCache = new HashCache();
-		const registry = createDefaultRegistry();
 
 		validator = new ReadThroughValidator({
 			hashCache,
-			queue,
+			enqueueForSync: (filePath: string) => {
+				sendToWorker({ type: 'enqueue', files: [filePath], trigger: 'read_through' });
+			},
 			repoRoot,
 			enabled: config.sync.readThroughValidation,
 		});
 
-		watcher = new FileWatcher({ queue, hashCache, config, repoRoot });
-
-		worker = new SyncWorker({
-			db,
-			queue,
-			hashCache,
-			config,
-			registry,
-			workspaceId,
-			repoRoot,
-		});
-
-		// 5. Tool classes
-		queryTools = new QueryTools(db, validator, workspaceId);
-		analysisTools = new AnalysisTools(db, workspaceId);
-		temporalTools = new TemporalTools(db, workspaceId);
-		operationsTools = new OperationsTools(db, workspaceId, {
-			queue,
-			worker,
-			watcher,
+		// 5. Tool classes (읽기=replica, 쓰기=primary)
+		queryTools = new QueryTools(readDb, validator, workspaceId);
+		analysisTools = new AnalysisTools(readDb, workspaceId);
+		temporalTools = new TemporalTools(readDb, workspaceId);
+		operationsTools = new OperationsTools(primaryDb, workspaceId, {
+			getStatus: () => latestWorkerStatus,
+			sendCommand: sendToWorker,
 			hashCache,
 			config,
 			repoRoot,
 		});
 
-		// 6. §8.1 Background startup (non-blocking)
-		//    서버 즉시 시작 → full scan은 background. scan 중 쿼리 가능 (stale 허용)
-		void worker.start().catch((err: unknown) => {
-			const msg = err instanceof Error ? err.message : String(err);
-			kbLog.error('sync-worker', `Worker start failed: ${msg}`);
+		// 6. Subprocess 생성 — 완전 격리된 별도 프로세스 (I/O 분리)
+		const syncProcessPath = new URL('./sync-process.ts', import.meta.url).pathname;
+		syncProcess = Bun.spawn(['bun', syncProcessPath], {
+			stdio: ['ignore', 'ignore', 'inherit'],
+			env: process.env as Record<string, string>,
+			ipc: handleIpcMessage as (message: unknown) => void,
+			onExit(_proc, exitCode, signalCode, error) {
+				kbLog.error('sync-process', `Subprocess exited`, {
+					exitCode,
+					signalCode: signalCode ?? undefined,
+					error: error?.message,
+				});
+				syncProcess = null;
+				latestWorkerStatus = {
+					workerStatus: 'stopped',
+					queueDepth: 0,
+					lastSyncAt: null,
+					lastSyncDurationMs: 0,
+					startupScanComplete: false,
+					filesProcessed: 0,
+					hashCacheSize: 0,
+					watchHealthy: false,
+					watchedDirs: [],
+				};
+			},
 		});
 
-		watcher.start();
+		// 7. Subprocess 초기화 명령 전송
+		sendToWorker({
+			type: 'init',
+			env: {
+				databaseUrl: env.kbDatabaseUrl,
+				pool: env.pool,
+				workspaceId,
+				repoRoot,
+				config,
+			},
+		});
 
-		kbLog.info('server', 'KB server initialized', { workspaceId, repoRoot });
+		kbLog.info('server', 'KB server initialized (subprocess mode)', { workspaceId, repoRoot });
 		initialized = true;
+		})();
+		await initPromise;
 	}
+
+	// ── Cleanup on server close ─────────────────────────────
+
+	server.onclose = async () => {
+		if (syncProcess) {
+			sendToWorker({ type: 'stop' });
+			syncProcess.kill();
+			syncProcess = null;
+		}
+		if (initialized && primaryDb) {
+			const closes = [primaryDb.close({ timeout: 2000 }), ...replicaDbs.map((db) => db.close({ timeout: 2000 }))];
+			await Promise.allSettled(closes);
+		}
+	};
 
 	// ── ListTools ────────────────────────────────────────────
 
@@ -401,11 +539,12 @@ export function createBunnerKbServer(options?: { envSource?: Record<string, stri
 		return { tools: [...TOOL_DEFINITIONS] };
 	});
 
-	// ── CallTool ─────────────────────────────────────────────
-
-	server.setRequestHandler(CallToolRequestSchema, async (request) => {
-		const { name: toolName, arguments: args = {} } = request.params;
-
+	/** Shared tool invocation: init + dispatch + timeout. Used by MCP and HTTP. */
+	async function handleToolCall(
+		toolName: string,
+		args: Record<string, unknown> = {},
+		options?: { maxResponseSize?: number },
+	): Promise<{ content: Array<{ type: 'text'; text: string }>; isError?: boolean }> {
 		try {
 			await ensureInit();
 		} catch (error) {
@@ -415,6 +554,10 @@ export function createBunnerKbServer(options?: { envSource?: Record<string, stri
 
 		try {
 			const toolStart = Date.now();
+			kbLog.debug('query', 'Tool start', { tool: toolName });
+
+			const envTimeout = process.env.BUNNER_MCP_TOOL_TIMEOUT_MS;
+			const toolTimeoutMs = envTimeout ? Number(envTimeout) : 30_000;
 
 			const dispatch = async (): Promise<ReturnType<typeof jsonResponse>> => {
 				switch (toolName) {
@@ -437,13 +580,13 @@ export function createBunnerKbServer(options?: { envSource?: Record<string, stri
 
 				case 'describe': {
 					const { entityKey } = args as { entityKey: string };
-					const result = await queryTools.describe(entityKey);
+					const result = await queryTools.describe(normalizeEntityKey(entityKey));
 					return jsonResponse(result ?? { entity: null });
 				}
 
 				case 'relations': {
 					const a = args as Record<string, unknown>;
-					const relParams: Parameters<typeof queryTools.relations>[0] = { entityKey: a.entityKey as string };
+					const relParams: Parameters<typeof queryTools.relations>[0] = { entityKey: normalizeEntityKey(a.entityKey as string) };
 					if (a.direction) relParams.direction = a.direction as 'outgoing' | 'incoming' | 'both';
 					if (a.relationType) relParams.relationType = a.relationType as string;
 					if (a.depth != null) relParams.depth = a.depth as number;
@@ -454,7 +597,7 @@ export function createBunnerKbServer(options?: { envSource?: Record<string, stri
 
 				case 'facts': {
 					const fa = args as Record<string, unknown>;
-					const factParams: Parameters<typeof queryTools.facts>[0] = { entityKey: fa.entityKey as string };
+					const factParams: Parameters<typeof queryTools.facts>[0] = { entityKey: normalizeEntityKey(fa.entityKey as string) };
 					if (fa.factType) factParams.factType = fa.factType as string;
 					if (fa.limit != null) factParams.limit = fa.limit as number;
 					const result = await queryTools.facts(factParams);
@@ -471,13 +614,13 @@ export function createBunnerKbServer(options?: { envSource?: Record<string, stri
 
 				case 'impact_analysis': {
 					const { entityKey, depth } = args as { entityKey: string; depth?: number };
-					const result = await analysisTools.impactAnalysis(entityKey, depth);
+					const result = await analysisTools.impactAnalysis(normalizeEntityKey(entityKey), depth);
 					return jsonResponse(result);
 				}
 
 				case 'dependency_graph': {
 					const dg = args as Record<string, unknown>;
-					const dgParams: Parameters<typeof analysisTools.dependencyGraph>[0] = { entityKey: dg.entityKey as string };
+					const dgParams: Parameters<typeof analysisTools.dependencyGraph>[0] = { entityKey: normalizeEntityKey(dg.entityKey as string) };
 					if (dg.direction) dgParams.direction = dg.direction as 'upstream' | 'downstream' | 'both';
 					if (dg.depth != null) dgParams.depth = dg.depth as number;
 					const result = await analysisTools.dependencyGraph(dgParams);
@@ -486,7 +629,7 @@ export function createBunnerKbServer(options?: { envSource?: Record<string, stri
 
 				case 'trace_chain': {
 					const { fromKey, toKey } = args as { fromKey: string; toKey: string };
-					const result = await analysisTools.traceChain(fromKey, toKey);
+					const result = await analysisTools.traceChain(normalizeEntityKey(fromKey), normalizeEntityKey(toKey));
 					return jsonResponse(result);
 				}
 
@@ -521,18 +664,13 @@ export function createBunnerKbServer(options?: { envSource?: Record<string, stri
 
 				case 'changelog': {
 					const cl = args as Record<string, unknown>;
-					const clParams: Parameters<typeof temporalTools.changelog>[0] = { entityKey: cl.entityKey as string };
+					const clParams: Parameters<typeof temporalTools.changelog>[0] = { entityKey: normalizeEntityKey(cl.entityKey as string) };
 					if (cl.limit != null) clParams.limit = cl.limit as number;
 					const result = await temporalTools.changelog(clParams);
-					return jsonResponse(result);
+					return jsonResponse({ entries: result });
 				}
 
 				// ── Operations ──────────────────────────────
-
-				case 'kb_health': {
-					const result = await operationsTools.kbHealth();
-					return jsonResponse(result);
-				}
 
 				case 'verify_integrity': {
 					const { level } = args as { level?: 'structural' | 'semantic' | 'full' };
@@ -562,7 +700,7 @@ export function createBunnerKbServer(options?: { envSource?: Record<string, stri
 
 				case 'bulk_describe': {
 					const { entityKeys } = args as { entityKeys: string[] };
-					const resultMap = await queryTools.bulkDescribe(entityKeys);
+					const resultMap = await queryTools.bulkDescribe(entityKeys.map(normalizeEntityKey));
 					const results: Record<string, unknown> = {};
 					for (const [key, value] of resultMap) results[key] = value;
 					return jsonResponse({ results });
@@ -570,7 +708,7 @@ export function createBunnerKbServer(options?: { envSource?: Record<string, stri
 
 				case 'bulk_facts': {
 					const { entityKeys, factType } = args as { entityKeys: string[]; factType?: string };
-					const resultMap = await queryTools.bulkFacts(entityKeys, factType);
+					const resultMap = await queryTools.bulkFacts(entityKeys.map(normalizeEntityKey), factType);
 					const results: Record<string, unknown> = {};
 					for (const [key, value] of resultMap) results[key] = value;
 					return jsonResponse({ results });
@@ -581,8 +719,16 @@ export function createBunnerKbServer(options?: { envSource?: Record<string, stri
 			}
 			};
 
-			const result = await dispatch();
+			let result = await withTimeout(dispatch(), toolTimeoutMs, `tool=${toolName}`);
 			kbLog.query(toolName, Date.now() - toolStart);
+			const maxBytes = options?.maxResponseSize ?? (process.env.BUNNER_MCP_MAX_RESPONSE_BYTES ? Number(process.env.BUNNER_MCP_MAX_RESPONSE_BYTES) : undefined);
+			if (maxBytes != null && result.content[0]?.text && result.content[0].text.length > maxBytes) {
+				result = jsonResponse({
+					_truncated: true,
+					_message: `Response size ${result.content[0].text.length} exceeds limit ${maxBytes}. Use HTTP or increase BUNNER_MCP_MAX_RESPONSE_BYTES.`,
+					_tool: toolName,
+				});
+			}
 			return result;
 		} catch (error) {
 			const detail = error instanceof Error ? error.message : String(error);
@@ -591,12 +737,32 @@ export function createBunnerKbServer(options?: { envSource?: Record<string, stri
 			kbLog.error('mcp', `Tool execution failed: ${toolName}`, { tool: toolName, detail: safe });
 			return errorResponse(toolName, safe);
 		}
+	}
+
+	const mcpMaxResponseBytes = 100 * 1024; // 100KB to avoid stdio backpressure hang
+	server.setRequestHandler(CallToolRequestSchema, async (request) => {
+		const viaHttp = (globalThis as { __BUNNER_MCP_VIA_HTTP?: boolean }).__BUNNER_MCP_VIA_HTTP;
+		const options = viaHttp ? undefined : { maxResponseSize: mcpMaxResponseBytes };
+		return handleToolCall(request.params.name, request.params.arguments ?? {}, options);
 	});
 
-	return server;
+	return { server, callTool: handleToolCall };
 }
 
 if (import.meta.main) {
+	process.on('uncaughtException', (err) => {
+		const { message, stack } = formatUnknownError(err);
+		kbLog.error('server', '[FATAL] uncaughtException', { detail: message, stack });
+		process.exit(1);
+	});
+
+	process.on('unhandledRejection', (reason) => {
+		const { message, stack } = formatUnknownError(reason);
+		kbLog.error('server', '[FATAL] unhandledRejection', { detail: message, stack });
+		process.exit(1);
+	});
+
+	const { server } = createBunnerKbServer();
 	const transport = new StdioServerTransport();
-	await createBunnerKbServer().connect(transport);
+	await server.connect(transport);
 }

@@ -319,7 +319,7 @@ workspace ──< entity ──< source
 
 - 모든 entity, source는 workspace_id로 격리
 - fact, relation은 entity FK를 통해 암묵적 격리
-- **고아 데이터**: 디렉토리 이동 등으로 workspace_id가 달라지면 이전 데이터는 고아. `kb_health()`에서 workspace별 entity 수 노출. `purge_tombstones(workspaceId)` 로 정리
+- **고아 데이터**: 디렉토리 이동 등으로 workspace_id가 달라지면 이전 데이터는 고아. `purge_tombstones(workspaceId)` 로 정리
 
 ### 2.8 데이터 수명 모델 (Data Lifecycle)
 
@@ -393,14 +393,14 @@ workspace ──< entity ──< source
 4. **DB에만 존재** (파일 삭제됨): tombstone (`is_deleted = true`)
 5. **새 파일**: sync queue에 enqueue
 6. **파일 복원** (tombstoned entity가 있는데 동일 key 파일이 다시 존재): `is_deleted = false` + re-extract
-7. Scan 완료 전 쿼리는 가능하지만 stale일 수 있음 → `kb_health()`에서 scan 진행 상태 노출
+7. Scan 완료 전 쿼리는 가능하지만 stale일 수 있음. (read-through 등으로 stale 플래그 확인)
 
 ### 3.3 Layer 2: Watch — fs.watch + Debounce
 
 1. 설정된 include 디렉토리에 `fs.watch({ recursive: true })` 등록
 2. 이벤트 → 설정된 debounce 시간(기본 500ms) 후 sync queue에 enqueue
 3. **OS 호환성**: `fs.watch`의 `recursive` 옵션은 OS별 동작 신뢰도가 다를 수 있다 (macOS/Windows: 네이티브, Linux: inotify 폴백). Layer 2 단독으로 정합성을 보장하지 않으며, Layer 1과 Layer 3이 보완
-4. **watch 실패 시**: 에러를 throw하지 않고 `kb_health()`에 `watch_healthy: false` 노출. 서버는 계속 동작
+4. **watch 실패 시**: 에러를 throw하지 않고 내부 상태만 unhealthy로 기록. 서버는 계속 동작
 
 ### 3.4 Layer 3: Read-through — Lightweight Validation
 
@@ -445,7 +445,7 @@ workspace ──< entity ──< source
 |----------|------|
 | **파서 실패** (깨진 파일, 예상 외 구조) | 해당 파일 skip + sync_run.errors에 기록. 기존 entity 유지 (삭제 안 함) |
 | **파일 읽기 실패** (권한, 인코딩) | 동일. skip + 기록 + 기존 유지 |
-| **DB 에러** (연결 끊김, 제약 위반) | 해당 TX 전체 롤백. 재시도 없음. kb_health()에 에러 노출 |
+| **DB 에러** (연결 끊김, 제약 위반) | 해당 TX 전체 롤백. 재시도 없음. 해당 run 실패 기록 |
 | **Worker 실패** | 해당 파일만 skip. worker는 계속 동작. 다음 trigger에서 재시도 |
 
 **원칙**: 개별 파일 실패가 전체 sync를 중단시키지 않는다. DB 에러(인프라 장애)만 즉시 중단.
@@ -630,7 +630,6 @@ interface ExtractionResult {
 
 | Tool | 파라미터 | 설명 |
 |------|----------|------|
-| `kb_health` | — | 시스템 전체 상태 (DB, watch, queue, metrics) |
 | `verify_integrity` | level? (structural/semantic/full) | 정합성 검증 |
 | `sync` | scope?, dryRun? | 수동 sync 트리거 (optional helper) |
 | `purge_tombstones` | olderThan?, workspaceId? | tombstone 정리 |
@@ -703,7 +702,6 @@ interface ImpactAnalysisResult {
   totalAffected: number
 }
 
-/** kb_health 응답 — §8.3 참조 */
 ```
 
 ---
@@ -831,32 +829,6 @@ interface KBConfig {
 
 ### 8.3 관측성
 
-**kb_health() 응답**:
-```jsonc
-{
-  "db": { "healthy": true, "latencyMs": 2 },
-  "watch": { "healthy": true, "dirs": ["examples/", "packages/"] },
-  "sync": {
-    "queueDepth": 0,
-    "workerStatus": "idle",
-    "lastSyncAt": "2026-02-08T12:00:00Z",
-    "lastSyncDurationMs": 1200,
-    "startupScanComplete": true
-  },
-  "counts": {
-    "entities": 342,
-    "facts": 1580,
-    "relations": 890,
-    "tombstoned": 5,
-    "workspaces": 1
-  },
-  "cache": {
-    "hashCacheSize": 280,
-    "hitRate": 0.94
-  }
-}
-```
-
 **Structured Logging**: sync events, query events, errors → JSON format.
 
 ### 8.4 정합성 검증 (verify_integrity)
@@ -950,10 +922,9 @@ interface KBConfig {
 ### Phase 7: Temporal & Operations
 24. sync_event 기록 로직 (worker에 통합)
 25. recent_changes, changelog
-26. kb_health (full metrics)
-27. verify_integrity (structural + semantic)
-28. purge_tombstones
-29. Structured logging
+26. verify_integrity (structural + semantic)
+27. purge_tombstones
+28. Structured logging
 
 ### Phase 8 (추후): Advanced
 30. Vector search (pgvector embeddings)
@@ -978,7 +949,6 @@ interface KBConfig {
 - [ ] coverage_map, inconsistency_report, find_orphans 동작
 - [ ] recent_changes, changelog가 sync_event 기반으로 동작
 - [ ] verify_integrity가 structural + semantic 검증 수행
-- [ ] kb_health()가 DB, watch, queue, counts, cache 상태를 반환
 - [ ] bunner.kb.jsonc로 watch scope, exclude, parser 활성화 설정 가능
 - [ ] Bun API만 사용 (node:fs, node:path 사용 없음)
 
@@ -1003,10 +973,9 @@ interface KBConfig {
 
 | 순서 | 호출 | 목적 | 필수 |
 |------|------|------|------|
-| 1 | `kb_health()` | KB 상태 확인. `startupScanComplete=false`면 scan 완료 대기 | ✅ |
-| 2 | `search(관련_키워드)` | 작업 대상 entity 파악 | ✅ |
-| 3 | `describe(entityKey)` + `relations(entityKey)` | 대상의 구조·의존 파악 | ✅ |
-| 4 | `facts(entityKey)` | 상세 사항 확인 | 상황별 |
+| 1 | `search(관련_키워드)` | 작업 대상 entity 파악 | ✅ |
+| 2 | `describe(entityKey)` + `relations(entityKey)` | 대상의 구조·의존 파악 | ✅ |
+| 3 | `facts(entityKey)` | 상세 사항 확인 | 상황별 |
 
 #### 변경 전 (파일 수정/생성/삭제 전)
 
@@ -1045,7 +1014,6 @@ interface KBConfig {
 | "전체적으로 빠진 건?" | `inconsistency_report` + `find_orphans` |
 | "최근 뭐가 바뀌었나?" | `recent_changes` |
 | "이 entity의 변경 이력은?" | `changelog` |
-| "KB가 정상인가?" | `kb_health` |
 | "데이터 무결성 확인" | `verify_integrity` |
 | "여러 entity 한번에 파악" | `bulk_describe` + `bulk_facts` |
 
@@ -1056,9 +1024,6 @@ interface KBConfig {
 | `stale: true` | sync 대기 → 재조회. 급하면 현재 결과 참고하되 **변경 판단은 sync 후** | stale 결과로 파일 수정 |
 | 검색 0건 | 키워드 변경 재시도 (최소 2회). 그래도 0건이면 **새 entity 가능성** 보고 | 0건 = "없다"로 단정 |
 | integrity 위반 | 즉시 사용자에게 보고 + 수정 시도. 수정 불가 시 에스컬레이션 | 위반 무시하고 작업 속행 |
-| `kb_health.db.healthy=false` | **작업 즉시 중단**. DB 복구 후 재개 | DB 없이 작업 속행 |
-| `kb_health.watch.healthy=false` | `sync(scope="full")` 수동 호출 고려. 작업은 계속 가능 | — |
-| `kb_health.startupScanComplete=false` | 결과가 불완전할 수 있음을 인지. 중요 작업은 scan 완료 후 | scan 미완료 상태에서 대규모 변경 |
 
 ### 10.6 AGENTS.md 연동
 

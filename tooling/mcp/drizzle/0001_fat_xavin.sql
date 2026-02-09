@@ -1,0 +1,1 @@
+CREATE INDEX "fact_entity_id_idx" ON "fact" USING btree ("entity_id");

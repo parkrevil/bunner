@@ -4,7 +4,7 @@
  * 설정된 include 디렉토리에 fs.watch({ recursive: true }) 등록.
  * 이벤트 → debounce 시간 후 sync queue에 enqueue.
  *
- * watch 실패 시: throw 하지 않고 kb_health()에 watch_healthy: false 노출.
+ * watch 실패 시: throw 하지 않고 내부 상태만 unhealthy로 기록.
  *
  * @see MCP_PLAN §3.3, §8.8
  */

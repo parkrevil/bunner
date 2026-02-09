@@ -1,0 +1,40 @@
+{"location":"server.ts:CallTool","message":"tool request entry","data":{"toolName":"kb_health","hasArgs":0},"hypothesisId":"B","timestamp":1770641938076}
+{"location":"server.ts:ensureInit","message":"ensureInit entry","data":{"initialized":false},"hypothesisId":"A","timestamp":1770641938077}
+{"location":"server.ts:ensureInit","message":"ensureInit done","data":{"workspaceId":"005be67162922d63"},"hypothesisId":"A","timestamp":1770641938081}
+{"location":"server.ts:CallTool","message":"after ensureInit","data":{"toolName":"kb_health"},"hypothesisId":"A","timestamp":1770641938081}
+{"location":"server.ts:dispatch","message":"dispatch start","data":{"toolName":"kb_health"},"hypothesisId":"B","timestamp":1770641938081}
+{"location":"server.ts:CallTool","message":"dispatch done, returning","data":{"toolName":"kb_health","elapsedMs":10,"contentLen":306},"hypothesisId":"B","timestamp":1770641938091}
+{"location":"server.ts:CallTool","message":"tool request entry","data":{"toolName":"search","hasArgs":2},"hypothesisId":"B","timestamp":1770641938600}
+{"location":"server.ts:ensureInit","message":"ensureInit entry","data":{"initialized":true},"hypothesisId":"A","timestamp":1770641938600}
+{"location":"server.ts:CallTool","message":"after ensureInit","data":{"toolName":"search"},"hypothesisId":"A","timestamp":1770641938600}
+{"location":"server.ts:dispatch","message":"dispatch start","data":{"toolName":"search"},"hypothesisId":"B","timestamp":1770641938600}
+{"location":"server.ts:CallTool","message":"dispatch done, returning","data":{"toolName":"search","elapsedMs":21,"contentLen":31},"hypothesisId":"B","timestamp":1770641938621}
+{"location":"server.ts:CallTool","message":"tool request entry","data":{"toolName":"inconsistency_report","hasArgs":1},"hypothesisId":"B","timestamp":1770641938915}
+{"location":"server.ts:ensureInit","message":"ensureInit entry","data":{"initialized":true},"hypothesisId":"A","timestamp":1770641938916}
+{"location":"server.ts:CallTool","message":"after ensureInit","data":{"toolName":"inconsistency_report"},"hypothesisId":"A","timestamp":1770641938916}
+{"location":"server.ts:dispatch","message":"dispatch start","data":{"toolName":"inconsistency_report"},"hypothesisId":"B","timestamp":1770641938916}
+{"location":"server.ts:CallTool","message":"dispatch done, returning","data":{"toolName":"inconsistency_report","elapsedMs":33,"contentLen":208628},"hypothesisId":"B","timestamp":1770641938949}
+{"location":"server.ts:CallTool","message":"tool request entry","data":{"toolName":"find_orphans","hasArgs":0},"hypothesisId":"B","timestamp":1770641939210}
+{"location":"server.ts:ensureInit","message":"ensureInit entry","data":{"initialized":true},"hypothesisId":"A","timestamp":1770641939210}
+{"location":"server.ts:CallTool","message":"after ensureInit","data":{"toolName":"find_orphans"},"hypothesisId":"A","timestamp":1770641939210}
+{"location":"server.ts:dispatch","message":"dispatch start","data":{"toolName":"find_orphans"},"hypothesisId":"B","timestamp":1770641939210}
+{"location":"server.ts:CallTool","message":"dispatch done, returning","data":{"toolName":"find_orphans","elapsedMs":12,"contentLen":146823},"hypothesisId":"B","timestamp":1770641939222}
+{"location":"server.ts:CallTool","message":"tool request entry","data":{"toolName":"recent_changes","hasArgs":1},"hypothesisId":"B","timestamp":1770641939623}
+{"location":"server.ts:ensureInit","message":"ensureInit entry","data":{"initialized":true},"hypothesisId":"A","timestamp":1770641939623}
+{"location":"server.ts:CallTool","message":"after ensureInit","data":{"toolName":"recent_changes"},"hypothesisId":"A","timestamp":1770641939623}
+{"location":"server.ts:dispatch","message":"dispatch start","data":{"toolName":"recent_changes"},"hypothesisId":"B","timestamp":1770641939623}
+{"location":"server.ts:CallTool","message":"dispatch done, returning","data":{"toolName":"recent_changes","elapsedMs":6,"contentLen":3094},"hypothesisId":"B","timestamp":1770641939629}
+{"location":"server.ts:CallTool","message":"tool request entry","data":{"toolName":"verify_integrity","hasArgs":1},"hypothesisId":"B","timestamp":1770641939758}
+{"location":"server.ts:ensureInit","message":"ensureInit entry","data":{"initialized":true},"hypothesisId":"A","timestamp":1770641939758}
+{"location":"server.ts:CallTool","message":"after ensureInit","data":{"toolName":"verify_integrity"},"hypothesisId":"A","timestamp":1770641939759}
+{"location":"server.ts:dispatch","message":"dispatch start","data":{"toolName":"verify_integrity"},"hypothesisId":"B","timestamp":1770641939759}
+{"location":"server.ts:CallTool","message":"tool request entry","data":{"toolName":"describe","hasArgs":1},"hypothesisId":"B","timestamp":1770641944979}
+{"location":"server.ts:ensureInit","message":"ensureInit entry","data":{"initialized":true},"hypothesisId":"A","timestamp":1770641944979}
+{"location":"server.ts:CallTool","message":"after ensureInit","data":{"toolName":"describe"},"hypothesisId":"A","timestamp":1770641944979}
+{"location":"server.ts:dispatch","message":"dispatch start","data":{"toolName":"describe"},"hypothesisId":"B","timestamp":1770641944979}
+{"location":"server.ts:CallTool","message":"dispatch done, returning","data":{"toolName":"describe","elapsedMs":22,"contentLen":1071},"hypothesisId":"B","timestamp":1770641945001}
+{"location":"server.ts:CallTool","message":"tool request entry","data":{"toolName":"relations","hasArgs":3},"hypothesisId":"B","timestamp":1770641945524}
+{"location":"server.ts:ensureInit","message":"ensureInit entry","data":{"initialized":true},"hypothesisId":"A","timestamp":1770641945524}
+{"location":"server.ts:CallTool","message":"after ensureInit","data":{"toolName":"relations"},"hypothesisId":"A","timestamp":1770641945524}
+{"location":"server.ts:dispatch","message":"dispatch start","data":{"toolName":"relations"},"hypothesisId":"B","timestamp":1770641945524}
+{"location":"server.ts:CallTool","message":"dispatch done, returning","data":{"toolName":"relations","elapsedMs":12,"contentLen":347},"hypothesisId":"B","timestamp":1770641945536}

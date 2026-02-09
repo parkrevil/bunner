@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import {
 	boolean,
 	integer,
+	index,
 	jsonb,
 	pgTable,
 	primaryKey,
@@ -124,6 +125,7 @@ export const fact = pgTable('fact', {
 	payloadTsv: tsvector('payload_tsv'),
 }, (t) => [
 	unique('fact_entity_type_key').on(t.entityId, t.factTypeId, t.factKey),
+	index('fact_entity_id_idx').on(t.entityId),
 ]);
 
 // ── relation ─────────────────────────────────────────────────

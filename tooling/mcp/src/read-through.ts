@@ -15,7 +15,6 @@
 
 import { resolve } from 'node:path';
 import type { HashCache } from './hash-cache';
-import type { SyncQueue } from './sync-queue';
 import { computeContentHash } from './scanner';
 
 export type StaleCheckResult = {
@@ -29,18 +28,18 @@ export type StaleCheckResult = {
 
 export class ReadThroughValidator {
 	private hashCache: HashCache;
-	private queue: SyncQueue;
+	private enqueueForSync: (filePath: string) => void;
 	private repoRoot: string;
 	private enabled: boolean;
 
 	constructor(deps: {
 		hashCache: HashCache;
-		queue: SyncQueue;
+		enqueueForSync: (filePath: string) => void;
 		repoRoot: string;
 		enabled: boolean;
 	}) {
 		this.hashCache = deps.hashCache;
-		this.queue = deps.queue;
+		this.enqueueForSync = deps.enqueueForSync;
 		this.repoRoot = deps.repoRoot;
 		this.enabled = deps.enabled;
 	}
@@ -63,7 +62,7 @@ export class ReadThroughValidator {
 				return { stale: false, deleted: false, currentHash: cached.contentHash };
 			}
 			// cache miss와 hash 불일치 → stale
-			this.queue.enqueue(filePath, 'read_through');
+			this.enqueueForSync(filePath);
 			return { stale: true, deleted: false, currentHash: cached.contentHash };
 		}
 
@@ -75,7 +74,7 @@ export class ReadThroughValidator {
 			const exists = await bunFile.exists();
 			if (!exists) {
 				// 파일 삭제됨
-				this.queue.enqueue(filePath, 'read_through');
+				this.enqueueForSync(filePath);
 				return { stale: true, deleted: true };
 			}
 
@@ -92,7 +91,7 @@ export class ReadThroughValidator {
 			}
 
 			// hash 불일치 → stale
-			this.queue.enqueue(filePath, 'read_through');
+			this.enqueueForSync(filePath);
 			return { stale: true, deleted: false, currentHash };
 		} catch {
 			// 파일 읽기 실패 → stale로 처리
@@ -106,13 +105,59 @@ export class ReadThroughValidator {
 	 */
 	async validateSources(
 		sources: Array<{ filePath: string; contentHash: string }>,
+		opts?: { concurrency?: number },
 	): Promise<Map<string, StaleCheckResult>> {
 		const results = new Map<string, StaleCheckResult>();
+		if (sources.length === 0) return results;
 
-		for (const source of sources) {
-			const result = await this.validateSource(source.filePath, source.contentHash);
-			results.set(source.filePath, result);
-		}
+		const concurrency = Math.max(1, Math.min(opts?.concurrency ?? 16, sources.length));
+		let nextIndex = 0;
+
+		await Promise.all(
+			Array.from({ length: concurrency }, async () => {
+				while (true) {
+					const i = nextIndex++;
+					if (i >= sources.length) return;
+					const source = sources[i]!;
+					const result = await this.validateSource(source.filePath, source.contentHash);
+					results.set(source.filePath, result);
+				}
+			}),
+		);
+
+		return results;
+	}
+
+	/**
+	 * 여러 source (filePath + contentHash 쌍)를 일괄 검증.
+	 * 결과 맵: `${filePath}\0${contentHash}` → StaleCheckResult
+	 *
+	 * bulk 조회에서 같은 filePath가 여러 엔티티에 중복될 수 있어,
+	 * (filePath) 단일 키로는 안전하지 않을 때 사용한다.
+	 */
+	async validateSourcePairs(
+		sources: Array<{ filePath: string; contentHash: string }>,
+		opts?: { concurrency?: number },
+	): Promise<Map<string, StaleCheckResult>> {
+		const results = new Map<string, StaleCheckResult>();
+		if (sources.length === 0) return results;
+
+		const concurrency = Math.max(1, Math.min(opts?.concurrency ?? 16, sources.length));
+		let nextIndex = 0;
+
+		await Promise.all(
+			Array.from({ length: concurrency }, async () => {
+				while (true) {
+					const i = nextIndex++;
+					if (i >= sources.length) return;
+					const source = sources[i]!;
+					const key = `${source.filePath}\0${source.contentHash}`;
+					if (results.has(key)) continue;
+					const result = await this.validateSource(source.filePath, source.contentHash);
+					results.set(key, result);
+				}
+			}),
+		);
 
 		return results;
 	}
