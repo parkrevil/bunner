@@ -111,7 +111,7 @@ export class AdapterSpecResolver {
       return null;
     }
 
-    if (rawPath.endsWith('.ts') || rawPath.endsWith('.tsx')) {
+    if (rawPath.endsWith('.ts')) {
       return rawPath;
     }
 

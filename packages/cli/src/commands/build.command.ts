@@ -63,7 +63,7 @@ export async function build(commandOptions?: CommandOptions) {
 
       visited.add(filePath);
 
-      if (!filePath.endsWith('.ts') && !filePath.endsWith('.tsx')) {
+      if (!filePath.endsWith('.ts')) {
         continue;
       }
 
@@ -136,20 +136,17 @@ export async function build(commandOptions?: CommandOptions) {
           if (
             resolvedPath &&
             !resolvedPath.endsWith('.ts') &&
-            !resolvedPath.endsWith('.tsx') &&
             !resolvedPath.endsWith('.d.ts')
           ) {
             if (await Bun.file(resolvedPath + '.ts').exists()) {
               resolvedPath += '.ts';
-            } else if (await Bun.file(resolvedPath + '.tsx').exists()) {
-              resolvedPath += '.tsx';
             } else if (await Bun.file(resolvedPath + '/index.ts').exists()) {
               resolvedPath += '/index.ts';
             }
           }
 
           if (resolvedPath && !visited.has(resolvedPath)) {
-            if (!resolvedPath.endsWith('.d.ts') && (resolvedPath.endsWith('.ts') || resolvedPath.endsWith('.tsx'))) {
+            if (!resolvedPath.endsWith('.d.ts') && resolvedPath.endsWith('.ts')) {
               const nodeModulesSegment = ['node', 'modules'].join('_');
               const typesSegment = ['@', 'types'].join('');
               const typesPath = `/${nodeModulesSegment}/${typesSegment}/`;

@@ -10,6 +10,7 @@ import { ConfigLoader, ConfigLoadError, scanGlobSorted, writeIfChanged } from '.
 import { buildDiagnostic, DiagnosticReportError, reportDiagnostics } from '../diagnostics';
 import { ManifestGenerator } from '../generator';
 import { ProjectWatcher } from '../watcher';
+import { buildDevIncrementalImpactLog } from './dev-incremental-impact';
 
 export async function dev(commandOptions?: CommandOptions) {
   console.info('🚀 Starting Bunner Dev...');
@@ -267,13 +268,27 @@ export async function dev(commandOptions?: CommandOptions) {
           return;
         }
 
-        if (event.eventType === 'rename' && !(await Bun.file(fullPath).exists())) {
+        const previousFileMap = new Map(fileCache.entries());
+        const isDeleted = event.eventType === 'rename' && !(await Bun.file(fullPath).exists());
+
+        if (isDeleted) {
           console.info(`🗑️ File deleted: ${filename}`);
 
           fileCache.delete(fullPath);
         } else {
           await analyzeFile(fullPath);
         }
+
+        const impactLog = buildDevIncrementalImpactLog({
+          previousFileMap,
+          nextFileMap: new Map(fileCache.entries()),
+          moduleFileName,
+          changedFilePath: fullPath,
+          isDeleted,
+          toProjectRelativePath,
+        });
+
+        console.info(impactLog.logLine);
 
         try {
           await rebuild();

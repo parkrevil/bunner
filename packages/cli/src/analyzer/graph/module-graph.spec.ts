@@ -1,5 +1,4 @@
-import { describe, expect, it, mock } from 'bun:test';
-import { createRequire } from 'node:module';
+import { describe, expect, it } from 'bun:test';
 
 // MUST: MUST-4 (모듈 경계 판정 deterministic)
 
@@ -12,40 +11,7 @@ import type {
   ModuleFileAnalysisParams,
 } from './module-graph.spec.interfaces';
 
-const require = createRequire(import.meta.url);
-const actualPath = require('path');
-const actualCommon = require('../../common');
-const actualModuleDiscovery = require('../module-discovery');
-const actualModuleNode = require('./module-node');
-
-mock.module('path', () => {
-  return {
-    ...actualPath,
-    basename: (...args: unknown[]) => actualPath.basename(...args),
-    dirname: (...args: unknown[]) => actualPath.dirname(...args),
-  };
-});
-
-mock.module('../../common', () => {
-  return {
-    ...actualCommon,
-    compareCodePoint: (...args: unknown[]) => actualCommon.compareCodePoint(...args),
-  };
-});
-
-mock.module('../module-discovery', () => {
-  return {
-    ModuleDiscovery: actualModuleDiscovery.ModuleDiscovery,
-  };
-});
-
-mock.module('./module-node', () => {
-  return {
-    ModuleNode: actualModuleNode.ModuleNode,
-  };
-});
-
-const { ModuleGraph } = require('./module-graph');
+import { ModuleGraph } from './module-graph';
 
 const requireNode = (node: ModuleNode | undefined): ModuleNode => {
   if (!node) {
