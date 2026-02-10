@@ -1,16 +1,16 @@
 # Card-centric Knowledge Base 설계 v4 (PostgreSQL 확정)
 
 > **범위**: bunner-kb MCP 서버를 Card-centric 아키텍처로 전환  
-> **상태**: 설계 v4 (지속 보강)  
+> **상태**: 설계 v4.6 (이전 문서 의존성 완전 제거 — 2026-02-11)  
 > **DB**: PostgreSQL (확정)  
 > **관련 코드**: `tooling/mcp/`  
-> **선행 문서**: `PLAN.md` (v1 — 아카이브), `PLAN-v2.md` (v2 — identity/version 분리 설계), `PLAN-v3.md` (v3 — card-centric 초안)
+> **v4는 자체 완결 문서이며, 이전 설계 문서에 의존하지 않는다.**
 
 ---
 
 ## 1. 배경 및 동기
 
-### 1.1 현재 운영 모델 (v1)
+### 1.1 현재 운영 모델
 
 | 구분 | 설명 | 등록 방식 |
 |------|------|-----------|
@@ -22,28 +22,28 @@
 
 코드 엔티티의 `entity_key`가 **파일 경로에 종속**되어 있다. 파일 이동/리네임 시 `entity.id`가 바뀌어 **링크가 파손**된다.
 
-v1 설계(`PLAN.md`)의 `entity_key rewrite` + `grace window` 접근은:
+현재 설계의 `entity_key rewrite` + `grace window` 접근은:
 - 정체성 보존이 "보정 메커니즘"에 의존 (선언이 아닌 패치)
 - grace window edge case 7종, pending_delete 등 부수 복잡도
 - 거버넌스 부재, 계약 이력 없음
 
-### 1.3 v2의 한계 (왜 v4가 필요한가)
+### 1.3 이전 설계의 한계 (왜 v4가 필요한가)
 
-v2(`PLAN-v2.md`)는 identity/version 분리로 v1의 근본 문제를 해결했다. 그러나:
+identity/version 분리로 v1의 파일 경로 종속 문제는 해결되었다. 그러나 이전 설계에는 다음 한계가 있었다:
 
 | 한계 | 설명 |
 |------|------|
-| **Code-centric** | KB의 중심이 코드이고 spec은 보조적 위치. "이 코드의 구조는?"이 핵심 질문 |
-| **Spec/Claim 이원 구조** | `spec`과 `claim` 두 entity_type을 분리 관리. claim 중첩 불가 (depth=1 고정) |
-| **Flat coverage** | `linked_claims / total_claims` 단순 비율. 가중치, 우선순위 없음 |
-| **단일 relation 테이블** | code↔code 정적 분석과 card↔code 수동 link가 같은 테이블에 혼재 |
+| **Code-centric** | KB의 중심이 코드이고 명세는 보조적 위치. "이 코드의 구조는?"이 핵심 질문 |
+| **Spec/Claim 이원 구조** | 명세와 하위 항목을 별도 entity_type으로 분리 관리. 중첩 불가 (depth=1 고정) |
+| **Flat coverage** | `linked / total` 단순 비율. 가중치, 우선순위 없음 |
+| **단일 relation 테이블** | code↔code 정적 분석과 명세↔code 수동 link가 같은 테이블에 혼재 |
 | **Evidence 단일 유형** | fact 참조만 가능. test, annotation, review 등 다형성 부재 |
-| **Card 속성 부재** | status, priority, tags, weight 없음. 분류/필터링 수단 부족 |
-| **설계 버그 29건** | v2 리뷰에서 식별된 DDL 버그, SQL 오류, 명세 누락 등 |
+| **명세 속성 부재** | status, priority, tags, weight 없음. 분류/필터링 수단 부족 |
+| **설계 버그 다수** | DDL 버그, SQL 오류, 명세 누락 등이 리뷰 과정에서 식별됨 |
 
 ### 1.4 v4 설계 목표
 
-v2의 identity/version 분리 + 3-tier defense + approval_event 거버넌스를 **계승**하되:
+이전 설계의 identity/version 분리 + 3-tier defense + approval_event 거버넌스를 **기반**으로 하되:
 
 1. **Card-centric KB**: 중심축을 code → card로 이동. Card = 1급 지식 객체
 2. **Unified card model**: spec/claim 이원 구조 폐지 → card nested tree 단일 모델
@@ -52,11 +52,12 @@ v2의 identity/version 분리 + 3-tier defense + approval_event 거버넌스를 
 5. **Card lifecycle**: draft → accepted → implementing → verified → deprecated + 하위 전파
 6. **Composite coverage**: 재귀 가중 집계 + tag 횡단 집계
 7. **Card 속성 정규화**: status/priority/tags/weight는 전용 컬럼으로 승격 (JSONB 과용 방지)
-8. **멀티 테넌시/멀티 프로젝트/브랜치**: tenant > project > workspace(branch)
-9. **Graph Read Model(데이터 준비만)**: VIEW/TABLE 생성 없이도 서브그래프 조회가 가능한 스키마/인덱스/쿼리 패턴 제공
-10. **검색/벡터 준비**: Postgres FTS + pgvector 훅
-11. **Agent Context Retrieval**: 에이전트가 최소 컨텍스트를 빠르게 얻는 도구 추가
-12. **v2 이슈 29건 전부 반영**
+8. **멀티 테넌시/멀티 프로젝트/브랜치**: tenant > project > workspace(branch) + user
+9. **배포 모델**: N MCP(로컬) : 1 DB(공유). workspace/user = 라벨 원칙, Git 독립 원칙 (v4.3)
+10. **Graph Read Model(데이터 준비만)**: VIEW/TABLE 생성 없이도 서브그래프 조회가 가능한 스키마/인덱스/쿼리 패턴 제공
+11. **검색/벡터 준비**: Postgres FTS + pgvector 훅
+12. **Agent Context Retrieval**: 에이전트가 최소 컨텍스트를 빠르게 얻는 도구 추가
+13. **이전 설계 리뷰에서 식별된 DDL/SQL/명세 버그 전부 반영**
 
 ### 1.5 DB 선택: PostgreSQL 확정
 
@@ -78,7 +79,7 @@ v2의 identity/version 분리 + 3-tier defense + approval_event 거버넌스를 
 > KB의 중심축은 card이다. 코드는 card를 구현하는 증거(evidence)이다.
 
 핵심 질문의 전환:
-- v1/v2: "이 코드의 구조는?"
+- 이전: "이 코드의 구조는?"
 - **v4: "이 요구사항의 구현 상태는?"**
 
 Card는 단순 문서가 아니라 **1급 지식 객체**이다. Stable ID를 갖고, 버전이 관리되며, lifecycle state machine으로 상태가 추적된다.
@@ -97,7 +98,7 @@ Card는 단순 문서가 아니라 **1급 지식 객체**이다. Stable ID를 �
 
 ### 2.3 Human-approved Truth
 
-시스템의 진실은 추론이 아니라 **승인 로그**이다. (v2에서 계승)
+시스템의 진실은 추론이 아니라 **승인 로그**이다.
 
 - **자동**: 결정론적 케이스만 (동일 content_hash, 1:1 매칭)
 - **반자동**: 후보와 근거만 제시
@@ -115,7 +116,7 @@ Card는 단순 문서가 아니라 **1급 지식 객체**이다. Stable ID를 �
 
 ### 2.5 범용화 원칙 (Portability)
 
-v2에서 계승. bunner-kb는 언어/프로젝트/환경에 무관한 **바이브코딩 RAG 서버**.
+bunner-kb는 언어/프로젝트/환경에 무관한 **바이브코딩 RAG 서버**.
 
 | 원칙 | 실천 |
 |------|------|
@@ -124,7 +125,7 @@ v2에서 계승. bunner-kb는 언어/프로젝트/환경에 무관한 **바이�
 | 파서 인터페이스를 확정한다 | `KBParser` 인터페이스를 명시적으로 정의 |
 | config를 한 곳에 모은다 | 파일 확장자, hash 단위, @card 패턴 등을 config 파일로 외부화 |
 
-#### KBParser 인터페이스 (v2 D-4 반영)
+#### KBParser 인터페이스
 
 ```typescript
 interface KBParser {
@@ -132,7 +133,7 @@ interface KBParser {
   extensions: string[];
   /** 파일을 파싱하여 entity/fact/relation을 추출 */
   parseFile(filePath: string, content: string): ParseResult;
-  /** content_hash 계산 (v2 B-3 반영: 정규화 규칙 명시) */
+  /** content_hash 계산 (정규화 규칙 명시) */
   computeHash(content: string): string;
 }
 
@@ -143,11 +144,11 @@ interface ParseResult {
 }
 ```
 
-> **content_hash 계산 규칙** (v2 B-3 반영): UTF-8 정규화 후 SHA-256. BOM 제거, trailing whitespace 제거, LF 정규화 후 해싱. `computeHash` 구현에 명시.
+> **content_hash 계산 규칙**: UTF-8 정규화 후 SHA-256. BOM 제거, trailing whitespace 제거, LF 정규화 후 해싱. `computeHash` 구현에 명시.
 
 ### 2.6 KB 범위 정책 (Scope Boundary)
 
-v2에서 계승. 판단 기준: "이 지식이 바뀌면 **특정 코드를 수정해야 하는가?**"
+판단 기준: "이 지식이 바뀌면 **특정 코드를 수정해야 하는가?**"
 
 | 지식 유형 | 코드와 결속력 | 관리 위치 |
 |----------|-------------|----------|
@@ -164,6 +165,13 @@ v4는 단일 워크스페이스 가정에서 확장하여, 다음 계층을 SSOT
 - **tenant**: 조직/사용자 경계(배포 단위)
 - **project**: card 지식의 경계(요구사항 SSOT)
 - **workspace**: 코드 인덱싱 단위 = **project + branch**
+- **user**: 행위자 식별 (v4.3 B-1)
+
+#### 설계 원칙 (v4.3 E-1, E-2, E-3)
+
+1. **workspace/user = 라벨 원칙**: workspace와 user는 데이터를 **구분하는 라벨** 역할만 한다. 데이터가 이것들에 의존하면 안 된다. 어떤 브랜치/사용자 패턴이든 DB 데이터는 보장되어야 한다.
+2. **Git 독립 원칙**: DB는 Git과 독립적이다. Git hook에 의존하지 않는다. 브랜치를 머지하든 버리든 삭제하든 DB 데이터는 영향받지 않는다.
+3. **project_id 유지 사유**: 1 project 환경에서 `project_id`는 `'default'`로 고정. 기능적 역할은 없으나 멀티 프로젝트 확장을 위해 유지. 제거 비용(34회 참조, 전 테이블/인덱스/RLS) > 유지 비용(TEXT 1컬럼).
 
 #### 스코프 규칙(핵심)
 
@@ -181,6 +189,12 @@ CREATE TABLE tenant (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE "user" (
+  id         TEXT PRIMARY KEY,
+  email      TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE project (
   id         TEXT PRIMARY KEY,
   tenant_id  TEXT NOT NULL REFERENCES tenant(id),
@@ -193,20 +207,89 @@ CREATE TABLE workspace (
   project_id  TEXT NOT NULL REFERENCES project(id),
   branch_name TEXT NOT NULL,
   root_path   TEXT,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+  status      TEXT NOT NULL DEFAULT 'active'
+    CHECK (status IN ('active', 'archived')),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- active workspace만 branch_name 유니크 (v4.3 A-2)
 CREATE UNIQUE INDEX workspace_project_branch_unique
-  ON workspace(project_id, branch_name);
+  ON workspace(project_id, branch_name)
+  WHERE status = 'active';
 ```
 
 > 단일 사용자/단일 프로젝트 환경에서는 `tenant = 'default'`, `project = repo`, `workspace = branch`로 고정해도 된다.
+
+> **`"user"` 테이블** (v4.3 B-1): 행위자(사용자)를 식별하는 최소 테이블. `user`는 PostgreSQL 예약어이므로 `"user"`로 감싼다. Drizzle ORM에서 테이블명 매핑으로 코드에서는 `user`로 참조 가능. 이후 인증/관리 시스템은 이 테이블을 확장하면 된다.
+
+> **TEXT PK 생성 전략** (v4.5 L-2): `tenant.id`, `project.id`, `workspace.id`, `"user".id`는 모두 `TEXT PRIMARY KEY`이다. 생성 전략:
+> - `workspace.id`: **ULID** (`01HXYZ...`) 권장. 시간 정렬 가능 + 충돌 없는 고유값. `Bun.randomUUIDv7()` 또는 `ulid()` 라이브러리 사용.
+> - `tenant.id`, `project.id`: 사용자가 지정하는 slug (`'default'`, `'my-project'`). 단일 환경에서는 고정값.
+> - `"user".id`: 사용자가 지정하는 식별자 (예: `'alice'`, `'bob'`). 이후 인증 시스템 연동 시 외부 ID로 대체 가능.
+
+> **workspace append-only 원칙** (v4.3 A-5): workspace는 **생성만 한다. 삭제하지 않는다.** entity_identity와 동일한 철학. 비활성화는 `status = 'archived'`로 처리. 같은 `branch_name`이라도 매번 새 workspace를 생성한다(id는 항상 새 고유값). 이전에 archived된 동일 branch_name의 workspace와는 별개의 레코드다. 이유: 같은 이름의 브랜치라도 시점이 다르면 완전히 다른 코드 상태이므로, old 데이터 혼재를 방지한다 (v4.3 A-3).
+
+#### 배포 토폴로지 (v4.3 D-1)
+
+권장 배포 모델: **N MCP(각 로컬) : 1 DB(공유)**
+
+```
+[Alice PC]  Cursor IDE ↔ 로컬 MCP 서버 → 공유 PostgreSQL
+[Bob PC]    Cursor IDE ↔ 로컬 MCP 서버 → 공유 PostgreSQL
+[서버]      PostgreSQL (팀 공유)
+```
+
+- 각 개발자 PC에서 MCP 서버를 실행 (Cursor ↔ MCP는 stdio/로컬 HTTP)
+- DB만 팀 공유 (PostgreSQL 서버 1대)
+- Sync Worker는 각 로컬에서 자기 코드를 인덱싱 → `workspace_id`로 구분되어 DB에 저장
+- Card는 DB에서 자연스럽게 팀 공유 (project scope)
+- `DATABASE_URL`만 공유 PostgreSQL로 향하게 하면 됨
+
+> **MCP 서버 config 필수 설정** (v4.3 D-3): 각 MCP 인스턴스는 `user_id`(→ `"user".id` 참조)를 설정해야 한다. 모든 write 작업에 이 `user_id`가 `actor_id`로 자동 기록된다.
+>
+> **user_id 미설정 시 동작** (v4.4 P-5): `user_id`가 config에 없으면 MCP 서버는 **시작 시 에러**를 발생시키고 종료한다 (`"BUNNER_USER_ID is required"`). `"user"` 테이블에 해당 id가 없으면 첫 write 시점에 에러를 발생시킨다 (`"User not found: {user_id}"`). 자동 생성(auto-create)은 하지 않는다 — 사용자 등록은 별도 관리 절차(seed 또는 관리 도구)로 수행한다.
+
+> **동시 sync 방어** (v4.3 D-2): 같은 workspace에 2명이 동시에 sync를 실행하면 충돌 가능. `sync_run` 시작 시 workspace별 `pg_advisory_xact_lock(hashtext(workspace_id))`으로 직렬화한다. v3.1에서 세밀한 파일 단위 잠금으로 전환 가능.
+
+#### Archived Workspace 쿼리 제외 패턴 (v4.4 P-4)
+
+모든 workspace scope 쿼리는 archived 데이터를 제외해야 한다. 두 가지 패턴:
+
+```sql
+-- 패턴 1: workspace_id 직접 필터 (대부분의 도구 — 명시적 workspaceId 입력)
+WHERE ev.workspace_id = :workspace_id  -- workspace_id가 active인지는 호출자가 보장
+
+-- 패턴 2: workspace 목록 조회 (dashboard, 관리 도구)
+SELECT * FROM workspace WHERE project_id = :project_id AND status = 'active'
+```
+
+> **규칙**: MCP 도구는 입력받은 `workspaceId`의 `status`를 검증한다. archived workspace에 대한 write 시도는 에러를 반환한다 (`"Workspace is archived"`). read는 히스토리 조회 목적으로 허용하되, 도구 응답에 `archived: true` 플래그를 포함한다.
+
+#### RLS (Row-Level Security) 방향
+
+멀티 테넌시 격리는 PostgreSQL RLS로 강제한다. v4 scope에서는 정책 설계만 명시하고, 구현은 v3.1에서 진행.
+
+```sql
+-- 예: entity_version에 대해 project 기준 RLS
+ALTER TABLE entity_version ENABLE ROW LEVEL SECURITY;
+CREATE POLICY entity_version_project_isolation ON entity_version
+  USING (project_id = current_setting('app.current_project_id')::text);
+```
+
+| 적용 대상 | 격리 기준 | 비고 |
+|-----------|-----------|------|
+| card 관련 테이블 | `project_id` | card, card_relation, approval_event |
+| code 관련 테이블 | `workspace_id` | code_relation, entity_version(code) |
+| cross-scope 테이블 | `project_id` + `workspace_id` | card_link |
+
+> **v4 scope**: RLS 정책 정의. **v3.1**: `SET app.current_project_id` 주입 메커니즘 + Drizzle ORM 통합.
 
 ---
 
 ## 3. 정체성(Identity) 모델
 
-> v2에서 전면 계승. identity/version 분리는 v4에서도 동일하게 적용.
+> identity/version 분리가 v4의 핵심 기반이다. 아래 원칙과 스키마가 v4 전체를 관통한다.
 
 ### 3.1 핵심 원칙
 
@@ -226,6 +309,30 @@ CREATE UNIQUE INDEX workspace_project_branch_unique
 > **v2와의 차이**: `spec`과 `claim` 두 타입이 `card` 하나로 통합됨. `spec::` / `claim::` prefix 대신 `card::` 단일 prefix.
 
 ### 3.3 Identity + Version 스키마
+
+#### 참조 테이블 (`entity_type`, `sync_run`)
+
+`entity_identity`와 `entity_version`이 참조하는 기반 테이블:
+
+```sql
+CREATE TABLE entity_type (
+  id   SMALLSERIAL PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE   -- 'module', 'symbol', 'card'
+);
+
+CREATE TABLE sync_run (
+  id          SERIAL PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspace(id),
+  run_type    TEXT NOT NULL CHECK (run_type IN ('startup', 'watch', 'manual')),
+  started_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  finished_at TIMESTAMPTZ,
+  files_scanned INTEGER,
+  entities_created INTEGER,
+  entities_updated INTEGER,
+  entities_archived INTEGER,
+  meta        JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+```
 
 #### `entity_identity` (정체성 — 불변)
 
@@ -250,7 +357,25 @@ CREATE INDEX idx_identity_workspace_type
   WHERE workspace_id IS NOT NULL;
 ```
 
-> **stable_key 불변성** (v2 C-3 반영): `stable_key`는 한번 설정되면 변경 불가. DB 트리거로 강제:
+> **project_id ↔ workspace.project_id 정합성** (v4.2 A-2): code entity(`workspace_id IS NOT NULL`)의 `project_id`가 workspace의 `project_id`와 반드시 일치해야 한다. DB 트리거로 강제:
+> ```sql
+> CREATE OR REPLACE FUNCTION enforce_identity_project_consistency() RETURNS trigger AS $$
+> BEGIN
+>   IF NEW.workspace_id IS NOT NULL THEN
+>     IF NEW.project_id != (SELECT project_id FROM workspace WHERE id = NEW.workspace_id) THEN
+>       RAISE EXCEPTION 'entity_identity.project_id must match workspace.project_id';
+>     END IF;
+>   END IF;
+>   RETURN NEW;
+> END;
+> $$ LANGUAGE plpgsql;
+>
+> CREATE TRIGGER trg_identity_project_consistency
+>   BEFORE INSERT OR UPDATE ON entity_identity
+>   FOR EACH ROW EXECUTE FUNCTION enforce_identity_project_consistency();
+> ```
+
+> **stable_key 불변성**: `stable_key`는 한번 설정되면 변경 불가. DB 트리거로 강제:
 > ```sql
 > CREATE OR REPLACE FUNCTION prevent_stable_key_update() RETURNS trigger AS $$
 > BEGIN
@@ -318,13 +443,61 @@ ALTER TABLE entity_version
 ALTER TABLE entity_version
   ADD CONSTRAINT card_status_enum
   CHECK (card_status IS NULL OR card_status IN ('draft', 'proposed', 'accepted', 'implementing', 'implemented', 'verified', 'deprecated'));
+
+-- card_tags 필터링/집계용 GIN 인덱스 (v4.2 D-3)
+CREATE INDEX entity_version_card_tags_gin_idx
+  ON entity_version USING GIN (card_tags)
+  WHERE card_tags != '{}';
+
+-- FTS (v4.5 H-1): search_tsv는 summary + card_body + entity_key를 결합한 tsvector
+ALTER TABLE entity_version ADD COLUMN search_tsv TSVECTOR;
+
+CREATE INDEX entity_version_search_tsv_idx
+  ON entity_version USING GIN (search_tsv)
+  WHERE search_tsv IS NOT NULL;
+
+-- search_tsv 자동 갱신 트리거
+CREATE OR REPLACE FUNCTION update_entity_version_search_tsv() RETURNS trigger AS $$
+BEGIN
+  NEW.search_tsv :=
+    setweight(to_tsvector('simple', COALESCE(NEW.entity_key, '')), 'A') ||
+    setweight(to_tsvector('simple', COALESCE(NEW.summary, '')), 'B') ||
+    setweight(to_tsvector('simple', COALESCE(NEW.card_body, '')), 'C');
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_entity_version_search_tsv
+  BEFORE INSERT OR UPDATE OF entity_key, summary, card_body ON entity_version
+  FOR EACH ROW EXECUTE FUNCTION update_entity_version_search_tsv();
 ```
+
+> **entity_version.project_id ↔ entity_identity.project_id 정합성** (v4.5 I-1): entity_version의 project_id는 해당 identity의 project_id와 반드시 일치해야 한다. 앱 레벨에서 보장하되, 방어적 트리거도 설치한다:
+> ```sql
+> CREATE OR REPLACE FUNCTION enforce_version_project_consistency() RETURNS trigger AS $$
+> BEGIN
+>   IF NEW.project_id != (SELECT project_id FROM entity_identity WHERE id = NEW.identity_id) THEN
+>     RAISE EXCEPTION 'entity_version.project_id must match entity_identity.project_id';
+>   END IF;
+>   RETURN NEW;
+> END;
+> $$ LANGUAGE plpgsql;
+>
+> CREATE TRIGGER trg_version_project_consistency
+>   BEFORE INSERT OR UPDATE ON entity_version
+>   FOR EACH ROW EXECUTE FUNCTION enforce_version_project_consistency();
+> ```
+
+> **컬럼 네이밍 규약** (v4.2 E-1): `entity_version`에 `status`와 `card_status` 두 컬럼이 존재한다. 혼동 방지를 위해 다음 규약을 따른다:
+> - `status` = **version lifecycle** ('active'/'archived'/'superseded'). 코드에서 `versionStatus`로 참조
+> - `card_status` = **card lifecycle** ('draft'/'proposed'/...). 코드에서 `cardStatus`로 참조
+> - SQL 쿼리에서 양쪽 모두 사용 시 반드시 `ev.status AS version_status, ev.card_status` 형태로 alias 부여
 
 | 컬럼 | 설명 |
 |------|------|
-| `status` | `'active'` = 현재 유효, `'archived'` = 경로 변경으로 비활성, `'superseded'` = identity merge/대체 시 사용 |
+| `status` | version lifecycle. `'active'` = 현재 유효, `'archived'` = 경로 변경으로 비활성, `'superseded'` = identity merge/대체 시 사용 |
 
-> **`superseded` 전이 조건** (v2 D-8 반영): `apply_identity_rewrite`로 relation이 다른 identity로 이전될 때, 원래 identity의 version을 `superseded`로 전이. 전이 조건: "해당 identity의 모든 manual relation이 다른 identity로 이전 완료된 경우".
+> **`superseded` 전이 조건**: `apply_identity_rewrite`로 relation이 다른 identity로 이전될 때, 원래 identity의 version을 `superseded`로 전이. 전이 조건: "해당 identity의 모든 manual relation이 다른 identity로 이전 완료된 경우".
 
 #### `entity_lifecycle` (생애 이벤트 로그)
 
@@ -345,11 +518,59 @@ CREATE TABLE entity_lifecycle (
 );
 ```
 
-> **v2 이슈 #27 반영**: `from_version_id`와 `to_version_id`에 `ON DELETE SET NULL` 추가. version purge 시 FK 위반 방지.
+> `from_version_id`와 `to_version_id`에 `ON DELETE SET NULL`을 설정하여 version purge 시 FK 위반을 방지한다.
+
+#### `source` (파일 출처 — version에 종속)
+
+```sql
+CREATE TABLE source (
+  id          SERIAL PRIMARY KEY,
+  version_id  INTEGER NOT NULL REFERENCES entity_version(id) ON DELETE CASCADE,
+  kind        TEXT NOT NULL CHECK (kind IN ('file', 'card', 'manual')),
+  file_path   TEXT,                -- file: 실제 경로, card: "__manual__/card/{cardKey}"
+  file_hash   TEXT,
+  meta        JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX source_version_idx ON source(version_id);
+CREATE INDEX source_file_path_idx ON source(file_path);
+```
+
+#### `fact_type`, `strength_type`, `fact` (파싱 결과 저장)
+
+```sql
+CREATE TABLE fact_type (
+  id   SMALLSERIAL PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE      -- 'module_info', 'symbol_info', 'card_body', ...
+);
+
+CREATE TABLE strength_type (
+  id   SMALLSERIAL PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE      -- 'inferred', 'manual', 'derived'
+);
+
+CREATE TABLE fact (
+  id              SERIAL PRIMARY KEY,
+  version_id      INTEGER NOT NULL REFERENCES entity_version(id) ON DELETE CASCADE,
+  fact_type_id    SMALLINT NOT NULL REFERENCES fact_type(id),
+  fact_key        TEXT NOT NULL,
+  payload         JSONB NOT NULL DEFAULT '{}'::jsonb,
+  payload_text    TEXT,            -- card_body 등 FTS 대상 텍스트
+  strength_id     SMALLINT NOT NULL REFERENCES strength_type(id),
+  meta            JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX fact_version_idx ON fact(version_id);
+CREATE INDEX fact_type_key_idx ON fact(fact_type_id, fact_key);
+```
+
+> **source/fact 생명주기**: 둘 다 `entity_version(id)`를 FK로 참조하며, version이 CASCADE 삭제되면 자동 정리된다. `card_evidence.fact_id`는 `ON DELETE SET NULL`이므로 fact 삭제 시에도 evidence 레코드는 보존된다 (snapshot 필드에 스냅샷 저장).
 
 ### 3.4 Identity 조회 전략
 
-v2에서 계승. 4단계 우선순위:
+4단계 우선순위:
 
 ```
 1. stable_key   — NOT NULL인 경우 (card entity). WHERE project_id = :project AND stable_key = :key
@@ -373,9 +594,9 @@ type IdentityLookup =
 
 ### 4.1 핵심 전환: spec/claim → card
 
-v2의 spec/claim 이원 구조를 **card 단일 모델**로 통합한다.
+이전 설계의 spec/claim 이원 구조를 **card 단일 모델**로 통합한다.
 
-| | v2 | v4 |
+| | 이전 | v4 |
 |---|---|---|
 | entity_type | `spec`, `claim` (2종) | **`card`** (1종) |
 | 계층 | spec → claim (depth=1 고정) | **card nested tree** (depth 무제한) |
@@ -399,6 +620,15 @@ card::{path}
 - 각 path segment는 kebab-case (2자 이상)
 - `/`로 계층 구분
 - path가 tree 구조를 반영하지만, **실제 부모-자식 관계는 `card_relation`의 `contains` relation이 SSOT**
+
+> **card_key path vs 실제 tree 불일치 정책** (v4.2 B-1):
+> `stable_key`는 불변이므로 `move_card`로 card를 다른 parent로 이동해도 card_key path는 변경되지 않는다. 예: `card::auth/login`을 `billing`의 child로 이동하면, key는 여전히 `card::auth/login`이지만 실제 parent는 `billing`.
+>
+> **규칙**:
+> - card_key path는 **초기 등록 시의 의도를 반영하는 힌트**일 뿐이다
+> - 실제 tree 구조는 **반드시 `card_relation(contains)`을 조회**하여 확인한다
+> - 도구 응답에서 card 정보 반환 시 `actualParentKey` 필드를 함께 제공하여 불일치를 명시한다
+> - `get_context`, `get_implementation_guide` 등 소비 도구는 card_key path가 아닌 card_relation 기반으로 tree를 구성한다
 
 ### 4.3 Card 속성 확장
 
@@ -455,7 +685,7 @@ draft ──propose──→ proposed ──accept──→ accepted ──start
 | `accepted` | 승인됨. 구현 대기 | proposed에서 전이 (approval 필요) |
 | `implementing` | 구현 진행 중 | accepted에서 전이 |
 | `implemented` | 구현 완료. 검증 대기 | implementing에서 전이 |
-| `verified` | 검증 완료 | implemented에서 전이 (evidence 충분) |
+| `verified` | 검증 완료 | implemented에서 전이 (evidence 조건 충족 — 아래 참조) |
 | `deprecated` | 폐기됨. 더 이상 유효하지 않음 | 어떤 상태에서든 전이 가능 |
 
 #### 상태 전이 규칙
@@ -476,17 +706,49 @@ const CARD_STATUS_TRANSITIONS: Record<CardStatus, CardStatus[]> = {
 
 | parent 상태 전이 | child에 대한 영향 | 방식 |
 |-----------------|------------------|------|
-| → `deprecated` | 모든 child도 `deprecated` | **강제 전파** (재귀) |
+| → `deprecated` | 모든 child도 `deprecated` + 연결된 card_link에 `stale_status = 'stale_confirmed'` | **강제 전파** (재귀). child별 개별 `card_status_changed` event 생성 (v4.2 D-5) |
 | → `draft` (롤백) | 영향 없음 | child 상태 유지 |
-| 기타 전이 | **상한 제약**: child 상태는 parent 이하만 가능 | 예: parent가 `accepted`면 child는 `verified` 불가 |
+| 기타 전이 | **상한 경고** (soft): child 상태가 parent를 초과하면 경고 반환, 차단하지 않음 | 예: parent가 `accepted`인데 child가 `verified`면 경고 |
 
-> **상한 제약 순서**: `draft < proposed < accepted < implementing < implemented < verified`
+> **상한 제약 → 상한 경고로 변경** (v4.2 F-2): v4.1의 "상한 제약"은 hard block이었으나, 바이브코딩에서 에이전트가 leaf card부터 bottom-up으로 구현을 완료하는 흐름이 자연스럽다. 따라서 상한을 **경고(warning)**로 완화한다. `update_card_status` 응답에 `warnings: string[]`를 포함하여 "child exceeds parent status" 경고를 반환하되, 전이 자체는 허용한다.
+
+> **상한 순서** (경고 기준): `draft < proposed < accepted < implementing < implemented < verified`
+
+#### deprecated 전이 시 card_link stale 마킹 (v4.2 D-1)
+
+`update_card_status`에서 card가 `deprecated`로 전이될 때:
+1. 해당 card의 모든 `card_link`를 `stale_status = 'stale_confirmed'`로 갱신
+2. 전파된 child card의 `card_link`도 동일하게 처리
+3. `inconsistency_report`에 deprecated card의 stale link 포함
+
+> **card_link 삭제는 하지 않음**: deprecated는 "폐기"이지 "삭제"가 아니다. link은 유지하되 stale로 마킹하여, 필요 시 `unlink_card`로 명시적 정리하거나, 다른 card로 이관(`unlink` → `link_card`)할 수 있도록 한다.
+
+#### verified 전이 evidence 조건 (v4.2 C-1)
+
+`implemented → verified` 전이 시 다음 조건을 검증한다:
+
+| 조건 | 규칙 | 강제 수준 |
+|------|------|----------|
+| active evidence 존재 | 해당 card의 card_link 중 1건 이상에 `is_active=true`인 evidence 존재 | **필수** (미충족 시 전이 거부) |
+| acceptance_criteria 매칭 | card.acceptance_criteria가 있으면, 모든 항목에 대응하는 evidence/link 존재 | **경고** (미충족 시 경고 반환, 전이 허용) |
+
+> leaf card(child 없음)는 card_link + evidence가 직접 필요하고, parent card는 모든 child가 verified인 경우 evidence 없이도 verified 전이 가능하다 (composite coverage = 100%).
 
 #### approval_event 연동
 
 모든 상태 전이는 `approval_event`를 생성한다:
 - `event_type: 'card_status_changed'`
 - `payload: { cardKey, fromStatus, toStatus, propagatedChildren: [...] }`
+- **deprecated 전파 시**: parent event + **child별 개별 `card_status_changed` event** 생성 (v4.2 D-5). 각 child event의 `parent_event_id`는 parent의 event id를 참조. 이를 통해 **child별 개별 rollback**이 가능하다.
+
+#### status 변경과 version의 관계 (v4.2 B-2)
+
+> **설계 결정**: `card_status` 변경은 기존 active version의 **in-place update**이며, 새 version을 생성하지 않는다 (version_num 불변). 이유:
+> - status 변경은 card의 **내용(body)** 변경이 아니라 **워크플로우 상태** 변경이다
+> - status만 변경할 때마다 version을 만들면 version이 폭발한다
+> - status 변경 이력은 `entity_lifecycle(event_type: 'status_changed')` + `approval_event(card_status_changed)`에 기록된다
+>
+> **stale detection 영향**: version_num 비교 기반 stale detection은 body 변경에만 반응하고 status 변경에는 반응하지 않는다. 이것은 의도적이다 — status 변경은 "코드가 card를 구현하는지"와 무관하므로 link을 stale로 만들 이유가 없다. 단, `deprecated` 전이는 §4.4 "deprecated 전이 시 card_link stale 마킹"에서 별도 처리한다.
 
 ### 4.5 Card Body 권장 형식
 
@@ -522,7 +784,7 @@ Card tree의 **구조 변경**(reparent, reorder)은 content 변경과 구분되
 
 ### 5.1 3종 분리
 
-v2에서는 모든 관계가 `relation` 단일 테이블. v4에서는 성격에 따라 3종으로 분리.
+이전 설계에서는 모든 관계가 `relation` 단일 테이블이었다. v4에서는 성격에 따라 3종으로 분리.
 
 | 테이블 | 대상 | 고유 속성 | 생성 방식 |
 |--------|------|----------|----------|
@@ -570,9 +832,7 @@ CREATE TABLE card_link (
     CHECK (weight >= 0.0 AND weight <= 1.0),
   confidence      REAL
     CHECK (confidence IS NULL OR (confidence >= 0.0 AND confidence <= 1.0)),
-  created_by      TEXT,
-  created_by_kind TEXT NOT NULL DEFAULT 'agent'
-    CHECK (created_by_kind IN ('user', 'agent', 'system')),
+  created_by      TEXT NOT NULL REFERENCES "user"(id),  -- v4.3 B-5: 행위자 (user FK)
   stale_status    TEXT NOT NULL DEFAULT 'fresh'
     CHECK (stale_status IN ('fresh', 'stale_candidate', 'stale_confirmed')),
   verified_at     TIMESTAMPTZ,             -- 마지막 검증 시각
@@ -591,12 +851,15 @@ CREATE INDEX card_link_card_idx ON card_link(card_identity_id);
 CREATE INDEX card_link_code_idx ON card_link(code_identity_id);
 ```
 
+> **동일 card↔code pair는 단일 link** (v4.2 F-3): `UNIQUE(card_identity_id, code_identity_id)`에 의해 같은 card와 code 사이에 link는 하나만 존재한다. 하나의 코드 파일이 같은 card의 여러 측면을 구현하는 경우, **symbol 수준**(`symbol:path#functionName`)으로 분리하여 별도 link를 생성한다. module 수준에서 다중 anchor가 필요하면 `card_link.meta`에 보조 anchor를 기록한다.
+
 | 컬럼 | 설명 |
 |------|------|
 | `card_identity_id` | card의 identity (FK) |
 | `code_identity_id` | code entity의 identity (FK) |
 | `anchor` | 링크 생성 시점의 코드 식별 정보 (`LinkAnchor`) |
 | `rationale` | 왜 이 코드가 이 card를 구현하는지 |
+| `created_by` | 링크 생성자 (`"user".id` FK) (v4.3 B-5) |
 | `stale_status` | `fresh` = 유효, `stale_candidate` = version_num 차이 감지, `stale_confirmed` = anchor 불일치 확인 |
 | `verified_at` | 마지막으로 stale 검증을 통과한 시각 |
 | `linked_at_card_version_id` | 링크 생성 시점의 card version |
@@ -634,6 +897,12 @@ CREATE TABLE card_relation (
 
 CREATE INDEX card_rel_src_idx ON card_relation(project_id, src_identity_id, relation_type_id);
 CREATE INDEX card_rel_dst_idx ON card_relation(project_id, dst_identity_id, relation_type_id);
+
+-- contains relation에서 child(dst)는 부모가 하나만 가능 (tree 구조 DB 강제) (v4.2 A-1)
+-- relation_type_registry의 contains id는 seed 시 고정 (§14.4 참조)
+CREATE UNIQUE INDEX card_relation_single_parent
+  ON card_relation(dst_identity_id)
+  WHERE relation_type_id = 1;  -- contains type id (seed에서 고정)
 ```
 
 | relation_type(key) | 방향 | 의미 | cycle 허용 |
@@ -641,6 +910,28 @@ CREATE INDEX card_rel_dst_idx ON card_relation(project_id, dst_identity_id, rela
 | `contains` | parent → child | 소속. nested tree의 edge | ❌ (tree) |
 | `depends_on` | A → B | A는 B에 의존 | ❌ (DAG) |
 | `extends` | A → B | A는 B를 확장 | ✅ (위임은 순환 허용) |
+
+#### relation_type별 제약 강제 방식
+
+| relation_type | 제약 | 강제 위치 | 이유 |
+|--------------|------|----------|------|
+| `contains` | **tree** (순환 금지, 부모 단일) | **DB partial unique index** (`card_relation_single_parent`) + **앱 레벨** CTE 순환 검사 | 부모 단일성은 DB에서 강제, 순환 검사는 앱에서 수행 (v4.2 A-1) |
+| `depends_on` | **DAG** (순환 금지) | **앱 레벨** (`relate_cards`에서 CTE 순환 검사) | 동일 |
+| `extends` | cycle 허용 | 제약 없음 | 상호 확장 가능 |
+
+> **Direct SQL INSERT 방어**: `card_relation` 테이블에 대한 INSERT 권한을 앱 전용 role로 제한. 운영 환경에서 직접 SQL INSERT를 차단하여 앱 레벨 검사를 우회하지 못하게 한다.
+
+#### edge 속성 확장 (v3.1 검토 대상)
+
+현재 `weight`/`confidence`는 `card_link`에만 존재한다. `card_relation`/`code_relation`에도 edge 속성이 필요할 수 있다:
+
+| 테이블 | 현재 | v3.1 검토 |
+|--------|------|-----------|
+| `card_link` | `weight`, `confidence` ✅ | — |
+| `card_relation` | `meta` JSONB만 | `strength` (strong/weak), `confidence` 추가 여부 |
+| `code_relation` | `strength` (inferred/manual) | `confidence` 추가 여부 |
+
+> v4에서는 `card_relation.meta`에 임시로 저장하고, v3.1에서 사용 패턴을 확인 후 전용 컬럼 승격 여부를 결정한다.
 
 ### 5.4 `code_relation` (code ↔ code)
 
@@ -661,7 +952,7 @@ CREATE TABLE code_relation (
 );
 ```
 
-> **v2의 `relation` 테이블**: v4에서는 `card_link` + `card_relation` + `code_relation`으로 분리. migration 시 relation_type에 따라 분배.
+> **이전의 `relation` 단일 테이블**: v4에서는 `card_link` + `card_relation` + `code_relation`으로 분리. migration 시 relation_type에 따라 분배.
 
 ### 5.5 연결 방향 확장
 
@@ -717,7 +1008,7 @@ LEFT JOIN card_link cl ON cl.card_identity_id = st.card_id
 
 ### 6.1 다형성 Evidence
 
-v2의 `relation_evidence`를 v4에서는 `card_evidence`로 확장. card_link에 연결.
+이전의 `relation_evidence`를 v4에서는 `card_evidence`로 확장. card_link에 연결.
 
 ```sql
 CREATE TABLE card_evidence (
@@ -737,6 +1028,8 @@ CREATE INDEX card_evidence_link_active_idx ON card_evidence(card_link_id, is_act
 CREATE INDEX card_evidence_type_idx ON card_evidence(evidence_type);
 ```
 
+> **확장성 노트**: `evidence_type`은 현재 CHECK constraint로 5종을 고정한다. `relation_type_registry`와 동일한 패턴으로 `evidence_type_registry` 테이블을 도입할 수 있으나, v4에서는 evidence 타입이 안정적(5종)이므로 CHECK를 유지한다. 새 evidence 타입 추가 빈도가 높아지면 v3.1에서 registry로 전환한다. 전환 시 DDL: `ALTER TABLE card_evidence DROP CONSTRAINT ...; ADD COLUMN evidence_type_id SMALLINT REFERENCES evidence_type_registry(id);`
+
 ### 6.2 Evidence Type별 수집 경로
 
 | Type | 수집 경로 | is_active 전환 |
@@ -747,7 +1040,7 @@ CREATE INDEX card_evidence_type_idx ON card_evidence(evidence_type);
 | `manual_review` | 사용자가 명시적으로 기록 | 사용자가 명시적으로 무효화 |
 | `ai_verification` | AI 검증 도구 호출 시 (v3.1) | 재검증 시 갱신 |
 
-### 6.3 Evidence와 is_active 전환 타이밍 (v2 D-10 반영)
+### 6.3 Evidence와 is_active 전환 타이밍
 
 sync worker `processFile()` 흐름에서:
 1. 파서가 현재 파일의 entity를 파싱
@@ -766,8 +1059,10 @@ sync worker `processFile()` 흐름에서:
 #### Leaf Coverage
 
 leaf card (child가 없는 card)의 coverage:
-- `card_link`가 1건 이상 존재하고, active evidence가 있으면 → **covered**
-- 없으면 → **uncovered**
+- `stale_status = 'fresh'`인 `card_link`가 1건 이상 존재하고, 해당 link에 `is_active = true`인 `card_evidence`가 있으면 → **covered**
+- 위 조건 미충족 → **uncovered**
+
+> **v4.4 P-1, P-2**: coverage 계산은 (1) stale link를 제외하고 (2) active evidence가 있는 link만 유효한 구현으로 인정한다. evidence 없는 link나 stale link는 coverage에 기여하지 않는다.
 
 #### Subtree Coverage (재귀 가중 집계)
 
@@ -797,16 +1092,20 @@ card_tree AS (
   FROM card_relation cr
   JOIN card_tree ct ON ct.card_id = cr.src_identity_id
   WHERE cr.relation_type_id = (SELECT id FROM contains_type)
-    AND ct.depth < 50  -- depth limit (v2 C-6 반영)
+    AND ct.depth < 50  -- depth limit
 )
 SELECT
   ct.card_id,
   ev.entity_key AS card_key,
   COALESCE(ev.card_weight, 1.0) AS weight,
-  CASE WHEN COUNT(cl.id) > 0 THEN 1.0 ELSE 0.0 END AS leaf_coverage
+  CASE WHEN COUNT(ce.id) > 0 THEN 1.0 ELSE 0.0 END AS leaf_coverage  -- v4.4 P-1: evidence 기준
 FROM card_tree ct
 JOIN entity_version ev ON ev.identity_id = ct.card_id AND ev.status = 'active'
 LEFT JOIN card_link cl ON cl.card_identity_id = ct.card_id
+  AND cl.stale_status = 'fresh'                                       -- v4.4 P-2: stale link 제외
+  AND (:workspace_id IS NULL OR cl.workspace_id = :workspace_id)       -- v4.3 C-1: workspace 필터
+LEFT JOIN card_evidence ce ON ce.card_link_id = cl.id
+  AND ce.is_active = true                                              -- v4.4 P-1: active evidence만
 GROUP BY ct.card_id, ev.entity_key, ev.card_weight;
 ```
 
@@ -817,12 +1116,19 @@ tree 구조와 독립적으로, 특정 tag를 가진 card들의 coverage를 집�
 ```sql
 SELECT
   tag,
-  COUNT(*) AS total_cards,
-  COUNT(cl.id) AS linked_cards,
-  ROUND(COUNT(cl.id)::numeric / COUNT(*)::numeric * 100, 1) AS coverage_pct
+  COUNT(DISTINCT ev.identity_id) AS total_cards,
+  COUNT(DISTINCT CASE WHEN ce.id IS NOT NULL THEN ev.identity_id END) AS covered_cards,  -- v4.4 P-1: evidence 기준
+  ROUND(
+    COUNT(DISTINCT CASE WHEN ce.id IS NOT NULL THEN ev.identity_id END)::numeric
+    / NULLIF(COUNT(DISTINCT ev.identity_id), 0)::numeric * 100, 1
+  ) AS coverage_pct
 FROM entity_version ev
 CROSS JOIN LATERAL unnest(ev.card_tags) AS tag
 LEFT JOIN card_link cl ON cl.card_identity_id = ev.identity_id
+  AND cl.stale_status = 'fresh'                                       -- v4.4 P-2: stale link 제외
+  AND (:workspace_id IS NULL OR cl.workspace_id = :workspace_id)       -- v4.3 C-2: workspace 필터
+LEFT JOIN card_evidence ce ON ce.card_link_id = cl.id
+  AND ce.is_active = true                                              -- v4.4 P-1: active evidence만
 WHERE ev.status = 'active'
   AND ev.identity_id IN (
     SELECT id FROM entity_identity WHERE entity_type_id = {card_type_id}
@@ -833,13 +1139,16 @@ GROUP BY tag;
 ### 7.3 Priority 기반 필터링
 
 ```sql
--- P0 카드 중 미구현 목록
+-- P0 카드 중 미구현 목록 (v4.5 M-1: §7.1과 동일한 evidence+stale 기준 적용)
 SELECT ev.entity_key, ev.card_status AS status
 FROM entity_version ev
 WHERE ev.status = 'active'
   AND ev.card_priority = 'P0'
   AND ev.identity_id NOT IN (
-    SELECT card_identity_id FROM card_link
+    SELECT cl.card_identity_id
+    FROM card_link cl
+    JOIN card_evidence ce ON ce.card_link_id = cl.id AND ce.is_active = true
+    WHERE cl.stale_status = 'fresh'
   );
 ```
 
@@ -849,7 +1158,7 @@ WHERE ev.status = 'active'
 
 ### 8.1 핵심 원칙
 
-v2에서 계승: **시스템의 진실은 추론이 아니라 승인 로그이다.**
+**시스템의 진실은 추론이 아니라 승인 로그이다.**
 
 ### 8.2 `approval_event` 스키마
 
@@ -868,14 +1177,13 @@ CREATE TABLE approval_event (
       'card_relation_created', 'card_relation_updated', 'card_relation_removed',
       'card_reparented'
     )),
-  actor           TEXT NOT NULL DEFAULT 'agent'
-    CHECK (actor IN ('agent', 'user', 'system')),
+  actor_id        TEXT NOT NULL REFERENCES "user"(id),  -- v4.3 B-2: 행위자 (user FK)
   target_card_link_id   INTEGER REFERENCES card_link(id) ON DELETE SET NULL,
   target_identity_id    INTEGER REFERENCES entity_identity(id) ON DELETE SET NULL,
   target_card_relation_id INTEGER REFERENCES card_relation(id) ON DELETE SET NULL,
   payload         JSONB NOT NULL,
   rationale       TEXT,
-  parent_event_id INTEGER REFERENCES approval_event(id),
+  parent_event_id INTEGER REFERENCES approval_event(id),  -- 인과 관계 (아래 용도 참조)
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -883,12 +1191,25 @@ CREATE INDEX approval_target_link_idx ON approval_event(target_card_link_id);
 CREATE INDEX approval_target_identity_idx ON approval_event(target_identity_id);
 CREATE INDEX approval_project_time_idx ON approval_event(project_id, created_at DESC);
 CREATE INDEX approval_workspace_time_idx ON approval_event(workspace_id, created_at DESC) WHERE workspace_id IS NOT NULL;
+CREATE INDEX approval_actor_idx ON approval_event(actor_id);
 ```
 
-> **v2 이슈 #28 반영**: `link_removed`의 생성 경로를 명시.
+> **`parent_event_id` 사용 시나리오** (v4.2 C-5):
+> - **deprecated 전파**: parent card의 `card_status_changed` event → child별 개별 event의 `parent_event_id`가 parent event를 참조
+> - **rollback**: `link_rollback` event의 `parent_event_id`가 원본 `link_created` event를 참조
+> - **identity merge 후 link 이관**: merge event를 parent로, 이관된 각 link의 `link_updated` event가 참조
+> - 용도가 없는 경우 NULL. 조회 시 `parent_event_id`로 인과 체인을 재구성한다.
+
+> **확장성 노트**: `event_type` CHECK constraint는 `relation_type_registry`와 달리 레지스트리 테이블로 분리하지 않는다. 이유:
+> - approval_event는 **감사 로그**이므로 새 타입 추가 빈도가 낮다 (도구 추가 시에만)
+> - CHECK constraint가 감사 데이터의 무결성을 더 강하게 보장한다
+> - 새 event_type 추가 시 `ALTER TABLE ... DROP CONSTRAINT ... ADD CONSTRAINT ...` DDL migration으로 처리
+> - v3.1에서 도구 플러그인 시스템 도입 시 registry 전환을 재검토한다
+
+> `link_removed`의 생성 경로를 명시.
 > - `link_removed`는 `rollback_approval`로 `link_created`를 롤백할 때 생성
 > - 또는 card가 `deprecated`로 전이 시 연결된 link에 대해 `link_removed` 이벤트 생성
-> - 명시적 `unlink_card` 도구도 v4에서 제공 (v2 C-1 반영)
+> - 명시적 `unlink_card` 도구도 제공
 
 ### 8.3 도구-이벤트 매핑
 
@@ -907,7 +1228,9 @@ CREATE INDEX approval_workspace_time_idx ON approval_event(workspace_id, created
 | `rollback_approval` | `link_rollback` |
 | identity merge (시스템 자동) | `identity_merged` |
 
-### 8.4 Payload 검증 (v2 B-2 반영)
+> **actor_id 기록 원칙** (v4.3 B-2): 모든 approval_event의 `actor_id`는 해당 작업을 트리거한 사용자의 `"user".id`를 기록한다. identity merge처럼 시스템이 자동 수행하는 작업도, 해당 sync를 실행한 MCP 인스턴스의 `user_id` 설정값이 기록된다. 에이전트가 도구를 호출한 경우에도 에이전트를 운용하는 사용자의 ID가 기록된다 — 행위의 책임은 항상 사용자에게 귀속된다 (§2.7 설계 원칙 1).
+
+### 8.4 Payload 검증
 
 각 event_type별 payload에 필수 필드를 검증한다:
 
@@ -939,7 +1262,7 @@ const PAYLOAD_SCHEMAS: Record<string, z.ZodSchema> = {
 
 ### 8.5 Reversibility (되돌리기)
 
-v2에서 계승 + 확장. `rollback_approval` 도구:
+`rollback_approval` 도구:
 
 | event_type | compensating action |
 |-----------|-------------------|
@@ -950,12 +1273,12 @@ v2에서 계승 + 확장. `rollback_approval` 도구:
 | `identity_merged` | version/relation을 원래 identity로 이관 원복 |
 | `card_registered` | version 삭제 + identity 삭제 (cascade) |
 | `card_updated` | 이전 version을 active로 복원, 현재 version 삭제 |
-| `card_status_changed` | 이전 status로 복원 + 전파된 children도 복원 |
+| `card_status_changed` | 이전 status로 복원. **child별 개별 event가 존재하므로**(v4.2 D-5) child는 개별 rollback 가능. parent rollback 시 `parent_event_id`로 연결된 child event도 자동 rollback |
 | `card_relation_created` | 해당 card_relation 삭제 |
 | `card_relation_updated` | card_relation.meta를 이전 상태로 복원 |
 | `card_reparented` | 이전 parent로 재이동 |
 
-> **v2 B-5 반영**: `identity_merged` 롤백 시 인과 순서 기준: merge 이후에 생성된 approval_event가 해당 identity를 참조하면 거부. 참조 여부는 `target_identity_id = merged_identity_id` OR payload 내 identity 참조로 판단.
+> `identity_merged` 롤백 시 인과 순서 기준: merge 이후에 생성된 approval_event가 해당 identity를 참조하면 거부. 참조 여부는 `target_identity_id = merged_identity_id` OR payload 내 identity 참조로 판단.
 
 ### 8.6 Provenance Chain
 
@@ -968,11 +1291,38 @@ WHERE ae.target_card_link_id = {card_link_id}
 ORDER BY ae.created_at ASC;
 ```
 
+### 8.7 entity_lifecycle vs approval_event 이중 기록 경계
+
+두 테이블의 역할이 겹치는 이벤트가 있다. 원칙:
+
+| 이벤트 | entity_lifecycle | approval_event | 비고 |
+|--------|:---:|:---:|------|
+| identity 생성 (sync 자동) | ✅ `created` | ❌ | 자동 이벤트는 lifecycle만 |
+| identity 생성 (register_card) | ✅ `created` | ✅ `card_registered` | 수동 도구는 양쪽 모두 |
+| version 갱신 (sync) | ✅ `updated` | ❌ | |
+| version 갱신 (register_card) | ✅ `updated` | ✅ `card_updated` | |
+| identity merge (자동) | ✅ `merged` | ✅ `identity_merged` | **예외**: 자동이지만 감사 필수이므로 양쪽 모두 |
+| status 변경 | ✅ `status_changed` | ✅ `card_status_changed` | |
+| reparent | ✅ `reparented` | ✅ `card_reparented` | |
+| rename (sync 감지) | ✅ `renamed` | ❌ | |
+| link 생성/삭제 | ❌ | ✅ `link_*` | link은 approval만 |
+
+**원칙**: `approval_event`는 **거버넌스 감사**(수동 도구, 승인 필요 작업)에만 기록. `entity_lifecycle`은 **모든 identity 상태 변화**를 기록. 양쪽에 기록하는 경우 **단일 트랜잭션 내에서 원자적으로** 기록한다.
+
+```typescript
+// Example: register_card 내부
+await db.transaction(async (tx) => {
+  const version = await createVersion(tx, ...);
+  await recordLifecycle(tx, { identityId, eventType: 'created', toVersionId: version.id });
+  await recordApproval(tx, { eventType: 'card_registered', payload: {...} });
+});
+```
+
 ---
 
 ## 9. 계층적 방어 전략 (3-Tier Defense)
 
-> v2에서 전면 계승. identity/version 분리가 핵심.
+> identity/version 분리가 핵심. 3계층 방어로 파일 이동/리네임 시 link 보존을 보장한다.
 
 ### 9.1 개요
 
@@ -991,7 +1341,7 @@ ORDER BY ae.created_at ASC;
 
 ### 9.2 계층 1: content_hash Identity Matching
 
-v2 §6.3과 동일. 주요 흐름:
+주요 흐름:
 
 **startupScan 시**:
 1. `scanFiles()` 결과와 DB의 active version을 교차 비교
@@ -1002,9 +1352,32 @@ v2 §6.3과 동일. 주요 흐름:
 - DELETE: version archived. identity + card_link 유지 (identity가 보호)
 - CREATE: content_hash로 archived version 검색 → 매칭 성공이면 같은 identity에 연결
 
-**Watch 역순 (CREATE→DELETE) 방어**: Post-DELETE Identity Merge Check (v2 §6.3 동일)
+**Watch 역순 (CREATE→DELETE) 방어**: Post-DELETE Identity Merge Check — DELETE 처리 후 같은 content_hash를 가진 새 version이 이미 존재하면 자동 merge를 수행한다.
 
-#### Symbol-level Identity Cascade (v2 A-1 반영)
+> **Cross-workspace identity merge 정책** (v4.2 C-2): identity merge는 **동일 workspace 내에서만** 수행된다. 다른 workspace(branch)에 같은 파일이 존재해도 서로 독립된 identity로 관리된다. 이유:
+> - 각 branch는 독립적인 코드 상태를 가진다
+> - branch 간 identity를 merge하면 branch 전환 시 정합성이 깨진다
+> - card_link는 workspace_id를 포함하므로, 같은 card가 다른 branch의 같은 파일에 각각 link될 수 있다 (T9-4)
+
+#### Identity Merge 시 card_link 이관 (v4 추가)
+
+v4에서는 `card_link.code_identity_id`를 변경해야 한다:
+
+```sql
+-- merge: old_identity → surviving_identity
+-- Step 1: card_link의 code_identity_id 이관
+UPDATE card_link
+SET code_identity_id = :surviving_identity_id,
+    updated_at = now()
+WHERE code_identity_id = :old_identity_id;
+
+-- Step 2: UNIQUE 충돌 시 (같은 card↔code pair 중복) → 기존 link 유지, 새 link 삭제
+-- ON CONFLICT 처리는 앱 레벨에서 선제 검사 후 처리
+```
+
+> merge 후 `approval_event(identity_merged)`의 payload에 이관된 card_link ID 목록을 포함한다. rollback 시 역이관에 사용.
+
+#### Symbol-level Identity Cascade
 
 module identity matching이 성공하여 파일 이동이 감지된 경우, **하위 symbol entity**도 처리해야 한다:
 
@@ -1016,16 +1389,75 @@ module identity matching이 성공하여 파일 이동이 감지된 경우, **�
 
 ### 9.3 계층 2: Identity Resolution
 
-v2 §8과 동일. `resolve_identity_candidates` + `apply_identity_rewrite`.
+`resolve_identity_candidates`로 후보를 제시하고, `apply_identity_rewrite`로 사용자 승인 후 identity를 재작성한다. 자세한 도구 인터페이스는 §12.3 참조.
 
-### 9.4 계층 3: 수동 도구
+### 9.4 동시성 Critical Section
 
-v2 §7에서 card-centric으로 변경. 도구명 변경:
+v4에서 Advisory Lock은 v3.1로 미뤄졌지만, 다음 작업은 **critical section**으로 식별된다:
+
+| Critical Section | 위험 시나리오 | v4 임시 방어 | v3.1 목표 |
+|-----------------|-------------|-------------|-----------|
+| `identity_merge` | 동시에 같은 identity를 merge 시도 | `SERIALIZABLE` isolation | `pg_advisory_xact_lock(identity_id)` |
+| `link_card` (UPSERT) | 동시에 같은 card↔code pair를 link | `ON CONFLICT` clause | advisory lock |
+| `apply_identity_rewrite` | 동시에 같은 identity를 rewrite | `SERIALIZABLE` isolation | advisory lock |
+| `move_card` | 동시에 같은 card를 다른 parent로 이동 | `SERIALIZABLE` isolation | advisory lock |
+| `update_card_status` (전파) | parent deprecated 중 child status 변경 | `SELECT ... FOR UPDATE` on parent version | advisory lock |
+| Watch 이벤트 처리 | 같은 파일의 DELETE+CREATE 동시 처리 | 이벤트 직렬화 (debounce queue) | advisory lock |
+
+> **v4 scope**: 모든 critical section에서 `SERIALIZABLE` 또는 `SELECT ... FOR UPDATE`를 사용한다. 성능 저하가 관측되면 v3.1에서 advisory lock으로 전환.
+
+```typescript
+// Example: identity_merge critical section
+await db.transaction(async (tx) => {
+  // FOR UPDATE로 두 identity를 잠금 (deadlock 방지: 항상 id 오름차순 잠금)
+  const [id1, id2] = [oldIdentityId, survivingIdentityId].sort((a, b) => a - b);
+  await tx.execute(sql`SELECT 1 FROM entity_identity WHERE id IN (${id1}, ${id2}) FOR UPDATE`);
+  // ... merge 로직
+});
+```
+
+#### Serialization Failure 재시도 (v4.2 D-4)
+
+PostgreSQL `SERIALIZABLE` 격리 수준은 serialization failure (SQLSTATE `40001`)를 발생시킬 수 있다. 모든 critical section에서 **자동 재시도 래퍼**를 사용한다:
+
+```typescript
+async function withSerializableRetry<T>(
+  db: DrizzleClient,
+  fn: (tx: Transaction) => Promise<T>,
+  maxRetries = 3
+): Promise<T> {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await db.transaction(fn, { isolationLevel: 'serializable' });
+    } catch (e: unknown) {
+      const isSerializationFailure = e instanceof Error && 'code' in e && (e as any).code === '40001';
+      if (isSerializationFailure && attempt < maxRetries - 1) {
+        // exponential backoff: 10ms, 20ms, 40ms
+        await new Promise(r => setTimeout(r, 10 * Math.pow(2, attempt)));
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw new Error('unreachable');
+}
+```
+
+> 이 래퍼는 `identity_merge`, `apply_identity_rewrite`, `move_card` 등 §9.4 표의 SERIALIZABLE critical section에 적용한다.
+>
+> **모니터링 메트릭** (v4.5 I-2): N명 동시 사용 시 serialization failure 빈도가 높아질 수 있다. 다음 메트릭을 `sync_run.meta` 또는 별도 로그에 기록하여 v3.1 advisory lock 전환 판단에 사용한다:
+> - `serialization_retries`: 해당 작업에서 발생한 재시도 횟수
+> - `serialization_failures`: 최대 재시도 초과로 실패한 횟수
+> - `avg_retry_delay_ms`: 평균 재시도 대기 시간
+
+### 9.5 계층 3: 수동 도구
+
+이전의 spec 도구를 card-centric으로 변경. 도구명 변경:
 - `register_spec` → `register_card`
 - `link_spec` → `link_card`
 - `relate_specs` → `relate_cards`
 - `spec_impact` → `card_impact`
-- `kb_status` → `card_status`
+- `kb_status` → `card_dashboard` (v4.2 E-2: `card_status` 컬럼과 혼동 방지를 위해 리네임)
 
 (상세 §13에서 정의)
 
@@ -1035,17 +1467,26 @@ v2 §7에서 card-centric으로 변경. 도구명 변경:
 
 ### 10.1 Core Loop
 
-v2 §9에서 계승. version append 중심.
+version append 중심. 파일 변경 시 기존 version을 archived로 전이하고 새 version을 추가한다.
 
 #### `processFile()` 변경
 
-v2의 `processFile()`에 추가:
+기존 `processFile()`에 추가:
 - `@card` 주석 파싱 → `card_link` 자동 생성 (evidence_type: `annotation`)
 - 기존 annotation evidence가 없어졌으면 `is_active=false` 전환
 
-### 10.2 Orphan Cleanup
+#### `@card` 파싱 에러 처리 (v4.2 C-4)
 
-v2 §9.2 동일.
+| 상황 | 처리 |
+|------|------|
+| 참조된 card가 존재하지 않음 | `sync_event`에 경고 기록 (`action: 'warning'`, `meta: {reason: 'card_not_found', cardKey, filePath}`). card_link 생성하지 않음 |
+| card_key 형식이 잘못됨 | 무시 + `sync_event`에 경고 기록 |
+| 참조된 card가 `deprecated` | card_link 생성하되 `stale_status = 'stale_confirmed'`으로 생성. 경고 기록 |
+| workspace.project_id에 해당 card가 없음 | `sync_event`에 경고 기록. card_link 생성하지 않음 |
+
+> `@card` 파싱 실패는 **sync를 중단시키지 않는다**. 경고만 기록하고 나머지 파일 처리를 계속한다.
+
+### 10.2 Orphan Cleanup
 
 **code_relation orphan**: 파싱 파일 scope로 한정 + `strength='manual'` 제외.
 
@@ -1053,11 +1494,11 @@ v2 §9.2 동일.
 
 ### 10.3 `__manual__/` 경로 보호
 
-v2 §9.3 동일. 5개 레이어 필터링.
+5개 레이어 필터링: (1) `.gitignore` (2) `node_modules/` (3) `__manual__/` prefix (4) config 파일 확장자 (5) binary 감지. `__manual__/` 경로의 source는 sync 대상에서 완전 제외된다.
 
 ### 10.4 Stale Link Detection
 
-card 갱신 시 기존 card_link의 stale 감지 (v2 §17.4를 v4 본문으로 격상):
+card 갱신 시 기존 card_link의 stale 감지:
 
 1. `card_updated` 이벤트 발생 시
 2. 해당 card의 모든 card_link를 조회
@@ -1073,7 +1514,7 @@ card 갱신 시 기존 card_link의 stale 감지 (v2 §17.4를 v4 본문으로 �
 
 ### 11.1 Version Purge
 
-v2 §10.2 기반 + v2 이슈 #27 반영:
+archived version의 TTL 기반 물리 삭제:
 
 ```sql
 -- Step 1: entity_lifecycle의 version FK를 NULL로 설정
@@ -1117,7 +1558,7 @@ WHERE status = 'archived'
 
 ### 11.2 Identity Purge
 
-v2 §10.3 기반 + v2 이슈 #29 반영 (COALESCE 추가):
+모든 version이 삭제된 identity를 TTL 후 정리 (COALESCE fallback으로 lifecycle 없는 identity도 처리):
 
 ```sql
 DELETE FROM entity_identity ei
@@ -1134,7 +1575,7 @@ AND NOT EXISTS (
 );
 ```
 
-> **보호 조건**: card_link가 참여하는 identity는 purge하지 않음. (v2의 `strength='manual'` relation 보호 → card_link 자체가 보호)
+> **보호 조건**: card_link가 참여하는 identity는 purge하지 않음. card_link 자체가 identity 보호 역할을 한다.
 
 ### 11.3 보호 해제 경로
 
@@ -1143,6 +1584,46 @@ AND NOT EXISTS (
 | `apply_identity_rewrite`로 card_link 이전 | 옛 identity에 link 없어지면 purge 가능 |
 | `unlink_card`로 link 삭제 | link 해제 |
 | card `deprecated` 전이 시 link 정리 | deprecated card의 link을 정리하면 code identity 보호 해제 |
+
+### 11.4 Workspace Archive 절차 (v4.3 A-4, 구 v4.2 A-3 전면 교체)
+
+workspace는 **삭제하지 않고 archive**한다 (append-only 원칙, §2.7). DDL에 ON DELETE CASCADE를 두지 않으며, workspace 레코드 자체도 DELETE하지 않는다.
+
+```sql
+-- Step 1: workspace의 code entity version을 archived로 전이
+UPDATE entity_version
+SET status = 'archived'
+WHERE workspace_id = :workspace_id AND status = 'active';
+
+-- Step 2: workspace의 card_link stale 마킹
+UPDATE card_link
+SET stale_status = 'stale_confirmed', updated_at = now()
+WHERE workspace_id = :workspace_id AND stale_status = 'fresh';
+
+-- Step 3: workspace 자체를 archived로 전이
+UPDATE workspace
+SET status = 'archived', updated_at = now()
+WHERE id = :workspace_id;
+```
+
+> **DELETE 없음**: workspace, card_link, entity_identity, code_relation, sync_run 모두 삭제하지 않는다. workspace가 archived되면 해당 workspace의 모든 데이터는 감사/히스토리 목적으로 영구 보존된다.
+>
+> **code_relation 처리** (v4.4 P-3): code_relation은 workspace scope이며, archive 시 별도 상태 변경 없이 그대로 보존된다. 쿼리 시 workspace_id 필터로 active workspace의 데이터만 조회하므로, archived workspace의 code_relation은 자연스럽게 제외된다 (§2.7 쿼리 패턴 참조).
+>
+> **같은 branch_name 재생성 시** (v4.3 A-3): 이전 workspace는 archived 상태이므로 `workspace_project_branch_unique` partial unique index(`WHERE status = 'active'`)에 의해 충돌 없이 **새 workspace가 생성**된다. reactivate는 하지 않는다 — 같은 이름의 브랜치라도 시점이 다르면 코드 상태가 완전히 다르므로 old 데이터 혼재를 방지한다.
+>
+> **entity_identity 정리**: identity purge (§11.2)가 active version이 없는 identity를 정리한다.
+
+### 11.5 머지 후 card_link 이관 정책 (v4.3 F-1)
+
+feature branch가 main에 머지된 후의 card_link 처리:
+
+| link 유형 | main 이관 여부 | 이유 |
+|-----------|---------------|------|
+| `@card` annotation 기반 | **자동** | main의 Sync Worker가 코드를 파싱하여 card_link를 재생성 |
+| 수동/에이전트 link | **자동 이관 안 됨** | main의 code identity는 별개(cross-workspace merge 금지). 에이전트가 main에서 재연결 필요 |
+
+> **의도적 설계**: branch의 수동 link가 자동으로 main에 이관되면 검증 안 된 link가 main에 유입되는 위험이 있다. main에서의 link는 main에서 명시적으로 생성해야 한다.
 
 ---
 
@@ -1178,8 +1659,12 @@ interface RegisterCardInput {
   tags?: string[];
   /** coverage 가중치 (0.0 ~ 1.0, 기본: 1.0) */
   weight?: number;
+  /** 카드 템플릿 유형 */
+  templateType?: CardTemplateType;
   /** 외부 참조 */
   externalRefs?: ExternalRef[];
+  /** 검증 기준 */
+  acceptanceCriteria?: AcceptanceCriterion[];
   /** 추가 메타 */
   meta?: Record<string, unknown>;
 }
@@ -1189,8 +1674,8 @@ interface RegisterCardInput {
 
 1. **Identity 생성/조회**: `stable_key = cardKey`로 조회. 없으면 `entity_type = 'card'`로 생성
 2. **Version 생성/갱신**: `content_hash = SHA-256(body)` 비교. 다르면 새 version (version_num++)
-3. **Source 생성**: `kind: "card"`, `file_path: "__manual__/card/{cardKey}"`
-4. **Fact 생성**: `fact_type: "card_body"`, `payload_text: body`
+3. **Source 생성**: `kind: "card"`, `file_path: "__manual__/card/{cardKey}"`, `file_hash: content_hash와 동일` (v4.2 C-6)
+4. **Fact 생성**: `fact_type: "card_body"`, `payload_text: body`. (v4.2 B-3: fact은 `card_evidence.fact_id`의 참조 대상 및 FTS 보조 인덱싱용. `entity_version.card_body`가 SSOT이고, fact은 evidence 체인의 참조점. 갱신 시 양쪽 동시 갱신을 단일 트랜잭션으로 보장)
 5. **Contains relation 자동 생성**: `parentCardKey` 지정 시
    - parent identity 조회 → 없으면 에러
   - `card_relation` INSERT (`relationType: 'contains'` → registry resolve → `relation_type_id`, `src = parent`, `dst = this`)
@@ -1239,7 +1724,7 @@ interface LinkCardInput {
 5. **card_evidence 생성**: `evidence_type: 'code_link'`
 6. **Approval event**: `link_created` 또는 `link_updated`
 
-#### `unlink_card` (v2 C-1 반영)
+#### `unlink_card`
 
 card와 code 사이의 link를 삭제한다.
 
@@ -1262,7 +1747,19 @@ type UnlinkCardInput =
 
 **동작**: card_link 삭제 + `link_removed` approval_event 생성.
 
-#### `move_card` (v2 C-2 반영)
+#### Deprecated card → 다른 card link 이관 워크플로우 (v4.2 D-2)
+
+card가 deprecated된 후, 해당 card의 code link를 다른 card로 옮기는 표준 절차:
+
+1. `card_dashboard`(또는 `inconsistency_report`)로 deprecated card의 stale link 목록 확인
+2. 각 link에 대해:
+   - `unlink_card({ cardKey: deprecatedCardKey, codeEntityKey, reason: "migrating to new card" })`
+   - `link_card({ cardKey: newCardKey, codeEntityKey, rationale: "migrated from deprecated card::..." })`
+3. 이관 완료 후 deprecated card의 모든 link이 정리되면, code identity의 purge 보호가 해제됨
+
+> deprecated card에 직접 `link_card`는 불가(§13.2). 반드시 `unlink` → `link` 순서.
+
+#### `move_card`
 
 card의 부모를 변경한다 (reparent).
 
@@ -1280,11 +1777,35 @@ interface MoveCardInput {
 ```
 
 **동작 절차**:
-1. 순환 검사: 새 parent가 cardKey의 descendant가 아닌지 확인
+1. 순환 검사: 새 parent가 cardKey의 descendant가 아닌지 확인 (아래 CTE)
 2. 기존 `contains` relation 삭제
 3. 새 `contains` relation 생성 (newParentCardKey가 있으면)
 4. `entity_lifecycle`에 `reparented` 이벤트 기록
 5. `approval_event`에 `card_reparented` 기록
+
+**순환 검사 CTE**:
+
+```sql
+WITH RECURSIVE contains_type AS (
+  SELECT id FROM relation_type_registry
+  WHERE domain = 'card_relation' AND key = 'contains'
+),
+descendants AS (
+  -- base: cardKey 자신
+  SELECT :card_identity_id::int AS id, 0 AS depth
+  UNION ALL
+  -- recursive: cardKey의 모든 descendants
+  SELECT cr.dst_identity_id, d.depth + 1
+  FROM card_relation cr
+  JOIN descendants d ON d.id = cr.src_identity_id
+  WHERE cr.relation_type_id = (SELECT id FROM contains_type)
+    AND d.depth < 50
+)
+SELECT EXISTS (
+  SELECT 1 FROM descendants WHERE id = :new_parent_identity_id
+) AS is_circular;
+-- is_circular = true이면 에러: "Circular reference detected"
+```
 
 #### `update_card_status`
 
@@ -1322,9 +1843,9 @@ interface RelateCardsInput {
 }
 ```
 
-v2 `relate_specs`와 동일한 절차. `depends_on`에 대해 순환 검사 (depth 50).
+`depends_on`에 대해 순환 검사 (recursive CTE, depth 50).
 
-#### `unrelate_cards` (v2 D-7 반영)
+#### `unrelate_cards`
 
 card 간 관계를 삭제한다.
 
@@ -1347,8 +1868,8 @@ interface UnrelateCardsInput {
 
 특정 card 변경 시 영향받는 code·card 목록을 재귀 탐색한다.
 
-v2 `spec_impact`에서 확장:
-- **양방향 탐색** (v2 A-2 반영): 
+card-centric 영향 분석:
+- **양방향 탐색**: 
   - 역방향: card를 참조하는 code (card_link)
   - 정방향: card의 children (contains), depends_on, extends
 - `contains` 관계는 **정방향**(src → dst)으로 탐색 (card의 하위 card)
@@ -1373,12 +1894,59 @@ interface CardImpactResult {
 }
 ```
 
-#### `card_status` (dashboard)
+**양방향 BFS 구현 SQL 예시**:
+
+```sql
+WITH RECURSIVE
+contains_type AS (
+  SELECT id FROM relation_type_registry WHERE domain = 'card_relation' AND key = 'contains'
+),
+depends_type AS (
+  SELECT id FROM relation_type_registry WHERE domain = 'card_relation' AND key = 'depends_on'
+),
+-- Forward: children (contains) + dependents (depends_on에서 역방향)
+forward_bfs AS (
+  SELECT :card_identity_id::int AS id, 0 AS depth, 'root'::text AS rel_type, ARRAY[:card_identity_id] AS path
+  UNION ALL
+  SELECT
+    CASE
+      WHEN cr.relation_type_id = (SELECT id FROM contains_type) THEN cr.dst_identity_id
+      WHEN cr.relation_type_id = (SELECT id FROM depends_type) THEN cr.src_identity_id
+    END,
+    fb.depth + 1,
+    rtr.key,
+    fb.path || CASE
+      WHEN cr.relation_type_id = (SELECT id FROM contains_type) THEN cr.dst_identity_id
+      ELSE cr.src_identity_id
+    END
+  FROM card_relation cr
+  JOIN forward_bfs fb ON (
+    (cr.src_identity_id = fb.id AND cr.relation_type_id = (SELECT id FROM contains_type))
+    OR
+    (cr.dst_identity_id = fb.id AND cr.relation_type_id = (SELECT id FROM depends_type))
+  )
+  JOIN relation_type_registry rtr ON rtr.id = cr.relation_type_id
+  WHERE fb.depth < :max_depth
+),
+-- Reverse: linked code entities
+impacted_code AS (
+  SELECT cl.code_identity_id, ev.entity_key, fb.path
+  FROM forward_bfs fb
+  JOIN card_link cl ON cl.card_identity_id = fb.id
+    AND cl.project_id = :project_id
+  JOIN entity_version ev ON ev.identity_id = cl.code_identity_id AND ev.status = 'active'
+)
+SELECT * FROM forward_bfs
+UNION ALL
+SELECT code_identity_id, -1, 'code_link', path FROM impacted_code;
+```
+
+#### `card_dashboard` (v4.2 E-2: `card_status`에서 리네임 — `entity_version.card_status` 컬럼과 혼동 방지)
 
 KB 전체 또는 특정 card의 건강 상태.
 
 ```typescript
-interface CardStatusResult {
+interface CardDashboardResult {
   scope:
     | { level: 'global' }
     | { level: 'project'; projectId: string }
@@ -1426,11 +1994,11 @@ interface CoverageMapInput {
 
 ### 12.3 거버넌스 도구
 
-- `rollback_approval`: v2와 동일 (§8.5 참조)
-- `resolve_identity_candidates`: v2 §8.2 동일
-- `apply_identity_rewrite`: v2 §8.3 동일 (card_link의 code_identity_id를 변경)
+- `rollback_approval`: compensating action으로 이전 상태 복원 (§8.5 참조)
+- `resolve_identity_candidates`: archived version 중 identity 재연결 후보를 제시 (§9.3 참조)
+- `apply_identity_rewrite`: 사용자 승인 후 card_link의 code_identity_id를 변경하여 identity 재연결 (§9.3 참조)
 
-### 12.4 도구별 Bulk 지원 (v2 D-6 반영)
+### 12.4 도구별 Bulk 지원
 
 ```typescript
 interface RegisterCardBatchInput {
@@ -1442,12 +2010,272 @@ interface RegisterCardBatchInput {
 
 ### 12.5 기존 도구 변경
 
-v2 §11.2 동일. 기존 18개 도구를 identity + active version JOIN 기반으로 전환.
+기존 18개 도구를 identity + active version JOIN 기반으로 전환.
 
 추가 변경:
-- `search`: card entity 검색 시 `card_status`/`card_priority`/`card_tags` 필터 지원
-- `inconsistency_report`: card 고유 검사 추가 (§10.4 stale link, orphan card)
+
+#### `search` (card-aware 검색)
+
+```typescript
+interface SearchInput {
+  projectId: string;
+  workspaceId?: string;
+  /** 검색어 (FTS 적용) */
+  query: string;
+  /** 필터 조건 (선택) */
+  filters?: {
+    entityTypes?: ('card' | 'module' | 'symbol')[];
+    cardStatus?: CardStatus[];
+    cardPriority?: CardPriority[];
+    cardTags?: string[];
+    /** true이면 deprecated 제외 (기본: true) */
+    excludeDeprecated?: boolean;
+  };
+  /** 정렬 기준 */
+  orderBy?: 'relevance' | 'created_at' | 'card_priority';
+  limit?: number;
+  offset?: number;
+}
+
+interface SearchResult {
+  items: Array<{
+    identityId: number;
+    entityKey: string;
+    entityType: string;
+    summary: string | null;
+    cardStatus?: CardStatus;
+    cardPriority?: CardPriority;
+    cardTags?: string[];
+    /** FTS rank score */
+    rank: number;
+  }>;
+  total: number;
+  hasMore: boolean;
+}
+```
+
+> 내부 구현은 `entity_version.search_tsv`를 사용한 `ts_rank()` 기반 검색. 필터는 WHERE 조건으로 결합.
+
+- `inconsistency_report`: card 고유 검사 추가 (§10.4 stale link, orphan card, **card_key path 불일치** (v4.4 P-7))
+  > **card_key path 불일치 검사** (v4.4 P-7): `move_card` 후 card_key path와 실제 parent(card_relation의 contains)가 불일치하는 card를 감지한다. 예: key가 `card::auth/login`인데 실제 parent가 `card::billing`이면 불일치. 경고 수준(blocking 아님)으로 보고한다.
 - `find_orphans`: "parent가 없는 non-root card" 검사 추가
+
+### 12.6 Agent Context Retrieval 도구 (소비 도구)
+
+> **핵심 동기**: bunner-kb는 "바이브코딩 RAG 서버"이다. §12.1~12.5의 CRUD/관리 도구만으로는 에이전트가 코딩 시 KB에서 컨텍스트를 꺼내 쓸 수 없다. 이 섹션의 도구들은 에이전트가 **실제 코딩 작업 중** 최소 컨텍스트를 빠르게 얻기 위한 **읽기 전용 소비 도구**이다.
+
+#### `get_context`
+
+특정 파일/코드에 관련된 card, relation, evidence를 일괄 반환한다. 에이전트가 파일을 열 때 자동 호출하는 것을 권장.
+
+```typescript
+interface GetContextInput {
+  projectId: string;
+  workspaceId: string;
+  /** 파일 경로 또는 entity_key. 해석 규칙 (v4.2 C-3):
+   * - "module:" 또는 "symbol:" prefix → entity_key로 해석
+   * - "card::" prefix → card entity_key로 해석 (card의 linked code를 반환)
+   * - 그 외 → 파일 경로로 해석. "module:{target}"으로 변환 후 조회
+   */
+  target: string;
+  /** 반환할 정보 범위 (기본: 'full') */
+  depth?: 'minimal' | 'standard' | 'full';
+}
+
+interface GetContextResult {
+  /** 대상 code entity 정보 */
+  codeEntity: {
+    identityId: number;
+    entityKey: string;
+    summary: string | null;
+    contentHash: string | null;
+  } | null;
+  /** 연결된 card 목록 (card_link 경유) */
+  linkedCards: Array<{
+    cardKey: string;
+    summary: string;
+    cardStatus: CardStatus;
+    cardPriority: CardPriority | null;
+    rationale: string;
+    staleStatus: string;
+    /** depth='full'일 때만 포함 */
+    body?: string;
+    acceptanceCriteria?: AcceptanceCriterion[];
+  }>;
+  /** 관련 code entities (code_relation 경유) */
+  relatedCode: Array<{
+    entityKey: string;
+    relationType: string;
+    direction: 'outgoing' | 'incoming';
+  }>;
+  /** depth='full'일 때: 연결된 card들의 상위/하위 card */
+  cardContext?: Array<{
+    cardKey: string;
+    parentCardKey: string | null;
+    childCardKeys: string[];
+    dependsOn: string[];
+    dependedBy: string[];
+  }>;
+}
+```
+
+#### `get_implementation_guide`
+
+특정 card를 구현하기 위한 참고 정보(관련 코드, 의존성, 형제 card)를 반환한다.
+
+```typescript
+interface GetImplementationGuideInput {
+  projectId: string;
+  workspaceId: string;
+  cardKey: string;
+}
+
+interface GetImplementationGuideResult {
+  card: {
+    cardKey: string;
+    summary: string;
+    body: string;
+    cardStatus: CardStatus;
+    cardPriority: CardPriority | null;
+    acceptanceCriteria: AcceptanceCriterion[];
+  };
+  /** 이미 연결된 code entities */
+  existingLinks: Array<{
+    entityKey: string;
+    filePath: string;
+    rationale: string;
+    staleStatus: string;
+  }>;
+  /** 의존하는 card들과 그 구현 상태 */
+  dependencies: Array<{
+    cardKey: string;
+    summary: string;
+    cardStatus: CardStatus;
+    linkedCodeCount: number;
+  }>;
+  /** 같은 parent 아래 형제 card들 */
+  siblings: Array<{
+    cardKey: string;
+    summary: string;
+    cardStatus: CardStatus;
+  }>;
+  /** parent card 정보 */
+  parent: {
+    cardKey: string;
+    summary: string;
+  } | null;
+  /** 구현 진행률 */
+  coverage: {
+    totalChildren: number;
+    linkedChildren: number;
+    coveragePercent: number;
+  };
+}
+```
+
+#### `get_subgraph`
+
+특정 entity를 중심으로 N-hop 서브그래프를 추출한다. 시각화/탐색용.
+
+```typescript
+interface GetSubgraphInput {
+  projectId: string;
+  workspaceId?: string;
+  /** 중심 entity의 identity_id 또는 entity_key */
+  center: number | string;
+  /** 탐색 깊이 (기본: 2) */
+  hops?: number;
+  /** 포함할 관계 타입 (기본: 전부) */
+  includeRelationTypes?: string[];
+  /** card_link도 포함할지 (기본: true) */
+  includeCardLinks?: boolean;
+}
+
+interface GetSubgraphResult {
+  nodes: Array<{
+    identityId: number;
+    entityKey: string;
+    entityType: string;
+    summary: string | null;
+    cardStatus?: CardStatus;
+    cardPriority?: CardPriority;
+  }>;
+  edges: Array<{
+    sourceId: number;
+    targetId: number;
+    relationType: string;
+    table: 'card_link' | 'card_relation' | 'code_relation';
+    meta?: Record<string, unknown>;
+  }>;
+  center: number;
+  truncated: boolean;
+}
+```
+
+> **성능 기준**: `get_context`는 < 50ms, `get_implementation_guide`는 < 100ms, `get_subgraph(hops=2)`는 < 200ms.
+
+### 12.7 에이전트 워크플로우 가이드 (v4.4 P-6, S-3)
+
+에이전트(AI)가 bunner-kb MCP 도구를 **어떤 순서로, 어떤 상황에서** 사용하는지 정의한다. 이 섹션은 `AGENTS.md` 및 `.cursor/rules/`의 MCP 사용 규칙과 연동된다.
+
+#### 핵심 원칙
+
+1. **Read-before-Write**: 코드를 수정하기 전에 반드시 `get_context` 또는 `search`로 관련 card/link 상태를 확인한다
+2. **Card-first Flow**: 구현 전에 card가 등록되어 있어야 한다. card 없이 코드만 작성하는 것은 KB 관점에서 "추적 불가능한 구현"이다
+3. **Evidence 생성 의무**: 코드를 작성/수정했으면 `link_card`로 card_link + evidence를 생성한다
+
+#### 워크플로우 A: 새 기능 구현
+
+```
+1. register_card        — 요구사항 정의 (사용자 지시 또는 에이전트 판단)
+2. get_implementation_guide — 구현 가이드 확인 (sibling card, parent, coverage 현황)
+3. [코드 작성]           — 에이전트가 코드를 생성/수정
+4. link_card            — 작성한 코드를 card에 연결 (evidence 자동 생성)
+5. update_card_status   — implementing → implemented (구현 완료 시)
+6. coverage_map         — 진행률 확인 (선택)
+```
+
+#### 워크플로우 B: 기존 코드 수정
+
+```
+1. get_context          — 수정할 파일/코드의 관련 card 확인
+2. card_dashboard       — stale link, 전체 현황 파악 (선택)
+3. [코드 수정]           — card body를 참고하여 수정
+4. link_card            — 수정한 코드의 link 재검증 (stale → fresh)
+```
+
+#### 워크플로우 C: 리팩토링 (파일 이동/리네임)
+
+```
+1. get_context          — 이동 대상 파일의 card_link 확인
+2. [파일 이동/리네임]     — 에이전트가 리팩토링 수행
+3. [startupScan/watch]  — Sync Worker가 자동으로 identity matching (계층 1)
+4. get_context          — 이동 후 link 보존 확인
+5. resolve_identity_candidates — 자동 매칭 실패 시 후보 검토 (계층 2)
+```
+
+#### 워크플로우 D: Card 관리 (사용자 주도)
+
+```
+1. register_card        — card 등록/수정
+2. relate_cards         — card 간 관계 설정 (depends_on, extends 등)
+3. update_card_status   — lifecycle 전이 (draft → proposed → accepted → ...)
+4. card_impact          — 상태 변경 시 영향 범위 확인 (선택)
+```
+
+#### AGENTS.md / .cursor/rules 연동 (v4.4 S-3)
+
+에이전트가 이 워크플로우를 자동으로 따르려면 `AGENTS.md` 또는 `.cursor/rules/mcp-usage.mdc`에 다음이 반영되어야 한다:
+
+| 규칙 | AGENTS.md / rules 반영 내용 |
+|------|---------------------------|
+| Read-before-Write | "코드 변경 전 `get_context` 호출 필수" |
+| Card-first | "새 기능 구현 시 card 등록 여부 확인. 없으면 `register_card` 선행" |
+| Evidence 의무 | "코드 작성/수정 후 `link_card` 호출하여 card_link + evidence 생성" |
+| Stale 처리 | "card body 수정 후 `card_dashboard`로 stale link 확인, 필요 시 `link_card` 재호출" |
+| Workspace 확인 | "MCP 호출 시 현재 branch에 대응하는 workspace_id 사용. archived workspace에 write 금지" |
+
+> **구현 시점**: 이 규칙들은 v4 MCP 도구가 구현된 후 `AGENTS.md`와 `.cursor/rules/mcp-usage.mdc`에 반영한다. 현재 기존 도구와는 다른 도구명/파라미터이므로, v4 도구 구현 완료 시점에 rules를 일괄 업데이트한다.
 
 ---
 
@@ -1484,12 +2312,17 @@ v2 §11.2 동일. 기존 18개 도구를 identity + active version JOIN 기반�
 | 상황 | 처리 |
 |------|------|
 | 잘못된 전이 | 에러: "Cannot transition from {from} to {to}" |
-| 상한 제약 위반 | 에러: "Child status cannot exceed parent status" |
+| 상한 경고 (v4.2 F-2) | 경고: "Child status exceeds parent status" (전이는 허용, 응답의 `warnings[]`에 포함) |
+| verified 전이 시 evidence 미충족 (v4.2 C-1) | 에러: "No active evidence found. Link code to this card first." |
 | `projectId` 불일치 | 에러: "Card not found in project" |
 
-### 13.4 기타 에러
+### 13.4 `@card` 파싱 에러 (v4.2 C-4)
 
-v2 §12의 나머지 에러 처리 계승 (identity matching, apply_identity_rewrite, rollback_approval 등).
+sync worker의 `@card` 주석 파싱 시 발생하는 에러는 §10.1에 정의. sync를 중단시키지 않으며 `sync_event`에 경고로 기록한다.
+
+### 13.5 기타 에러
+
+identity matching, apply_identity_rewrite, rollback_approval 등의 에러 처리:
 
 ---
 
@@ -1520,6 +2353,26 @@ v2 §12의 나머지 에러 처리 계승 (identity matching, apply_identity_rew
 | `fact` | `entity_id` → `version_id` (FK 대상 변경) |
 | `sync_event` | `entity_id` → `identity_id` + `version_id` |
 
+> `source`, `fact`, `fact_type`, `strength_type` DDL은 §3.3에 정의되어 있다. migration 시 FK 대상을 `entity_id` → `version_id`로 변경한다.
+
+#### `sync_event` (v4 DDL)
+
+```sql
+CREATE TABLE sync_event (
+  id            SERIAL PRIMARY KEY,
+  sync_run_id   INTEGER NOT NULL REFERENCES sync_run(id),
+  identity_id   INTEGER REFERENCES entity_identity(id) ON DELETE SET NULL,
+  version_id    INTEGER REFERENCES entity_version(id) ON DELETE SET NULL,
+  action        TEXT NOT NULL CHECK (action IN ('created', 'updated', 'archived', 'deleted', 'matched')),
+  entity_key    TEXT,
+  meta          JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX sync_event_run_idx ON sync_event(sync_run_id);
+CREATE INDEX sync_event_identity_idx ON sync_event(identity_id);
+```
+
 ### 14.3 제거 테이블
 
 | 테이블 | 시점 |
@@ -1531,15 +2384,58 @@ v2 §12의 나머지 에러 처리 계승 (identity matching, apply_identity_rew
 ### 14.4 Seed 데이터
 
 ```sql
--- entity_type: card 추가, claim 불필요
-INSERT INTO entity_type (name) VALUES ('card')
-  ON CONFLICT (name) DO NOTHING;
+-- entity_type seed (id 고정 — 다른 DDL에서 id를 직접 참조함) (v4.2 F-4)
+INSERT INTO entity_type (id, name) VALUES
+  (1, 'module'),
+  (2, 'symbol'),
+  (3, 'card')
+ON CONFLICT (id) DO NOTHING;
+SELECT setval('entity_type_id_seq', (SELECT MAX(id) FROM entity_type));
+
+-- relation_type_registry seed (id 고정 — partial unique index가 id=1을 참조함) (v4.2 F-4)
+INSERT INTO relation_type_registry (id, domain, key, description, is_system) VALUES
+  -- card_relation types
+  (1, 'card_relation', 'contains',   'parent → child (nested tree edge)', true),
+  (2, 'card_relation', 'depends_on', 'A depends on B (DAG)', true),
+  (3, 'card_relation', 'extends',    'A extends B (cycle allowed)', true),
+  -- code_relation types (v4.2 E-3: 'implements'는 code↔code 인터페이스 구현 관계.
+  --   v1의 spec↔code 'implements' relation과 다름 — v1의 것은 card_link로 migration됨. §15.3 참조)
+  (4, 'code_relation', 'imports',    'module import', true),
+  (5, 'code_relation', 'extends',    'class/interface inheritance', true),
+  (6, 'code_relation', 'calls',      'function call', true),
+  (7, 'code_relation', 'implements', 'interface implementation (code↔code only)', true)
+ON CONFLICT (id) DO NOTHING;
+SELECT setval('relation_type_registry_id_seq', (SELECT MAX(id) FROM relation_type_registry));
+
+-- fact_type seed (id 고정)
+INSERT INTO fact_type (id, name) VALUES
+  (1, 'module_info'),
+  (2, 'symbol_info'),
+  (3, 'card_body')
+ON CONFLICT (id) DO NOTHING;
+SELECT setval('fact_type_id_seq', (SELECT MAX(id) FROM fact_type));
+
+-- strength_type seed (id 고정)
+INSERT INTO strength_type (id, name) VALUES
+  (1, 'inferred'),
+  (2, 'manual'),
+  (3, 'derived')
+ON CONFLICT (id) DO NOTHING;
+SELECT setval('strength_type_id_seq', (SELECT MAX(id) FROM strength_type));
+
+-- system user seed (v4.3 B-1) — migration, sync 등 시스템 작업용
+INSERT INTO "user" (id, email) VALUES
+  ('migration', 'system+migration@bunner.local'),
+  ('system',    'system@bunner.local')
+ON CONFLICT (id) DO NOTHING;
 ```
 
-> v2에서 사용하던 `spec`, `claim` entity_type은 migration 후 제거.
-> v4에서는 `card_relation`/`code_relation`이 `relation_type_registry`를 참조한다. 관계 타입 시드는 registry에 모은다.
+> 이전에 사용하던 `spec`, `claim` entity_type은 migration 완료 후 제거.
+> 사용자 정의 관계 타입은 `is_system = false`로 추가한다.
+> **(v4.2 F-4)**: seed id를 고정하여 partial unique index (`card_relation_single_parent WHERE relation_type_id = 1`) 등에서 안전하게 참조 가능. `setval`로 시퀀스 동기화.
+> **(v4.3 B-1)**: `migration` user는 migration 시 card_link.created_by에 사용. `system` user는 MCP config에 user_id가 설정되지 않은 경우의 fallback (권장하지 않음).
 
-### 14.5 성능 베이스라인 (v2 C-7 반영)
+### 14.5 성능 베이스라인
 
 주요 쿼리의 성능 기준:
 
@@ -1551,13 +2447,19 @@ INSERT INTO entity_type (name) VALUES ('card')
 | coverage_map (depth 5) | < 200ms | recursive CTE + index |
 | card_impact (depth 3) | < 100ms | BFS + index |
 
-### 14.6 FTS 의존성 (v2 D-5 반영)
+### 14.6 FTS 의존성 (v4.2 D-6 기본 전략 확정)
 
-한국어 Full-Text Search를 위해 다음 중 하나 필요:
-- `pg_bigm`: bigram 기반 (설치 간단)
-- `pgroonga`: Groonga 기반 (정확도 높음)
+**기본 전략: `pg_bigm` (확정)**
 
-> 기본은 PostgreSQL 내장 FTS. 한국어 지원이 필요한 경우 `pg_bigm` 권장. `docker-compose.yml`에 extension 설치 포함.
+바이브코딩에서 card body를 한국어로 작성하는 것이 자연스러우므로, 한국어 FTS는 **v4 scope에서 필수**이다. PostgreSQL 내장 `'simple'` config는 공백 기준 토크나이징만 하므로 한국어에서는 사실상 무용하다.
+
+| 옵션 | 설치 | 한국어 | 선택 |
+|------|------|--------|------|
+| `pg_bigm` | Docker extension 1줄 | bigram 기반. 2자 이상 매칭 | ✅ **v4 기본** |
+| `pgroonga` | 별도 Groonga 설치 | 정확도 높음 | v3.1 옵션 |
+| 내장 `simple` | 없음 | 공백 기준만 | ❌ 한국어 불가 |
+
+> `docker-compose.yml`에 `pg_bigm` extension 설치를 포함한다. `pgroonga`는 v3.1에서 정확도가 필요할 때 전환 검토.
 
 ### 14.7 검색(FTS) / 벡터(pgvector) 준비
 
@@ -1566,21 +2468,26 @@ v4는 **VIEW/TABLE을 추가로 만들지 않고**, SSOT 테이블(`entity_versi
 #### FTS (PostgreSQL 내장)
 
 ```sql
-ALTER TABLE entity_version
-  ADD COLUMN search_tsv tsvector
-  GENERATED ALWAYS AS (
-    to_tsvector('simple',
-      coalesce(entity_key, '') || ' ' ||
-      coalesce(summary, '') || ' ' ||
-      coalesce(card_body, '')
-    )
-  ) STORED;
+-- pg_bigm 기반 FTS (v4.2 D-6)
+-- pg_bigm은 LIKE '%query%'를 GIN 인덱스로 가속한다
+CREATE INDEX entity_version_search_bigm_entity_key_idx
+  ON entity_version USING gin (entity_key gin_bigm_ops)
+  WHERE status = 'active';
 
-CREATE INDEX entity_version_search_tsv_idx
-  ON entity_version USING GIN (search_tsv);
+CREATE INDEX entity_version_search_bigm_summary_idx
+  ON entity_version USING gin (summary gin_bigm_ops)
+  WHERE status = 'active' AND summary IS NOT NULL;
+
+CREATE INDEX entity_version_search_bigm_card_body_idx
+  ON entity_version USING gin (card_body gin_bigm_ops)
+  WHERE status = 'active' AND card_body IS NOT NULL;
 ```
 
-> 한국어 토크나이징 품질이 필요하면 `pg_bigm`/`pgroonga`를 옵션으로 붙이되, SSOT는 `entity_version` 그대로 유지한다.
+> **검색 쿼리 패턴**: `WHERE entity_key LIKE '%검색어%' OR summary LIKE '%검색어%' OR card_body LIKE '%검색어%'`. pg_bigm이 GIN 인덱스로 가속.
+>
+> **fallback**: pg_bigm이 설치되지 않은 환경에서는 PostgreSQL 내장 `to_tsvector('simple', ...)`로 fallback한다. 이 경우 한국어 토크나이징 품질이 떨어짐.
+>
+> SSOT는 `entity_version` 그대로 유지한다.
 
 #### Vector (pgvector 훅)
 
@@ -1592,63 +2499,172 @@ CREATE INDEX entity_version_search_tsv_idx
 
 ---
 
-## 15. Migration Path (v1 → v4)
+## 15. Migration Path (현재 → v4)
 
 ### 15.1 전략
 
-v1 → v4 직접 migration. (v2는 설계 문서로만 존재하므로 v2 스키마가 배포된 적 없음)
+현재 스키마에서 v4로 직접 migration.
 
 | Phase | 내용 |
 |-------|------|
-| 1 | 신규 테이블 생성 |
+| 1 | 신규 테이블 생성 (`"user"` 포함, workspace에 `status`/`updated_at` 추가) (v4.3) |
 | 2 | entity → entity_identity + entity_version 데이터 복사 (INSERT...RETURNING 방식) |
 | 3 | relation → card_link + card_relation + code_relation 분리 |
 | 4 | source/fact FK 전환 |
 | 5 | 레거시 테이블 제거 |
 
-### 15.2 Phase 2: Entity 매핑 (v2 A-3 반영)
+### 15.2 Phase 2: Entity 매핑
 
-> **v2의 ROW_NUMBER 매칭 문제 수정**: `INSERT...RETURNING`으로 안전한 1:1 매핑.
+> `INSERT...RETURNING`으로 안전한 1:1 매핑 (ROW_NUMBER 매칭의 불안정성 방지).
 
 ```sql
--- entity별로 INSERT → RETURNING으로 identity_id를 즉시 획득
--- PL/pgSQL 루프 또는 CTE WITH INSERT...RETURNING 사용
+-- (v4.2 A-4) 매핑 임시 테이블 생성 (v4.1에서 누락)
+CREATE TEMP TABLE entity_to_identity_map (
+  entity_id   INTEGER NOT NULL,
+  identity_id INTEGER NOT NULL,
+  entity_key  TEXT NOT NULL,
+  workspace_id TEXT,
+  PRIMARY KEY (entity_id)
+);
 
-WITH inserted_identities AS (
-  INSERT INTO entity_identity (project_id, workspace_id, entity_type_id, stable_key, created_at)
-  SELECT
-    w.project_id,
-    e.workspace_id,
-    e.entity_type_id,
-    CASE WHEN et.name IN ('spec', 'claim') THEN e.entity_key ELSE NULL END,
-    e.created_at
-  FROM entity e
-  JOIN workspace w ON w.id = e.workspace_id
-  JOIN entity_type et ON et.id = e.entity_type_id
-  ORDER BY e.id
-  RETURNING id, project_id, workspace_id, stable_key, created_at
-)
--- 매핑 테이블은 entity.id 순서와 inserted identity를 entity_key/workspace_id로 JOIN
-INSERT INTO entity_to_identity_map (entity_id, identity_id, entity_key, workspace_id)
-SELECT e.id, ii.id, e.entity_key, e.workspace_id
-FROM entity e
-JOIN entity_type et ON et.id = e.entity_type_id
-JOIN inserted_identities ii ON ii.workspace_id = e.workspace_id
-  AND COALESCE(ii.stable_key, '') = COALESCE(
-    CASE WHEN et.name IN ('spec', 'claim') THEN e.entity_key ELSE NULL END, ''
-  )
-  AND ii.created_at = e.created_at;
+-- PL/pgSQL 루프로 안전한 1:1 매핑 (v4.2 A-4: CTE JOIN의 비유니크 매칭 문제 해결)
+DO $$
+DECLARE
+  rec RECORD;
+  new_identity_id INTEGER;
+  card_type_id SMALLINT;
+BEGIN
+  SELECT id INTO card_type_id FROM entity_type WHERE name = 'card';
+
+  FOR rec IN
+    SELECT e.id AS entity_id, e.entity_key, e.workspace_id, e.created_at,
+           et.name AS type_name, et.id AS type_id,
+           w.project_id
+    FROM entity e
+    JOIN entity_type et ON et.id = e.entity_type_id
+    JOIN workspace w ON w.id = e.workspace_id
+    ORDER BY e.id
+  LOOP
+    INSERT INTO entity_identity (
+      project_id, workspace_id, entity_type_id, stable_key, created_at
+    ) VALUES (
+      rec.project_id,
+      CASE WHEN rec.type_name IN ('spec', 'claim') THEN NULL ELSE rec.workspace_id END,
+      CASE WHEN rec.type_name IN ('spec', 'claim') THEN card_type_id ELSE rec.type_id END,
+      CASE
+        WHEN rec.type_name = 'spec' THEN REPLACE(rec.entity_key, 'spec::', 'card::')
+        WHEN rec.type_name = 'claim' THEN REPLACE(rec.entity_key, 'claim::', 'card::')
+        ELSE NULL
+      END,
+      rec.created_at
+    ) RETURNING id INTO new_identity_id;
+
+    INSERT INTO entity_to_identity_map (entity_id, identity_id, entity_key, workspace_id)
+    VALUES (rec.entity_id, new_identity_id, rec.entity_key, rec.workspace_id);
+  END LOOP;
+END $$;
 ```
 
 > **검증**: entity 수 == identity 수 == map 수. 불일치 시 즉시 중단.
+> **(v4.2 A-4)**: v4.1의 CTE + JOIN 방식은 `workspace_id + created_at` 비유니크 조인으로 중복 매칭 가능했다. PL/pgSQL 루프로 변경하여 각 entity에 대해 INSERT → RETURNING으로 정확한 1:1 매핑을 보장한다.
 
 ### 15.3 Phase 3: relation 분리
 
+v1의 `relation` 테이블을 v4의 3종 테이블로 분리한다.
+
+#### Step 1: 기존 relation_type → v4 registry 매핑
+
 ```sql
--- v1 relation_type(문자열)을 v4로 이관할 때는
--- (domain, key) → relation_type_registry.id 로 resolve 한 뒤,
--- card_relation/code_relation에 relation_type_id로 기록한다.
+-- 기존 relation_type 테이블의 name을 v4 registry로 매핑
+-- 매핑 임시 테이블 생성
+CREATE TEMP TABLE relation_type_map AS
+SELECT
+  v1rt.id AS v1_type_id,
+  v1rt.name AS v1_name,
+  v4rtr.id AS v4_registry_id,
+  v4rtr.domain AS v4_domain
+FROM relation_type v1rt  -- 기존 테이블
+JOIN relation_type_registry v4rtr ON (
+  -- 기존 name → v4 (domain, key) 매핑
+  -- (v4.2 E-3) 기존 'implements'는 spec↔code 관계였으므로 v4의 card_link로 migration된다 (아래 Step 2a).
+  -- 여기서는 card_relation.contains로 매핑하지 않음. v1에 spec 간 관계가 있었다면 별도 처리 필요.
+  (v1rt.name = 'implements' AND v4rtr.domain = 'card_relation' AND v4rtr.key = 'contains')
+  OR (v1rt.name = 'imports' AND v4rtr.domain = 'code_relation' AND v4rtr.key = 'imports')
+  OR (v1rt.name = 'extends' AND v4rtr.domain = 'code_relation' AND v4rtr.key = 'extends')
+  OR (v1rt.name = 'calls' AND v4rtr.domain = 'code_relation' AND v4rtr.key = 'calls')
+  -- 추가 기존 type이 있으면 여기에 매핑 추가
+);
+
+-- 매핑 검증: v1의 모든 relation_type이 매핑되었는지 확인
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM relation_type v1rt
+    WHERE NOT EXISTS (SELECT 1 FROM relation_type_map rtm WHERE rtm.v1_type_id = v1rt.id)
+  ) THEN
+    RAISE EXCEPTION 'Unmapped relation types exist. Migration aborted.';
+  END IF;
+END $$;
 ```
+
+#### Step 2: relation → card_link / card_relation / code_relation 분리
+
+```sql
+-- (a) spec/claim 관련 relation → card_link
+-- v1에서 strength='manual'이고 한쪽이 spec/claim, 다른 쪽이 code인 경우
+INSERT INTO card_link (
+  project_id, workspace_id,
+  card_identity_id, code_identity_id,
+  anchor, rationale, weight, created_by, stale_status,
+  created_at, updated_at
+)
+SELECT
+  p.id,
+  w.id,
+  m_card.identity_id,
+  m_code.identity_id,
+  '{}'::jsonb,  -- anchor는 v1에 없으므로 빈 객체
+  'Migrated from relation #' || r.id,
+  1.0,
+  'migration',  -- v4.3: migration 전용 user (seed에서 미리 생성)
+  'fresh',
+  r.created_at,
+  r.created_at
+FROM relation r
+JOIN entity_to_identity_map m_card ON m_card.entity_id = r.src_entity_id
+JOIN entity_to_identity_map m_code ON m_code.entity_id = r.dst_entity_id
+JOIN entity e_src ON e_src.id = r.src_entity_id
+JOIN entity_type et_src ON et_src.id = e_src.entity_type_id
+JOIN workspace w ON w.id = e_src.workspace_id
+JOIN project p ON p.id = w.project_id
+WHERE et_src.name IN ('spec', 'claim')
+ON CONFLICT (card_identity_id, code_identity_id) DO NOTHING;
+
+-- (b) code↔code relation → code_relation
+INSERT INTO code_relation (
+  workspace_id,
+  src_identity_id, dst_identity_id,
+  relation_type_id, strength, source_file,
+  created_at
+)
+SELECT
+  e_src.workspace_id,
+  m_src.identity_id,
+  m_dst.identity_id,
+  rtm.v4_registry_id,
+  r.strength,
+  NULL,
+  r.created_at
+FROM relation r
+JOIN relation_type_map rtm ON rtm.v1_type_id = r.relation_type_id
+  AND rtm.v4_domain = 'code_relation'
+JOIN entity_to_identity_map m_src ON m_src.entity_id = r.src_entity_id
+JOIN entity_to_identity_map m_dst ON m_dst.entity_id = r.dst_entity_id
+JOIN entity e_src ON e_src.id = r.src_entity_id
+ON CONFLICT (src_identity_id, dst_identity_id, relation_type_id) DO NOTHING;
+```
+
+> **검증**: `COUNT(relation)` == `COUNT(card_link migrated)` + `COUNT(code_relation migrated)`. 불일치 시 중단.
 
 ### 15.4 롤백 계획
 
@@ -1656,7 +2672,7 @@ JOIN inserted_identities ii ON ii.workspace_id = e.workspace_id
 
 ### 15.5 Dual-Write / Dual-Read
 
-v2 §15.5 동일 패턴. `BUNNER_V4_ENABLED` feature flag.
+`BUNNER_V4_ENABLED` feature flag로 현재 → v4 점진적 전환.
 
 ---
 
@@ -1673,7 +2689,8 @@ v2 §15.5 동일 패턴. `BUNNER_V4_ENABLED` feature flag.
 | **3b** | Dual-read adapter | 3 | 중 |
 | **4** | Card 도구 구현 (register_card, link_card, unlink_card, move_card, update_card_status, relate_cards, unrelate_cards) | 3b | 중 |
 | **5** | 거버넌스 도구 (rollback_approval + payload 검증) | 4 | 중 |
-| **6** | 분석 도구 (card_impact, card_status, coverage_map) | 4 | 중 |
+| **6** | 분석 도구 (card_impact, card_dashboard, coverage_map) | 4 | 중 |
+| **6b** | Agent Context 도구 (get_context, get_implementation_guide, get_subgraph) | 4 | 중 |
 | **7** | Sync worker 재작성 (version append + @card 파싱 + stale detection) | 3b | **높** |
 | **8** | Purge 재작성 (lifecycle FK 처리 + COALESCE identity purge) | 7 | 높 |
 | **9** | Identity resolution (resolve_identity_candidates + apply_identity_rewrite) | 4 | 중 |
@@ -1682,7 +2699,7 @@ v2 §15.5 동일 패턴. `BUNNER_V4_ENABLED` feature flag.
 
 ### 16.2 호환성 모드
 
-v2 §16.2 동일 패턴. `BUNNER_V4_ENABLED` feature flag로 점진적 전환.
+`BUNNER_V4_ENABLED` feature flag로 점진적 전환. flag가 off이면 기존 도구/쿼리를 사용하고, on이면 v4 도구/쿼리로 전환한다.
 
 ---
 
@@ -1710,7 +2727,7 @@ LLM이 code↔card 일치 여부를 검증. `evidence_type: 'ai_verification'`.
 
 ### 17.6 Advisory Lock (v3.1)
 
-v2 §17.6 동일. `pg_advisory_xact_lock(identity_id)`.
+`pg_advisory_xact_lock(identity_id)`로 identity 단위 잠금. §9.4의 SERIALIZABLE 방어를 세밀한 잠금으로 대체하여 동시성을 개선한다.
 
 ### 17.7 `.card.md` 파서 (v3.1)
 
@@ -1718,19 +2735,105 @@ v2 §17.6 동일. `pg_advisory_xact_lock(identity_id)`.
 
 ### 17.8 approval_event Archive Policy (v3.1)
 
-v2 §17.5 동일.
+오래된 approval_event를 별도 archive 테이블로 이관하여 메인 테이블 성능을 유지한다. 이관 기준: `created_at < now() - {archiveDays} * interval '1 day'`.
 
 ### 17.9 Weighted Scoring for Identity Candidates (v3.1)
 
-v2 §17.2 동일.
+identity resolution 시 content_hash 외에 `symbolName` 유사도, `summary` 유사도 등 가중 점수를 부여하여 후보 순위를 정밀화한다.
 
-### 17.10 Multi-workspace Card Sharing (v3.2)
+### 17.10 Cross-project Card Sharing (v3.2)
 
-공통 card를 여러 workspace에서 참조.
+공통 card를 여러 project에서 참조. 최소 인터페이스 설계 방향:
+
+```typescript
+// v3.2 인터페이스 초안 — v4에서는 구현하지 않으나, 스키마 확장 시 깨지지 않도록 방향을 미리 정의
+interface SharedCardRef {
+  /** 원본 card의 project */
+  sourceProjectId: string;
+  /** 원본 card identity */
+  sourceCardIdentityId: number;
+  /** 참조하는 project */
+  targetProjectId: string;
+  /** 참조 유형: 'mirror' (읽기 전용 복사) | 'alias' (원본 직접 참조) */
+  refType: 'mirror' | 'alias';
+}
+```
+
+> **v4 scope 제약**: `card_relation`/`card_link`는 `project_id` 단일 스코프이므로, cross-project 참조 시 별도 `shared_card_ref` 테이블이 필요하다. v4에서는 이 테이블을 생성하지 않지만, `entity_identity.project_id`를 FK로 유지하여 향후 확장 시 스키마 변경을 최소화한다.
 
 ### 17.11 Access Control / Ownership (v3.2)
 
 card owner/reviewer 지정.
+
+### 17.12 지식 품질 스코어링 / Decay (v3.1)
+
+card와 link의 품질을 시간 기반으로 평가하고, 오래된/미검증 지식의 신뢰도를 자동 감소:
+
+| 지표 | 계산 방식 | 용도 |
+|------|----------|------|
+| freshness | `1.0 - (now - verified_at) / decay_window` | stale link 우선순위 |
+| evidence_quality | `Σ(evidence_weight × is_active)` | card 신뢰도 |
+| coverage_quality | `coverage × avg(link_freshness)` | 실질적 구현 진행률 |
+
+> 스키마 훅: `card_link.verified_at`, `card_evidence.is_active`가 이미 존재하므로 추가 컬럼 불필요. 계산은 쿼리 타임에 수행.
+
+### 17.13 시간축 쿼리 (Temporal Query) (v3.1)
+
+"2주 전 coverage는?", "이 card의 status 변화 추이" 같은 시간 기반 질문을 지원:
+
+- **방법 1**: `entity_lifecycle` + `approval_event`의 `created_at`을 기반으로 특정 시점의 상태를 재구성
+- **방법 2**: Tree Snapshot (§17.5)과 결합하여 시점별 스냅샷 비교
+- 스키마 훅: `entity_version.created_at`, `approval_event.created_at`이 이미 타임스탬프를 보유
+
+### 17.14 이벤트 스트림 (Webhook / Push) (v3.2)
+
+KB 변경 사항을 외부 시스템에 push:
+
+| 이벤트 | 대상 |
+|--------|------|
+| `card_link.stale_status` 변경 | IDE 알림, Slack |
+| card status 전이 | 프로젝트 대시보드 |
+| coverage 임계치 도달 | CI/CD 파이프라인 |
+
+> 스키마 훅: `approval_event`가 모든 상태 변이의 SSOT이므로, approval_event INSERT 트리거로 이벤트 스트림 구현 가능.
+
+### 17.15 Export / Import (포터빌리티) (v3.2)
+
+프로젝트 KB를 이식 가능한 형태로 내보내기/가져오기:
+
+```typescript
+interface KBExportFormat {
+  version: 'v4';
+  project: { id: string; name: string };
+  cards: Array<{ cardKey: string; body: string; status: CardStatus; /* ... */ }>;
+  cardRelations: Array<{ src: string; dst: string; type: string }>;
+  cardLinks: Array<{ cardKey: string; codeEntityKey: string; rationale: string; /* ... */ }>;
+  evidence: Array<{ cardLinkKey: string; type: string; snapshot: unknown }>;
+}
+```
+
+### 17.16 학습 데이터 추출 파이프라인 (v3.2)
+
+KB에 축적된 지식(card ↔ code 매핑, evidence, approval 패턴)을 에이전트 학습 데이터로 추출:
+
+- card body + linked code → fine-tuning 데이터셋
+- approval_event 패턴 → 에이전트 의사결정 개선
+- stale → fresh 전환 이력 → link 품질 예측 모델
+
+> 스키마 훅: 모든 데이터가 PostgreSQL에 정규화되어 있으므로 SQL 기반 ETL로 추출 가능.
+
+### 17.17 자연어 쿼리 인터페이스 (v3.2)
+
+에이전트 또는 사용자가 자연어로 KB에 질문:
+
+```typescript
+interface NaturalLanguageQueryInput {
+  projectId: string;
+  question: string;  // "auth 모듈의 미구현 card는?"
+}
+```
+
+> 구현 경로: pgvector 임베딩(§14.7) + LLM SQL 생성 또는 entity_version.search_tsv FTS + 후처리.
 
 ---
 
@@ -1740,8 +2843,9 @@ card owner/reviewer 지정.
 |------|------|
 | **tenant** | 배포/조직 경계. 여러 project를 묶는 최상위 스코프 (§2.7) |
 | **project** | card 지식의 SSOT 경계. card/card_relation/approval_event의 기본 스코프 (§2.7) |
-| **workspace** | code 인덱싱 단위(= project + branch). code/code_relation의 스코프 (§2.7) |
-| **card** | 1급 지식 객체. 요구사항·기능 명세를 표현하는 nested tree의 노드. v2의 spec/claim을 통합 |
+| **workspace** | code 인덱싱 단위(= project + branch). code/code_relation의 스코프. append-only — 삭제하지 않고 archive (§2.7, §11.4) |
+| **user** | 행위자 식별 테이블. `"user"` (PG 예약어). 모든 write 작업의 actor_id가 참조 (§2.7) |
+| **card** | 1급 지식 객체. 요구사항·기능 명세를 표현하는 nested tree의 노드. 단일 entity_type으로 무제한 depth의 tree를 구성 |
 | **entity_identity** | entity의 전 생애 불변 정체성. card_link/code_relation이 참조하는 대상 |
 | **entity_version** | entity의 특정 시점 상태 (주소, 내용, 메타). 가변 |
 | **entity_key** | entity_version에 저장되는 현재 주소. 형식: `{type}:{identifier}` |
@@ -1770,7 +2874,7 @@ card owner/reviewer 지정.
 | `tooling/mcp/src/tools/card.ts` | **신규** | register_card, link_card, unlink_card, move_card, update_card_status, relate_cards, unrelate_cards |
 | `tooling/mcp/src/tools/identity.ts` | **신규** | resolve_identity_candidates, apply_identity_rewrite |
 | `tooling/mcp/src/tools/governance.ts` | **신규** | rollback_approval |
-| `tooling/mcp/src/tools/dashboard.ts` | **신규** | card_impact, card_status, coverage_map |
+| `tooling/mcp/src/tools/dashboard.ts` | **신규** | card_impact, card_dashboard, coverage_map |
 | `tooling/mcp/src/repo/identity-repo.ts` | **신규** | entity_identity CRUD |
 | `tooling/mcp/src/repo/version-repo.ts` | **신규** | entity_version CRUD + status 전이 |
 | `tooling/mcp/src/repo/card-link-repo.ts` | **신규** | card_link CRUD + stale 관리 |
@@ -1779,6 +2883,11 @@ card owner/reviewer 지정.
 | `tooling/mcp/src/repo/card-evidence-repo.ts` | **신규** | card_evidence CRUD |
 | `tooling/mcp/src/repo/approval-repo.ts` | **신규** | approval_event 기록/조회 + payload 검증 |
 | `tooling/mcp/src/repo/lifecycle-repo.ts` | **신규** | entity_lifecycle 기록/조회 |
+| `tooling/mcp/src/repo/tenant-repo.ts` | **신규** | tenant CRUD |
+| `tooling/mcp/src/repo/project-repo.ts` | **신규** | project CRUD |
+| `tooling/mcp/src/repo/workspace-repo.ts` | **신규** | workspace CRUD + archive (v4.3: 삭제 없음, archive만) |
+| `tooling/mcp/src/repo/user-repo.ts` | **신규** | `"user"` CRUD (v4.3 B-1) |
+| `tooling/mcp/src/tools/context.ts` | **신규** | get_context, get_implementation_guide, get_subgraph (§12.6) |
 | `tooling/mcp/src/repo/entity-repo.ts` | **제거** | identity-repo + version-repo로 대체 |
 | `tooling/mcp/src/repo/relation-repo.ts` | **제거** | card-link-repo + card-relation-repo + code-relation-repo로 대체 |
 | `tooling/mcp/src/sync-worker.ts` | **재작성** | version append + @card 파싱 + stale detection |
@@ -1787,7 +2896,7 @@ card owner/reviewer 지정.
 | `tooling/mcp/src/repo/source-repo.ts` | 수정 | FK를 version 참조로 변경 |
 | `tooling/mcp/src/repo/fact-repo.ts` | 수정 | FK를 version 참조로 변경 |
 | `tooling/mcp/src/read-through.ts` | 수정 | `__manual__/` 예외 + version 기준 |
-| `tooling/mcp/drizzle/migrations/` | **신규** | v1→v4 migration SQL |
+| `tooling/mcp/drizzle/migrations/` | **신규** | migration SQL |
 
 ## 부록 C: 테스트 매트릭스
 
@@ -1824,8 +2933,9 @@ card owner/reviewer 지정.
 |---|----------|------|-----------|
 | T3-1 | draft → proposed | `update_card_status` | status 변경, `card_status_changed` |
 | T3-2 | 잘못된 전이 | draft → verified | 에러: "Cannot transition" |
-| T3-3 | deprecated 전파 | parent deprecated | 모든 children도 deprecated |
-| T3-4 | 상한 제약 | parent=accepted, child=verified 시도 | 에러: "Cannot exceed parent" |
+| T3-3 | deprecated 전파 | parent deprecated | 모든 children도 deprecated. child별 개별 event 생성. card_link stale_confirmed |
+| T3-4 | 상한 경고 (v4.2) | parent=accepted, child=verified 시도 | 전이 허용 + `warnings: ["Child status exceeds parent status"]` |
+| T3-5 | verified evidence 미충족 (v4.2) | evidence 없는 card에 verified 시도 | 에러: "No active evidence found" |
 
 ### C.4 거버넌스
 
@@ -1870,9 +2980,43 @@ card owner/reviewer 지정.
 | T8-2 | anchor 불일치 확인 | inconsistency_report | stale_status = 'stale_confirmed' |
 | T8-3 | 재검증 | link_card 재호출 | stale_status = 'fresh', verified_at 갱신 |
 
-## 부록 D: v1 대비 변경 요약
+### C.9 멀티 브랜치 시나리오
 
-| 영역 | v1 | v4 | 변경 이유 |
+| # | 시나리오 | 수행 | 기대 결과 |
+|---|----------|------|-----------|
+| T9-1 | 같은 파일 다른 브랜치 | branch-a, branch-b에서 같은 파일 수정 | 각 workspace에 독립 version. card_link는 project scope이므로 공유 |
+| T9-2 | 브랜치 전환 후 sync | branch-a → branch-b 전환 후 startupScan | branch-b의 workspace에 새 version. branch-a 데이터 불변 |
+| T9-3 | 브랜치 삭제 | workspace archived (v4.3 A-4) | workspace.status='archived', code entity version archived, card_link stale_confirmed. card는 project scope이므로 불변. workspace 레코드는 삭제하지 않음 |
+| T9-5 | 브랜치 재생성 (v4.3 A-3) | 삭제했던 branch-a를 다시 생성 | 새 workspace 생성 (old workspace는 archived 상태로 보존). 새 workspace는 깨끗한 상태에서 startupScan. old 데이터 혼재 없음 |
+| T9-6 | 머지 후 main link (v4.3 F-1) | branch-a에서 card_link 후 main 머지 | main sync 시 @card annotation 기반 link는 자동 재생성. 수동 link는 main에서 재연결 필요 |
+| T9-4 | 동일 card 다른 브랜치 link | card::auth를 branch-a의 code와 branch-b의 code에 각각 link | card_link 2건 (workspace_id 다름). card identity는 1건 |
+
+### C.10 E2E 통합 테스트
+
+| # | 시나리오 | 전체 흐름 | 기대 결과 |
+|---|----------|-----------|-----------|
+| T10-1 | Full lifecycle | `register_card` → `link_card` → 파일 이동 → `startupScan` → identity matching → `coverage_map` | coverage 유지. card_link 불변. identity matching 자동 |
+| T10-2 | Stale → re-verify | `register_card` → `link_card` → `register_card`(body 변경) → stale detection → `link_card`(재호출) | stale_candidate → fresh. verified_at 갱신 |
+| T10-3 | Deprecated cascade | `register_card`(parent) → `register_card`(child) → `link_card`(child) → `update_card_status`(parent=deprecated) | parent+child deprecated. card_link는 유지되나 stale 마킹 |
+| T10-4 | Rollback chain | `link_card` → `rollback_approval` → `register_card`(재연결) | 원래 link 삭제 → 새 link 생성. provenance chain 완전 |
+| T10-5 | Multi-project isolation | project-a에 card 등록 → project-b에서 검색 | project-b에서 검색 결과 0건. 격리 확인 |
+
+### C.11 에이전트 워크플로우 시나리오 (v4.2 F-1)
+
+바이브코딩에서 에이전트의 실제 사용 흐름을 검증하는 시나리오:
+
+| # | 시나리오 | 전체 흐름 | 기대 결과 |
+|---|----------|-----------|-----------|
+| T11-1 | Card → 구현 | 사용자가 `register_card` → 에이전트가 `get_implementation_guide` 호출 → 코드 작성 → `link_card` 호출 | card_link 생성. coverage 반영. 에이전트가 card body/acceptance_criteria를 참고하여 구현 |
+| T11-2 | 파일 열기 → context | 에이전트가 파일을 열면 `get_context({target: "src/auth.ts"})` 호출 | linkedCards, relatedCode 반환. 에이전트가 관련 card를 인지하고 코딩 |
+| T11-3 | Card 수정 → stale → 재검증 | 사용자가 card body 수정 → stale detection → 에이전트가 `card_dashboard`로 stale 확인 → `link_card` 재호출 | stale_candidate → fresh. verified_at 갱신 |
+| T11-4 | 리팩토링 → identity 보존 | 에이전트가 파일 이동/리네임 → startupScan → identity matching | card_link 자동 보존. 에이전트가 다음 `get_context` 호출 시 동일 card 연결 확인 |
+| T11-5 | Bottom-up 구현 | 사용자가 parent card + child cards 등록 → 에이전트가 leaf부터 구현 → child verified → parent verified | 상한 경고만 반환. bottom-up 흐름 정상 동작 |
+| T11-6 | Subgraph 탐색 | 에이전트가 `get_subgraph({center: "card::auth", hops: 2})` 호출 | card tree + linked code + dependencies 그래프 반환. 에이전트가 영향 범위 파악 |
+
+## 부록 D: 현재 대비 변경 요약
+
+| 영역 | 현재 | v4 | 변경 이유 |
 |------|----|----|-----------|
 | 정체성 담체 | `entity.id` | `entity_identity.id` | 스키마 수준 강제 |
 | 파일 이동 처리 | entity_key rewrite | version append | 복잡도 제거 |
@@ -1882,16 +3026,30 @@ card owner/reviewer 지정.
 | 관계 테이블 | relation (단일) | **card_link + card_relation + code_relation** (3종) | 성격별 분리 |
 | evidence | relation_evidence (fact 참조만) | **card_evidence** (5종 다형성) | test, annotation 등 |
 | card 속성 | 없음 | **status, priority, tags, weight, template, external_refs** | 분류/필터/가중치 |
-| card lifecycle | 없음 | **7단계 state machine + 하위 전파** | 워크플로우 추적 |
-| coverage | flat 비율 | **재귀 가중 집계 + tag 횡단** | 정밀한 진행률 |
+| card lifecycle | 없음 | **7단계 state machine + 하위 전파 + 상한 경고(soft)** | 워크플로우 추적 |
+| coverage | flat 비율 | **재귀 가중 집계 + tag 횡단 + workspace 필터** (v4.3) | 정밀한 진행률 |
 | 감사 모델 | sync_event | approval_event (CHECK + payload 검증) | 거버넌스 |
 | 되돌리기 | 없음 | rollback_approval | Reversibility |
 | purge | 물리 삭제 | version purge (evidence 보존) → identity purge (COALESCE fallback) | 감사 보존 |
+| workspace lifecycle | 없음 | **append-only + archive** (v4.3). 삭제 없음, soft delete | 브랜치 패턴 무관 무결성 |
+| 사용자 식별 | 없음 | **`"user"` 테이블 + actor_id FK** (v4.3) | N명 감사 추적 |
 | KB 중심 | code-centric | **card-centric** | 요구사항 중심 |
 | 연결 방향 | code→spec 수동만 | + **@card 자동, glob pattern, external_refs** | 양방향 |
 | 구현 전략 | big-bang | dual-read + feature flag | 점진적 전환 |
-| 도구 | 기존 18개 + 8개 (v2) | 기존 18개 + **12개** (register_card, link_card, unlink_card, move_card, update_card_status, relate_cards, unrelate_cards, card_impact, card_status, coverage_map, rollback_approval, resolve/apply) | card 모델 + lifecycle |
+| 배포 모델 | 단일 사용자 | **N MCP : 1 DB** (v4.3) | 팀 협업 지원 |
+| 도구 | 기존 18개 | 기존 18개 + **15개 신규** (register_card, link_card, unlink_card, move_card, update_card_status, relate_cards, unrelate_cards, card_impact, **card_dashboard**, coverage_map, rollback_approval, resolve/apply, **get_context, get_implementation_guide, get_subgraph**) | card 모델 + lifecycle + **context retrieval** |
+| coverage 정확도 | link 존재 = covered | **evidence 기준 + stale 제외** (v4.4) | 과대평가 방지 |
+| 에이전트 가이드 | 없음 | **워크플로우 A~D + AGENTS.md 연동** (v4.4) | 도구 사용 순서 명문화 |
+| inconsistency 검사 | stale link, orphan | + **card_key path 불일치** (v4.4) | move_card 후 불일치 감지 |
+| workspace 쿼리 안전 | 암묵적 | **archived 제외 패턴 + write 차단** (v4.4) | 운영 안전성 |
+| user_id config | 권장 | **필수 (미설정 시 시작 거부)** (v4.4) | 감사 추적 보장 |
+| FTS DDL | 없음 | **search_tsv TSVECTOR + GIN + 트리거** (v4.5) | 검색 도구 구현 가능 |
+| source/fact DDL | §14에만 존재 | **§3.3에 정식 포함** (v4.5) | 자체 완결 |
+| version project_id 정합 | 앱 보장만 | **트리거 추가** (v4.5) | identity↔version 정합 강제 |
+| PK 생성 전략 | 미명시 | **ULID 권장** (v4.5) | workspace.id 충돌 방지 |
+| retry 모니터링 | 없음 | **메트릭 기록** (v4.5) | advisory lock 전환 판단 |
+| 문서 자체 완결성 | 이전 문서 참조 필요 | **자체 완결** (v4.6) | 이전 문서 없이 독립 이해 가능 |
 
 ---
 
-> **문서 상태**: 초안. 재검토 후 완성도 높여갈 예정.
+> **문서 상태**: v4.6 (이전 문서 의존성 완전 제거 — 2026-02-11). 이전 설계 문서(v1/v2/v3)의 이슈 태그, 섹션 참조, 파일명 참조, 비교 서술을 모두 자체 완결 표현으로 교체. 이전 설계 문서 없이 본 문서만으로 전체 설계를 이해할 수 있다.
