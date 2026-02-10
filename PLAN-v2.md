@@ -82,6 +82,34 @@ v1 설계(`PLAN.md`)는 `entity_key rewrite` + `grace window`로 이 문제를 �
 | **Governance** | 자동화와 인간 책임 경계가 명확한가? | 승인 이벤트가 상태 전이의 단일 진실 소스 |
 | **Evolution cost** | 리팩터링 규모가 커져도 규칙 복잡도가 선형 이하인가? | identity+version 분리로 rewrite 규칙 자체 제거 |
 
+### 2.5 범용화 원칙 (Portability)
+
+bunner-kb는 언어/프로젝트/환경에 무관하게 **바이브코딩 RAG 서버**로 활용할 수 있어야 한다. 이를 위해 코어와 파서의 경계를 명확히 유지한다.
+
+| 원칙 | 실천 |
+|------|------|
+| **코어와 파서를 섞지 않는다** | identity/version/approval/카드 모델 로직에 특정 언어 파서 코드를 넣지 않는다 |
+| **entity_key 형식을 코어에서 가정하지 않는다** | 코어는 entity_key를 opaque string으로 취급. `module:` prefix 파싱은 파서 레이어에서만 수행 |
+| **파서 인터페이스를 확정한다** | `KBParser` 인터페이스를 명시적으로 정의. 파서 플러그인 교체로 다른 언어 지원 |
+| **config를 한 곳에 모은다** | 파일 확장자, hash 단위, @spec 패턴 등을 config 파일로 외부화 |
+
+### 2.6 KB 범위 정책 (Scope Boundary)
+
+KB에 등록하는 지식과 문서로 관리하는 지식의 경계를 명확히 한다.
+
+**판단 기준**: "이 지식이 바뀌면 **특정 코드를 수정해야 하는가?**"
+
+| 지식 유형 | 코드와 결속력 | 관리 위치 | 이유 |
+|----------|-------------|----------|------|
+| **스펙/카드** | 🔴 강함 — 직접 구현 대상 | **KB** (entity) | 코드와 1:1 추적. 변경 시 양방향 영향 |
+| 프로젝트 철학/비전 | ⚪ 없음 | **문서** | 코드와 무관. 사람이 읽는 것 |
+| 아키텍처 결정 (ADR) | 🟡 약함 | **문서** | 참고 사항. 인과관계 아님 |
+| 스타일 가이드 | 🟡 약함 | **문서 + 린터** | 린터가 강제. 코드와 relation 추적 불필요 |
+| 에이전트 규칙 | ⚪ 없음 | **문서** (AGENTS.md) | 프롬프트 주입용 |
+| 용어집/온보딩 | ⚪ 없음 | **문서** | 사람/에이전트 참고용 |
+
+> **스펙↔코드는 계약 관계(이행 의무)이므로 추적할 가치가 있다. 규칙↔코드는 참고 관계(권장)이므로 KB에 넣으면 관리 지옥이 된다.** 규칙은 파일(AGENTS.md, .cursor/rules/) + 린터로 관리한다.
+
 ---
 
 ## 3. 정체성(Identity) 모델
@@ -116,6 +144,7 @@ v1 설계(`PLAN.md`)는 `entity_key rewrite` + `grace window`로 이 문제를 �
 | **Module** | `entity_identity.id` | `module:{file_path}` → `entity_version` | `content_hash` (SHA-256) |
 | **Symbol** | `entity_identity.id` | `symbol:{file_path}#{symbol_name}` → `entity_version` | 부모 module의 identity + `symbol_name` |
 | **Spec** | `entity_identity.id` | `spec::{spec_name}` → `entity_version` | 사용자 지정 (불변) |
+| **Claim** | `entity_identity.id` | `claim::{spec_name}/{claim_name}` → `entity_version` | 사용자 지정 (불변). 상위 spec에 `contains` relation |
 
 ### 3.4 정체성 유지의 의미
 
@@ -135,7 +164,7 @@ CREATE TABLE entity_identity (
   entity_type_id SMALLINT NOT NULL REFERENCES entity_type(id),
   stable_key    TEXT,          -- optional: user-assigned stable name (e.g. spec key)
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE(workspace_id, id)    -- for FK composition if needed
+  -- UNIQUE(workspace_id, id) 불필요: id가 이미 PK이므로 생략
 );
 
 -- partial unique index: stable_key가 있는 경우만 (spec entity)
@@ -166,9 +195,13 @@ CREATE TABLE entity_version (
   status        TEXT NOT NULL DEFAULT 'active',  -- active / archived / superseded
   version_num   INTEGER NOT NULL DEFAULT 1,
   last_seen_run INTEGER REFERENCES sync_run(id),
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE(workspace_id, entity_key, status)  -- same key can exist as active + archived
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- active version만 유일성 보장. archived는 중복 허용 (파일 왕복 이동 대응)
+CREATE UNIQUE INDEX version_active_unique
+  ON entity_version(workspace_id, entity_key)
+  WHERE status = 'active';
 ```
 
 | 컬럼 | 설명 |
@@ -178,7 +211,7 @@ CREATE TABLE entity_version (
 | `summary` | 엔티티 요약 |
 | `meta` | 추가 메타데이터 (JSONB) |
 | `content_hash` | 이 version 시점의 파일 content hash |
-| `status` | `'active'` = 현재 살아있는 version, `'archived'` = 경로 변경으로 비활성, `'superseded'` = 다른 identity로 대체됨 |
+| `status` | `'active'` = 현재 살아있는 version, `'archived'` = 경로 변경으로 비활성, `'superseded'` = 미래 확장용 예약 상태 (v2 미사용. identity merge나 entity 대체 시나리오에서 사용 예정) |
 | `version_num` | 동일 identity 내 순번 (monotonic increment) |
 | `last_seen_run` | 마지막으로 확인된 sync run |
 
@@ -189,7 +222,9 @@ CREATE TABLE entity_lifecycle (
   id            SERIAL PRIMARY KEY,
   identity_id   INTEGER NOT NULL REFERENCES entity_identity(id) ON DELETE CASCADE,
   event_type    TEXT NOT NULL
-    CHECK (event_type IN ('created', 'renamed', 'split', 'merged', 'superseded', 'archived', 'restored')),
+    CHECK (event_type IN ('created', 'updated', 'renamed', 'split', 'merged', 'superseded', 'archived', 'restored')),
+    -- v2 사용 이벤트: created, updated, renamed, merged, superseded, archived
+    -- 예약 이벤트: split, restored (미래 확장용)
   from_version_id INTEGER REFERENCES entity_version(id),
   to_version_id   INTEGER REFERENCES entity_version(id),
   related_identity_id INTEGER REFERENCES entity_identity(id),  -- for split/merge: the other identity
@@ -208,7 +243,7 @@ CREATE TABLE entity_lifecycle (
 
 ### 3.6 Identity 조회 전략
 
-`entity_identity`의 `stable_key`는 spec entity만 값이 있고, code entity는 `NULL`이다. 따라서 identity를 조회하는 표준 전략이 필요하다.
+`entity_identity`의 `stable_key`는 spec/claim entity만 값이 있고, code entity는 `NULL`이다. 따라서 identity를 조회하는 표준 전략이 필요하다.
 
 #### 조회 우선순위 (모든 도구에 적용)
 
@@ -326,7 +361,7 @@ identity_id INTEGER REFERENCES entity_identity(id) ON DELETE CASCADE
 version_id  INTEGER REFERENCES entity_version(id)   -- nullable, specific version if applicable
 ```
 
-### 3.7 v1 `entity` 테이블의 처분
+### 3.8 v1 `entity` 테이블의 처분
 
 v2에서 `entity` 테이블은 `entity_identity` + `entity_version`으로 **분리 대체**된다. migration 완료 후 `entity` 테이블은 제거한다 (§15 Migration Path 참조).
 
@@ -350,7 +385,8 @@ CREATE TABLE approval_event (
     CHECK (event_type IN (
       'link_created', 'link_updated', 'link_removed',
       'identity_rewritten', 'identity_merged',
-      'link_rollback', 'spec_registered', 'spec_updated'
+      'link_rollback', 'spec_registered', 'spec_updated',
+      'spec_relation_created', 'spec_relation_updated'
     )),
   actor           TEXT NOT NULL DEFAULT 'agent'
     CHECK (actor IN ('agent', 'user', 'system')),
@@ -474,6 +510,38 @@ CREATE TABLE approval_event (
 }
 ```
 
+#### `identity_merged`
+
+```json
+{
+  "survivorIdentityId": 42,             // [필수] 병합 후 생존한 identity
+  "mergedIdentityId": 55,               // [필수] 흡수된 identity
+  "mergedEntityKey": "module:old.ts",    // [필수] 흡수된 identity의 마지막 entity_key
+  "survivorEntityKey": "module:new.ts",  // [필수] 생존 identity의 현재 entity_key
+  "mergeReason": "content_hash_match",   // [필수] "content_hash_match" | "user_approved"
+  "migratedRelations": [123, 456],       // [필수] 이관된 relation id 목록
+  "migratedVersions": [78, 90]           // [필수] 이관된 version id 목록
+}
+```
+
+#### `spec_relation_created` / `spec_relation_updated`
+
+```json
+{
+  "relationId": 200,                     // [필수] 생성/갱신된 relation id
+  "srcKey": "spec::billing",             // [필수]
+  "srcIdentityId": 10,                   // [필수]
+  "dstKey": "spec::auth-flow",           // [필수]
+  "dstIdentityId": 11,                   // [필수]
+  "relationType": "depends_on",          // [필수] "depends_on" | "extends"
+  "strengthType": "manual",              // [필수]
+  "rationale": "결제에 인증 선행 필요",    // [필수]
+  "previousMeta": { /* ... */ }          // [필수 for spec_relation_updated] 갱신 전 meta 스냅샷
+}
+```
+
+
+
 ### 4.4 도구-이벤트 매핑
 
 | 도구 호출 | 생성되는 approval_event |
@@ -484,6 +552,9 @@ CREATE TABLE approval_event (
 | `register_spec` (갱신) | `spec_updated` |
 | `apply_identity_rewrite` | `identity_rewritten` |
 | `rollback_approval` (신규 도구) | `link_rollback` |
+| `relate_specs` (신규) | `spec_relation_created` |
+| `relate_specs` (기존 갱신) | `spec_relation_updated` |
+| identity merge (시스템 자동) | `identity_merged` |
 
 ### 4.5 Reversibility (되돌리기)
 
@@ -503,9 +574,23 @@ type RollbackApprovalInput = {
 **동작**:
 1. 대상 `approval_event`를 조회
 2. 해당 이벤트의 `event_type`에 따라 compensating action 수행:
-   - `link_created` → relation 삭제 (또는 strength를 'inferred'로 격하)
-   - `identity_rewritten` → relation의 src_identity_id를 원래 값으로 복원
-   - `link_updated` → relation.meta를 이전 상태로 복원
+
+   | event_type | compensating action |
+   |-----------|-------------------|
+   | `link_created` | relation 삭제 (또는 strength를 'inferred'로 격하) |
+   | `link_updated` | relation.meta를 `payload.previousMeta`로 복원 |
+   | `identity_rewritten` | relation의 src_identity_id를 원래 값으로 복원 |
+   | `identity_merged` | version/relation을 원래 identity로 이관 원복 + 분기 identity 복원 |
+   | `spec_registered` | version 삭제 + identity 삭제 (하위 claim relation도 cascade) |
+   | `spec_updated` | 이전 version을 `active`로 복원, 현재 version 삭제 (`payload.previousVersionId` 참조) |
+   | `spec_relation_created` | 해당 relation 삭제 |
+   | `spec_relation_updated` | relation.meta를 `payload.previousMeta`로 복원 |
+   | `link_rollback` | 롤백의 롤백: 원래 이벤트의 상태를 재적용 (이중 롤백) |
+
+   > **주의**: `identity_merged`의 롤백은 merge 이후에 생성된 다른 이벤트가 있으면 거부한다 (인과 순서 보호).
+
+   > **`link_removed` 생성 경로**: `link_removed`는 독립 도구가 아니라, `rollback_approval`로 `link_created` 이벤트를 롤백할 때 compensating action으로 relation이 삭제되는 흐름이다. 명시적인 `unlink_spec` 도구는 제공하지 않으며, 모든 link 삭제는 `rollback_approval`을 통해 거버넌스 추적이 보장된다.
+
 3. `link_rollback` 이벤트 생성 (`parent_event_id` = 대상 이벤트)
 4. 결과 반환
 
@@ -556,19 +641,125 @@ spec body가 변경될 때, 단순 upsert가 아니라 **버전 이력**을 남�
 
 이를 통해 "이 링크가 만들어진 시점의 spec 내용이 뭐였는지" 재현 가능하다.
 
-### 5.3 Claim 확장 경로
+### 5.3 하이브리드 카드 모델 (Claim as Card)
 
-현재(v2 v1 단계)는 spec 전체를 하나의 coarse claim으로 취급한다.
+스펙을 하나의 큰 blob으로 관리하지 않고, **작은 카드(claim) 단위**로 분해하여 등록한다. 각 카드는 독립적인 추적 단위이며, 코드 link의 실제 대상이다.
 
-**향후 확장 경로**:
+#### 개념 모델
+
+```
+spec::di-container                    ← 상위 스펙 (entity_type: 'spec')
+│   summary: "DI 컨테이너"
+│   body: "총괄 설명 + 배경"
+│
+├── claim::di-container/singleton     ← 카드 (entity_type: 'claim')
+│     summary: "싱글톤 스코프 지원"
+│     body: "요구사항 + 검증 기준(BDD)"
+│     ─[implements]← symbol:...#SingletonScope
+│
+├── claim::di-container/transient     ← 카드
+│     ─[implements]← symbol:...#TransientScope
+│
+└── claim::di-container/scope         ← 카드 (미연결 = 미구현)
+```
+
+#### 핵심 규칙
+
+- **spec** = 상위 컨테이너. 배경/목적/범위를 기술. 코드 link는 카드에만 걸기를 **권장** (spec에 직접 link 시 경고)
+- **claim** = 카드. 하나의 요구사항 단위. 코드 link의 실제 대상
+- spec ←[contains]→ claim 관계로 소속 자동 표현
+- **진행률 = 카드 커버리지**: 10개 카드 중 7개 linked = 70%
+
+#### 시드 추가
+
+```sql
+INSERT INTO entity_type (name) VALUES ('claim');
+INSERT INTO relation_type (name) VALUES ('contains');
+INSERT INTO relation_type (name) VALUES ('depends_on');  -- spec↔spec 의존
+INSERT INTO relation_type (name) VALUES ('extends');      -- spec↔spec 확장
+```
+
+#### 카드 키 형식
+
+```
+claim::{상위spec명}/{카드명}
+
+예: claim::di-container/singleton
+    claim::auth-flow/token-refresh
+    claim::error-handling/retry-policy
+```
+
+검증 정규식: `/^claim::[a-z0-9][a-z0-9-]*[a-z0-9]\/[a-z0-9][a-z0-9-]*[a-z0-9]$/`
+
+#### 카드 body 권장 형식 (BDD 하이브리드)
+
+강제가 아닌 **권장 컨벤션**. 자유 마크다운도 허용된다.
+
+```markdown
+## 요구사항
+{이 카드가 무엇을 요구하는지 1~3문장}
+
+## 검증 기준
+- Given: {사전 조건}
+- When: {행위}
+- Then: {기대 결과}
+
+## 비고 (선택)
+{추가 맥락, 관련 카드 참조 등}
+```
+
+#### 워크플로우 예시
+
+```
+1️⃣  사용자 + 에이전트 논의: "DI 컨테이너를 만들자"
+
+2️⃣  상위 스펙 등록
+    register_spec({ specKey: "spec::di-container", summary: "DI 컨테이너", body: "총괄 설명" })
+
+3️⃣  카드 등록 (작은 단위로 나열)
+    register_spec({ specKey: "claim::di-container/singleton",
+                    parentSpecKey: "spec::di-container",
+                    summary: "싱글톤 스코프 지원", body: "## 요구사항 ..." })
+    register_spec({ specKey: "claim::di-container/transient", ... })
+    register_spec({ specKey: "claim::di-container/scope", ... })
+
+4️⃣  코드 구현 → 카드 단위 링크
+    link_spec({ codeEntityKey: "symbol:...#SingletonScope",
+                specKey: "claim::di-container/singleton",
+                rationale: "이 클래스가 싱글톤 스코프를 구현" })
+
+5️⃣  커버리지 확인
+    coverage_map({ specKey: "spec::di-container" })
+    →  spec::di-container         전체 커버리지: 2/3 (66.7%)
+       ├── claim::.../singleton   ✅ linked → SingletonScope
+       ├── claim::.../transient   ✅ linked → TransientScope
+       └── claim::.../scope       ❌ 미연결
+```
+
+#### Claim 확장 경로
 
 | 단계 | claim 세분화 | 구현 |
 |------|-------------|------|
-| v1 (현재) | spec blob = 1 claim | `entity_version` 1개 = spec 전체 |
-| v2+ | 핵심 claim 수동 추출 | spec identity 하위에 claim identity를 추가. relation이 claim을 참조 |
+| v2 (현재) | **카드 = 수동 claim** | `register_spec`으로 카드 단위 등록. `contains` relation 자동 생성 |
 | v3+ | 보조 자동 제안 | LLM이 spec body에서 claim 후보를 추출하고, 사용자가 승인 |
 
-이를 위해 `entity_type`에 `'claim'`을 추가하고, spec identity와 claim identity 사이에 `'contains'` relation을 생성하는 것만으로 확장 가능하다. 현재 스키마 변경 불필요 — `entity_type` 시드만 추가하면 된다.
+#### spec↔spec 관계
+
+스펙 간 의존/확장 관계를 표현할 수 있다.
+
+```
+relate_specs({
+  srcKey: "spec::billing",
+  dstKey: "spec::auth-flow",
+  relationType: "depends_on",
+  rationale: "결제 처리에 인증이 선행되어야 함"
+})
+```
+
+
+> **strength**: `relate_specs`로 생성되는 relation의 `strength_type`은 항상 `'manual'`이다. 사용자가 명시적으로 생성하는 관계이므로 자동 삭제 대상이 아니다.
+
+`dependency_graph`에서 spec 노드 간 관계도 표시. `impact_analysis`에서 spec 변경 시 의존 spec까지 영향도 표시.
 
 ---
 
@@ -660,6 +851,11 @@ DELETE(a.ts) 처리 완료 후:
    b. 분기된 identity에 달린 relation이 있으면 old_identity로 이관
    c. 빈 identity 삭제
    d. entity_lifecycle에 'merged' 이벤트 기록
+      (related_identity_id = 삭제된 분기 identity)
+   e. approval_event에 'identity_merged' 이벤트 기록:
+      - target_identity_id: old_identity_id (병합 대상)
+      - actor: 'system'
+      - payload: { mergedIdentityId: new_identity_id, contentHash, trigger: 'post_delete_merge' }
 4. 매칭 미발견 → 정상 (다른 파일). 아무 것도 하지 않음
 ```
 
@@ -682,12 +878,14 @@ DELETE(a.ts) 처리 완료 후:
 
 ```typescript
 type RegisterSpecInput = {
-  /** 스펙 키. 형식: "spec::{name}". 예: "spec::di-container", "spec::auth-flow" */
+  /** 스펙/카드 키. 형식: "spec::{name}" 또는 "claim::{spec_name}/{card_name}" */
   specKey: string;
-  /** 스펙 요약 (1~2줄) */
+  /** 스펙/카드 요약 (1~2줄) */
   summary: string;
-  /** 스펙 본문 (마크다운) */
+  /** 스펙/카드 본문 (마크다운) */
   body: string;
+  /** 카드(claim) 등록 시 필수. 상위 spec 키. 예: "spec::di-container" */
+  parentSpecKey?: string;
   /** 추가 메타데이터 */
   meta?: Record<string, unknown>;
 };
@@ -699,7 +897,11 @@ type RegisterSpecInput = {
 
 1. **Identity 생성/조회**
    - `entity_identity`에서 `stable_key = specKey` 조회
-   - 없으면 새 identity 생성 (`entity_type = 'spec'`, `stable_key = specKey`)
+   - 없으면 새 identity 생성:
+     - `specKey`가 `spec::` prefix → `entity_type = 'spec'`
+     - `specKey`가 `claim::` prefix → `entity_type = 'claim'`
+   - **claim인 경우**: `parentSpecKey` 필수 검증. 없으면 에러: "claim requires parentSpecKey"
+   - **spec인 경우**: `parentSpecKey` 있으면 에러: "spec cannot have a parent"
 
 2. **Version 생성/갱신**
    - `content_hash = SHA-256(body)` 계산
@@ -733,6 +935,19 @@ type RegisterSpecInput = {
    - 신규: `event_type: 'created'`
    - 갱신: `event_type: 'updated'`, `from_version_id`, `to_version_id`
 
+7. **Contains Relation 자동 생성** (claim인 경우만)
+   - `parentSpecKey`로 parent spec identity 조회
+   - 없으면 에러: "Parent spec not found: {parentSpecKey}"
+   - `contains` relation 생성:
+     ```
+     src_identity_id: parent spec의 identity_id
+     dst_identity_id: claim의 identity_id
+     relation_type:   "contains"
+     strength:        "manual"
+     meta: { createdBy: 'register_spec', autoGenerated: true }
+     ```
+   - 이미 존재하면 skip (idempotent)
+
 #### 출력 스키마
 
 ```typescript
@@ -745,11 +960,12 @@ type RegisterSpecResult = {
 };
 ```
 
-#### 스펙 키 규칙
+#### 스펙/카드 키 규칙
 
-- 형식: `spec::{name}` (콜론 두 개)
-- `name`은 kebab-case: `/^[a-z0-9][a-z0-9-]*[a-z0-9]$/` (2자 이상)
-- 한번 등록된 `specKey`는 변경 불가. 변경이 필요하면 별도 도구로만 허용
+- **spec 형식**: `spec::{name}` (콜론 두 개)
+- **claim 형식**: `claim::{spec_name}/{card_name}` (콜론 두 개 + 슬래시)
+- `name`/`card_name`은 kebab-case: `/^[a-z0-9][a-z0-9-]*[a-z0-9]$/` (2자 이상)
+- 한번 등록된 key는 변경 불가. 변경이 필요하면 별도 도구로만 허용
 - 본문 변경은 `register_spec` 재호출로 처리 (version append)
 
 ### 7.2 도구: `link_spec`
@@ -762,9 +978,9 @@ type RegisterSpecResult = {
 type LinkSpecInput = {
   /** 코드 entity key. 예: "symbol:packages/core/src/app.ts#createApplication" */
   codeEntityKey: string;
-  /** 스펙 entity key. 예: "spec::di-container" */
+  /** 스펙/카드 entity key. 예: "claim::di-container/singleton" (권장) 또는 "spec::di-container" */
   specKey: string;
-  /** 왜 이 코드가 이 스펙을 구현하는지에 대한 근거 (필수) */
+  /** 왜 이 코드가 이 스펙/카드를 구현하는지에 대한 근거 (필수) */
   rationale: string;
 };
 ```
@@ -778,9 +994,15 @@ type LinkSpecInput = {
    - 없으면: **에러 반환** + `search` 도구로 후보 추천
    - 있으면: `identity_id` 획득
 
-2. **스펙 entity 존재 확인**
-   - `entity_identity`에서 `stable_key = specKey AND entity_type = 'spec'` 조회
+2. **스펙/카드 entity 존재 확인**
+   - `entity_identity`에서 `stable_key = specKey AND entity_type IN ('spec', 'claim')` 조회
    - 없으면: 에러 반환 ("먼저 register_spec으로 등록하세요")
+   - **spec에 직접 link 시 경고**: `entity_type = 'spec'`이고 하위 claim이 존재하면 경고 반환: "이 spec에 카드가 있습니다. 카드 단위로 link하는 것을 권장합니다" (link은 생성)
+
+2b. **스펙 active version 정보 수집**
+   - spec identity의 active version 조회: `entity_version WHERE identity_id = spec.id AND status = 'active'`
+   - `specVersionId`, `specVersionNum`, `specContentHash` 획득
+   - active version 없으면: 에러 반환 ("All versions are archived for spec: {specKey}")
 
 3. **앵커 정보 수집**
 
@@ -851,6 +1073,246 @@ type LinkSpecResult = {
 2. **계층 2 (resolve_identity_candidates)의 검색 근거**: archived version의 fact에 접근하지 않고도, relation.meta만으로 후보 검색 가능
 
 **핵심**: 앵커는 **링크 생성 시점에 한 번만 기록**된다. version이 archived/삭제되어도 앵커 정보는 relation.meta에 보존된다.
+
+### 7.4 도구: `relate_specs`
+
+스펙/카드 간의 `depends_on` 또는 `extends` 관계를 수동으로 생성한다.
+
+#### 입력 스키마
+
+```typescript
+type RelateSpecsInput = {
+  /** 소스 스펙/카드 키. 예: "spec::billing" 또는 "claim::billing/payment" */
+  srcKey: string;
+  /** 대상 스펙/카드 키. 예: "spec::auth" 또는 "claim::auth/login" */
+  dstKey: string;
+  /** 관계 유형: "depends_on" | "extends" */
+  relationType: 'depends_on' | 'extends';
+  /** 관계 설정 이유 (필수) */
+  rationale: string;
+};
+```
+
+#### 동작 절차
+
+**단일 트랜잭션**으로:
+
+1. **입력 검증**
+   - `relationType`이 `'depends_on'` 또는 `'extends'`가 아니면: 에러 "relationType must be 'depends_on' or 'extends'"
+   - `srcKey`와 `dstKey`가 동일하면: 에러 "Self-reference not allowed"
+
+2. **소스 entity 존재 확인**
+   - `entity_identity`에서 `stable_key = srcKey AND entity_type IN ('spec', 'claim')` 조회
+   - 없으면: 에러 "Source spec not found: {srcKey}. 먼저 register_spec으로 등록하세요"
+   - `srcIdentityId` 획득
+
+3. **대상 entity 존재 확인**
+   - `entity_identity`에서 `stable_key = dstKey AND entity_type IN ('spec', 'claim')` 조회
+   - 없으면: 에러 "Destination spec not found: {dstKey}. 먼저 register_spec으로 등록하세요"
+   - `dstIdentityId` 획득
+
+4. **순환 의존 검사** (`depends_on` 전용)
+   - `dstIdentityId` → `srcIdentityId` 방향으로 기존 `depends_on` relation 체인을 BFS 탐색
+   - 탐색 중 `srcIdentityId`에 도달하면: 에러 "Circular dependency detected: {cycle_path}"
+   - 탐색 깊이 제한: 최대 50 (무한 루프 방어)
+   - `extends`는 순환 검사 생략 (위임 관계는 순환 허용)
+
+5. **기존 relation 확인 (upsert)**
+   - 동일 `src_identity_id + dst_identity_id + relation_type` 조합이 이미 존재하면:
+     - `meta` 갱신 (rationale, updatedAt)
+     - approval_event `spec_relation_updated` 생성 (payload에 `previousMeta` 포함)
+   - 없으면: 새 relation 생성 → 6단계
+
+6. **Relation 생성**
+   ```
+   src_identity_id:   srcIdentityId
+   dst_identity_id:   dstIdentityId
+   relation_type:     relationType ("depends_on" | "extends")
+   strength:          "manual"
+   meta: {
+     rationale: rationale,
+     createdBy: "relate_specs",
+     createdAt: <ISO 8601>
+   }
+   ```
+
+7. **Approval Event 기록**
+   - `event_type: 'spec_relation_created'` (신규) 또는 `'spec_relation_updated'` (갱신)
+   - `target_relation_id`: 생성/갱신된 relation의 id
+   - `target_identity_id`: srcIdentityId
+   - `payload`: { srcKey, dstKey, relationType, rationale, dstIdentityId }
+
+8. **Entity Lifecycle 기록**
+   - srcIdentity에 `event_type: 'updated'` 기록 (meta: { action: 'relate_specs', dstKey })
+
+#### 출력 스키마
+
+```typescript
+type RelateSpecsResult = {
+  relationId: number;
+  srcIdentityId: number;
+  dstIdentityId: number;
+  relationType: 'depends_on' | 'extends';
+  approvalEventId: number;
+  action: 'created' | 'updated';
+};
+```
+
+### 7.5 도구: `spec_impact`
+
+특정 스펙/카드 변경 시 영향받는 코드·스펙·카드 목록을 재귀적으로 탐색한다.
+
+#### 입력 스키마
+
+```typescript
+type SpecImpactInput = {
+  /** 분석 대상 스펙/카드 키 */
+  specKey: string;
+  /** 탐색 깊이 제한 (기본값: 3, 최대: 10) */
+  depth?: number;
+  /** 포함할 관계 유형 (기본값: 모두) */
+  relationTypes?: ('implements' | 'depends_on' | 'extends' | 'contains')[];
+};
+```
+
+#### 동작 절차
+
+1. **대상 entity 확인**
+   - `entity_identity`에서 `stable_key = specKey` 조회
+   - 없으면: 에러 "Spec not found: {specKey}"
+   - `targetIdentityId` 획득
+
+2. **BFS 재귀 탐색**
+   - 시작 노드: `targetIdentityId`
+   - 탐색 방향: 해당 identity가 `dst_identity_id`인 relation을 찾음 (역방향 = "나를 참조하는 것")
+   - 각 단계에서:
+     a. `relation` 테이블에서 `dst_identity_id = currentId` 조회
+     b. `relationTypes` 필터 적용
+     c. `src_identity_id`를 다음 탐색 노드에 추가
+   - 방문 노드 추적 (중복 방지)
+   - 깊이 제한 도달 시 탐색 중단 + `truncated: true` 표시
+
+3. **결과 분류**
+   - 탐색된 entity를 `entity_type`으로 분류:
+     - `module`/`symbol` → `impactedCode[]`
+     - `spec` → `impactedSpecs[]`
+     - `claim` → `impactedClaims[]`
+
+4. **각 항목에 경로 정보 포함**
+   - `path`: 시작 노드에서 해당 노드까지의 relation chain
+
+#### 출력 스키마
+
+```typescript
+type SpecImpactResult = {
+  specKey: string;
+  depth: number;
+  truncated: boolean;
+  impactedCode: Array<{
+    entityKey: string;
+    identityId: number;
+    relationType: string;
+    path: string[];   // e.g. ["spec::auth", "claim::auth/login", "symbol:...#LoginService"]
+  }>;
+  impactedSpecs: Array<{
+    specKey: string;
+    identityId: number;
+    relationType: string;
+    path: string[];
+  }>;
+  impactedClaims: Array<{
+    claimKey: string;
+    identityId: number;
+    relationType: string;
+    parentSpecKey: string;
+    path: string[];
+  }>;
+  summary: {
+    totalImpacted: number;
+    codeCount: number;
+    specCount: number;
+    claimCount: number;
+  };
+};
+```
+
+### 7.6 도구: `kb_status`
+
+KB의 전체 또는 특정 스펙 범위의 건강 상태 대시보드를 반환한다.
+
+#### 입력 스키마
+
+```typescript
+type KBStatusInput = {
+  /** 특정 스펙 범위로 한정 (선택). 생략 시 전체 KB */
+  specKey?: string;
+};
+```
+
+#### 동작 절차
+
+1. **범위 결정**
+   - `specKey` 제공 시: 해당 spec + 하위 claim만 대상
+   - 미제공 시: 전체 workspace 대상
+
+2. **스펙/카드 집계**
+   ```sql
+   -- 전체 모드
+   SELECT entity_type, COUNT(*) FROM entity_identity ei
+   JOIN entity_version ev ON ev.identity_id = ei.id AND ev.status = 'active'
+   WHERE ei.entity_type_id IN (spec_type_id, claim_type_id)
+   GROUP BY entity_type;
+   ```
+   - `specKey` 지정 시: 해당 spec identity + `contains` relation으로 연결된 claim identity만 집계
+
+3. **커버리지 계산**
+   - `implements` relation이 있는 claim 수 / 전체 claim 수 × 100
+   - spec 단위: 하위 claim 기준으로 재귀 집계
+
+4. **링크 상태 집계**
+   - `brokenLinks`: active version이 없는 identity에 `strength='manual'` relation이 있는 경우
+   - `staleLinks`: `inconsistency_report`의 `stale_link_after_spec_update` 검사 결과
+   - `totalLinks`: `strength='manual'` relation 총 수
+
+5. **최근 활동**
+   - 최근 7일 내 `approval_event` 수
+   - 최근 `sync_run` 정보
+
+#### 출력 스키마
+
+```typescript
+type KBStatusResult = {
+  scope: 'global' | string;  // 'global' 또는 specKey
+  specs: {
+    total: number;
+    withClaims: number;   // claim이 1개 이상인 spec 수
+  };
+  claims: {
+    total: number;
+    linked: number;       // implements relation이 있는 claim 수
+    unlinked: number;
+  };
+  coverage: {
+    percent: number;      // linked / total × 100 (소수점 1자리)
+    bySpec: Array<{       // specKey 모드에서만 포함
+      specKey: string;
+      totalClaims: number;
+      linkedClaims: number;
+      coveragePercent: number;
+    }>;
+  };
+  links: {
+    total: number;
+    broken: number;
+    stale: number;
+    healthy: number;      // total - broken - stale
+  };
+  recentActivity: {
+    approvalEventsLast7d: number;
+    lastSyncRun: string | null;  // ISO 8601
+  };
+};
+```
 
 ---
 
@@ -1205,7 +1667,7 @@ v1과 동일한 원칙:
 | 해제 조건 | 설명 |
 |-----------|------|
 | `apply_identity_rewrite`로 relation 이전 | 옛 identity에 manual relation이 없어지면 purge 가능 |
-| `unlink_spec` 등으로 relation 명시적 삭제 | 보호 해제 |
+| `rollback_approval`로 `link_created` 이벤트 롤백 → relation 삭제 | 보호 해제 |
 | `superseded` relation의 strength 격하 | `'inferred'`로 변경 시 보호 해제 |
 
 TTL 자동 해제는 도입하지 않는다.
@@ -1254,8 +1716,13 @@ WHERE ev.entity_key = 'module:...'
 | `verify_integrity` | 중 | 새 테이블 간 FK 정합성 검사 추가 |
 | `sync` | 높음 | core loop 재작성 (§9 참조) |
 | `purge_tombstones` | 높음 | version purge + identity purge 이중 구조 (§10 참조) |
+| **`relate_specs`** | **신규** | spec↔spec / claim↔claim 간 `depends_on`, `extends` relation 생성 도구 (§5.3) |
+| **`spec_impact`** | **신규** | 특정 spec/claim 변경 시 영향받는 코드·spec·claim 목록을 반환하는 분석 도구 |
+| **`kb_status`** | **신규** | KB 전체 대시보드: spec 수, claim 수, 링크 수, 커버리지 비율, stale link 수 등 요약 |
 
 ### 11.3 `coverage_map` 상세
+
+**기본 쿼리** (spec 직접 링크):
 
 ```sql
 -- v2
@@ -1266,6 +1733,43 @@ WHERE r.dst_identity_id = {spec_identity_id}
   AND rt.name = 'implements'
 ```
 
+**재귀 claim 집계** (카드 모델 지원):
+
+spec이 하위 claim을 가질 경우, `contains` relation을 따라 재귀적으로 claim을 수집한 뒤 각 claim에 대한 implements 링크를 집계한다.
+
+```sql
+-- claim 재귀 수집 (spec → claim hierarchy)
+WITH RECURSIVE claim_tree AS (
+  -- base: 직접 하위 claim
+  SELECT r.dst_identity_id AS claim_id
+  FROM relation r
+  JOIN relation_type rt ON rt.id = r.relation_type_id
+  WHERE r.src_identity_id = {spec_identity_id}
+    AND rt.name = 'contains'
+  UNION ALL
+  -- recursive: claim의 하위 claim (중첩 claim 지원)
+  SELECT r.dst_identity_id
+  FROM relation r
+  JOIN relation_type rt ON rt.id = r.relation_type_id
+  JOIN claim_tree ct ON ct.claim_id = r.src_identity_id
+  WHERE rt.name = 'contains'
+)
+SELECT
+  ct.claim_id,
+  ev.entity_key AS claim_key,
+  COUNT(impl.id) AS linked_code_count
+FROM claim_tree ct
+JOIN entity_version ev ON ev.identity_id = ct.claim_id AND ev.status = 'active'
+LEFT JOIN relation impl ON impl.dst_identity_id = ct.claim_id
+  AND impl.relation_type_id = (SELECT id FROM relation_type WHERE name = 'implements')
+GROUP BY ct.claim_id, ev.entity_key;
+```
+
+**집계 규칙**:
+- `linked_code_count = 0`인 claim → **미커버**
+- spec 커버리지 = (코드 링크 1건 이상인 claim 수) / (전체 claim 수) × 100%
+- claim이 없는 spec → spec 직접 링크 기준으로 covered/uncovered 판정
+
 ### 11.4 `inconsistency_report` 추가 검사 항목
 
 | 검사 | 설명 |
@@ -1273,6 +1777,9 @@ WHERE r.dst_identity_id = {spec_identity_id}
 | `identity_no_active_version` | active version이 없는 identity (모두 archived) |
 | `orphan_version` | identity가 없는 version (FK 무결성 위반) |
 | `manual_relation_archived_identity` | manual relation이 참조하는 identity에 active version이 없음 → 깨진 링크 후보 |
+| `stale_link_after_spec_update` | spec body가 갱신(version_num 증가)된 후 기존 claim 링크가 아직 구 버전 기준 → 재검토 필요 |
+| `claim_without_parent` | `entity_type = 'claim'`이지만 `contains` relation의 대상(dst)이 아닌 고아 claim |
+| `spec_with_claims_direct_link` | claim이 있는 spec에 직접 `implements` 링크 존재 → claim 레벨로 분해 권장 |
 
 ---
 
@@ -1283,8 +1790,11 @@ WHERE r.dst_identity_id = {spec_identity_id}
 **입력 검증**:
 | 검증 | 규칙 | 에러 메시지 |
 |------|------|-------------|
-| `specKey` prefix | `specKey.startsWith('spec::')` | "specKey must start with 'spec::'" |
-| `specKey` name | `/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(name)` (2자 이상) | "specKey name must be kebab-case" |
+| `specKey` prefix | `specKey.startsWith('spec::')` 또는 `specKey.startsWith('claim::')` | "specKey must start with 'spec::' or 'claim::'" |
+| `specKey` name (spec) | `/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(name)` (2자 이상) | "specKey name must be kebab-case" |
+| `specKey` name (claim) | `/^[a-z0-9][a-z0-9-]*[a-z0-9]\/[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(name)` (각 부분 2자 이상, `-`로 끝나지 않음) | "claim key must be 'claim::{spec}/{card}' format" |
+| `parentSpecKey` (claim) | claim 인 경우 필수, `spec::` prefix | "parentSpecKey is required for claim entities" |
+| `parentSpecKey` (spec) | spec 인 경우 제공하면 에러 | "parentSpecKey is not allowed for spec entities" |
 | `summary` 길이 | `1 ≤ length ≤ 500` | "summary must be 1-500 characters" |
 | `body` 길이 | `1 ≤ length ≤ 50000` | "body must be 1-50000 characters" |
 
@@ -1299,16 +1809,17 @@ WHERE r.dst_identity_id = {spec_identity_id}
 | 검증 | 규칙 | 에러 메시지 |
 |------|------|-------------|
 | `codeEntityKey` prefix | `module:` 또는 `symbol:` 시작 | "codeEntityKey must start with 'module:' or 'symbol:'" |
-| `specKey` prefix | `spec::` 시작 | "specKey must start with 'spec::'" |
+| `specKey` prefix | `spec::` 또는 `claim::` 시작 (권장: `claim::`) | "specKey must start with 'spec::' or 'claim::'" |
 | `rationale` 길이 | `1 ≤ length ≤ 5000` | "rationale must be 1-5000 characters" |
 
 **런타임 에러**:
 | 상황 | 처리 |
 |------|------|
 | `codeEntityKey`에 해당하는 active version 없음 | 에러 반환 + search로 유사 entity 추천 |
-| `specKey`에 해당하는 spec identity 없음 | 에러 반환: "Spec not found. Use register_spec first." |
+| `specKey`에 해당하는 spec/claim identity 없음 | 에러 반환: "Spec/Claim not found. Use register_spec first." |
 | `codeEntityKey`의 모든 version이 archived | 에러 반환: "All versions are archived. Run sync first or check the entity key." |
 | 이미 동일 링크가 존재 | upsert: meta 갱신. approval_event `'link_updated'` |
+| `spec::` 대상이 claim을 보유한 spec | **경고** 반환: "This spec has N claims. Consider linking to a specific claim instead." (link은 생성됨) |
 
 ### 12.3 `resolve_identity_candidates` 에러
 
@@ -1349,25 +1860,58 @@ WHERE r.dst_identity_id = {spec_identity_id}
 | N:1 매칭 | 자동 매칭 금지. 새 identity 생성 |
 | 매칭 트랜잭션 실패 | archived + 새 identity 생성 fallback |
 
+### 12.7 `relate_specs` 에러
+
+**입력 검증**:
+| 검증 | 규칙 | 에러 메시지 |
+|------|------|-------------|
+| `srcKey` prefix | `spec::` 또는 `claim::` | "srcKey must start with 'spec::' or 'claim::'" |
+| `dstKey` prefix | `spec::` 또는 `claim::` | "dstKey must start with 'spec::' or 'claim::'" |
+| `relationType` | `'depends_on'` 또는 `'extends'` | "relationType must be 'depends_on' or 'extends'" |
+| 순환 검사 | srcKey → dstKey 경로에 역방향 관계 존재 시 | "Circular dependency detected: {path}" |
+
+**런타임 에러**:
+| 상황 | 처리 |
+|------|------|
+| src 또는 dst identity 없음 | 에러 반환: "Entity not found: {key}" |
+| 동일 relation 이미 존재 | upsert: meta 갱신. approval_event `'spec_relation_updated'` |
+| 자기 자신에게 링크 | 에러 반환: "Cannot relate entity to itself" |
+
+### 12.8 `spec_impact` 에러
+
+| 상황 | 처리 |
+|------|------|
+| 대상 spec/claim identity 없음 | 에러 반환: "Entity not found: {key}" |
+| 대상이 spec/claim이 아님 | 에러 반환: "spec_impact only supports spec/claim entities" |
+| 영향 범위 없음 | `{ impactedCode: [], impactedSpecs: [], impactedClaims: [], totalImpact: 0 }` 반환 |
+
+### 12.9 `kb_status` 에러
+
+| 상황 | 처리 |
+|------|------|
+| workspace 없음 | 에러 반환: "No workspace found. Run sync first." |
+| DB 연결 실패 | 에러 전파 + 연결 상태 정보 포함 |
+
 ---
 
 ## 13. MCP 도구 등록
 
-`server.ts`의 `TOOL_DEFINITIONS`에 다음 5개 도구를 추가한다:
+`server.ts`의 `TOOL_DEFINITIONS`에 다음 8개 도구를 추가한다:
 
 ### 13.1 `register_spec`
 
 ```typescript
 {
   name: 'register_spec',
-  description: 'Register or update a spec (contract) entity in the KB. Stores a feature specification agreed upon by user and agent. If the specKey already exists, updates the body/summary (creates a new version).',
+  description: 'Register or update a spec/claim entity in the KB. Stores a feature specification (spec) or an atomic requirement card (claim). If the key already exists, updates the body/summary (creates a new version). For claims, parentSpecKey is required.',
   inputSchema: {
     type: 'object',
     properties: {
-      specKey: { type: 'string', minLength: 1, description: 'Spec key. Format: "spec::{name}". Example: "spec::di-container"' },
-      summary: { type: 'string', minLength: 1, description: 'Spec summary (1-2 lines)' },
-      body: { type: 'string', minLength: 1, description: 'Spec body (markdown)' },
+      specKey: { type: 'string', minLength: 1, description: 'Spec key: "spec::{name}" or Claim key: "claim::{spec_name}/{claim_name}". Example: "spec::di-container" or "claim::di-container/constructor-injection"' },
+      summary: { type: 'string', minLength: 1, description: 'Spec/Claim summary (1-2 lines)' },
+      body: { type: 'string', minLength: 1, description: 'Spec/Claim body (markdown). For claims, BDD format recommended (Given/When/Then)' },
       meta: { type: 'object', description: 'Additional metadata (optional)' },
+      parentSpecKey: { type: 'string', description: 'Required for claim entities. The parent spec key ("spec::{name}"). Auto-creates contains relation.' },
     },
     required: ['specKey', 'summary', 'body'],
     additionalProperties: false,
@@ -1380,13 +1924,13 @@ WHERE r.dst_identity_id = {spec_identity_id}
 ```typescript
 {
   name: 'link_spec',
-  description: 'Create a manual implements relation between a code entity and a spec. Records rationale as relation_evidence. All state changes are tracked via approval_event.',
+  description: 'Create a manual implements relation between a code entity and a spec/claim. Accepts both spec:: and claim:: keys (claim:: recommended for fine-grained tracking). Records rationale as relation_evidence. All state changes are tracked via approval_event.',
   inputSchema: {
     type: 'object',
     properties: {
       codeEntityKey: { type: 'string', minLength: 1, description: 'Code entity key. Example: "symbol:packages/core/src/app.ts#createApplication"' },
-      specKey: { type: 'string', minLength: 1, description: 'Spec entity key. Example: "spec::di-container"' },
-      rationale: { type: 'string', minLength: 1, description: 'Why this code implements this spec' },
+      specKey: { type: 'string', minLength: 1, description: 'Spec or Claim entity key. Example: "claim::di-container/constructor-injection" (recommended) or "spec::di-container"' },
+      rationale: { type: 'string', minLength: 1, description: 'Why this code implements this spec/claim' },
     },
     required: ['codeEntityKey', 'specKey', 'rationale'],
     additionalProperties: false,
@@ -1458,6 +2002,61 @@ WHERE r.dst_identity_id = {spec_identity_id}
 }
 ```
 
+### 13.6 `relate_specs`
+
+```typescript
+{
+  name: 'relate_specs',
+  description: 'Create a relation between two spec/claim entities. Supports depends_on and extends relation types. Used to model spec-to-spec and claim-to-claim dependencies.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      srcKey: { type: 'string', minLength: 1, description: 'Source spec/claim key. Example: "spec::auth" or "claim::auth/jwt-validation"' },
+      dstKey: { type: 'string', minLength: 1, description: 'Destination spec/claim key. Example: "spec::crypto" or "claim::crypto/hashing"' },
+      relationType: { type: 'string', enum: ['depends_on', 'extends'], description: 'Relation type between specs/claims' },
+      rationale: { type: 'string', minLength: 1, description: 'Why this dependency exists' },
+    },
+    required: ['srcKey', 'dstKey', 'relationType', 'rationale'],
+    additionalProperties: false,
+  },
+}
+```
+
+### 13.7 `spec_impact`
+
+```typescript
+{
+  name: 'spec_impact',
+  description: 'Analyze the impact of changing a specific spec or claim. Returns all code entities, specs, and claims that would be affected. Traverses implements, depends_on, extends, and contains relations.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      specKey: { type: 'string', minLength: 1, description: 'Spec or Claim key to analyze impact for' },
+      depth: { type: 'integer', minimum: 1, maximum: 10, default: 3, description: 'Max traversal depth for transitive dependencies' },
+    },
+    required: ['specKey'],
+    additionalProperties: false,
+  },
+}
+```
+
+### 13.8 `kb_status`
+
+```typescript
+{
+  name: 'kb_status',
+  description: 'Get a high-level dashboard of the Knowledge Base. Returns counts of specs, claims, links, coverage percentage, stale links, and recent activity summary.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      workspaceId: { type: 'string', description: 'Workspace to check. Omit for default workspace.' },
+      specKey: { type: 'string', description: 'Optional spec key to filter coverage for a specific spec and its claims.' },
+    },
+    additionalProperties: false,
+  },
+}
+```
+
 ---
 
 ## 14. 스키마 변경 상세
@@ -1470,6 +2069,20 @@ WHERE r.dst_identity_id = {spec_identity_id}
 | `entity_version` | 가변 주소/상태 (§3.5) |
 | `entity_lifecycle` | 생애 이벤트 로그 (§3.5) |
 | `approval_event` | 거버넌스 이벤트 (§4.2) |
+
+**Seed 데이터 (카드 모델 지원)**:
+
+```sql
+-- entity_type 시드: claim 타입 추가
+INSERT INTO entity_type (name) VALUES ('claim')
+  ON CONFLICT (name) DO NOTHING;
+
+-- relation_type 시드: 카드 모델 관계 추가
+INSERT INTO relation_type (name) VALUES ('contains'), ('depends_on'), ('extends')
+  ON CONFLICT (name) DO NOTHING;
+```
+
+> **주의**: `entity_type`의 `spec`, `module`, `symbol`과 `relation_type`의 `implements`는 v1에서 이미 seed된 상태.
 
 ### 14.2 변경 테이블
 
@@ -1488,6 +2101,9 @@ WHERE r.dst_identity_id = {spec_identity_id}
 | `entity` | migration 완료 후 제거 |
 
 ### 14.4 Drizzle Schema (v2)
+
+> **CHECK 제약 방침**: `entity_lifecycle.event_type`, `entity_version.status`, `approval_event.event_type/actor`의 CHECK 제약은 Drizzle ORM이 아닌 **migration SQL에서 직접 선언**한다. Drizzle의 `.check()` API는 런타임 검증이 아닌 스키마 생성용이므로, 안정성을 위해 raw SQL migration에서 `ALTER TABLE ... ADD CONSTRAINT ...`로 추가한다. §14.4의 Drizzle 코드는 CHECK를 생략하되, 실제 DB에는 §3.5, §4.2의 DDL 기준으로 CHECK가 존재해야 한다.
+
 
 ```typescript
 // entity_identity
@@ -1518,9 +2134,14 @@ export const entityVersion = pgTable('entity_version', {
   lastSeenRun: integer('last_seen_run').references(() => syncRun.id),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
-  unique('version_workspace_key_status').on(t.workspaceId, t.entityKey, t.status),
+  // ❗ partial unique index: active version만 workspace+entity_key 유니크 보장
+  // 이유: a.ts→b.ts→a.ts 이동 시 archived version도 동일 key를 가질 수 있음
+  uniqueIndex('version_active_unique')
+    .on(t.workspaceId, t.entityKey)
+    .where(sql`status = 'active'`),
   index('version_identity_idx').on(t.identityId),
   index('version_content_hash_idx').on(t.contentHash),
+  index('version_identity_status_idx').on(t.identityId, t.status),  // identity별 active version 조회 최적화
 ]);
 
 // entity_lifecycle
@@ -1547,7 +2168,10 @@ export const approvalEvent = pgTable('approval_event', {
   rationale: text('rationale'),
   parentEventId: integer('parent_event_id').references(() => approvalEvent.id),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [
+  index('approval_target_relation_idx').on(t.targetRelationId),   // relation별 거버넌스 이력 조회
+  index('approval_target_identity_idx').on(t.targetIdentityId),  // identity별 거버넌스 이력 조회
+]);
 
 // relation (v2 — FK changed)
 export const relation = pgTable('relation', {
@@ -1559,6 +2183,7 @@ export const relation = pgTable('relation', {
   meta: jsonb('meta').notNull().default(sql`'{}'::jsonb`),
 }, (t) => [
   unique('relation_unique').on(t.srcIdentityId, t.dstIdentityId, t.relationTypeId, t.strengthTypeId),
+  index('relation_type_dst_idx').on(t.relationTypeId, t.dstIdentityId),  // coverage_map 재귀 쿼리 최적화
 ]);
 
 // relation_evidence (v2 — 구조 변경)
@@ -1700,11 +2325,54 @@ migration은 각 phase를 개별 트랜잭션으로 실행하며, phase 2~3 사�
 
 검증 실패 시 해당 phase를 롤백하고 v1 상태로 복귀.
 
+### 15.5 Dual-Write 전략 (source/fact FK 전환)
+
+`source`와 `fact` 테이블의 FK가 `entity_id` → `version_id`로 변경되어야 하지만, 단계적 전환이 필요하다.
+
+| 단계 | source/fact FK | 설명 |
+|------|---------------|------|
+| **Step 1~3** | `entity_id`만 사용 | v1 호환. version_id 컬럼은 nullable로 추가만 |
+| **Step 3b~7** | `entity_id` + `version_id` 양쪽 기록 (dual-write) | 새 레코드는 두 FK 모두 기록. 기존 레코드는 migration 스크립트로 backfill |
+| **Step 8** | `version_id`만 사용 | entity_id 컬럼 DROP. 레거시 제거 |
+
+**Dual-Write 규칙**:
+- 쓰기: 항상 `version_id`를 우선 설정. `entity_id`는 호환성을 위해 매핑 테이블에서 조회하여 설정
+- 읽기: `version_id`가 NOT NULL이면 `version_id` 사용, NULL이면 `entity_id` → 매핑 테이블 → `version_id` 변환
+- Step 8 전환 직전: `version_id IS NULL` 레코드가 0건인지 검증
+
+### 15.6 relation_evidence 3단계 전환
+
+`relation_evidence`의 PK가 `(relation_id, fact_id)` 복합키 → `serial id` 단독 PK로 변경되어야 한다.
+
+| 단계 | PK | 추가 컬럼 | 설명 |
+|------|-----|----------|------|
+| **Phase 2-A** (Step 1) | 기존 복합 PK 유지 | `version_id`, `is_active`, `evidence_snapshot`, `created_at` nullable 추가 | 스키마 확장만. 기존 코드 영향 없음 |
+| **Phase 2-B** (Step 4~7) | 기존 복합 PK 유지 | 새 도구들은 새 컬럼을 적극 사용 | 새로 생성되는 evidence는 모든 컬럼 채움 |
+| **Phase 2-C** (Step 8) | `id serial PK` 전환 | `fact_id` nullable로 변경 | PK 변경 migration. 기존 레코드에 id 부여 후 복합 PK DROP |
+
+**Phase 2-C 실행 절차**:
+```sql
+-- 1. serial id 컬럼 추가
+ALTER TABLE relation_evidence ADD COLUMN id SERIAL;
+-- 2. 기존 레코드에 id 부여 (이미 SERIAL이므로 자동)
+-- 3. 복합 PK 삭제
+ALTER TABLE relation_evidence DROP CONSTRAINT relation_evidence_pkey;
+-- 4. 새 PK 설정
+ALTER TABLE relation_evidence ADD PRIMARY KEY (id);
+-- 5. fact_id nullable 변경 (이미 SET NULL FK이므로 호환)
+ALTER TABLE relation_evidence ALTER COLUMN fact_id DROP NOT NULL;
+-- 6. 인덱스 추가
+CREATE INDEX re_relation_active_idx ON relation_evidence (relation_id, is_active);
+```
+
 ---
 
 ## 16. 구현 순서
 
 ### 16.1 단계별 작업
+
+> **§18과의 관계**: §16.1은 논리적 의존성 그래프이고, §18.2는 실제 실행 순서(Runbook)이다. 구현 시 **§18.2의 Step 순서를 따르되**, 각 Step 내부의 세부 작업은 §16.1의 의존성을 참고한다.
+
 
 | 단계 | 작업 | 의존성 | 위험도 |
 |------|------|--------|--------|
@@ -1712,18 +2380,20 @@ migration은 각 phase를 개별 트랜잭션으로 실행하며, phase 2~3 사�
 | **2** | Migration 스크립트 작성 + 테스트 (entity → identity+version, 매핑 테이블 포함) | 단계 1 | **높** |
 | **3** | 기존 repo 계층 변경 (entity-repo → identity-repo + version-repo) | 단계 2 | 높 |
 | **3b** | **호환성 모드 진입**: dual-read adapter 구현 | 단계 3 | 중 |
-| **4** | `register_spec` 구현 (identity+version 기반) | 단계 3b |  중 |
-| **5** | `link_spec` 구현 (identity 기반 relation) | 단계 4 | 중 |
-| **6** | `approval_event` 기록 로직 통합 | 단계 5 | 중 |
-| **7** | `rollback_approval` 구현 | 단계 6 | 중 |
-| **8** | Sync worker 재작성 (version append 중심) | 단계 3b | **높** |
-| **9** | Purge 모델 재작성 (version purge + identity purge, evidence 보존 포함) | 단계 8 | 높 |
-| **10** | `resolve_identity_candidates` 구현 (구성요소 점수 포함) | 단계 5 | 중 |
-| **11** | `apply_identity_rewrite` 구현 | 단계 10 | 중 |
-| **12** | 기존 18개 도구 쿼리 변경 (dual-read adapter 사용) | 단계 3b | 높 |
-| **13** | `__manual__/` 경로 정합성 정책 | 단계 4, 8 | 낮 |
-| **14** | Orphan cleanup (fact + relation, 파일 단위 scope) | 단계 8 | 중 |
-| **15** | **호환성 모드 종료**: 기존 entity 테이블 제거, dual-read adapter 제거 | 단계 12 전체 완료 + 검증 후 | **높** |
+| **4** | `register_spec` 구현 (spec + claim, identity+version 기반) | 단계 3b | 중 |
+| **4b** | `link_spec` 구현 (identity 기반 relation, claim:: 키 지원) | 단계 4 | 중 |
+| **4c** | `relate_specs` 구현 (spec↔spec, claim↔claim depends_on/extends) | 단계 4 | 중 |
+| **5** | `approval_event` 기록 로직 통합 | 단계 4b | 중 |
+| **6** | `rollback_approval` 구현 | 단계 5 | 중 |
+| **6b** | `spec_impact` + `kb_status` 구현 (영향도 분석 + KB 대시보드) | 단계 4c | 중 |
+| **7** | Sync worker 재작성 (version append 중심) | 단계 3b | **높** |
+| **8** | Purge 모델 재작성 (version purge + identity purge, evidence 보존 포함) | 단계 7 | 높 |
+| **9** | `resolve_identity_candidates` 구현 (구성요소 점수 포함) | 단계 4b | 중 |
+| **10** | `apply_identity_rewrite` 구현 | 단계 9 | 중 |
+| **11** | 기존 18개 도구 쿼리 변경 (dual-read adapter 사용) | 단계 3b | 높 |
+| **12** | `__manual__/` 경로 정합성 정책 | 단계 4, 7 | 낮 |
+| **13** | Orphan cleanup (fact + relation, 파일 단위 scope) | 단계 7 | 중 |
+| **14** | **호환성 모드 종료**: 기존 entity 테이블 제거, dual-read adapter 제거 | 단계 11 전체 완료 + 검증 후 | **높** |
 
 ### 16.2 호환성 모드 (Compatibility Mode)
 
@@ -1748,9 +2418,9 @@ export function resolveEntity(key: string, workspaceId: string) {
 
 **운영 규칙**:
 1. **단계 3b**: adapter 구현. 기본값 `V2_ENABLED=false` (v1 경로)
-2. **단계 4~11**: 각 도구를 v2로 전환할 때마다 해당 도구에서 v2 경로 활성화
-3. **단계 12**: 모든 18개 도구를 v2로 전환. `V2_ENABLED=true`가 기본값이 됨
-4. **단계 15**: v1 경로와 기존 entity 테이블을 제거. adapter도 제거
+2. **단계 4~10**: 각 도구를 v2로 전환할 때마다 해당 도구에서 v2 경로 활성화
+3. **단계 11**: 모든 18개 도구를 v2로 전환. `V2_ENABLED=true`가 기본값이 됨
+4. **단계 14**: v1 경로와 기존 entity 테이블을 제거. adapter도 제거
 
 **이점**:
 - 부분 배포 가능: 도구별로 점진적 전환
@@ -1773,7 +2443,91 @@ export function resolveEntity(key: string, workspaceId: string) {
 
 §5.3에서 정의한 v2+/v3+ 경로. spec을 atomic claim으로 분해하여 fine-grained coverage 추적.
 
+### 17.4 Stale Link Detection (v2.1)
+
+**문제**: spec이 업데이트되면 기존 코드 link의 앵커(`rationale`, `anchor`)가 무효화될 수 있다.
+
+**해결 경로**:
+
+1. `spec_updated` 이벤트 발생 시 해당 spec의 모든 outbound/inbound link를 재검증 큐에 등록
+2. `inconsistency_report`에 `stale_link_after_spec_update` 검사 항목 추가
+3. 검사 로직:
+   - link 생성 시점의 `entity_version.version_num` vs 현재 spec의 `version_num` 비교
+   - 차이 ≥ 1이면 `stale_candidate`로 마킹
+   - `relation.meta.anchor`가 현재 spec 본문에서 매칭되지 않으면 `stale_confirmed`
+4. 결과는 `inconsistency_report` 응답의 `staleLinks[]` 배열로 반환
+5. 자동 삭제 없음 — 사용자에게 보고만. `link_spec`으로 재연결은 수동
+
+**트리거 조건**: `sync` 이벤트 중 spec entity의 `content_hash` 변경 감지 시
+
+### 17.5 approval_event Archive Policy (v2.1)
+
+**문제**: approval_event 테이블이 무한 성장하면 쿼리 성능 저하.
+
+**해결 경로**:
+
+1. **TTL**: 90일 이상 경과한 이벤트를 `approval_event_archive`로 이동
+2. **아카이브 테이블**: `approval_event_archive` — 동일 스키마, 별도 테이블
+3. **제외 조건**: 최근 30일 내 child rollback이 있는 이벤트는 아카이브 제외
+4. **실행**: `purge_tombstones`와 동일 패턴의 관리 도구 또는 cron job
+5. **쿼리 전략**: 현재 데이터는 `approval_event`, 이력 조회는 `UNION ALL` 또는 뷰
+
+```sql
+-- 아카이브 이동 (예시)
+WITH candidates AS (
+  SELECT id FROM approval_event
+  WHERE created_at < NOW() - INTERVAL '90 days'
+    AND id NOT IN (
+      SELECT DISTINCT parent_event_id FROM approval_event
+      WHERE event_type = 'link_rollback' AND created_at > NOW() - INTERVAL '30 days'
+    )
+)
+INSERT INTO approval_event_archive SELECT * FROM approval_event WHERE id IN (SELECT id FROM candidates);
+DELETE FROM approval_event WHERE id IN (SELECT id FROM candidates);
+```
+
+### 17.6 Advisory Lock (v2.1)
+
+**문제**: 동시 sync 또는 수동 도구 호출이 같은 identity를 동시에 변경하면 race condition 발생 가능.
+
+**해결 경로**:
+
+1. **PostgreSQL Advisory Lock**: `pg_advisory_xact_lock(identity_id)` — 트랜잭션 범위 잠금
+2. **적용 대상**: `register_spec`, `link_spec`, `apply_identity_rewrite` — identity 변경이 있는 도구
+3. **래퍼 함수**:
+
+```typescript
+async function withIdentityLock<T>(
+  tx: Transaction,
+  identityId: number,
+  fn: () => Promise<T>
+): Promise<T> {
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(${identityId})`);
+  return fn();
+}
+```
+
+4. **sync worker**: 파일 단위로 직렬 처리하므로 기본적으로 충돌 없음. 수동 도구와의 충돌만 방어
+5. **성능 영향**: advisory lock은 row lock보다 가벼움. 트랜잭션 종료 시 자동 해제
+
 ---
+
+### 17.7 `.spec.md` 파서 (v2.1+)
+
+**목표**: `.spec.md` 파일을 sync 파서가 인식하여 spec/claim entity를 자동 등록하고 `contains` 관계를 자동 생성.
+
+> §17.1의 "코드 내 `@spec` 주석 태그"와는 별개 기능이다. §17.1은 코드 → spec 방향의 자동 link이고, 본 항목은 spec 파일 → KB 자동 등록이다.
+
+**설계 필요 항목** (구현 전 확정 필수):
+1. `.spec.md` 파일 형식 정의 (frontmatter YAML? heading 기반?)
+2. claim 추출 규칙 (heading level? marker comment?)
+3. 기존 `register_spec` 수동 등록과의 충돌 해결 (우선순위, merge 정책)
+4. approval_event 기록 시 `actor='system'` 사용
+
+**배치 시점**: Step 7 이후 또는 별도 이터레이션. 설계 확정 전까지 Step 7 범위에서 제외.
+
+---
+
 
 ## 부록 A: 용어 정의
 
@@ -1790,19 +2544,23 @@ export function resolveEntity(key: string, workspaceId: string) {
 | **앵커(anchor)** | 링크 생성 시 relation.meta에 저장하는 식별 정보 |
 | **rationale** | 링크의 근거. "왜 이 코드가 이 스펙을 구현하는가" |
 | **contract** | 스펙을 계약 객체로 바라보는 관점. stable ID + versioning |
-| **claim** | 계약의 개별 요구사항 항목 (v2+에서 세분화 예정) |
+| **claim (카드)** | 계약의 개별 요구사항 카드. `claim::{spec}/{name}` 형식. 코드 link의 실제 대상 단위 |
+| **contains** | spec → claim 소속 관계. `register_spec`에서 `parentSpecKey` 지정 시 자동 생성 |
 | **evidence** | 계약 충족을 입증하는 코드/fact. relation_evidence로 연결 |
 | **provenance** | approval_event 체인을 통한 출처 추적 |
+| **stale link** | spec/claim body가 갱신된 후 아직 재검증되지 않은 기존 링크 |
+| **coverage** | spec의 하위 claim 중 코드 link가 있는 비율. 카드 모델의 진행률 지표 |
 
 ## 부록 B: 관련 파일 목록
 
 | 파일 | 변경 유형 | 내용 |
 |------|-----------|------|
 | `tooling/mcp/drizzle/schema.ts` | **재작성** | entity_identity, entity_version, entity_lifecycle, approval_event 추가. entity 제거. relation/source/fact FK 변경 |
-| `tooling/mcp/src/server.ts` | 수정 | 5개 도구 등록 (TOOL_DEFINITIONS, handleToolCall) |
-| `tooling/mcp/src/tools/spec.ts` | **신규** | register_spec, link_spec 구현 |
+| `tooling/mcp/src/server.ts` | 수정 | 8개 도구 등록 (TOOL_DEFINITIONS, handleToolCall) |
+| `tooling/mcp/src/tools/spec.ts` | **신규** | register_spec, link_spec, relate_specs 구현 |
 | `tooling/mcp/src/tools/identity.ts` | **신규** | resolve_identity_candidates, apply_identity_rewrite 구현 |
 | `tooling/mcp/src/tools/governance.ts` | **신규** | rollback_approval 구현 |
+| `tooling/mcp/src/tools/dashboard.ts` | **신규** | spec_impact, kb_status 구현 |
 | `tooling/mcp/src/repo/identity-repo.ts` | **신규** | entity_identity CRUD |
 | `tooling/mcp/src/repo/version-repo.ts` | **신규** | entity_version CRUD + status 전이 |
 | `tooling/mcp/src/repo/approval-repo.ts` | **신규** | approval_event 기록/조회 |
@@ -1829,7 +2587,7 @@ export function resolveEntity(key: string, workspaceId: string) {
 | T1-3 | **파일 복사 (1:N)** | `a.ts` 존재 | `cp a.ts b.ts` + `rm a.ts` → startupScan | 동일 hash 2개 → 1:N 자동 매칭 금지. 기존 archived, b.ts 새 identity |
 | T1-4 | **N:1 통합** | `a.ts`, `b.ts` 같은 hash | 둘 다 삭제 + `c.ts` 생성 → startupScan | N:1 자동 매칭 금지. 둘 다 archived, c.ts 새 identity |
 | T1-5 | **Watch DELETE → CREATE** | `a.ts`에 link 존재 | DELETE(a.ts) → CREATE(b.ts), hash 동일 | DELETE: version archived, identity+relation 유지. CREATE: content_hash 매칭 → 같은 identity에 새 version |
-| T1-6 | **Watch 역순 CREATE → DELETE** | `a.ts` 존재 | CREATE(b.ts) → DELETE(a.ts), hash 동일 | CREATE: 새 identity+version. DELETE: a.ts version archived. 이후 content_hash 매칭으로 identity merge는 resolve_identity_candidates 필요 |
+| T1-6 | **Watch 역순 CREATE → DELETE** | `a.ts` 존재 | CREATE(b.ts) → DELETE(a.ts), hash 동일 | CREATE: 새 identity+version. DELETE: a.ts version archived. Post-DELETE merge check(§6.3)로 content_hash 1:1 매칭 → 자동 병합. entity_lifecycle 'merged' 기록. approval_event 'identity_merged'(actor='system') 기록 |
 
 ### C.2 수동 도구
 
@@ -1879,6 +2637,36 @@ export function resolveEntity(key: string, workspaceId: string) {
 | T6-4 | **rewrite 충돌** | 동일 unique constraint | meta 병합, supersededBy 표시, approval_event에 충돌 기록 |
 | T6-5 | **relation orphan cleanup** | sync 후 파서가 새 relation 생성 | 옛 relation (strength='inferred') 삭제, manual 보존 |
 
+### C.7 카드 모델 (하이브리드)
+
+| # | 시나리오 | 수행 | 기대 결과 |
+|---|----------|------|-----------|
+| T7-1 | **claim 등록** | `register_spec({specKey: "claim::auth/login", parentSpecKey: "spec::auth", ...})` | identity(type='claim') 생성, version active, contains relation 자동 생성, approval_event `spec_registered` |
+| T7-2 | **claim 등록 — parent 없이** | `register_spec({specKey: "claim::auth/login", ...})` (parentSpecKey 생략) | 에러: "claim requires parentSpecKey" |
+| T7-3 | **spec에 parent 지정** | `register_spec({specKey: "spec::auth", parentSpecKey: "spec::core"})` | 에러: "spec cannot have a parent" |
+| T7-4 | **claim에 link** | `link_spec({specKey: "claim::auth/login", ...})` | 정상 link 생성, approval_event `link_created` |
+| T7-5 | **하위 claim 있는 spec에 직접 link** | spec에 claim 3개 있는 상태에서 `link_spec({specKey: "spec::auth", ...})` | 경고 반환 ("카드 단위 link 권장") + link는 생성 |
+| T7-6 | **coverage_map 재귀 집계** | spec에 claim 3개, 2개 linked | `{ totalClaims: 3, linkedClaims: 2, coveragePercent: 66.7 }` |
+| T7-7 | **claim 갱신** | claim body 변경하여 재호출 | 기존 version archived, 새 version(version_num=2), approval_event `spec_updated` |
+
+### C.8 spec↔spec 관계
+
+| # | 시나리오 | 수행 | 기대 결과 |
+|---|----------|------|-----------|
+| T8-1 | **depends_on 생성** | `relate_specs({srcKey: "spec::billing", dstKey: "spec::auth", relationType: "depends_on", rationale: "결제에 인증 선행 필요"})` | relation 생성 (depends_on), approval_event `spec_relation_created` |
+| T8-2 | **순환 의존 감지** | A→B→C→A depends_on | 에러: "Circular dependency detected" |
+| T8-3 | **extends 생성** | `relate_specs({..., relationType: "extends", ...})` | relation 생성 (extends) |
+| T8-4 | **잘못된 relationType** | `relate_specs({..., relationType: "implements", ...})` | 에러: "relationType must be 'depends_on' or 'extends'" |
+
+### C.9 대시보드 / 영향도
+
+| # | 시나리오 | 수행 | 기대 결과 |
+|---|----------|------|-----------|
+| T9-1 | **kb_status 전체** | `kb_status()` | specs/claims 수, 커버리지 %, brokenLinks 수, staleLinks 수 반환 |
+| T9-2 | **kb_status 특정 spec** | `kb_status({specKey: "spec::auth"})` | 해당 spec + 하위 claim의 커버리지만 반환 |
+| T9-3 | **spec_impact 조회** | `spec_impact({specKey: "claim::auth/login"})` | claim에 연결된 코드 목록 + depends_on/extends 따른 간접 영향 spec/claim |
+| T9-4 | **stale link 탐지** | spec body 갱신 후 기존 link 존재 | `inconsistency_report`에 `stale_link_after_spec_update` 항목 포함 |
+
 ## 부록 D: v1 대비 변경 요약
 
 | 영역 | v1 | v2 | 변경 이유 |
@@ -1896,4 +2684,123 @@ export function resolveEntity(key: string, workspaceId: string) {
 | orphan cleanup | identity 전체 범위 | 파싱 파일 단위 scope (relation.meta.sourceFile) | 오탐 방지 |
 | identity 조회 | entity_key 단일 경로 | 4단계 우선순위 (stable_key → entity_key → id → content_hash) | NULL stable_key 대응 |
 | 구현 전략 | big-bang | dual-read adapter + feature flag (호환성 모드) | 점진적 전환, 즉시 롤백 가능 |
-| 신규 도구 | 4개 | 5개 (+rollback_approval) | Reversibility |
+| 스펙 모델 | 1 spec = 1 blob | 하이브리드 카드 모델 (spec → claim 계층, BDD 검증 기준 권장) | 카드 단위 추적, 진행률 가시성 |
+| 신규 도구 | 4개 | 8개 (+rollback_approval, relate_specs, spec_impact, kb_status) | 카드 모델 + 거버넌스 + 대시보드 |
+
+---
+
+## 18. 작업 순서 (Implementation Runbook)
+
+> 목표: v1→v2 전환을 “병렬 운영 + 즉시 롤백 가능”하게 수행하면서, 링크 파손 방지/감사/되돌리기(거버넌스)를 스키마로 강제한다.
+
+### 18.1 공통 운영 규칙 (모든 단계 적용)
+
+- 모든 단계는 **작게 쪼개서** 머지 가능해야 한다 (단계별 CI 통과)
+- “자동”은 **content_hash 1:1** 결정론만 허용, 그 외는 승인 이벤트 기반 수동/반자동
+- `strength='manual'` relation은 **절대 자동 삭제 금지**
+- 각 단계 완료 시점마다 `verify_integrity`/`inconsistency_report`를 강화해 “깨진 상태”를 조기 탐지한다
+- Dual-read 기간에는 **feature flag로 즉시 롤백** 가능해야 한다 (`BUNNER_V2_ENABLED`)
+
+### 18.2 단계별 실행 순서 (권장)
+
+#### Step 0 — Preflight (변경 전 안전장치)
+
+- [ ] 현재 스키마/레포/도구 호출 흐름을 기준으로 **회귀 테스트 베이스라인** 확보
+- [ ] “dual-read adapter”가 들어갈 **단일 진입점**(resolve 계열)을 확정
+
+#### Step 1 — v2 스키마 추가 (병렬 운영 기반)
+
+- [ ] 신규 테이블 생성: `entity_identity`, `entity_version`, `entity_lifecycle`, `approval_event`
+- [ ] 변경 테이블 컬럼/인덱스 추가(병행): `relation`(identity FK), `source`/`fact`(version FK), `sync_event`(identity_id+version_id), `relation_evidence` 구조 확장
+- [ ] 무결성 제약(UNIQUE/INDEX/CHECK) 반영
+
+**완료 조건**
+
+- [ ] 기존 v1 기능이 깨지지 않음(아직 v1 경로 사용)
+- [ ] 마이그레이션 없이도 서버 기동/기본 쿼리 가능
+
+#### Step 2 — Migration 스크립트(TDD) + 검증 체크포인트
+
+- [ ] v1 `entity` → v2 `entity_identity`(1:1) + `entity_version`(version_num=1) 매핑 스크립트 작성
+- [ ] 임시 매핑 테이블 + count mismatch 검사(Step 1c) 포함
+- [ ] FK 전환 스크립트(Phase 3)까지 포함하되, **phase별 트랜잭션**으로 롤백 가능하게 구성
+
+**테스트(부록 C 기반)**
+
+- [ ] 마이그레이션 전/후 엔티티 수/매핑 수 불일치 시 즉시 실패
+- [ ] relation/source/fact/sync_event FK 유효성 검증
+
+#### Step 3 — Repo 계층 분리 + Dual-Read Adapter 도입 (호환성 모드 시작)
+
+- [ ] `entity-repo`를 `identity-repo`/`version-repo`로 분리(추상화 레벨 고정)
+- [ ] dual-read adapter 추가: `BUNNER_V2_ENABLED=false` 기본
+- [ ] v1 경로 결과와 v2 경로 결과를 비교 가능한 “shadow read” 옵션(로그) 제공(선택)
+
+**완료 조건**
+
+- [ ] 동일 입력에 대해 v1/v2가 (가능한 범위에서) 동일 결과를 반환
+- [ ] `BUNNER_V2_ENABLED` 토글로 즉시 복귀 가능
+
+#### Step 4 — MCP 신규 도구 8종 구현(카드 모델 포함)
+
+**① 핵심 도구 (5종)**
+
+1) [ ] `register_spec` (spec + claim 등록, parentSpecKey로 contains 관계 자동 생성, `__manual__/` source, approval_event)
+2) [ ] `link_spec` (manual implements, `claim::` 키 권장, anchor + rationale evidence + approval_event)
+3) [ ] `rollback_approval` (보상 이벤트 + parent_event_id 체인)
+4) [ ] `resolve_identity_candidates` (깨진 링크 탐지 + 후보 스코어링, 자동 적용 금지)
+5) [ ] `apply_identity_rewrite` (승인된 relink + approval_event + evidence append-only)
+
+**② 카드 모델 / 분석 도구 (3종)**
+
+6) [ ] `relate_specs` (spec↔spec, claim↔claim 간 `depends_on`/`extends` relation, 순환 검사)
+7) [ ] `spec_impact` (spec/claim 변경 시 영향받는 코드·spec·claim 목록, 재귀 탐색)
+8) [ ] `kb_status` (KB 대시보드: spec/claim 수, 링크 수, 커버리지 %, stale link 수)
+
+**테스트(부록 C: T2/T3/T6/T7/T8/T9)**
+
+- [ ] T2-1~T2-7 (spec/claim 등록 · 링크), T3-1~T3-4 (거버넌스), T6-1~T6-5 (identity resolution)
+- [ ] T7 (카드 모델), T8 (spec↔spec 관계), T9 (대시보드/영향도)
+
+#### Step 5 — Sync Worker v2 core loop 재작성 (version append 중심)
+
+- [ ] `startupScan()` 교차 비교 + content_hash 1:1 매칭 → rename 처리(archived+new active version)
+- [ ] `processFile()`에서 entity_key active miss 시 archived hash 매칭 → identity 연결/신규 생성
+- [ ] `handleDeletedFile()`은 version archived 처리(그레이스 윈도우 금지)
+- [ ] Watch 역순(CREATE→DELETE) 방어: Post-DELETE merge check(결정론 케이스만)
+- [ ] `isManualPath()` 유틸 구현 + 5개 레이어 필터링(§9.3: L1~L5) 적용
+
+**테스트(부록 C: T1-1~T1-6 + T5)**
+
+- [ ] 파일 이동/삭제/생성 이벤트 조합에서 relation 유지(깨짐은 계층 2로 위임)
+- [ ] `__manual__/` 경로 보호 검증 (T5-1~T5-3)
+
+#### Step 6 — Cleanup/Purge 재작성 (증거 보존)
+
+- [ ] Orphan fact cleanup: version 단위
+- [ ] Orphan relation cleanup: “현재 파싱 파일 scope”로 제한 + manual 제외
+- [ ] Version purge: evidence_snapshot 선캡처 → archived version 삭제
+- [ ] Identity purge: “버전 없음 + TTL + manual relation 미참여” 조건
+- [ ] **Stale link detection**: `inconsistency_report`에 `stale_link_after_spec_update` 검사 항목 추가 (v2 범위)
+  - > **범위 구분**: 검사 항목 추가 및 보고는 v2 범위. 재검증 큐 등록 및 자동 트리거(§17.4)는 v2.1로 이관.
+
+**테스트(부록 C: T4, T9)**
+
+- [ ] evidence_snapshot 보존 + fact_id SET NULL 동작 검증
+- [ ] stale link 감지: spec 업데이트 후 link의 `version_num` 차이 + anchor 매칭 실패 검증
+
+#### Step 7 — 기존 도구(18개) 쿼리 전환 (active version 기준)
+
+- [ ] `search/describe/facts/relations/...`를 identity+active version JOIN 기반으로 전환
+- [ ] `evidence`는 `is_active=true` 기본 + `includeHistory` 옵션
+- [ ] `inconsistency_report`에 “active version 없는 identity / manual_relation_archived_identity” 추가
+- [ ] `inconsistency_report`에 `stale_link_after_spec_update` 검사 항목 추가 (§17.4)
+
+#### Step 8 — 호환성 모드 종료(빅 스위치) + 레거시 제거
+
+- [ ] `BUNNER_V2_ENABLED=true` 기본 전환
+- [ ] shadow 비교 기간 운영 후, legacy `entity` 테이블 제거 + v1 경로 제거 + adapter 제거
+- [ ] 마이그레이션 롤백이 어려운 시점이므로, 전환 직전/직후 검증 체크포인트 필수
+- [ ] **Dual-Write 종료**: source/fact의 `entity_id` 칼럼 DROP (§15.5 Phase 3)
+- [ ] **relation_evidence PK 전환**: 복합 PK → serial id PK (§15.6 Phase 2-C)
+- [ ] 최종 도구 수 확인: 기존 18개 + 신규 8개 = **총 26개 도구**
