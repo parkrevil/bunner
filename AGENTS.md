@@ -46,6 +46,6 @@ Behavioral rules are split into contextual files under `.cursor/rules/`. Follow 
 
 | File | Applies | Content |
 |------|---------|---------|
-| `mcp-usage.mdc` | Always | MCP tool usage (context7, bunner-kb, sequential-thinking) |
+| `mcp-usage.mdc` | Always | MCP tool usage (context7, sequential-thinking) |
 | `write-gate.mdc` | Always | Approval gate, independent judgment, Bun-first procedure, STOP conditions |
 | `test-standards.mdc` | test/ | TDD, BDD, bun:test, test file conventions |

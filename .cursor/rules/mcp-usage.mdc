@@ -1,5 +1,5 @@
 ---
-description: MCP tool usage (context7, bunner-kb, sequential-thinking)
+description: MCP tool usage (context7, sequential-thinking)
 alwaysApply: true
 ---
 
@@ -12,35 +12,12 @@ Ask yourself: **"Which MCP server(s) does this task require?"**
 | Situation | MCP |
 |-----------|-----|
 | External knowledge (packages, APIs, versions, compatibility, config) | `context7` |
-| Internal knowledge (code structure, dependencies, specs, history) | `bunner-kb` |
 | Analysis, judgment, planning | `sequential-thinking` (already performed if pre-flight ran) |
 | None of the above | No MCP needed |
-
-## Pre-flight Q3 (When bunner-kb Is Needed)
-
-Ask yourself: **"Which bunner-kb tool fits this situation?"**
-
-Select based on tool descriptions + this reference:
-
-| Question / Situation | Tool |
-|---|---|
-| "What is this? Structure?" | `search` → `describe` + `relations` |
-| "Detailed attributes/types/config?" | `facts` |
-| "What breaks if I change this?" | `impact_analysis` |
-| "Full dependency structure?" | `dependency_graph` |
-| "How are A and B connected?" | `trace_chain` |
-| "Multiple entities at once?" | `bulk_describe` / `bulk_facts` |
-| "Recent changes / history?" | `recent_changes` / `changelog` |
-| "Consistency / orphans / mismatches?" | `verify_integrity` / `inconsistency_report` / `find_orphans` |
-| "Evidence for a relation?" | `evidence` |
-| "Reflect changes to KB" | `sync` |
-| "Clean up tombstones" | `purge_tombstones` |
-| "Spec coverage?" | `coverage_map` |
 
 ## Role Separation
 
 - `context7` = **External** knowledge (package docs, API specs, version compatibility)
-- `bunner-kb` = **Internal** knowledge (project module structure, dependencies, spec coverage, change history). Acts as RAG — accumulates, reuses, and verifies project knowledge.
 - `sequential-thinking` = **Analysis engine** (combines MCP results for judgment). Auto-performed during pre-flight.
 
 ## Global MCP Rules
@@ -60,21 +37,3 @@ Select based on tool descriptions + this reference:
 5. Version/compatibility decision
 
 **Procedure:** No pre-reasoning. Call → present results (cite source) → proceed based on evidence.
-
-## bunner-kb
-
-bunner-kb is a Knowledge Graph MCP server for the project codebase.
-Tool details (parameters, scenarios) are in each tool's description.
-Select tools via Pre-flight Q3 reference table + tool descriptions.
-
-**Hard Gates (absolute rules):**
-
-1. **Code understanding/change tasks** → call bunner-kb **at least once** and use results as evidence.
-2. **Public API changes** → `impact_analysis` is mandatory.
-3. **After changes** → `sync` is mandatory (ensures KB accumulation loop).
-4. **`stale: true` results** → never trust. Call `sync` then re-query.
-
-**Operational notes:**
-- Use entityKeys obtained from `search` or `recent_changes`.
-- bunner-kb connects via HTTP — server must be running. On connection error, ask user to verify server status.
-- On bunner-kb unavailable: report to user + fallback to direct file reading/grep. But **public API changes remain blocked without `impact_analysis`** (rule F3).

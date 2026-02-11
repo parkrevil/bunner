@@ -59,15 +59,13 @@ Guessing user intent is a policy violation.
 ### Role Separation
 
 - `context7` = **External** knowledge (package docs, API specs, versions)
-- `bunner-kb` = **Internal** knowledge (code structure, dependencies, specs, history). RAG for project knowledge.
 - `sequential-thinking` = **Analysis engine** (combines results for judgment)
 
 ### Pre-flight (Every Response)
 
 Before acting, ask yourself:
 1. **Does this require file changes?** → Yes: approval gate first
-2. **Which MCP is needed?** → External: context7 / Internal: bunner-kb / Analysis: sequential-thinking
-3. **If bunner-kb, which tool?** → Use reference below
+2. **Which MCP is needed?** → External: context7 / Analysis: sequential-thinking
 
 ### MCP Rules
 
@@ -82,29 +80,6 @@ Before acting, ask yourself:
 3. Public API changes
 4. Config file changes
 5. Version/compatibility decisions
-
-### bunner-kb — Tool Reference
-
-| Situation | Tool |
-|---|---|
-| "What is this? Structure?" | `search` → `describe` + `relations` |
-| "Attributes/types?" | `facts` |
-| "What breaks if changed?" | `impact_analysis` |
-| "Dependency structure?" | `dependency_graph` |
-| "Connection path A↔B?" | `trace_chain` |
-| "Multiple entities?" | `bulk_describe` / `bulk_facts` |
-| "Recent changes?" | `recent_changes` / `changelog` |
-| "Consistency check?" | `verify_integrity` / `inconsistency_report` / `find_orphans` |
-| "Relation evidence?" | `evidence` |
-| "Reflect changes" | `sync` |
-| "Spec coverage?" | `coverage_map` |
-
-### bunner-kb Hard Gates
-
-1. Code understanding/change → call bunner-kb at least once
-2. Public API change → `impact_analysis` mandatory
-3. After changes → `sync` mandatory
-4. `stale: true` → never trust, `sync` then re-query
 
 ## Test Standards
 

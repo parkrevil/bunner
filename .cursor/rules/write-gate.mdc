@@ -73,6 +73,6 @@ Choosing Node/npm without context7 verification is a policy violation.
 Halt immediately when:
 
 1. **Scope exceeded** — need to modify files outside approved scope
-2. **Required MCP unavailable** — context7/sequential-thinking failure → stop; bunner-kb failure → report to user, fallback to direct file reading (but public API changes still blocked)
+2. **Required MCP unavailable** — context7/sequential-thinking failure → stop
 3. **Rule conflict** — choose the most conservative interpretation: no-change > change, Bun > Node > npm, approval-required > not-required
 4. **Ambiguity** — ask, don't guess. Never use "probably" or "presumably"
