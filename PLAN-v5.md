@@ -782,3 +782,31 @@ Each phase follows **strict TDD**: write ALL tests first → RED → implement �
 - MCP write tools enable fully MCP-driven development (no CLI required)
 - Card type system (`{type}::key`) supports framework rules, adapter rules, and user specs in a unified model
 - Card-centric verification allows exploratory coding (code first, link later) while ensuring confirmed specs have implementations
+
+---
+
+## Appendix: Non-Guarantee Area (Static-only Limits)
+
+이 문서에서 말하는 `compiler/`의 CodeRelationExtractor(= pure AST 기반)는 **정적 분석만으로** 관계를 추출한다. 따라서 아래 케이스들은 “구멍”이 아니라 **정의상 보장 불가 영역**이다.
+
+1. **비리터럴 dynamic import**: `import(expr)`에서 `expr`가 문자열 리터럴이 아니면 대상 모듈을 결정할 수 없다.
+2. **계산된 멤버 접근/호출**: `obj[expr]()` / `obj[expr]`는 `expr` 평가 결과에 따라 대상이 달라져 정적으로 확정 불가.
+3. **런타임 재바인딩/몽키패치**: 함수/메서드가 재할당되거나 프로토타입이 변경되면 “호출 → 실제 대상” 매핑이 런타임에 바뀐다.
+4. **리플렉션/메타프로그래밍**: `Reflect`, `Proxy`, 데코레이터/메타데이터 기반 라우팅 등은 AST만으로 완전 추적 불가.
+5. **FS/툴체인 의존 해석**: `tsconfig paths`, 확장자/인덱스 규칙, 번들러 리졸브 규칙 등은 파일시스템/설정에 의존하므로 P2의 “no FS / no SQLite” 제약 하에서 완전해질 수 없다.
+
+### Guarantee modes
+
+정적 추출 결과의 신뢰도/완전성은 모드로 정의한다.
+
+1. **Sound mode (no false positives)**
+  - 확실히 판별 가능한 관계만 기록한다.
+  - 장점: 잘못된 엣지(거짓 양성)를 최소화.
+  - 단점: 누락(거짓 음성)이 늘 수 있음.
+
+2. **Complete-ish mode (best-effort + meta_json)**
+  - 가능한 많이 엣지를 생성하되, 애매한 경우 `meta_json`에 “best-effort/불확실성”을 명시한다.
+  - 장점: 누락(거짓 음성)을 줄여 탐색/리트리벌에 유리.
+  - 단점: 일부 엣지는 런타임과 불일치할 수 있음(거짓 양성 가능).
+
+현재 계획은 인덱서의 탐색 성능/리트리벌을 우선하여 **Complete-ish**를 기본으로 한다.
