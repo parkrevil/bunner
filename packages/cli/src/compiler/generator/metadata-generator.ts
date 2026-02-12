@@ -4,7 +4,7 @@ import type { ImportRegistry } from './import-registry';
 import type { MetadataClassEntry } from './interfaces';
 
 import { type ClassMetadata } from '../analyzer';
-import { compareCodePoint } from '../common';
+import { compareCodePoint } from '../../common';
 
 export class MetadataGenerator {
   generate(classes: MetadataClassEntry[], registry: ImportRegistry): string {

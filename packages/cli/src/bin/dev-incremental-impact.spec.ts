@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 
-import type { FileAnalysis } from '../analyzer/graph/interfaces';
-import type { ImportEntry } from '../analyzer/interfaces';
+import type { FileAnalysis } from '../compiler/analyzer/graph/interfaces';
+import type { ImportEntry } from '../compiler/analyzer/interfaces';
 
 import { buildDevIncrementalImpactLog } from './dev-incremental-impact';
 

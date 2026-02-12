@@ -4,11 +4,11 @@ import { join, resolve, relative } from 'path';
 
 import type { CommandOptions } from './types';
 
-import { AdapterSpecResolver, AstParser, ModuleGraph, type FileAnalysis } from '../analyzer';
-import type { AnalyzerValue, AnalyzerValueRecord } from '../analyzer/types';
+import { AdapterSpecResolver, AstParser, ModuleGraph, type FileAnalysis } from '../compiler/analyzer';
+import { validateCreateApplication } from '../compiler/analyzer/validation';
 import { ConfigLoader, ConfigLoadError, scanGlobSorted, writeIfChanged } from '../common';
 import { buildDiagnostic, DiagnosticReportError, reportDiagnostics } from '../diagnostics';
-import { ManifestGenerator } from '../generator';
+import { ManifestGenerator } from '../compiler/generator';
 import { ProjectWatcher } from '../watcher';
 import { buildDevIncrementalImpactLog } from './dev-incremental-impact';
 
@@ -83,85 +83,6 @@ export async function dev(commandOptions?: CommandOptions) {
         return false;
       }
     }
-
-    const isAnalyzerRecord = (value: AnalyzerValue): value is AnalyzerValueRecord => {
-      return typeof value === 'object' && value !== null && !Array.isArray(value);
-    };
-
-    // MUST: MUST-1
-    // MUST: MUST-2
-    const validateCreateApplication = (fileMap: Map<string, FileAnalysis>): void => {
-      const callEntries = Array.from(fileMap.values())
-        .flatMap(file => (file.createApplicationCalls ?? []).map(call => ({ call, filePath: file.filePath })))
-        .filter(entry => entry.call !== undefined);
-
-      if (callEntries.length === 0) {
-        throw new DiagnosticReportError(
-          buildDiagnostic({
-            code: 'BUNNER_APP_002',
-            severity: 'fatal',
-            summary: 'createApplication entry module not found.',
-            reason: 'createApplication call not found in recognized files.',
-            file: '.',
-          }),
-        );
-      }
-
-      if (callEntries.length > 1) {
-        throw new DiagnosticReportError(
-          buildDiagnostic({
-            code: 'BUNNER_APP_018',
-            severity: 'fatal',
-            summary: 'Multiple createApplication calls detected.',
-            reason: 'Multiple createApplication calls detected in recognized files.',
-            file: callEntries[0]?.filePath ?? '.',
-          }),
-        );
-      }
-
-      const entry = callEntries[0];
-      const args = entry.call.args ?? [];
-
-      if (args.length !== 1) {
-        throw new DiagnosticReportError(
-          buildDiagnostic({
-            code: 'BUNNER_APP_002',
-            severity: 'fatal',
-            summary: 'Invalid createApplication entry argument.',
-            reason: 'createApplication must take exactly one entry module argument.',
-            file: entry.filePath,
-          }),
-        );
-      }
-
-      const entryArg = args[0];
-
-      if (!isAnalyzerRecord(entryArg)) {
-        throw new DiagnosticReportError(
-          buildDiagnostic({
-            code: 'BUNNER_APP_002',
-            severity: 'fatal',
-            summary: 'Invalid createApplication entry argument.',
-            reason: 'createApplication entry module must be a statically resolvable identifier.',
-            file: entry.filePath,
-          }),
-        );
-      }
-
-      const entryRef = entryArg.__bunner_ref;
-
-      if (typeof entryRef !== 'string' || entryRef.length === 0) {
-        throw new DiagnosticReportError(
-          buildDiagnostic({
-            code: 'BUNNER_APP_002',
-            severity: 'fatal',
-            summary: 'Invalid createApplication entry argument.',
-            reason: 'createApplication entry module must be a statically resolvable identifier.',
-            file: entry.filePath,
-          }),
-        );
-      }
-    };
 
     async function rebuild() {
       try {

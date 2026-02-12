@@ -245,4 +245,380 @@ describe('ConfigLoader', () => {
     // Act & Assert
     await expect(ConfigLoader.load(projectRoot)).rejects.toBeInstanceOf(ConfigLoadError);
   });
+
+  describe('mcp config', () => {
+    it('should use default mcp.card.types when mcp is omitted', async () => {
+      // Arrange
+      setup.existsByPath.set(jsonPath, true);
+      setup.existsByPath.set(jsoncPath, false);
+      setup.textByPath.set(
+        jsonPath,
+        JSON.stringify(
+          {
+            module: { fileName: '__module__.ts' },
+            sourceDir: 'src',
+            entry: 'src/main.ts',
+          },
+          null,
+          2,
+        ),
+      );
+
+      // Act
+      const result = await ConfigLoader.load(projectRoot);
+
+      // Assert
+      expect(result.config.mcp.card.types).toEqual(['spec']);
+    });
+
+    it('should use default mcp.card.relations when mcp is omitted', async () => {
+      // Arrange
+      setup.existsByPath.set(jsonPath, true);
+      setup.existsByPath.set(jsoncPath, false);
+      setup.textByPath.set(
+        jsonPath,
+        JSON.stringify(
+          {
+            module: { fileName: '__module__.ts' },
+            sourceDir: 'src',
+            entry: 'src/main.ts',
+          },
+          null,
+          2,
+        ),
+      );
+
+      // Act
+      const result = await ConfigLoader.load(projectRoot);
+
+      // Assert
+      expect(result.config.mcp.card.relations).toEqual([
+        'depends_on',
+        'references',
+        'related',
+        'extends',
+        'conflicts',
+      ]);
+    });
+
+    it('should use custom mcp.card.types when mcp.card.types is provided', async () => {
+      // Arrange
+      setup.existsByPath.set(jsonPath, true);
+      setup.existsByPath.set(jsoncPath, false);
+      setup.textByPath.set(
+        jsonPath,
+        JSON.stringify(
+          {
+            module: { fileName: '__module__.ts' },
+            sourceDir: 'src',
+            entry: 'src/main.ts',
+            mcp: {
+              card: {
+                types: ['spec', 'system'],
+              },
+            },
+          },
+          null,
+          2,
+        ),
+      );
+
+      // Act
+      const result = await ConfigLoader.load(projectRoot);
+
+      // Assert
+      expect(result.config.mcp.card.types).toEqual(['spec', 'system']);
+    });
+
+    it('should use custom mcp.card.relations when mcp.card.relations is provided', async () => {
+      // Arrange
+      setup.existsByPath.set(jsonPath, true);
+      setup.existsByPath.set(jsoncPath, false);
+      setup.textByPath.set(
+        jsonPath,
+        JSON.stringify(
+          {
+            module: { fileName: '__module__.ts' },
+            sourceDir: 'src',
+            entry: 'src/main.ts',
+            mcp: {
+              card: {
+                relations: ['depends_on', 'references'],
+              },
+            },
+          },
+          null,
+          2,
+        ),
+      );
+
+      // Act
+      const result = await ConfigLoader.load(projectRoot);
+
+      // Assert
+      expect(result.config.mcp.card.relations).toEqual(['depends_on', 'references']);
+    });
+
+    it('should use default mcp.card.relations when only mcp.card.types is provided', async () => {
+      // Arrange
+      setup.existsByPath.set(jsonPath, true);
+      setup.existsByPath.set(jsoncPath, false);
+      setup.textByPath.set(
+        jsonPath,
+        JSON.stringify(
+          {
+            module: { fileName: '__module__.ts' },
+            sourceDir: 'src',
+            entry: 'src/main.ts',
+            mcp: {
+              card: {
+                types: ['spec'],
+              },
+            },
+          },
+          null,
+          2,
+        ),
+      );
+
+      // Act
+      const result = await ConfigLoader.load(projectRoot);
+
+      // Assert
+      expect(result.config.mcp.card.relations).toEqual([
+        'depends_on',
+        'references',
+        'related',
+        'extends',
+        'conflicts',
+      ]);
+    });
+
+    it('should reject mcp.card.types when it is not a string array', async () => {
+      // Arrange
+      setup.existsByPath.set(jsonPath, true);
+      setup.existsByPath.set(jsoncPath, false);
+      setup.textByPath.set(
+        jsonPath,
+        JSON.stringify(
+          {
+            module: { fileName: '__module__.ts' },
+            sourceDir: 'src',
+            entry: 'src/main.ts',
+            mcp: {
+              card: {
+                types: [1, 2, 3],
+              },
+            },
+          },
+          null,
+          2,
+        ),
+      );
+
+      // Act & Assert
+      await expect(ConfigLoader.load(projectRoot)).rejects.toBeInstanceOf(ConfigLoadError);
+    });
+
+    it('should reject mcp.card.relations when it is not a string array', async () => {
+      // Arrange
+      setup.existsByPath.set(jsonPath, true);
+      setup.existsByPath.set(jsoncPath, false);
+      setup.textByPath.set(
+        jsonPath,
+        JSON.stringify(
+          {
+            module: { fileName: '__module__.ts' },
+            sourceDir: 'src',
+            entry: 'src/main.ts',
+            mcp: {
+              card: {
+                relations: [1, 2, 3],
+              },
+            },
+          },
+          null,
+          2,
+        ),
+      );
+
+      // Act & Assert
+      await expect(ConfigLoader.load(projectRoot)).rejects.toBeInstanceOf(ConfigLoadError);
+    });
+
+    it('should reject mcp.card.types when it is an empty array', async () => {
+      // Arrange
+      setup.existsByPath.set(jsonPath, true);
+      setup.existsByPath.set(jsoncPath, false);
+      setup.textByPath.set(
+        jsonPath,
+        JSON.stringify(
+          {
+            module: { fileName: '__module__.ts' },
+            sourceDir: 'src',
+            entry: 'src/main.ts',
+            mcp: {
+              card: {
+                types: [],
+              },
+            },
+          },
+          null,
+          2,
+        ),
+      );
+
+      // Act & Assert
+      await expect(ConfigLoader.load(projectRoot)).rejects.toBeInstanceOf(ConfigLoadError);
+    });
+
+    it('should reject mcp.card.relations when it is an empty array', async () => {
+      // Arrange
+      setup.existsByPath.set(jsonPath, true);
+      setup.existsByPath.set(jsoncPath, false);
+      setup.textByPath.set(
+        jsonPath,
+        JSON.stringify(
+          {
+            module: { fileName: '__module__.ts' },
+            sourceDir: 'src',
+            entry: 'src/main.ts',
+            mcp: {
+              card: {
+                relations: [],
+              },
+            },
+          },
+          null,
+          2,
+        ),
+      );
+
+      // Act & Assert
+      await expect(ConfigLoader.load(projectRoot)).rejects.toBeInstanceOf(ConfigLoadError);
+    });
+
+    it('should reject mcp.card when it is not an object', async () => {
+      // Arrange
+      setup.existsByPath.set(jsonPath, true);
+      setup.existsByPath.set(jsoncPath, false);
+      setup.textByPath.set(
+        jsonPath,
+        JSON.stringify(
+          {
+            module: { fileName: '__module__.ts' },
+            sourceDir: 'src',
+            entry: 'src/main.ts',
+            mcp: {
+              card: 'invalid',
+            },
+          },
+          null,
+          2,
+        ),
+      );
+
+      // Act & Assert
+      await expect(ConfigLoader.load(projectRoot)).rejects.toBeInstanceOf(ConfigLoadError);
+    });
+
+    it('should reject mcp when it is not an object', async () => {
+      // Arrange
+      setup.existsByPath.set(jsonPath, true);
+      setup.existsByPath.set(jsoncPath, false);
+      setup.textByPath.set(
+        jsonPath,
+        JSON.stringify(
+          {
+            module: { fileName: '__module__.ts' },
+            sourceDir: 'src',
+            entry: 'src/main.ts',
+            mcp: 'invalid',
+          },
+          null,
+          2,
+        ),
+      );
+
+      // Act & Assert
+      await expect(ConfigLoader.load(projectRoot)).rejects.toBeInstanceOf(ConfigLoadError);
+    });
+  });
+
+  describe('mcp.exclude config', () => {
+    it('should use empty array as default when mcp.exclude is omitted', async () => {
+      // Arrange
+      setup.existsByPath.set(jsonPath, true);
+      setup.existsByPath.set(jsoncPath, false);
+      setup.textByPath.set(
+        jsonPath,
+        JSON.stringify(
+          {
+            module: { fileName: '__module__.ts' },
+            sourceDir: 'src',
+            entry: 'src/main.ts',
+          },
+          null,
+          2,
+        ),
+      );
+
+      // Act
+      const result = await ConfigLoader.load(projectRoot);
+
+      // Assert
+      expect(result.config.mcp.exclude).toEqual([]);
+    });
+
+    it('should use custom mcp.exclude patterns when mcp.exclude is provided', async () => {
+      // Arrange
+      setup.existsByPath.set(jsonPath, true);
+      setup.existsByPath.set(jsoncPath, false);
+      setup.textByPath.set(
+        jsonPath,
+        JSON.stringify(
+          {
+            module: { fileName: '__module__.ts' },
+            sourceDir: 'src',
+            entry: 'src/main.ts',
+            mcp: {
+              exclude: ['**/test/**', '**/fixtures/**'],
+            },
+          },
+          null,
+          2,
+        ),
+      );
+
+      // Act
+      const result = await ConfigLoader.load(projectRoot);
+
+      // Assert
+      expect(result.config.mcp.exclude).toEqual(['**/test/**', '**/fixtures/**']);
+    });
+
+    it('should reject mcp.exclude when it is not a string array', async () => {
+      // Arrange
+      setup.existsByPath.set(jsonPath, true);
+      setup.existsByPath.set(jsoncPath, false);
+      setup.textByPath.set(
+        jsonPath,
+        JSON.stringify(
+          {
+            module: { fileName: '__module__.ts' },
+            sourceDir: 'src',
+            entry: 'src/main.ts',
+            mcp: {
+              exclude: [1, 2, 3],
+            },
+          },
+          null,
+          2,
+        ),
+      );
+
+      // Act & Assert
+      await expect(ConfigLoader.load(projectRoot)).rejects.toBeInstanceOf(ConfigLoadError);
+    });
+  });
 });

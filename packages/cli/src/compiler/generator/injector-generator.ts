@@ -2,7 +2,7 @@ import type { AnalyzerValue, AnalyzerValueRecord } from '../analyzer/types';
 import type { ImportRegistry } from './import-registry';
 
 import { type ClassMetadata, ModuleGraph, type ModuleNode } from '../analyzer';
-import { compareCodePoint } from '../common';
+import { compareCodePoint } from '../../common';
 
 type RecordValue = AnalyzerValueRecord;
 

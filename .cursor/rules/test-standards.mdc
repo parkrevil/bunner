@@ -14,8 +14,10 @@ Integration tests > Unit tests.
 
 ## TDD Loop
 
-User instruction → Write test → Implement → Verify test passes.
-Implementation before test is prohibited.
+1. User instruction → **Write ALL tests first** → Confirm RED (all new tests fail)
+2. After RED confirmed → Implement → Confirm GREEN (all tests pass)
+3. Mixing implementation code during the test-writing phase is prohibited.
+4. Only minimal types/interfaces required for test compilation are allowed before RED.
 
 ## Style
 
@@ -24,8 +26,8 @@ Implementation before test is prohibited.
 
 ## Mocking
 
-- External dependencies (DB, network) only.
-- Internal module mocking is prohibited.
+- Mock anything **outside the test boundary (SUT)**.
+- Internal or external is irrelevant — if it crosses the SUT boundary, mock it.
 
 ## Runner
 

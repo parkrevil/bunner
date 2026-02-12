@@ -1,4 +1,4 @@
-import type { ClassMetadata } from '../analyzer';
+import type { ClassMetadata } from '../compiler/analyzer';
 
 export interface CollectedClass {
   metadata: ClassMetadata;

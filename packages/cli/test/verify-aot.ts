@@ -1,12 +1,12 @@
 import { Glob } from 'bun';
 import { resolve, join } from 'path';
 
-import type { FileAnalysis } from '../src/analyzer/graph/interfaces';
+import type { FileAnalysis } from '../src/compiler/analyzer/graph/interfaces';
 
-import { AstParser } from '../src/analyzer/ast-parser';
-import { ModuleGraph } from '../src/analyzer/graph/module-graph';
-import { ImportRegistry } from '../src/generator/import-registry';
-import { InjectorGenerator } from '../src/generator/injector';
+import { AstParser } from '../src/compiler/analyzer/ast-parser';
+import { ModuleGraph } from '../src/compiler/analyzer/graph/module-graph';
+import { ImportRegistry } from '../src/compiler/generator/import-registry';
+import { InjectorGenerator } from '../src/compiler/generator/injector-generator';
 
 async function run() {
   const appDir = resolve(new URL('../../../examples/src', import.meta.url).pathname);

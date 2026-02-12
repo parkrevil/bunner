@@ -2,7 +2,7 @@ import type { ClassMetadata } from '../analyzer';
 import type { ModuleGraph } from '../analyzer/graph/module-graph';
 import type { AdapterStaticSpec, HandlerIndexEntry } from '../analyzer/interfaces';
 import type { AnalyzerValue } from '../analyzer/types';
-import type { BunnerConfigSource, ResolvedBunnerConfig } from '../common/interfaces';
+import type { BunnerConfigSource, ResolvedBunnerConfig } from '../../common/interfaces';
 
 export interface ManifestJsonParams {
   graph: ModuleGraph;

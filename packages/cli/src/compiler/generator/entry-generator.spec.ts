@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { EntryGenerator } from './entry';
+import { EntryGenerator } from './entry-generator';
 
 describe('EntryGenerator', () => {
   it('should inline bootstrap when generating runtime entry code', () => {

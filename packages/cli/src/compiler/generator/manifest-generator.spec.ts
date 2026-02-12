@@ -11,7 +11,7 @@ import type { DeepFreezeModule, GeneratedBlockParams, MetadataRegistryModule, Sc
 
 import { ModuleGraph } from '../analyzer/graph/module-graph';
 
-import { ManifestGenerator } from './manifest';
+import { ManifestGenerator } from './manifest-generator';
 
 const isAnalyzerValueRecord = (value: AnalyzerValue): value is AnalyzerValueRecord => {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

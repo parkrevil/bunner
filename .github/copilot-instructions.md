@@ -84,9 +84,9 @@ Before acting, ask yourself:
 ## Test Standards
 
 - **Priority:** Integration > Unit
-- **TDD:** instruction → test → implement → verify
+- **TDD:** instruction → write ALL tests → RED → implement → GREEN. No mixing.
 - **Style:** BDD (`describe`/`it`), AAA (Arrange/Act/Assert)
-- **Mocking:** External deps only. No internal module mocking.
+- **Mocking:** Mock anything outside the SUT boundary (internal/external irrelevant).
 - **Runner:** `bun:test`
 - **Unit:** `*.spec.ts` next to source. **Integration:** `packages/*/test/*.test.ts`
 

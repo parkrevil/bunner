@@ -14,7 +14,7 @@ import type {
 } from './interfaces';
 import type { AnalyzerValue, AnalyzerValueRecord, DecoratorArguments } from './types';
 
-import { PathResolver } from '../common';
+import { PathResolver } from '../../common';
 import { AstParser } from './ast-parser';
 
 const isRecordValue = (value: AnalyzerValue): value is AnalyzerValueRecord => {

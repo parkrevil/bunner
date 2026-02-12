@@ -7,7 +7,7 @@ import type { FileAnalysis } from '../analyzer/graph/interfaces';
 
 import { ModuleGraph } from '../analyzer/graph/module-graph';
 import { ImportRegistry } from './import-registry';
-import { InjectorGenerator } from './injector';
+import { InjectorGenerator } from './injector-generator';
 
 function createEmptyGraph(): ModuleGraph {
   const fileMap = new Map<string, FileAnalysis>();

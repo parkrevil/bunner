@@ -1,9 +1,10 @@
 #!/usr/bin/env bun
 import { parseArgs } from 'util';
 
-import type { CommandOptions } from '../commands/types';
+import type { CommandOptions } from './types';
 
-import { dev, build } from '../commands';
+import { dev } from './dev.command';
+import { build } from './build.command';
 import { buildDiagnostic, reportDiagnostics } from '../diagnostics';
 
 const { positionals, values } = parseArgs({

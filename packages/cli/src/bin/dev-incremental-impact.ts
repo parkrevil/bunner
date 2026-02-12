@@ -1,6 +1,6 @@
-import type { FileAnalysis } from '../analyzer/graph/interfaces';
+import type { FileAnalysis } from '../compiler/analyzer/graph/interfaces';
 
-import { buildModuleImpact, type ModuleImpact } from '../analyzer/incremental/module-impact';
+import { buildModuleImpact, type ModuleImpact } from '../compiler/analyzer/incremental/module-impact';
 
 export interface DevIncrementalImpactLogParams {
   previousFileMap: Map<string, FileAnalysis>;

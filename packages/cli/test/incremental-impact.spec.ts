@@ -4,10 +4,10 @@ import { mkdtemp, mkdir, rm } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
-import type { FileAnalysis } from '../src/analyzer/graph/interfaces';
+import type { FileAnalysis } from '../src/compiler/analyzer/graph/interfaces';
 
-import { AstParser } from '../src/analyzer/ast-parser';
-import { buildModuleImpact } from '../src/analyzer/incremental/module-impact';
+import { AstParser } from '../src/compiler/analyzer/ast-parser';
+import { buildModuleImpact } from '../src/compiler/analyzer/incremental/module-impact';
 
 const writeFile = async (path: string, contents: string): Promise<void> => {
   await Bun.write(path, contents);

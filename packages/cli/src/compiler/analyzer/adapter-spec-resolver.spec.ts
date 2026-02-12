@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { join } from 'path';
 import type { FileAnalysis } from './graph/interfaces';
-import type { FileSetup } from '../../test/shared/interfaces';
+import type { FileSetup } from '../../../test/shared/interfaces';
 
 
 import type { AstParseResult } from './test/types';
 
-import { createBunFileStub } from '../../test/shared/stubs';
+import { createBunFileStub } from '../../../test/shared/stubs';
 
-import { PathResolver } from '../common';
+import { PathResolver } from '../../common';
 import { AstParser } from './ast-parser';
 import { AdapterSpecResolver } from './adapter-spec-resolver';
 

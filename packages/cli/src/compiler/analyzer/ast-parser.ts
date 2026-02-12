@@ -15,7 +15,7 @@ import type {
 } from './types';
 
 import { AstTypeResolver } from './ast-type-resolver';
-import { compareCodePoint } from '../common';
+import { compareCodePoint } from '../../common';
 
 const UNKNOWN_TYPE_NAME = 'Unknown';
 const UNKNOWN_CALLEE_NAME = 'unknown';

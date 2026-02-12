@@ -4,7 +4,7 @@ import type { ClassMetadata } from '../interfaces';
 import type { AnalyzerValue, AnalyzerValueRecord } from '../types';
 import type { CyclePath, ProviderRef, FileAnalysis } from './interfaces';
 
-import { compareCodePoint } from '../../common';
+import { compareCodePoint } from '../../../common';
 import { ModuleDiscovery } from '../module-discovery';
 import { ModuleNode } from './module-node';
 

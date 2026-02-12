@@ -1,6 +1,6 @@
 import { basename, join, relative, resolve, sep } from 'path';
 
-import type { ConfigLoadResult, JsonRecord, JsonValue, ResolvedBunnerConfig } from './interfaces';
+import type { ConfigLoadResult, JsonRecord, JsonValue, ResolvedBunnerConfig, ResolvedBunnerConfigMcp } from './interfaces';
 
 import { ConfigLoadError } from './errors';
 
@@ -69,6 +69,10 @@ export class ConfigLoader {
     return typeof value === 'string' && value.length > 0;
   }
 
+  private static isNonEmptyStringArray(value: JsonValue | undefined): value is string[] {
+    return Array.isArray(value) && value.length > 0 && value.every((item) => typeof item === 'string');
+  }
+
   private static toResolvedConfig(value: JsonValue, sourcePath: string, projectRoot: string): ResolvedBunnerConfig {
     if (!this.isRecord(value)) {
       throw new ConfigLoadError('Invalid bunner config: must be an object.', sourcePath);
@@ -106,13 +110,73 @@ export class ConfigLoader {
       throw new ConfigLoadError('Invalid bunner config: entry must be within sourceDir.', sourcePath);
     }
 
+    const mcp = this.toResolvedMcpConfig(value.mcp, sourcePath);
+
     const config: ResolvedBunnerConfig = {
       module: { fileName },
       sourceDir,
       entry,
+      mcp,
     };
 
     return config;
+  }
+
+  private static toResolvedMcpConfig(value: JsonValue | undefined, sourcePath: string): ResolvedBunnerConfigMcp {
+    if (value === undefined || value === null) {
+      return {
+        card: {
+          types: ['spec'],
+          relations: ['depends_on', 'references', 'related', 'extends', 'conflicts'],
+        },
+        exclude: [],
+      };
+    }
+
+    if (!this.isRecord(value)) {
+      throw new ConfigLoadError('Invalid bunner config: mcp must be an object.', sourcePath);
+    }
+
+    const cardValue = value.card;
+    let types: string[] = ['spec'];
+    let relations: string[] = ['depends_on', 'references', 'related', 'extends', 'conflicts'];
+
+    if (cardValue !== undefined && cardValue !== null) {
+      if (!this.isRecord(cardValue)) {
+        throw new ConfigLoadError('Invalid bunner config: mcp.card must be an object.', sourcePath);
+      }
+
+      if (cardValue.types !== undefined) {
+        if (!this.isNonEmptyStringArray(cardValue.types)) {
+          throw new ConfigLoadError('Invalid bunner config: mcp.card.types must be a non-empty string array.', sourcePath);
+        }
+
+        types = cardValue.types;
+      }
+
+      if (cardValue.relations !== undefined) {
+        if (!this.isNonEmptyStringArray(cardValue.relations)) {
+          throw new ConfigLoadError('Invalid bunner config: mcp.card.relations must be a non-empty string array.', sourcePath);
+        }
+
+        relations = cardValue.relations;
+      }
+    }
+
+    let exclude: string[] = [];
+
+    if (value.exclude !== undefined) {
+      if (!Array.isArray(value.exclude) || !value.exclude.every((item) => typeof item === 'string')) {
+        throw new ConfigLoadError('Invalid bunner config: mcp.exclude must be a string array.', sourcePath);
+      }
+
+      exclude = value.exclude as string[];
+    }
+
+    return {
+      card: { types, relations },
+      exclude,
+    };
   }
 
   private static async loadJsonConfig(

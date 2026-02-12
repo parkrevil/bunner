@@ -1,6 +1,6 @@
 import { basename, dirname, sep } from 'path';
 
-import { compareCodePoint } from '../common';
+import { compareCodePoint } from '../../common';
 
 export class ModuleDiscovery {
   private moduleMap: Map<string, Set<string>> = new Map();

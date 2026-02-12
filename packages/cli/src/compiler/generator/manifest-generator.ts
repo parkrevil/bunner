@@ -11,10 +11,10 @@ import type {
 } from './interfaces';
 
 import { type AdapterStaticSpec, type ClassMetadata, ModuleGraph, type ModuleNode } from '../analyzer';
-import { compareCodePoint, PathResolver } from '../common';
+import { compareCodePoint, PathResolver } from '../../common';
 import { ImportRegistry } from './import-registry';
-import { InjectorGenerator } from './injector';
-import { MetadataGenerator } from './metadata';
+import { InjectorGenerator } from './injector-generator';
+import { MetadataGenerator } from './metadata-generator';
 
 export class ManifestGenerator {
   private injectorGen = new InjectorGenerator();

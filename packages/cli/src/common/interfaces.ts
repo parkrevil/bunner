@@ -9,10 +9,21 @@ export interface ResolvedBunnerConfigModule {
   fileName: string;
 }
 
+export interface ResolvedBunnerConfigCard {
+  types: string[];
+  relations: string[];
+}
+
+export interface ResolvedBunnerConfigMcp {
+  card: ResolvedBunnerConfigCard;
+  exclude: string[];
+}
+
 export interface ResolvedBunnerConfig {
   module: ResolvedBunnerConfigModule;
   sourceDir: string;
   entry: string;
+  mcp: ResolvedBunnerConfigMcp;
 }
 
 export interface ConfigLoadResult {
