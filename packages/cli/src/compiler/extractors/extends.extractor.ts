@@ -49,6 +49,9 @@ export const ExtendsExtractor: CodeRelationExtractor = {
                             const importedNamespace = importMap.get(superName.root);
                             if (importedNamespace && importedNamespace.importedName === '*') {
                                 const last = superName.parts[superName.parts.length - 1];
+                                if (!last) {
+                                    return;
+                                }
                                 relations.push({
                                     type: 'extends',
                                     srcEntityKey: srcKey,

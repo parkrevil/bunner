@@ -192,6 +192,21 @@ describe('CodeRelationExtractors', () => {
   });
 
   describe('CallsExtractor', () => {
+      it('should extract top-level calls as module calls', () => {
+        const code = `
+          import { util } from './utils';
+          util();
+        `;
+        const ast = getAst(code);
+        const relations = CallsExtractor.extract(ast, filePath);
+
+        expect(relations).toHaveLength(1);
+        expect(relations[0].type).toBe('calls');
+        expect(relations[0].srcEntityKey).toBe(srcModuleKey);
+        expect(relations[0].dstEntityKey).toBe(`symbol:src/utils.ts#util`);
+        expect(getMeta(relations[0].metaJson)).toEqual({ resolution: 'import', callee: 'util', scope: 'module' });
+      });
+
       it('should extract direct calls inside function', () => {
           const code = `
           import { util } from './utils';

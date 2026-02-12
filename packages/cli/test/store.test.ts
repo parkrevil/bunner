@@ -3,6 +3,7 @@ import { and, asc, eq, inArray } from 'drizzle-orm';
 import { sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { statSync, writeFileSync } from 'node:fs';
 
 let mismatchDbSeq = 0;
 
@@ -27,6 +28,27 @@ async function cleanupSqliteFiles(path: string) {
   await deleteIfExists(path);
   await deleteIfExists(`${path}-wal`);
   await deleteIfExists(`${path}-shm`);
+}
+
+function statInoOrNull(path: string): number | null {
+  try {
+    return statSync(path).ino;
+  } catch {
+    return null;
+  }
+}
+
+async function waitForFileExists(path: string, retries = 10): Promise<boolean> {
+  for (let i = 0; i < retries; i += 1) {
+    // eslint-disable-next-line no-await-in-loop
+    const exists = await Bun.file(path).exists();
+    if (exists) {
+      return true;
+    }
+    // eslint-disable-next-line no-await-in-loop
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  return false;
 }
 
 import { createDb, closeDb, SCHEMA_VERSION } from '../src/store/connection';
@@ -54,6 +76,11 @@ const cardFts = sqliteTable('card_fts', {
   keywords: text('keywords'),
 });
 
+const codeFts = sqliteTable('code_fts', {
+  entityKey: text('entity_key'),
+  symbolName: text('symbol_name'),
+});
+
 describe('store', () => {
   let db: ReturnType<typeof createDb>;
 
@@ -71,6 +98,38 @@ describe('store', () => {
       // in-memory DB returns 'memory' for journal_mode; WAL applies to file-based DBs
       // Verify the pragma was executed without error (in-memory falls back to 'memory')
       expect(journalMode).toBeDefined();
+    });
+
+    it('creates -wal/-shm files for file-based db after a write', async () => {
+      const dbPath = makeTempDbPath('store_wal');
+      const fileDb = createDb(dbPath);
+
+      try {
+        // A write is required for -wal creation.
+        const now = new Date().toISOString();
+        fileDb.insert(card)
+          .values({
+            key: 'spec::wal/test',
+            type: 'spec',
+            summary: 'wal',
+            status: 'draft',
+            filePath: 'a.md',
+            updatedAt: now,
+          })
+          .run();
+
+        const walPath = `${dbPath}-wal`;
+        const shmPath = `${dbPath}-shm`;
+
+        const walExists = await waitForFileExists(walPath);
+        const shmExists = await waitForFileExists(shmPath);
+
+        // Depending on timing/checkpointing, one may appear before the other.
+        expect(walExists || shmExists).toBe(true);
+      } finally {
+        closeDb(fileDb);
+        await cleanupSqliteFiles(dbPath);
+      }
     });
 
     it('sets busy_timeout to 5000ms', () => {
@@ -401,6 +460,114 @@ describe('store', () => {
 
       expect(afterDelete).toEqual([]);
     });
+
+    it('keeps code_fts in sync on insert/update/delete', () => {
+      const now = new Date().toISOString();
+      db.insert(codeEntity)
+        .values({
+          entityKey: 'symbol:src/auth/login.ts#handleOAuth',
+          filePath: 'src/auth/login.ts',
+          symbolName: 'handleOAuth',
+          kind: 'function',
+          signature: null,
+          fingerprint: null,
+          contentHash: 'h1',
+          updatedAt: now,
+        })
+        .run();
+
+      const inserted = db
+        .select({ entityKey: codeFts.entityKey, symbolName: codeFts.symbolName })
+        .from(codeFts)
+        .where(eq(codeFts.entityKey, 'symbol:src/auth/login.ts#handleOAuth'))
+        .limit(1)
+        .get();
+
+      expect(inserted).toEqual({
+        entityKey: 'symbol:src/auth/login.ts#handleOAuth',
+        symbolName: 'handleOAuth',
+      });
+
+      db.update(codeEntity)
+        .set({ symbolName: 'handleOAuthUpdated' })
+        .where(eq(codeEntity.entityKey, 'symbol:src/auth/login.ts#handleOAuth'))
+        .run();
+
+      const updated = db
+        .select({ entityKey: codeFts.entityKey, symbolName: codeFts.symbolName })
+        .from(codeFts)
+        .where(eq(codeFts.entityKey, 'symbol:src/auth/login.ts#handleOAuth'))
+        .limit(1)
+        .get();
+
+      expect(updated).toEqual({
+        entityKey: 'symbol:src/auth/login.ts#handleOAuth',
+        symbolName: 'handleOAuthUpdated',
+      });
+
+      db.delete(codeEntity)
+        .where(eq(codeEntity.entityKey, 'symbol:src/auth/login.ts#handleOAuth'))
+        .run();
+
+      const afterDelete = db
+        .select({ entityKey: codeFts.entityKey })
+        .from(codeFts)
+        .where(eq(codeFts.entityKey, 'symbol:src/auth/login.ts#handleOAuth'))
+        .all();
+
+      expect(afterDelete).toEqual([]);
+    });
+
+    it('supports trigram matches for card_fts', () => {
+      const now = new Date().toISOString();
+      db.insert(card)
+        .values({
+          key: 'spec::auth/trigram',
+          type: 'spec',
+          summary: 'Login',
+          status: 'draft',
+          keywords: 'auth',
+          constraintsJson: null,
+          body: 'authentication',
+          filePath: 'a.md',
+          updatedAt: now,
+        })
+        .run();
+
+      const row = db
+        .select({ key: cardFts.key })
+        .from(cardFts)
+        .where(sql`card_fts MATCH ${'uth'}`)
+        .limit(1)
+        .get();
+
+      expect(row?.key).toBe('spec::auth/trigram');
+    });
+
+    it('supports trigram matches for code_fts', () => {
+      const now = new Date().toISOString();
+      db.insert(codeEntity)
+        .values({
+          entityKey: 'symbol:src/auth/login.ts#authentication',
+          filePath: 'src/auth/login.ts',
+          symbolName: 'authentication',
+          kind: 'function',
+          signature: null,
+          fingerprint: null,
+          contentHash: 'h1',
+          updatedAt: now,
+        })
+        .run();
+
+      const row = db
+        .select({ entityKey: codeFts.entityKey })
+        .from(codeFts)
+        .where(sql`code_fts MATCH ${'uth'}`)
+        .limit(1)
+        .get();
+
+      expect(row?.entityKey).toBe('symbol:src/auth/login.ts#authentication');
+    });
   });
 
   describe('schema versioning — mismatch rebuild', () => {
@@ -412,6 +579,16 @@ describe('store', () => {
       bootstrap.run(sql`INSERT INTO metadata(key, value) VALUES('schema_version', '1')`);
       bootstrap.run(sql`CREATE TABLE old_table (x text)`);
       bootstrap.$client.close();
+
+      // Create dummy WAL/SHM artifacts to verify rebuild deletion.
+      const walPath = `${dbPath}-wal`;
+      const shmPath = `${dbPath}-shm`;
+      writeFileSync(walPath, 'dummy_wal');
+      writeFileSync(shmPath, 'dummy_shm');
+      const walInoBefore = statInoOrNull(walPath);
+      const shmInoBefore = statInoOrNull(shmPath);
+      expect(walInoBefore != null).toBe(true);
+      expect(shmInoBefore != null).toBe(true);
 
       const rebuilt = createDb(dbPath);
       try {
@@ -431,6 +608,14 @@ describe('store', () => {
           .all();
         expect(versionRow).toHaveLength(1);
         expect(versionRow[0]!.value).toBe(String(SCHEMA_VERSION));
+
+        const walInoAfter = statInoOrNull(walPath);
+        const shmInoAfter = statInoOrNull(shmPath);
+
+        // After rebuild, the old artifacts must have been deleted.
+        // They may be re-created by SQLite, but inode should differ if present.
+        expect(walInoAfter === null || walInoAfter !== walInoBefore).toBe(true);
+        expect(shmInoAfter === null || shmInoAfter !== shmInoBefore).toBe(true);
       } finally {
         closeDb(rebuilt);
         await cleanupSqliteFiles(dbPath);
@@ -444,6 +629,15 @@ describe('store', () => {
       bootstrap.run(sql`CREATE TABLE old_table (x text)`);
       bootstrap.$client.close();
 
+      const walPath = `${dbPath}-wal`;
+      const shmPath = `${dbPath}-shm`;
+      writeFileSync(walPath, 'dummy_wal');
+      writeFileSync(shmPath, 'dummy_shm');
+      const walInoBefore = statInoOrNull(walPath);
+      const shmInoBefore = statInoOrNull(shmPath);
+      expect(walInoBefore != null).toBe(true);
+      expect(shmInoBefore != null).toBe(true);
+
       const rebuilt = createDb(dbPath);
       try {
         const old = rebuilt
@@ -462,6 +656,11 @@ describe('store', () => {
           .all();
         expect(versionRow).toHaveLength(1);
         expect(versionRow[0]!.value).toBe(String(SCHEMA_VERSION));
+
+        const walInoAfter = statInoOrNull(walPath);
+        const shmInoAfter = statInoOrNull(shmPath);
+        expect(walInoAfter === null || walInoAfter !== walInoBefore).toBe(true);
+        expect(shmInoAfter === null || shmInoAfter !== shmInoBefore).toBe(true);
       } finally {
         closeDb(rebuilt);
         await cleanupSqliteFiles(dbPath);

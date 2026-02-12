@@ -1,1128 +1,812 @@
-# 스펙-코드 링크 유지 설계
+# Card-centric MCP Index Design (Git-first + File SSOT + SQLite Index)
 
-> **범위**: bunner-kb MCP 서버에 스펙(spec) 등록·링크·정체성 유지 기능 추가  
-> **상태**: 설계 확정 (구현 전)  
-> **관련 코드**: `tooling/mcp/`
+> **Scope**: bunner MCP architecture optimized for vibe-coding agents
+> **Status**: Draft v5.9 — 2026-02-12
+> **Core idea**: **Git is the source of truth** (cards are files with frontmatter metadata + body spec). **SQLite is a disposable local index (gitignored, always rebuildable)** for ultra-fast agent traversal. **SQLite is managed exclusively by the MCP domain** — `bunner build/dev` produce only build artifacts (manifest); `bunner mcp` owns all SQLite indexing.
+> **Where it lives**: bunner **CLI package** — CLI and MCP share the same core logic.
 
----
-
-## 1. 배경 및 문제 정의
-
-### 1.1 현재 운영 모델
-
-| 구분 | 설명 | 등록 방식 |
-|------|------|-----------|
-| **스펙(spec)** | 사용자와 에이전트가 논의하여 확정한 기능 명세 | 수동 등록 (`entity_type = 'spec'`) |
-| **코드(code)** | TypeScript 소스 파일에서 추출한 모듈/심볼 | `sync` 파서가 자동 생성 (`module:`, `symbol:` 엔티티) |
-| **스펙↔코드 연결** | 어떤 코드가 어떤 스펙을 구현하는지 | 수동 링크 (`relation_type = 'implements'`, `strength = 'manual'`) |
-
-### 1.2 핵심 문제
-
-코드 엔티티의 `entity_key`가 **파일 경로에 종속**되어 있다.
-
-```
-module:packages/core/src/app.ts
-symbol:packages/core/src/app.ts#createApplication
-```
-
-파일 이동/리네임 시:
-1. sync가 기존 `entity_key`의 entity를 **tombstone** 처리 (`is_deleted = true`)
-2. 새 경로로 **새 entity** 생성 (새 `entity_key`, 새 `entity.id`)
-3. 기존 relation은 tombstone entity의 `entity.id`를 FK로 참조 중 → **링크 파손**
-
-### 1.3 설계 목표
-
-- 파일 이동(내용 동일) 시 링크가 **자동으로 유지**되어야 한다
-- 파일 분리/통합/심볼 리네임 시 링크 **후보를 제시**하고 **인간이 승인**해야 한다
-- 수동 링크는 **절대 자동 삭제되지 않아야** 한다
-- 링크에는 **"왜 연결했는지"(rationale)**가 항상 남아야 한다
+**Out of scope**: repository documentation directory (it will be deleted)
 
 ---
 
-## 2. 정체성(Identity) 모델
+## 1. Problem Statement
 
-### 2.1 핵심 원칙
+During vibe-coding, an agent must be able to answer quickly:
 
-> **`entity.id`(serial PK)가 진짜 정체성이다. `entity_key`는 변경 가능한 주소(address)일 뿐이다.**
+- "What requirement(card) does this code implement?"
+- "What code implements this card?"
+- "What other cards depend on this?"
+- "What code is adjacent/impacted?"
 
-현재 DB 구조에서 `relation.src_entity_id`와 `relation.dst_entity_id`는 `entity.id`를 FK로 참조한다. 따라서 **`entity.id`만 유지되면 relation은 깨지지 않는다.** `entity_key`가 바뀌더라도.
+And the answer must be:
 
-### 2.2 계층별 정체성 정의
-
-| 레벨 | Identity (불변) | Address (가변) | 매칭 신호 |
-|------|-----------------|----------------|-----------|
-| **Module** | `entity.id` | `module:{file_path}` | `source.content_hash` (SHA-256) |
-| **Symbol** | `entity.id` | `symbol:{file_path}#{symbol_name}` | 부모 module의 identity + `symbol_name` |
-| **Spec** | `entity.id` | `spec::{spec_name}` | 사용자 지정 (변경 불가, 불변) |
-
-### 2.3 정체성 유지의 의미
-
-"파일 `a.ts`가 `b.ts`로 이동"되었을 때:
-- **현재**: `module:a.ts` tombstone + `module:b.ts` 신규 생성 → 두 entity는 **별개의 `entity.id`**
-- **변경 후**: `module:a.ts`의 `entity_key`를 `module:b.ts`로 **UPDATE** → **같은 `entity.id`** 유지 → 모든 relation FK 자동 유지
-
-> ⚠️ **정밀 설명**: "파일 이동 시 항상 새 entity.id 생성"은 현재 sync의 **기본 동작**을 설명한 것이다. content_hash rewrite(§4)가 이를 **가로채서** 기존 entity.id를 유지하는 것이 본 설계의 핵심이다. 즉, rewrite가 정상 동작하면 새 entity.id는 생성되지 **않는다**. rewrite에 실패한 경우에만(1:N, N:1 등) 현재 동작(tombstone + 새 entity)이 fallback으로 실행된다.
+- **Fast** (sub-100ms interactive)
+- **Branch-safe** (Git branches naturally isolate)
+- **Merge-safe** (Git merge resolves conflicts)
+- **Low-ops** (no always-on shared DB requirement)
 
 ---
 
-## 3. 링크 유지 전략: 계층적 방어
+## 2. Design Goals
 
-### 3.1 개요
-
-```
-┌─────────────────────────────────────────────────┐
-│  계층 1: content_hash 기반 entity key rewrite    │ ← 자동 (결정론적)
-│  대상: 파일 이동 (내용 동일)                       │
-├─────────────────────────────────────────────────┤
-│  계층 2: resolve_identity_candidates             │ ← 반자동 (인간 승인)
-│  대상: 파일 분리/통합, 심볼 리네임                   │
-├─────────────────────────────────────────────────┤
-│  계층 3: register_spec / link_spec               │ ← 수동 (논의 기반)
-│  대상: 새 스펙 등록, 새 링크 생성                    │
-└─────────────────────────────────────────────────┘
-```
-
-**자동 적용 기준**: 결정론적 신호(content_hash 1:1 매칭)만 자동. 그 외는 전부 인간 승인.
+1. **Git-first SSOT**: Card files (frontmatter + body) are Git-tracked, human-reviewable, mergeable.
+2. **SQLite index**: Disposable local cache (gitignored). Provides high-performance traversal/search. Always rebuildable.
+3. **CLI + MCP share core**: Both interfaces invoke the same core logic for reads and writes. Framework authors may use MCP exclusively; end-users may use CLI.
+4. **MCP embedded**: MCP server is started via `bunner mcp` (single command). MCP write tools are **required** (not deferred).
+5. **AOT/AST (oxc-parser only)**: Reuse existing CLI `oxc-parser` pipeline. No TypeScript Compiler API dependency.
+6. **Call-level code relations**: Code↔code relations include imports, calls, extends, implements — all statically extractable via AST. (DI inject/provide reserved for future framework-user features.)
+7. **Dual audience**: Must serve both the framework author (building bunner itself via vibe-coding/MCP) and framework users (who get richer features including framework rules via MCP).
+8. **No "snapshot export/import" as a workflow**: the SSOT is the files themselves.
 
 ---
 
-## 4. 계층 1: content_hash 기반 Entity Key Rewrite
+## 3. High-Level Architecture
 
-### 4.1 동작 원리
+### 3.1 Source-of-truth layers
 
-`startupScan()`(full sync) 시점에서, DB의 source 레코드와 파일 시스템 스캔 결과를 교차 비교한다.
-
-**현재 `startupScan`이 이미 보유한 데이터:**
-
-| 출처 | 데이터 | 위치 |
-|------|--------|------|
-| DB | `(file_path, content_hash, entity_id, entity_key, is_deleted)` | `source JOIN entity` 쿼리 결과 |
-| 파일 시스템 | `(filePath, contentHash)` | `scanFiles()` 결과 |
-
-**rename 감지 로직:**
+- **SSOT (Git-tracked)**: `.bunner/cards/**/*.card.md` (frontmatter=metadata, body=spec) + **optional** in-code card links (JSDoc `@see {type}::key`)
+- **Build artifacts (Git-tracked)**: `.bunner/build/` — compiler output (manifest TS, etc.)
+- **Derived local index (gitignored)**: `.bunner/cache/index.sqlite` — managed exclusively by MCP domain
 
 ```
-DB에 있지만 파일시스템에 없는 source  →  deletedSources = { file_path → content_hash, entity_id }
-파일시스템에 있지만 DB에 없는 파일     →  newFiles = { file_path → content_hash }
+repo/
+  .bunner/
+    cards/                 # SSOT: card files (frontmatter + body)
+    build/                 # Git-tracked: compiler artifacts
+      runtime.ts           #   manifest (export const manifest = ... as const)
+    cache/                 # gitignored: MCP-managed derived data
+      index.sqlite         #   project index (code_entity, card, relations, FTS5)
+      owner.lock           #   Owner Election lock file (PID)
+  bunner.jsonc             # Config: source dir, entry, card types, exclusions
+  src/
+    ...                    # Code SSOT
 ```
 
-이 두 집합에서 **content_hash가 동일한 (deleted, new) 쌍**을 찾는다.
+`.gitignore` rule: `.bunner/cache/`
 
-### 4.2 매칭 조건 (전부 충족해야 자동 적용)
+### 3.2 Read vs Write paths
 
-1. `deletedSource.content_hash === newFile.contentHash` (파일 내용 동일)
-2. 매칭이 **1:1** (같은 hash로 여러 후보가 있으면 자동 적용 금지)
-3. 같은 sync run 내의 (삭제, 생성) 쌍
+- **Reads** (agent tools): always serve from SQLite index
+- **Writes** (human/agent via CLI or MCP): modify SSOT files (cards / code annotations) via shared core logic, then re-index
 
-### 4.3 Rewrite 트랜잭션
+CLI and MCP invoke the **same core** for writes (AST-safe edits, card CRUD, re-index).
+The SQLite DB is always rebuildable.
 
-매칭이 확정되면, **단일 트랜잭션** 내에서 다음을 수행한다:
+---
 
-#### 4.3.1 직접 UPDATE하는 대상
+## 4. SSOT File Model
 
-| 테이블 | 변경 내용 | 이유 |
-|--------|-----------|------|
-| `entity.entity_key` | `module:old_path` → `module:new_path` | canonical address 변경 |
-| `source.file_path` | `old_path` → `new_path` | stale 검증/scan 기준 |
+### 4.1 Cards as files
 
-module entity를 rewrite하면, 해당 module에 속한 **모든 symbol entity**의 key prefix도 일괄 변경한다:
+Cards are stored as Markdown files with **frontmatter (metadata) + body (spec content only)**.
+
+Path convention:
+
+- `.bunner/cards/auth.card.md`
+- `.bunner/cards/auth/login.card.md`
+
+This is a filesystem hierarchy for organization. Logical relationships are stored in frontmatter, not directory structure.
+
+### 4.2 Card types
+
+Cards have a `type` field. The type determines the JSDoc link prefix: `@see {type}::key`.
+
+Default type:
+
+| Type | Purpose |
+|------|---------|
+| `spec` | Feature/requirement specification |
+
+Additional types (e.g. `system`, `adapter`) may be added in later phases.
+
+Card types and relation types are configured in `bunner.jsonc`:
+
+```jsonc
+{
+  "sourceDir": "./src",
+  "entry": "./src/main.ts",
+  "module": { "fileName": "module.ts" },
+  "mcp": {
+    "card": {
+      "types": ["spec"],
+      "relations": ["depends_on", "references", "related", "extends", "conflicts"]
+    },
+    "exclude": []
+  }
+}
+```
+
+- `mcp.card.types`: registered card types. Only these are valid as `@see` prefixes. Default: `["spec"]`.
+- `mcp.card.relations`: allowed `relations[].type` values. Default: 5 types above.
+- `mcp.exclude`: glob patterns excluded from indexing and `@see` verification.
+
+Only registered types are valid. Unregistered type prefixes in `@see` are errors.
+
+### 4.3 Card frontmatter
+
+```yaml
+---
+key: spec::auth/login
+type: spec
+summary: OAuth login
+status: draft              # draft | accepted | implementing | implemented | deprecated
+keywords: [auth, mvp, authentication]  # optional, free-form tags for search/filter
+constraints:               # optional (spec-specific constraints, brief)
+  - latency < 200ms
+  - PII must be masked
+relations:                 # optional (graph edges to other cards)
+  - type: depends_on
+    target: spec::auth/session
+  - type: references
+    target: system::di/injection
+  - type: related
+    target: spec::auth/token-refresh
+---
+```
+
+**Body** contains **spec content only**. No AC checklists, no style guides, no tutorials. Completion is determined by user-directed `status` transitions.
+
+### 4.4 Relationship model (graph/web, no tree)
+
+- **No `parent` field**. No forced tree hierarchy.
+- All card↔card relationships are **typed edges** stored in frontmatter `relations[]`.
+- `relations[].type` is a fixed set of edge kinds:
+
+| Type | Meaning |
+|------|---------|
+| `depends_on` | Prerequisite / blocking |
+| `references` | Weak reference / background |
+| `related` | Associated (symmetric — both directions have identical semantics) |
+| `extends` | Refinement / elaboration |
+| `conflicts` | Contradicts / clashes |
+
+- SSOT stores **outgoing edges only**. Reverse edges are auto-generated by the indexer in SQLite.
+- Start with R1 (frontmatter). Migrate to R2 (separate files) if merge conflicts become frequent.
+
+### 4.5 Card↔Code links (card-centric verification)
+
+`@see {type}::key` is an **optional connection mechanism**. Code uses `@see` to declare that it implements a specific card.
+
+Not every code file needs a card link. Types, interfaces, constants, and utility code may exist without `@see`. Verification is **card-centric**, not code-centric.
+
+#### Syntax
+
+```ts
+/**
+ * @see spec::auth/login
+ */
+export function handleOAuthCallback() {}
+```
+
+Multiple links:
+
+```ts
+/**
+ * @see spec::auth/login
+ * @see spec::auth/session
+ */
+```
+
+Framework-shipped cards use their type prefix:
+
+```ts
+/**
+ * @see system::di/injection
+ * @see adapter::express/middleware
+ */
+```
+
+#### Card-centric verification rules
+
+Verification checks whether **confirmed cards have implementation code linked**, not whether all code has card links.
+
+| Card status | No @see references | Action |
+|-------------|-------------------|--------|
+| `draft` | — | no check |
+| `accepted` | warning | "confirmed card, no implementation code linked" |
+| `implementing` | warning | "card in progress, no code linked" |
+| `implemented` | **error** | "marked implemented but no code linked" |
+| `deprecated` | — | no check |
+
+#### Verification layers
+
+Card-centric verification operates at two layers:
+
+**1. Verification command warnings**
+
+When the verification command (`bunner mcp verify`) is executed, it performs full integrity verification and reports errors/warnings. It warns about confirmed cards (`accepted` / `implementing` / `implemented`) that have no `@see` code links.
+
+**2. Agent instruction hardcoding (out of document scope)**
+
+Hardcode the following rule into agent instruction files (`.github/copilot-instructions.md`, `AGENTS.md`, `.cursor/rules/`, etc.):
+
+> When writing or modifying implementation code, always insert `@see {type}::key` JSDoc comments if the code relates to a card.
+
+This rule is outside the scope of the card system document, but is stated at the design stage because card-centric verification requires agents to consistently insert `@see` links. Actual instruction file modifications will be done during implementation.
+
+#### Validity rules (always enforced)
+
+- Every `@see {type}::key` in code MUST reference an existing card
+- `@see` type prefix MUST match the target card's `type` field
+- Invalid `@see` references are **errors**
+
+Notes:
+
+- JSDoc contains **only the card key reference** (no spec duplication). The card file remains SSOT for spec content.
+- Link insertion is supported via CLI/MCP core (AST-safe edit).
+
+---
+
+## 5. Local SQLite Index Model (Derived)
+
+### 5.1 Purpose
+
+SQLite index is the **MCP-managed project index**. The MCP domain is the sole owner of all SQLite read/write operations. `bunner build/dev` do not access SQLite.
+
+**MCP read tools** (consumer):
+- `search`, `get_context`, `get_subgraph`, `impact_analysis`, `trace_chain`
+
+**MCP indexer** (producer):
+- `bunner mcp rebuild` performs full index build (card parsing + code AST scanning + FTS5)
+- `bunner mcp` server performs incremental re-index on file changes (watch mode)
+
+The index is always **disposable and rebuildable** from:
+
+- `.bunner/cards/**/*.card.md`
+- code files under configured source roots (from `bunner.jsonc`)
+
+**WAL mode**: SQLite is opened with `PRAGMA journal_mode = WAL` for optimal read-write concurrency (single writer via Owner Election, multiple readers via MCP tools). `PRAGMA busy_timeout = 5000` is set to handle transient lock contention.
+
+### 5.2 Tables (domain-separated)
 
 ```sql
-UPDATE entity
-SET entity_key = 'symbol:' || {new_path} || '#' || split_part(entity_key, '#', 2),
-    updated_at = now()
-WHERE workspace_id = {workspace_id}
-  AND entity_key LIKE 'symbol:{old_path}#%'
-  AND is_deleted = false
-```
-
-symbol의 source도 동일하게:
-
-```sql
-UPDATE source
-SET file_path = {new_path}
-WHERE workspace_id = {workspace_id}
-  AND file_path = {old_path}
-```
-
-#### 4.3.1.1 Source Unique Constraint 충돌 처리
-
-`source` 테이블의 unique constraint: `(workspace_id, kind, file_path, span_start, span_end)`
-
-rewrite 시 target 경로(`new_path`)에 이미 source가 존재할 수 있는 경우:
-
-| 상황 | 발생 조건 | 처리 |
-|------|-----------|------|
-| startupScan에서 rewrite | rename detection은 tombstone/enqueue **전에** 실행되므로, new_path에 아직 source 없음 | **충돌 없음** (정상) |
-| watch grace window에서 rewrite | 새 파일이 먼저 `processFile`로 처리되어 source가 생긴 후, pending_delete에서 rewrite 시도 | **충돌 가능** |
-
-**watch 충돌 시 처리 규칙**:
-1. new_path에 이미 source가 존재하면, 그 source가 가리키는 entity의 `entity.id`를 확인
-2. 만약 새 entity가 이미 생성되었고, 기존 entity(pending_delete 대상)와 **다른 `entity.id`**를 가진다면:
-   - rewrite를 **포기**하고, pending_delete 항목은 정상적으로 tombstone 처리
-   - 이 경우 manual link는 깨지며, `resolve_identity_candidates`로 사후 복구
-3. 만약 새 entity가 없거나 source만 존재한다면:
-   - 기존 source를 **UPDATE**로 덮어씀 (entity_id를 rewrite 대상으로 변경)
-
-#### 4.3.2 직접 UPDATE하지 않는 대상 (파생 데이터 재생성)
-
-| 테이블 | 이유 |
-|--------|------|
-| `fact.*` (fact_key, payload_json, payload_text) | 파서가 생성한 파생 데이터. 다음 sync에서 재파싱 → upsert + orphan fact cleanup으로 자연 갱신 |
-| `relation` (파서 생성 relation의 meta, dst 등) | 파서가 생성한 파생 데이터. 다음 sync에서 재생성 |
-
-rewrite 트랜잭션 완료 후, **해당 파일을 sync 큐에 enqueue**하면 파서가 새 경로 기준으로 fact/relation을 재생성한다. orphan fact cleanup(`deleteOrphanFacts`)이 이전 fact를 정리한다.
-
-> **주의: relation orphan cleanup**  
-> 현재 sync 경로에는 fact orphan cleanup만 존재하고, **relation orphan cleanup은 없다** (`sync-worker.ts`의 `commitExtraction`에서 fact만 `deleteOrphanFacts` 호출). 파서가 생성하는 relation(예: `depends_on`, `exports`)도 경로 변경 시 이전 dst를 가리키는 relation이 누적될 수 있다.
->
-> **해결**: `commitExtraction`에 `deleteOrphanRelations` 단계를 추가한다. fact와 동일한 패턴:
-> 1. 파서가 현재 파싱에서 생성한 relation을 `retainedRelations` 집합으로 추적 (src_entity_key + dst_entity_key + relation_type 조합)
-> 2. 해당 entity의 outgoing relation 중, `retainedRelations`에 포함되지 않고 `strength != 'manual'`인 relation을 삭제
-> 3. **`strength = 'manual'`인 relation은 절대 삭제하지 않음** (수동 링크 보호 원칙)
->
-> 이를 위해 `relation-repo.ts`에 `deleteOrphanRelations` 메서드를 추가하고, `kb.ts`에 래퍼를 추가한다.
-
-#### 4.3.3 감사 기록
-
-`sync_event`에 다음을 기록한다:
-
-| 필드 | 값 |
-|------|----|
-| `action` | `'renamed'` (새 action 타입 추가) |
-| `entity_id` | rewrite된 entity의 id |
-| `prev_content_hash` | 파일의 content_hash (rewrite 전후 동일) |
-| `new_content_hash` | 파일의 content_hash (rewrite 전후 동일) |
-
-rename의 이전/이후 entity_key는 `sync_event`의 hash 필드가 아닌, **별도 방식으로 기록**한다:
-
-- **방식**: `entity.meta`에 `{ renamedFrom: "module:old_path", renamedAt: "ISO8601" }` 저장
-- **이유**: `prev_content_hash`/`new_content_hash` 필드에 entity_key 문자열을 넣으면 필드의 semantic이 깨진다. 감사 로그 분석 시 "이 값이 hash인지 key인지" 구분이 불가능해진다.
-
-> **참고**: `sync_event.action`에 `'renamed'` 값을 추가해야 한다. 현재는 `'created' | 'updated' | 'deleted' | 'restored'`만 존재.
-
-### 4.4 적용 시점
-
-| 트리거 | rewrite 적용 | 비고 |
-|--------|-------------|------|
-| `startupScan()` (startup/full sync) | **적용** | 삭제 대상과 신규 파일을 동시에 파악 가능 |
-| `processFile()` (watch/개별 파일) | **미적용** | 파일 하나만 보므로 rename 판단 불가. 아래 §4.5 참고 |
-
-### 4.5 Watch 트리거에서의 지연 Tombstone
-
-watch(inotify) 이벤트는 "파일 삭제"와 "파일 생성"이 별도 이벤트로 도착한다. 즉시 tombstone하면 rename을 놓친다.
-
-**해결: Grace Window (2~5초)**
-
-1. 삭제 이벤트 수신 시, 즉시 tombstone하지 않고 **pending_delete 큐**에 `{ filePath, contentHash, entityId, timestamp }` 저장
-2. 생성 이벤트 수신 시, pending_delete 큐에서 **content_hash가 동일한 항목** 검색
-   - 매칭 성공: rename으로 처리 (entity_key rewrite)
-   - 매칭 실패: pending_delete 항목 유지, 생성은 정상 처리
-3. Grace window(기본 3초) 경과 후, pending_delete에 남아있는 항목은 **정상적으로 tombstone 처리**
-
-**구현 위치**: `sync-worker.ts`의 `handleDeletedFile()` 전단에 pending_delete 로직 추가.
-
-**Grace window 설정**: `KBConfig.sync.renameGraceWindowMs` (기본값: 3000)
-
-#### 4.5.1 Grace Window Edge Case 처리 규칙
-
-| # | 시나리오 | 이벤트 시퀀스 | 처리 규칙 |
-|---|----------|---------------|-----------|
-| E1 | **정상 rename** | DELETE(a.ts) → CREATE(b.ts), hash 동일 | pending_delete에서 a.ts 제거, entity key rewrite 실행 |
-| E2 | **역순 이벤트** (OS/watcher에 따라 가능) | CREATE(b.ts) → DELETE(a.ts), hash 동일 | CREATE 시점에는 pending_delete에 a.ts가 없으므로 정상적으로 새 entity 생성. 이후 DELETE 시 a.ts를 pending_delete에 넣고, 새로 생성된 b.ts와 hash 비교. 이미 b.ts entity가 존재하므로 **rewrite 불가** → a.ts는 tombstone, 결과적으로 두 entity가 됨. `resolve_identity_candidates`로 사후 복구 |
-| E3 | **동일 hash 복수 생성** (파일 복사) | DELETE(a.ts) → CREATE(b.ts) + CREATE(c.ts), 3개 hash 동일 | 1:N 매칭이므로 자동 rewrite **금지**. pending_delete 항목은 grace window 만료 후 tombstone |
-| E4 | **연쇄 이벤트** | DELETE(a.ts) → CREATE(b.ts) → DELETE(b.ts), 모두 hash 동일 | 첫 DELETE→CREATE: rewrite(a→b). 두 번째 DELETE(b): 새 pending_delete 항목 생성. grace window 만료 시 tombstone |
-| E5 | **grace window 내 내용 변경** | DELETE(a.ts) → CREATE(b.ts), hash **불일치** | pending_delete에서 매칭 실패. a.ts는 grace window 만료 후 tombstone, b.ts는 새 entity |
-| E6 | **grace window 만료 후 생성** | DELETE(a.ts) → (3초 경과) → CREATE(b.ts), hash 동일 | a.ts는 이미 tombstone됨. b.ts는 새 entity. `resolve_identity_candidates`로 사후 복구 |
-| E7 | **중복 DELETE 이벤트** | DELETE(a.ts) → DELETE(a.ts) | pending_delete에 이미 존재하면 **무시** (idempotent). file_path를 key로 중복 판단 |
-
-**pending_delete 자료구조**:
-```typescript
-type PendingDelete = Map<string, {  // key: filePath
-  contentHash: string;
-  entityId: number;
-  timestamp: number;
-  timerId: ReturnType<typeof setTimeout>;
-}>;
-```
-
-**타이머 관리**: 각 pending_delete 항목은 개별 타이머를 갖는다. 매칭 성공 시 `clearTimeout(timerId)`로 타이머 취소.
-
----
-
-## 5. 계층 2: Identity Resolution (인간 승인 기반)
-
-### 5.1 대상 케이스
-
-content_hash rewrite가 커버하지 못하는 경우:
-
-| 케이스 | 왜 자동 실패하는가 |
-|--------|-------------------|
-| 파일 이동 + 내용 변경 | content_hash 불일치 |
-| 파일 분리 (1 → N) | old file의 hash와 매칭되는 new file이 없음 |
-| 파일 통합 (N → 1) | 여러 old file이 하나의 new file에 대응 |
-| 심볼 리네임 (파일 내) | entity_key의 `#` 이후 부분이 변경됨 |
-
-### 5.2 도구: `resolve_identity_candidates`
-
-깨진 링크(spec과 연결된 entity가 tombstone이거나 missing)를 감지하고, **후보 entity 목록을 반환**한다. 자동 적용 없음.
-
-#### 입력 스키마
-
-```typescript
-type ResolveIdentityCandidatesInput = {
-  /** 특정 spec만 검사. 생략 시 모든 깨진 링크 스캔 */
-  specKey?: string;
-  /** 반환할 후보 수 상한 (기본값: 5) */
-  maxCandidates?: number;
-};
-```
-
-#### 동작 절차
-
-1. `relation` 테이블에서 `strength_type.name = 'manual'` AND `relation_type.name = 'implements'`인 관계를 조회
-2. 각 관계의 `src_entity_id`가 가리키는 entity가 `is_deleted = true`이거나, 해당 entity의 source가 가리키는 파일이 파일시스템에 존재하지 않으면 → **깨진 링크**
-3. 깨진 링크의 `relation.meta`에 저장된 앵커 정보(§6.3에서 정의)를 기반으로 후보 검색:
-   - `meta.anchor.symbolName`으로 **기존 FTS 인프라** 활용: `fact.payload_tsv @@ plainto_tsquery(symbolName)` + `ts_rank_cd`로 관련도 정렬
-   - `entity_type` 필터 (같은 타입만)
-   - `is_deleted = false` 필터 (살아있는 entity만)
-
-   > **참고**: fact 테이블에 이미 `payload_tsv` (tsvector) 컬럼이 존재하고, 파서가 심볼명/시그니처를 text로 저장하고 있다. 별도 인덱스 추가 없이 기존 인프라를 재사용한다.
-4. 결과를 반환 (자동 적용 없음)
-
-#### 출력 스키마
-
-```typescript
-type ResolveIdentityCandidatesResult = {
-  brokenLinks: Array<{
-    /** 깨진 relation의 id */
-    relationId: number;
-    /** spec entity key */
-    specKey: string;
-    /** 원래 연결되어 있던 entity key (현재 tombstone 또는 missing) */
-    originalEntityKey: string;
-    /** relation.meta에 저장된 앵커 정보 */
-    anchor: LinkAnchor;
-    /** 후보 entity 목록 */
-    candidates: Array<{
-      entityKey: string;
-      entityType: string;
-      summary: string | null;
-      /** 매칭 근거 (어떤 앵커가 일치했는지) */
-      matchReason: string;
-    }>;
-  }>;
-  totalBroken: number;
-};
-```
-
-### 5.3 도구: `apply_identity_rewrite`
-
-사용자가 `resolve_identity_candidates`의 결과를 검토하고, 승인한 매칭을 적용한다.
-
-#### 입력 스키마
-
-```typescript
-type ApplyIdentityRewriteInput = {
-  /** 적용할 매칭 목록 */
-  rewrites: Array<{
-    /** 깨진 relation의 id */
-    relationId: number;
-    /** 새로 연결할 entity key */
-    newEntityKey: string;
-  }>;
-};
-```
-
-#### 동작 절차
-
-각 rewrite 항목에 대해 **단일 트랜잭션**으로:
-
-1. `newEntityKey`로 entity 조회 → `newEntityId` 획득
-2. relation의 `src_entity_id`를 `newEntityId`로 UPDATE
-3. `relation.meta`에 마이그레이션 기록 추가:
-   ```json
-   {
-     "migratedFrom": "symbol:old_path#foo",
-     "migratedAt": "2026-02-10T...",
-     "migratedBy": "apply_identity_rewrite"
-   }
-   ```
-4. **evidence 재연결** (아래 §5.3.1 evidence 정책 참조)
-5. `sync_event`에 `action: 'renamed'` 기록
-
-#### 5.3.1 Evidence 재연결 정책
-
-`apply_identity_rewrite`가 relation의 `src_entity_id`를 변경하면, 기존 evidence(옛 entity의 fact에 연결)와 새 evidence(새 entity의 fact)가 공존하는 문제가 발생한다.
-
-**정책: 기존 evidence 유지 + 새 evidence 추가 (append-only)**
-
-| 단계 | 동작 |
-|------|------|
-| 1 | 기존 `relation_evidence` 레코드는 **삭제하지 않음** (옛 근거 보존) |
-| 2 | 새 entity의 `manual_link` fact가 있으면 evidence에 추가 연결 |
-| 3 | 새 entity의 `signature` fact가 있으면 evidence에 추가 연결 (앵커 검증용) |
-| 4 | `relation_evidence`의 PK `(relation_id, fact_id)`가 중복이면 `INSERT ... ON CONFLICT DO NOTHING` |
-
-**근거**: evidence는 "왜 이 링크가 존재하는지"의 이력이다. 옛 evidence를 삭제하면 원래 링크의 근거가 소실된다. 새 evidence를 추가하면 "원래 이유 + 재연결 이유"가 모두 남는다.
-
-**정리 시점**: 옛 entity가 `purge_tombstones`로 물리 삭제되면, 옛 entity의 fact도 cascade 삭제되고, `relation_evidence`에서 해당 fact_id 레코드도 cascade 삭제된다. 즉 **자연스럽게 정리**된다.
-
-#### 충돌 처리
-
-relation의 unique constraint: `(src_entity_id, dst_entity_id, relation_type_id, strength_type_id)`
-
-새 `(newEntityId, specEntityId, implements, manual)` 조합이 이미 존재하면:
-- 기존 relation의 `meta`를 병합 (rationale 보존)
-- 중복 relation은 생성하지 않음
-- 옛 relation의 `meta`에 `{ supersededBy: newRelationId }` 표시
-
-#### 출력 스키마
-
-```typescript
-type ApplyIdentityRewriteResult = {
-  applied: number;
-  skipped: number;
-  details: Array<{
-    relationId: number;
-    status: 'applied' | 'skipped_already_exists' | 'skipped_entity_not_found';
-    newEntityKey?: string;
-  }>;
-};
-```
-
----
-
-## 6. 계층 3: 수동 도구
-
-### 6.1 도구: `register_spec`
-
-스펙 entity를 KB에 수동 등록한다.
-
-#### 입력 스키마
-
-```typescript
-type RegisterSpecInput = {
-  /** 스펙 키. 형식: "spec::{name}". 예: "spec::di-container", "spec::auth-flow" */
-  specKey: string;
-  /** 스펙 요약 (1~2줄) */
-  summary: string;
-  /** 스펙 본문 (마크다운) */
-  body: string;
-  /** 추가 메타데이터 */
-  meta?: Record<string, unknown>;
-};
-```
-
-#### 동작 절차
-
-**단일 트랜잭션**으로:
-
-1. **Entity 생성/갱신**
-   ```
-   entity_key:    specKey (예: "spec::di-container")
-   entity_type:   "spec"
-   summary:       입력의 summary
-   meta:          입력의 meta ?? {}
-   is_deleted:    false
-   ```
-   - 이미 존재하면 upsert (summary, meta 갱신)
-
-2. **Source 생성/갱신**
-   ```
-   kind:          "spec"
-   file_path:     "__manual__/spec/{specKey}" (가상 경로)
-   content_hash:  SHA-256(body)
-   ```
-   - `__manual__/` prefix는 read-through stale 검증에서 **제외**해야 함 (파일시스템에 실제 파일이 없으므로)
-
-3. **Fact 생성**
-   ```
-   fact_type:     "spec_body"
-   fact_key:      "body:{specKey}"
-   payload_text:  body (FTS 인덱싱 대상)
-   payload_json:  { format: "markdown", version: 1 }
-   content_hash:  SHA-256(body)
-   ```
-
-4. **감사 기록**
-   `sync_event`에 `action: 'created'` 또는 `'updated'` 기록
-
-#### 출력 스키마
-
-```typescript
-type RegisterSpecResult = {
-  specKey: string;
-  entityId: number;
-  action: 'created' | 'updated';
-};
-```
-
-#### 스펙 키 규칙
-
-- 형식: `spec::{name}` (콜론 두 개)
-- `name`은 kebab-case 권장: `di-container`, `auth-flow`, `pipeline-v2`
-- 한번 등록된 `specKey`는 변경 불가. 변경이 필요하면 별도 도구(`rename_spec_key`, 향후 구현)로만 허용
-- 본문 변경은 `register_spec` 재호출로 처리 (upsert). `content_hash`로 변경 감지
-
-### 6.2 도구: `link_spec`
-
-스펙과 코드 entity 사이에 `implements` 관계를 수동으로 생성한다.
-
-#### 입력 스키마
-
-```typescript
-type LinkSpecInput = {
-  /** 코드 entity key. 예: "symbol:packages/core/src/app.ts#createApplication" */
-  codeEntityKey: string;
-  /** 스펙 entity key. 예: "spec::di-container" */
-  specKey: string;
-  /** 왜 이 코드가 이 스펙을 구현하는지에 대한 근거 (필수) */
-  rationale: string;
-};
-```
-
-#### 동작 절차
-
-**단일 트랜잭션**으로:
-
-1. **코드 entity 존재 확인**
-   - `codeEntityKey`로 entity 조회 (`is_deleted = false`)
-   - 존재하지 않으면: **에러 반환** + `search` 도구로 후보 추천
-   - 에러 메시지에 유사한 entity key 목록 포함
-
-2. **스펙 entity 존재 확인**
-   - `specKey`로 entity 조회 (`entity_type.name = 'spec'`)
-   - 존재하지 않으면: 에러 반환 ("먼저 register_spec으로 등록하세요")
-
-3. **앵커 정보 수집** (relation.meta에 저장할 데이터)
-
-   코드 entity의 fact를 조회하여 앵커를 구성한다:
-
-   ```typescript
-   type LinkAnchor = {
-     /** 링크 생성 시점의 entity_key */
-     entityKey: string;
-     /** 심볼 이름 (entity_key에서 '#' 이후 부분) */
-     symbolName: string | null;
-     /** source.file_path */
-     filePath: string;
-     /** entity_type.name */
-     entityType: string;
-     /** signature fact의 payload_text (있으면) */
-     signatureText: string | null;
-     /** kind fact의 payload_text (있으면). 예: "function", "class" */
-     symbolKind: string | null;
-   };
-   ```
-
-4. **Relation 생성**
-   ```
-   src_entity_id:   코드 entity의 id
-   dst_entity_id:   스펙 entity의 id
-   relation_type:   "implements"
-   strength:        "manual"
-   meta: {
-     anchor: <위에서 수집한 LinkAnchor>,
-     rationale: <입력의 rationale>,
-     linkedAt: <ISO 8601 타임스탬프>,
-     linkedBy: "link_spec"
-   }
-   ```
-
-5. **Rationale Fact 생성** (evidence용)
-   ```
-   entity_id:     코드 entity의 id
-   fact_type:     "manual_link"
-   fact_key:      "manual_link:{specKey}"
-   payload_text:  rationale
-   payload_json:  { specKey, linkedAt }
-   ```
-
-6. **Evidence 연결**
-   - 위에서 생성한 `manual_link` fact의 id를 `relation_evidence`에 연결
-   - 기존의 "src entity의 모든 fact를 evidence로 연결"하는 방식이 아닌, **이 fact만 타깃팅**
-
-#### 출력 스키마
-
-```typescript
-type LinkSpecResult = {
-  relationId: number;
-  codeEntityKey: string;
-  specKey: string;
-  action: 'created' | 'updated';
-};
-```
-
-### 6.3 relation.meta에 저장되는 앵커의 역할
-
-앵커(`LinkAnchor`)는 두 가지 목적으로 사용된다:
-
-1. **계층 1 (content_hash rewrite) 이후 잔여 검증**: rewrite가 정상 수행되었는지 확인할 때 앵커의 `symbolName`과 실제 entity를 대조
-2. **계층 2 (resolve_identity_candidates)의 검색 근거**: tombstone entity에 접근하지 않고도, relation.meta만으로 후보 검색 가능
-
-**핵심**: 앵커는 **링크 생성 시점에 한 번만 기록**된다. tombstone entity의 fact에 의존하지 않는다. 따라서 `purge_tombstones`로 entity가 삭제되어도 앵커 정보는 relation.meta에 보존된다.
-
----
-
-## 7. Purge 정책: 수동 링크 보호
-
-### 7.1 문제
-
-현재 `purgeTombstones()`:
-
-```typescript
-// entity-repo.ts
-const deleted = await ctx.db
-  .delete(schema.entity)
-  .where(
-    and(
-      eq(schema.entity.workspaceId, workspaceId),
-      eq(schema.entity.isDeleted, true),
-      sql`${schema.entity.updatedAt} < now() - ${olderThanDays} * interval '1 day'`,
-    ),
-  )
-  .returning({ id: schema.entity.id });
-```
-
-entity가 DELETE되면 `relation`이 **FK cascade로 함께 삭제**된다 (`onDelete: 'cascade'`). 수동 링크의 rationale, 앵커 정보가 전부 소실된다.
-
-### 7.2 해결: Manual Link 보호 조건 추가
-
-`purgeTombstones` 쿼리에 다음 조건을 추가한다:
-
-```sql
-AND NOT EXISTS (
-  SELECT 1
-  FROM relation r
-  JOIN strength_type st ON st.id = r.strength_type_id
-  WHERE (r.src_entity_id = entity.id OR r.dst_entity_id = entity.id)
-    AND st.name = 'manual'
+-- Schema metadata (versioning, configuration)
+metadata(
+  key           TEXT PRIMARY KEY,
+  value         TEXT NOT NULL
 )
-```
-
-**의미**: `strength = 'manual'`인 relation에 참여하는 entity는 tombstone이라도 purge하지 않는다.
-
-### 7.3 보호 대상
-
-| entity 역할 | 보호 여부 | 이유 |
-|-------------|-----------|------|
-| spec entity (dst) | 보호 | 스펙 자체가 삭제되면 모든 링크 소실 |
-| code entity (src) — tombstone | 보호 | 링크의 앵커 정보와 rationale이 relation.meta에 있지만, relation 자체가 cascade 삭제되면 소실 |
-
-### 7.4 content_hash rewrite와의 상호작용
-
-content_hash rewrite가 정상 동작하면 **코드 entity가 tombstone되지 않으므로** purge 보호가 필요한 케이스 자체가 감소한다. purge 보호는 **마지막 안전장치**이다.
-
-### 7.5 보호 해제 경로
-
-수동 링크 보호된 tombstone entity가 영구 누적되는 것을 방지하기 위한 해제 조건:
-
-| 해제 조건 | 설명 |
-|-----------|------|
-| **명시적 해제** | `apply_identity_rewrite`로 relation이 새 entity에 재연결되면, 옛 entity는 더 이상 manual relation에 참여하지 않게 되어 purge 보호 자동 해제 |
-| **relation 삭제** | `unlink_spec` (향후 구현) 등으로 manual relation을 명시적으로 삭제하면 보호 해제 |
-| **superseded** | `apply_identity_rewrite`의 충돌 처리에서 `supersededBy` 표시된 relation → 해당 relation의 `strength`를 `'inferred'`로 격하하여 보호 해제 |
-
-**TTL 자동 해제는 도입하지 않는다.** 수동 링크의 보존은 사용자 의도에 기반하므로, 해제도 반드시 명시적 행위에 의해서만 이루어져야 한다. 자동 TTL은 "모르는 사이에 근거가 소실되는" 위험을 만든다.
-
----
-
-## 8. Sync Worker 변경 사항
-
-### 8.1 `startupScan()` 변경
-
-현재 흐름:
-```
-scanFiles() → DB 비교 → deletedEntityIds 수집 → tombstone 트랜잭션 → 변경/신규 파일 enqueue
-```
-
-변경 후 흐름:
-```
-scanFiles() → DB 비교 → deletedSources, newFiles 수집
-  → content_hash 기반 rename 매칭
-  → 매칭 성공: entity key rewrite 트랜잭션
-  → 매칭 실패: tombstone 트랜잭션
-  → 변경/신규 파일 enqueue (rewrite된 파일 포함)
-```
-
-**구체적 변경 위치**: `sync-worker.ts` `startupScan()` 메서드, tombstone 처리 (`if (deletedEntityIds.length > 0)`) 블록 **앞에** rename detection 로직 삽입.
-
-### 8.2 `handleDeletedFile()` 변경 — Grace Window
-
-현재 흐름:
-```
-파일 미존재 확인 → 해당 entity tombstone
-```
-
-변경 후 흐름:
-```
-파일 미존재 확인
-  → pending_delete 큐에 추가 (entity_id, file_path, content_hash, timestamp)
-  → grace window 타이머 시작
-  → 타이머 만료 시: pending_delete에서 매칭 안 된 항목 tombstone
-```
-
-**생성 이벤트(`processFile`) 진입 시**:
-```
-pending_delete 큐에서 동일 content_hash 검색
-  → 매칭 발견: entity key rewrite (tombstone 안 함)
-  → 매칭 미발견: 정상적으로 새 entity 생성
-```
-
-### 8.3 `sync_event.action` 확장
-
-| 기존 값 | 새로 추가 |
-|---------|-----------|
-| `created`, `updated`, `deleted`, `restored` | **`renamed`** |
-
-`SyncAction` 타입에 `'renamed'` 추가. **두 곳에 중복 선언**되어 있으므로 양쪽 모두 수정해야 한다:
-
-| 파일 | 현재 |
-|------|------|
-| `tooling/mcp/src/kb.ts:42` | `export type SyncAction = 'created' \| 'updated' \| 'deleted' \| 'restored';` |
-| `tooling/mcp/src/repo/sync-event-repo.ts:6` | `export type SyncAction = 'created' \| 'updated' \| 'deleted' \| 'restored';` |
-
-> **리팩터링 권장**: 중복 선언을 제거하고 한 곳에서만 정의 후 re-export. 예: `sync-event-repo.ts`에서 정의, `kb.ts`에서 import.
-
-변경 후:
-```typescript
-export type SyncAction = 'created' | 'updated' | 'deleted' | 'restored' | 'renamed';
-```
-
-### 8.4 `__manual__/` 경로 정합성 정책
-
-`__manual__/` prefix는 파일시스템에 실제 파일이 존재하지 않는 **가상 경로**이다. 다음 3개 지점에서 명시적으로 제외해야 한다:
-
-#### 8.4.1 Read-Through Stale 검증 제외
-
-`ReadThroughValidator`가 source의 `file_path`를 파일시스템과 비교할 때, `__manual__/` prefix로 시작하는 source는 **검증 대상에서 제외**한다.
-
-- 위치: `read-through.ts`
-- 조건: `source.filePath.startsWith('__manual__/')`이면 항상 fresh로 간주
-
-#### 8.4.2 startupScan Tombstone 제외
-
-`startupScan()`은 DB의 source 경로와 파일시스템의 실제 파일 목록을 교차 비교하여, "DB에 있지만 파일시스템에 없는" source의 entity를 tombstone 대상으로 분류한다. `__manual__/` 경로는 파일시스템에 절대 존재하지 않으므로, 무조건 tombstone 대상이 된다.
-
-**해결**: `startupScan()`의 tombstone 대상 수집 시, `source.file_path`가 `__manual__/`로 시작하는 entity를 **제외**:
-
-```
-deletedEntityIds = dbSources
-  .filter(s => !fsFileSet.has(s.filePath) && !s.filePath.startsWith('__manual__/'))
-  .map(s => s.entityId)
-```
-
-- 위치: `sync-worker.ts`, `startupScan()` 메서드 내 tombstone 대상 수집 로직
-- 추가로 rename detection의 `deletedSources` 수집 시에도 동일한 필터 적용
-
-#### 8.4.3 Watch/Sync 큐 제외
-
-`__manual__/` 경로가 watch 이벤트나 sync 큐에 진입하는 것은 정상적으로 불가능하다(파일시스템에 없으므로). 그러나 방어적으로:
-
-- `handleDeletedFile()`에서 `filePath.startsWith('__manual__/')`이면 **무시** (early return)
-- `processFile()`에서 `filePath.startsWith('__manual__/')`이면 **무시** (early return)
-- 위치: `sync-worker.ts`, 각 메서드 진입부
-
----
-
-## 8.5 `strength_type` 의미 정의
-
-| `strength_type.name` | 의미 | 생성 주체 | orphan cleanup 대상 | purge 보호 |
-|----------------------|------|-----------|---------------------|------------|
-| `'inferred'` (기존) | 파서가 코드에서 자동 추론한 relation | sync 파서 | **대상** (`deleteOrphanRelations`에서 삭제 가능) | **아니오** |
-| `'manual'` (신규) | 사용자/에이전트가 명시적으로 생성한 relation | `link_spec`, `apply_identity_rewrite` | **제외** (절대 자동 삭제 안 함) | **예** |
-
-**`apply_identity_rewrite`가 생성하는 relation의 strength**: `'manual'`을 유지한다.
-
-- 근거: `apply_identity_rewrite`는 사용자가 후보를 **승인**한 결과이다. 자동 추론이 아니라 인간 판단이 개입했으므로 `'manual'`이 정확하다.
-- 이 relation도 orphan cleanup에서 보호되고, purge에서도 보호된다.
-
----
-
-## 9. 타입 테이블 시드 데이터
-
-새 도구가 사용하는 타입 값들은 `type-repo.ts`의 `ensure*` 패턴으로 런타임에 자동 생성된다. 별도 마이그레이션 불필요.
-
-| 테이블 | 값 | 용도 | 생성 시점 |
-|--------|-----|------|-----------|
-| `entity_type` | `spec` | 스펙 entity | `register_spec` 최초 호출 시 |
-| `relation_type` | `implements` | 스펙↔코드 관계 | `link_spec` 최초 호출 시 |
-| `strength_type` | `manual` | 수동 링크 표시 | `link_spec` 최초 호출 시 |
-| `fact_type` | `spec_body` | 스펙 본문 | `register_spec` 최초 호출 시 |
-| `fact_type` | `manual_link` | 링크 근거 | `link_spec` 최초 호출 시 |
-
-> `coverage_map`이 이미 `entity_type.name = 'spec'`과 `relation_type.name = 'implements'`를 쿼리하고 있으므로, 새 도구가 만드는 데이터는 `coverage_map`과 **즉시 호환**된다.
-
----
-
-## 10. 기존 도구와의 호환성
-
-### 10.1 `coverage_map`
-
-```sql
--- coverage_map이 사용하는 쿼리 (analysis.ts)
-SELECT ... FROM relation r
-JOIN entity e ON e.id = r.src_entity_id
-WHERE r.dst_entity_id = {spec.id}
-  AND rt.name = 'implements'
-  AND e.is_deleted = false
-```
-
-`link_spec`이 생성하는 데이터:
-- `dst_entity_id` = spec entity의 id ✓
-- `relation_type.name` = `'implements'` ✓
-- src entity가 `is_deleted = false` ✓ (살아있는 코드 entity만 링크 가능)
-
-→ **변경 없이 즉시 호환.**
-
-### 10.2 `inconsistency_report`
-
-`inconsistency_report`가 이미 검사하는 항목:
-- `spec_no_impl`: spec entity에 implements relation이 없는 경우
-- `evidenceless_relation`: evidence가 없는 relation
-
-`link_spec`은 항상 evidence를 생성하므로 `evidenceless_relation`에 걸리지 않는다.
-`register_spec` 후 `link_spec`을 안 하면 `spec_no_impl`이 감지된다 → **의도된 동작.**
-
-### 10.3 `impact_analysis`
-
-`impact_analysis`는 역방향 BFS로 incoming relation을 추적한다. `implements` relation도 추적 대상에 포함된다.
-
-→ spec entity에 대해 `impact_analysis`를 실행하면, **해당 스펙을 구현하는 모든 코드 entity가 영향 범위에 포함**된다. 변경 없이 즉시 동작.
-
----
-
-## 11. 에러 및 예외 처리
-
-### 11.1 `register_spec` 에러
-
-**입력 검증 (도구 실행 전 선행)**:
-| 검증 | 규칙 | 에러 메시지 |
-|------|------|-------------|
-| `specKey` prefix | `specKey.startsWith('spec::')` | "specKey must start with 'spec::'" |
-| `specKey` name 부분 | `/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(name)` (2자 이상, kebab-case) | "specKey name must be kebab-case (e.g., 'spec::my-feature')" |
-| `summary` 길이 | `1 ≤ length ≤ 500` | "summary must be 1-500 characters" |
-| `body` 길이 | `1 ≤ length ≤ 50000` | "body must be 1-50000 characters" |
-
-**런타임 에러**:
-| 상황 | 처리 |
-|------|------|
-| DB 트랜잭션 실패 | 에러 전파. 부분 커밋 없음 (단일 트랜잭션) |
-
-### 11.2 `link_spec` 에러
-
-**입력 검증**:
-| 검증 | 규칙 | 에러 메시지 |
-|------|------|-------------|
-| `codeEntityKey` prefix | `module:` 또는 `symbol:`로 시작 | "codeEntityKey must start with 'module:' or 'symbol:'" |
-| `specKey` prefix | `spec::` 시작 | "specKey must start with 'spec::'" |
-| `rationale` 길이 | `1 ≤ length ≤ 5000` | "rationale must be 1-5000 characters" |
-
-**런타임 에러**:
-| 상황 | 처리 |
-|------|------|
-| `codeEntityKey`에 해당하는 entity 없음 | 에러 반환 + `search(codeEntityKey의 마지막 segment)` 결과로 유사 entity 추천 |
-| `specKey`에 해당하는 spec entity 없음 | 에러 반환: "Spec not found. Use register_spec first." |
-| `codeEntityKey`의 entity가 `is_deleted = true` | 에러 반환: "Entity is tombstoned. Run sync first or check the entity key." |
-| 이미 동일 링크가 존재 | upsert: `meta`를 갱신 (rationale, anchor 업데이트). `action: 'updated'` 반환 |
-
-### 11.3 `resolve_identity_candidates` 에러
-
-| 상황 | 처리 |
-|------|------|
-| 깨진 링크가 없음 | `{ brokenLinks: [], totalBroken: 0 }` 반환 (에러 아님) |
-| 특정 `specKey`에 해당하는 spec이 없음 | 에러 반환: "Spec not found: {specKey}" |
-
-### 11.4 `apply_identity_rewrite` 에러
-
-**입력 검증**:
-| 검증 | 규칙 | 에러 메시지 |
-|------|------|-------------|
-| `rewrites` 배열 | `minItems: 1` (JSON Schema에서 이미 정의) | MCP SDK 레벨에서 거부 |
-| `newEntityKey` | 빈 문자열 불가 (`minLength: 1`) | MCP SDK 레벨에서 거부 |
-| `relationId` | 양의 정수 | "relationId must be a positive integer" |
-
-**런타임 에러**:
-| 상황 | 처리 |
-|------|------|
-| `newEntityKey`에 해당하는 entity 없음 | 해당 항목 skip, `status: 'skipped_entity_not_found'` |
-| `relationId`가 유효하지 않음 | 해당 항목 skip, `status: 'skipped_relation_not_found'` |
-| unique constraint 충돌 | 기존 relation에 meta 병합, 옛 relation에 `supersededBy` 표시 |
-
-### 11.5 content_hash rewrite 에러
-
-| 상황 | 처리 |
-|------|------|
-| 1:N 매칭 (같은 hash로 여러 new file) | rewrite 안 함, 정상적으로 tombstone + 새 entity 생성 |
-| N:1 매칭 (여러 old entity가 같은 new file에 대응) | rewrite 안 함, 정상적으로 tombstone + 새 entity 생성 |
-| rewrite 트랜잭션 실패 | 정상적으로 tombstone fallback. `sync_event`에 에러 기록 |
-
----
-
-## 12. MCP 도구 등록
-
-`server.ts`의 `TOOL_DEFINITIONS`에 다음 4개 도구를 추가한다:
-
-### 12.1 `register_spec`
-
-```typescript
-{
-  name: 'register_spec',
-  description: '스펙(spec) 엔티티를 KB에 수동 등록한다. 사용자와 에이전트가 논의하여 확정한 기능 명세를 저장한다. 이미 존재하는 specKey면 본문/요약을 갱신한다.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      specKey: {
-        type: 'string',
-        minLength: 1,
-        description: '스펙 키. 형식: "spec::{name}". 예: "spec::di-container"'
-      },
-      summary: {
-        type: 'string',
-        minLength: 1,
-        description: '스펙 요약 (1~2줄)'
-      },
-      body: {
-        type: 'string',
-        minLength: 1,
-        description: '스펙 본문 (마크다운)'
-      },
-      meta: {
-        type: 'object',
-        description: '추가 메타데이터 (선택)'
-      },
-    },
-    required: ['specKey', 'summary', 'body'],
-    additionalProperties: false,
-  },
-}
-```
-
-### 12.2 `link_spec`
-
-```typescript
-{
-  name: 'link_spec',
-  description: '스펙과 코드 엔티티 사이에 implements 관계를 수동으로 생성한다. 어떤 코드가 어떤 스펙을 구현하는지 기록한다. rationale(근거)은 필수이며, relation_evidence로 보존된다.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      codeEntityKey: {
-        type: 'string',
-        minLength: 1,
-        description: '코드 엔티티 키. 예: "symbol:packages/core/src/app.ts#createApplication", "module:packages/core/src/app.ts"'
-      },
-      specKey: {
-        type: 'string',
-        minLength: 1,
-        description: '스펙 엔티티 키. 예: "spec::di-container"'
-      },
-      rationale: {
-        type: 'string',
-        minLength: 1,
-        description: '왜 이 코드가 이 스펙을 구현하는지에 대한 근거'
-      },
-    },
-    required: ['codeEntityKey', 'specKey', 'rationale'],
-    additionalProperties: false,
-  },
-}
-```
-
-### 12.3 `resolve_identity_candidates`
-
-```typescript
-{
-  name: 'resolve_identity_candidates',
-  description: '스펙-코드 링크 중 깨진 것(코드 엔티티가 tombstone이거나 missing)을 감지하고, 대체 후보 엔티티 목록을 반환한다. 자동 적용하지 않으며, 사용자 승인 후 apply_identity_rewrite로 적용한다.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      specKey: {
-        type: 'string',
-        description: '특정 스펙만 검사. 생략 시 모든 깨진 링크를 스캔한다.'
-      },
-      maxCandidates: {
-        type: 'integer',
-        minimum: 1,
-        maximum: 20,
-        default: 5,
-        description: '각 깨진 링크당 반환할 최대 후보 수'
-      },
-    },
-    additionalProperties: false,
-  },
-}
-```
-
-### 12.4 `apply_identity_rewrite`
-
-```typescript
-{
-  name: 'apply_identity_rewrite',
-  description: 'resolve_identity_candidates의 결과를 검토한 뒤, 승인된 매칭을 적용한다. 깨진 relation의 src_entity_id를 새 엔티티로 재연결한다.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      rewrites: {
-        type: 'array',
-        items: {
-          type: 'object',
-          properties: {
-            relationId: { type: 'integer', description: '깨진 relation의 id' },
-            newEntityKey: { type: 'string', minLength: 1, description: '새로 연결할 엔티티 키' },
-          },
-          required: ['relationId', 'newEntityKey'],
-        },
-        minItems: 1,
-        description: '적용할 매칭 목록'
-      },
-    },
-    required: ['rewrites'],
-    additionalProperties: false,
-  },
-}
-```
-
----
-
-## 13. 구현 순서 (권장)
-
-| 단계 | 작업 | 의존성 |
-|------|------|--------|
-| **1** | `register_spec` 도구 구현 | 없음 |
-| **2** | `link_spec` 도구 구현 | register_spec |
-| **3** | `purgeTombstones` 보호 조건 추가 | link_spec (manual strength 사용) |
-| **4** | Read-through `__manual__/` 예외 처리 | register_spec |
-| **5** | `startupScan` content_hash rename detection | 없음 (독립) |
-| **6** | watch grace window (pending_delete) | rename detection |
-| **7** | `resolve_identity_candidates` 도구 구현 | link_spec (anchor 구조 사용) |
-| **8** | `apply_identity_rewrite` 도구 구현 | resolve_identity_candidates |
-| **9** | `sync_event.action` 에 `'renamed'` 추가 | rename detection |
-
----
-
-## 14. 미래 확장 경로
-
-### 14.1 불변 ID + Alias 테이블 (A 방식)
-
-현재 설계(B 방식: entity_key rewrite)로 시작하되, 다음 수요가 발생하면 A 방식으로 승격한다:
-
-- "이 심볼이 예전에 어디 있었는지" 이력 조회가 빈번
-- 대규모 리팩터링(파일 분할/통합)이 잦아서 content_hash rewrite로 커버 안 되는 케이스가 많음
-- 링크 보존이 제품의 핵심 가치로 격상
-
-A 방식 스키마 (참고):
-```sql
-CREATE TABLE entity_alias (
-  id SERIAL PRIMARY KEY,
-  workspace_id TEXT NOT NULL REFERENCES workspace(id),
-  entity_id INTEGER NOT NULL REFERENCES entity(id) ON DELETE CASCADE,
-  alias_key TEXT NOT NULL,
-  reason TEXT,  -- 'renamed', 'split', 'merged'
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE(workspace_id, alias_key)
+-- Initial row: ('schema_version', '1')
+-- Code constant SCHEMA_VERSION compared on open; mismatch → DROP ALL + rebuild (disposable DB)
+
+-- Card metadata (parsed from frontmatter)
+card(
+  key           TEXT PRIMARY KEY,  -- e.g. 'spec::auth/login'
+  type          TEXT NOT NULL,     -- e.g. 'spec', 'system', 'adapter'
+  summary       TEXT NOT NULL,
+  status        TEXT NOT NULL,     -- draft|accepted|implementing|implemented|deprecated
+  keywords      TEXT,              -- space-separated keywords (denormalized for FTS5 external content)
+  constraints_json TEXT,           -- JSON array
+  body          TEXT,              -- raw markdown body
+  file_path     TEXT NOT NULL,     -- source .card.md path
+  updated_at    TEXT NOT NULL
+)
+
+-- Keyword master table (unique keyword registry)
+keyword(
+  id            INTEGER PRIMARY KEY,
+  name          TEXT NOT NULL UNIQUE  -- e.g. 'auth', 'mvp', 'authentication'
+)
+
+-- Card↔Keyword mapping (N:M)
+card_keyword(
+  card_key      TEXT NOT NULL REFERENCES card(key),
+  keyword_id    INTEGER NOT NULL REFERENCES keyword(id),
+  PRIMARY KEY (card_key, keyword_id)
+)
+
+-- Code entities (parsed from AST by MCP indexer)
+code_entity(
+  entity_key    TEXT PRIMARY KEY,  -- e.g. 'symbol:src/auth/login.ts#handleOAuth'
+  file_path     TEXT NOT NULL,
+  symbol_name   TEXT,
+  kind          TEXT NOT NULL,     -- module|class|function|variable|...
+  signature     TEXT,
+  fingerprint   TEXT,              -- hash of (symbol_name + kind + signature) for move tracking
+  content_hash  TEXT NOT NULL,
+  updated_at    TEXT NOT NULL
+)
+
+-- Card↔Card relations (parsed from frontmatter relations[])
+-- Indexer auto-generates reverse edges (is_reverse = true) for bidirectional traversal
+card_relation(
+  id            INTEGER PRIMARY KEY,
+  type          TEXT NOT NULL,     -- depends_on|references|related|extends|conflicts
+  src_card_key  TEXT NOT NULL REFERENCES card(key),
+  dst_card_key  TEXT NOT NULL REFERENCES card(key),
+  is_reverse    BOOLEAN NOT NULL DEFAULT false,
+  meta_json     TEXT
+)
+
+-- Card↔Code links (parsed from JSDoc @see {type}::key)
+-- entity_key is NOT NULL: file-level @see maps to the module entity
+card_code_link(
+  id            INTEGER PRIMARY KEY,
+  type          TEXT NOT NULL,     -- see (all card↔code links are represented as @see)
+  card_key      TEXT NOT NULL REFERENCES card(key),
+  entity_key    TEXT NOT NULL REFERENCES code_entity(entity_key),
+  file_path     TEXT NOT NULL,
+  symbol_name   TEXT,
+  meta_json     TEXT
+)
+
+-- Code↔Code relations (extracted by AST pipeline)
+code_relation(
+  id              INTEGER PRIMARY KEY,
+  type            TEXT NOT NULL,   -- imports|calls|extends|implements
+  src_entity_key  TEXT NOT NULL REFERENCES code_entity(entity_key),
+  dst_entity_key  TEXT NOT NULL REFERENCES code_entity(entity_key),
+  meta_json       TEXT
+)
+
+-- File state (for incremental indexing)
+file_state(
+  path            TEXT PRIMARY KEY,
+  content_hash    TEXT NOT NULL,
+  mtime           TEXT NOT NULL,
+  last_indexed_at TEXT NOT NULL
+)
+
+-- FTS5 external content virtual tables (trigram tokenizer for CJK support)
+-- External content FTS5: content stored in source table, FTS index auto-synced via triggers
+-- No data duplication — FTS reads from source table on SELECT, only index is stored
+CREATE VIRTUAL TABLE card_fts USING fts5(
+  key, summary, body, keywords,
+  content='card', content_rowid='rowid',
+  tokenize='trigram'
 );
+CREATE VIRTUAL TABLE code_fts USING fts5(
+  entity_key, symbol_name,
+  content='code_entity', content_rowid='rowid',
+  tokenize='trigram'
+);
+
+-- FTS external content sync triggers (card_fts)
+-- External content DELETE uses special INSERT INTO fts(fts, ...) VALUES('delete', ...) syntax
+CREATE TRIGGER card_fts_ai AFTER INSERT ON card BEGIN
+  INSERT INTO card_fts(rowid, key, summary, body, keywords)
+    VALUES (new.rowid, new.key, new.summary, new.body, new.keywords);
+END;
+CREATE TRIGGER card_fts_au AFTER UPDATE ON card BEGIN
+  INSERT INTO card_fts(card_fts, rowid, key, summary, body, keywords)
+    VALUES('delete', old.rowid, old.key, old.summary, old.body, old.keywords);
+  INSERT INTO card_fts(rowid, key, summary, body, keywords)
+    VALUES (new.rowid, new.key, new.summary, new.body, new.keywords);
+END;
+CREATE TRIGGER card_fts_ad AFTER DELETE ON card BEGIN
+  INSERT INTO card_fts(card_fts, rowid, key, summary, body, keywords)
+    VALUES('delete', old.rowid, old.key, old.summary, old.body, old.keywords);
+END;
+
+-- FTS external content sync triggers (code_fts)
+CREATE TRIGGER code_fts_ai AFTER INSERT ON code_entity BEGIN
+  INSERT INTO code_fts(rowid, entity_key, symbol_name)
+    VALUES (new.rowid, new.entity_key, new.symbol_name);
+END;
+CREATE TRIGGER code_fts_au AFTER UPDATE ON code_entity BEGIN
+  INSERT INTO code_fts(code_fts, rowid, entity_key, symbol_name)
+    VALUES('delete', old.rowid, old.entity_key, old.symbol_name);
+  INSERT INTO code_fts(rowid, entity_key, symbol_name)
+    VALUES (new.rowid, new.entity_key, new.symbol_name);
+END;
+CREATE TRIGGER code_fts_ad AFTER DELETE ON code_entity BEGIN
+  INSERT INTO code_fts(code_fts, rowid, entity_key, symbol_name)
+    VALUES('delete', old.rowid, old.entity_key, old.symbol_name);
+END;
+
+-- Indexes for query performance (§9 targets)
+CREATE INDEX idx_card_type ON card(type);
+CREATE INDEX idx_card_status ON card(status);
+CREATE INDEX idx_card_file_path ON card(file_path);
+CREATE INDEX idx_code_entity_file_path ON code_entity(file_path);
+CREATE INDEX idx_code_entity_kind ON code_entity(kind);
+CREATE INDEX idx_card_relation_src ON card_relation(src_card_key);
+CREATE INDEX idx_card_relation_dst ON card_relation(dst_card_key);
+CREATE INDEX idx_card_relation_type ON card_relation(type);
+CREATE INDEX idx_card_code_link_card ON card_code_link(card_key);
+CREATE INDEX idx_card_code_link_entity ON card_code_link(entity_key);
+CREATE INDEX idx_card_code_link_file ON card_code_link(file_path);
+CREATE INDEX idx_code_relation_src ON code_relation(src_entity_key);
+CREATE INDEX idx_code_relation_dst ON code_relation(dst_entity_key);
+CREATE INDEX idx_code_relation_type ON code_relation(type);
+CREATE INDEX idx_card_keyword_card ON card_keyword(card_key);
+CREATE INDEX idx_card_keyword_keyword ON card_keyword(keyword_id);
+-- Note: keyword.name already has a UNIQUE index (implicit from UNIQUE constraint)
 ```
 
-### 14.2 코드 내 @spec 주석 태그
+### 5.3 Identity strategy
 
-`/** @spec spec::di-container */` 같은 태그를 파서가 인식하여 자동으로 `implements` relation을 생성하는 방식. 가장 강력한 링크 유지 방법이나, 코드에 대량 삽입이 필요하므로 **옵션으로만** 제공.
+**Namespace separation** (intentional delimiter difference):
+- Card keys use **double colon** `::` — e.g. `spec::auth/login`, `system::di/injection`
+- Code entity keys use **single colon** `:` — e.g. `module:src/auth/login.ts`, `symbol:src/auth/login.ts#handleOAuth`
 
-### 14.3 가중치 기반 스코어링
+This prevents ambiguity: any key containing `::` is a card, any key with single `:` is a code entity.
 
-`resolve_identity_candidates`에서 후보를 **점수 기반으로 정렬**하는 기능. 현재는 후보를 나열하기만 하고 점수를 매기지 않는다. 운영 데이터(실제 rename 패턴)가 충분히 쌓이면 도입을 검토한다.
+- Cards: identity is `card.key` (e.g. `spec::auth/login`). Key is defined in frontmatter and is immutable by policy. Rename is supported via `card_rename` tool (updates all references).
+- Code: identity is `entity_key` derived from AST:
+  - module: `module:{relativePath}`
+  - symbol: `symbol:{relativePath}#{symbolName}`
+
+**Fingerprint for move tracking**:
+- `fingerprint` = hash of (symbol_name + kind + signature)
+- When a file moves, the indexer matches old entities to new entities by fingerprint
+- Match found → update `entity_key`, preserve `code_relation` edges
+- No match → delete old, create new
 
 ---
 
-## 부록 A: 용어 정의
+## 6. MCP Indexing Pipeline
 
-| 용어 | 정의 |
-|------|------|
-| **entity** | KB의 기본 단위. module, symbol, spec, pkg, test 등의 타입을 가진다 |
-| **entity_key** | entity의 현재 주소. 형식: `{type}:{identifier}`. 가변(mutable) |
-| **entity.id** | entity의 불변 정체성. serial PK. relation FK가 참조하는 대상 |
-| **tombstone** | `entity.is_deleted = true` 상태. 실제 삭제가 아닌 논리적 삭제 |
-| **purge** | tombstone entity를 DB에서 물리적으로 DELETE. FK cascade로 관련 데이터 소실 |
-| **rewrite** | entity_key를 UPDATE하여 entity.id(정체성)를 유지하는 방식 |
-| **앵커(anchor)** | 링크 생성 시 relation.meta에 저장하는 식별 정보. tombstone에 의존하지 않음 |
-| **grace window** | watch 트리거에서 삭제 이벤트 후 rename 매칭을 위해 대기하는 시간 |
-| **rationale** | 링크의 근거. "왜 이 코드가 이 스펙을 구현하는가"에 대한 설명 |
+The MCP domain is the sole owner of SQLite indexing. `bunner build/dev` produce only build artifacts (manifest) and do **not** access SQLite. The MCP indexer independently parses card files and code files to populate the index.
 
-## 부록 B: 관련 파일 목록
+### 6.1 Full rebuild (`bunner mcp rebuild --full`)
 
-| 파일 | 변경 유형 | 내용 |
-|------|-----------|------|
-| `tooling/mcp/src/server.ts` | 수정 | 4개 도구 등록 (TOOL_DEFINITIONS, handleToolCall) |
-| `tooling/mcp/src/tools/spec.ts` | **신규** | register_spec, link_spec 구현 |
-| `tooling/mcp/src/tools/identity.ts` | **신규** | resolve_identity_candidates, apply_identity_rewrite 구현 |
-| `tooling/mcp/src/sync-worker.ts` | 수정 | startupScan rename detection, handleDeletedFile grace window |
-| `tooling/mcp/src/repo/entity-repo.ts` | 수정 | purgeTombstones manual link 보호, rewriteEntityKey 메서드 추가 |
-| `tooling/mcp/src/kb.ts` | 수정 | SyncAction에 'renamed' 추가, rewriteEntityKey 래퍼 |
-| `tooling/mcp/src/read-through.ts` | 수정 | `__manual__/` prefix 예외 처리 |
-| `tooling/mcp/src/config.ts` | 수정 | `sync.renameGraceWindowMs` 설정 추가 |
-| `tooling/mcp/src/sync-ipc.ts` | 수정 | SyncWorkerStatus에 pendingDeletes 필드 추가 (선택) |
-| `tooling/mcp/src/repo/relation-repo.ts` | 수정 | `deleteOrphanRelations` 메서드 추가 |
-| `tooling/mcp/src/repo/sync-event-repo.ts` | 수정 | `SyncAction`에 `'renamed'` 추가 (중복 선언 해소) |
+1. Check `metadata.schema_version` → mismatch with code constant → DROP ALL tables + recreate schema
+2. **Entire rebuild is wrapped in a single SQLite transaction** (atomic: all-or-nothing)
+3. Parse all card files → `card` rows + `card_relation` rows (from frontmatter `relations[]`) + `keyword`/`card_keyword` rows (from frontmatter `keywords[]`)
+4. Auto-generate reverse `card_relation` rows (`is_reverse = true`)
+5. Parse code files via `oxc-parser` AST → `code_entity` rows (with fingerprint) + `code_relation` rows (imports, calls, extends, implements)
+6. Parse JSDoc `@see {type}::key` annotations → `card_code_link` rows
+7. FTS5 external content tables are auto-synchronized via triggers (no manual refresh needed)
+8. Update `file_state` for all processed files
 
-## 부록 C: 테스트 케이스 매트릭스
+### 6.2 Incremental re-index (watch mode / `bunner mcp rebuild`)
 
-구현 검증을 위한 핵심 테스트 시나리오.
+- Use `file_state` to skip unchanged files (content_hash + mtime comparison)
+- Each file update is wrapped in a **SQLite transaction** (atomic per-file: all-or-nothing)
+- If a card file changes: update `card` + `card_relation` + `card_keyword` rows from that file. **Reverse edge scope**: delete only reverse edges where `dst_card_key` is the changed card, then regenerate from the card's current outgoing relations (not full reverse rebuild)
+- If a code file changes: update `code_entity` + `code_relation` + `card_code_link` rows from that file
+- FTS5 external content tables are auto-synchronized via triggers (no manual update needed)
+- File move detection: compare fingerprints of deleted entities with new entities to preserve relations
 
-### C.1 계층 1: content_hash Rewrite
+### 6.3 Data flow
 
-| # | 시나리오 | 선행 상태 | 수행 | 기대 결과 |
-|---|----------|-----------|------|-----------|
-| T1-1 | **단순 파일 이동** | `a.ts`에 module+symbol+link 존재 | `mv a.ts b.ts` → startupScan | entity_key `module:b.ts`로 rewrite, symbol key도 갱신, relation FK 유지, sync_event `'renamed'` 기록 |
-| T1-2 | **이동+내용변경 동시** | `a.ts`에 link 존재 | `mv a.ts b.ts` + b.ts 내용 수정 → startupScan | hash 불일치 → rewrite 안 됨, a.ts tombstone, b.ts 새 entity. link 파손 (계층 2로 전환) |
-| T1-3 | **파일 복사 (1:N)** | `a.ts` 존재 | `cp a.ts b.ts` + `rm a.ts` → startupScan | 동일 hash 2개 → rewrite 금지, a.ts tombstone, b.ts 새 entity |
-| T1-4 | **N:1 통합** | `a.ts`, `b.ts` 존재 (같은 hash) | `rm a.ts` + `rm b.ts` + `c.ts` 생성(같은 hash) → startupScan | 2:1 매칭 → rewrite 금지, 둘 다 tombstone, c.ts 새 entity |
-| T1-5 | **rewrite 후 파싱** | T1-1 수행 후 | enqueue된 b.ts를 파싱 | fact/relation이 새 경로 기준으로 재생성, orphan fact 정리됨 |
+```
+[.card.md frontmatter] ──parse──→ card + card_relation tables (+ reverse edges)
+[.card.md body]        ──parse──→ card.body column
+[*.ts files AST]       ──parse──→ code_entity (with fingerprint) + code_relation tables
+[*.ts JSDoc @see]      ──parse──→ card_code_link table
+(FTS5 external content) ──triggers──→ card_fts + code_fts indexes (no data duplication)
+```
 
-### C.2 Watch Grace Window
+### 6.4 Code relation extractor (plugin structure)
 
-| # | 시나리오 | 이벤트 시퀀스 | 기대 결과 |
-|---|----------|---------------|-----------|
-| T2-1 | **정상 rename (window 내)** | DELETE(a.ts) → 1초 후 CREATE(b.ts), hash 동일 | rewrite 성공, tombstone 안 됨 |
-| T2-2 | **window 만료** | DELETE(a.ts) → 4초 대기 (default 3초) → CREATE(b.ts), hash 동일 | a.ts 이미 tombstone됨, b.ts 새 entity |
-| T2-3 | **역순 이벤트** | CREATE(b.ts) → DELETE(a.ts), hash 동일 | b.ts 새 entity 생성됨, a.ts tombstone, rewrite 불가 |
-| T2-4 | **중복 DELETE** | DELETE(a.ts) → DELETE(a.ts) | 두 번째 DELETE 무시 (idempotent) |
-| T2-5 | **source unique 충돌** | CREATE(b.ts)가 먼저 처리 → pending_delete에서 a.ts→b.ts rewrite 시도 | b.ts entity 이미 존재 → rewrite 포기, a.ts tombstone |
+The code relation extraction pipeline is designed for extensibility. Extractors live in `compiler/` domain and are imported by MCP indexer.
 
-### C.3 수동 도구
+```typescript
+interface CodeRelationExtractor {
+  name: string;
+  extract(ast: AST, filePath: string): CodeRelation[];
+}
+```
 
-| # | 시나리오 | 수행 | 기대 결과 |
-|---|----------|------|-----------|
-| T3-1 | **spec 등록** | `register_spec({specKey: "spec::auth", ...})` | entity 생성, source `__manual__/spec/spec::auth`, fact `spec_body` 생성 |
-| T3-2 | **spec 갱신** | T3-1 후 body 변경하여 재호출 | upsert: body/hash 갱신, `action: 'updated'` |
-| T3-3 | **link 생성** | `link_spec({codeEntityKey: "symbol:...", specKey: "spec::auth", rationale: "..."})` | relation 생성 (strength='manual'), evidence 연결, anchor in meta |
-| T3-4 | **link 중복** | T3-3 재호출 (같은 pair) | upsert: meta 갱신, `action: 'updated'` |
-| T3-5 | **tombstoned entity에 link** | `is_deleted=true`인 entity에 link 시도 | 에러: "Entity is tombstoned" |
-| T3-6 | **잘못된 specKey 형식** | `register_spec({specKey: "auth", ...})` | 에러: "specKey must start with 'spec::'" |
+**Currently implemented:** `imports`, `calls`, `extends`, `implements` (pure AST extractable)
 
-### C.4 Purge 보호
+**Reserved for future:** `injects`, `provides` (framework-user features, to be added with system/adapter card types)
 
-| # | 시나리오 | 수행 | 기대 결과 |
-|---|----------|------|-----------|
-| T4-1 | **manual link가 있는 tombstone** | code entity tombstone, manual link 존재 | `purgeTombstones` 실행 → entity 보호됨 (삭제 안 됨) |
-| T4-2 | **manual link 없는 tombstone** | code entity tombstone, manual link 없음 | `purgeTombstones` 실행 → entity 삭제됨 |
-| T4-3 | **rewrite로 보호 해제** | T4-1 상태에서 `apply_identity_rewrite`로 relation 이전 | 옛 entity에 manual relation 없음 → 다음 purge에서 삭제됨 |
+### 6.5 Build vs Index separation
 
-### C.5 __manual__/ 경로 보호
+| Command | Responsibility | SQLite access |
+|---------|---------------|---------------|
+| `bunner build` | AOT compilation → manifest (`.bunner/build/runtime.ts`) | **None** |
+| `bunner dev` | Watch mode compilation → manifest | **None** |
+| `bunner mcp rebuild` | Full/incremental index rebuild | **Read + Write** |
+| `bunner mcp` (server) | Watch mode incremental re-index + MCP tools | **Read + Write** |
 
-| # | 시나리오 | 수행 | 기대 결과 |
-|---|----------|------|-----------|
-| T5-1 | **startupScan 시 __manual__/ 제외** | spec entity with source `__manual__/spec/spec::auth` | startupScan → tombstone 대상에서 **제외** |
-| T5-2 | **read-through 시 __manual__/ 제외** | `__manual__/` source의 stale 체크 | 항상 fresh로 간주 |
-| T5-3 | **watch에 __manual__/ 진입** | (정상적으로 불가능하지만) `__manual__/` path가 processFile에 도달 | early return, 무시 |
+---
 
-### C.6 Identity Resolution (계층 2)
+## 7. CLI Surface (Draft)
 
-| # | 시나리오 | 수행 | 기대 결과 |
-|---|----------|------|-----------|
-| T6-1 | **깨진 링크 감지** | code entity tombstone, manual link 존재 | `resolve_identity_candidates` → `brokenLinks` 1건, `candidates`에 FTS 결과 |
-| T6-2 | **깨진 링크 없음** | 모든 manual link healthy | `resolve_identity_candidates` → `{ brokenLinks: [], totalBroken: 0 }` |
-| T6-3 | **rewrite 적용** | T6-1에서 후보 선택 → `apply_identity_rewrite` | relation.src_entity_id 변경, evidence 추가, meta에 migratedFrom 기록 |
-| T6-4 | **rewrite 충돌** | 이미 동일 (src, dst, type, strength) 존재 | meta 병합, 옛 relation에 supersededBy 표시 |
-| T6-5 | **relation orphan cleanup** | 파일 이동 후 sync → 파서가 새 relation 생성 | 옛 relation (strength='inferred')이 deleteOrphanRelations에 의해 삭제, manual relation은 보존 |
+### 7.1 Commands
+
+- `bunner mcp rebuild [--full]`
+  - build/refresh `.bunner/cache/index.sqlite` (manual rebuild)
+
+- `bunner mcp verify`
+  - runs full integrity verification (cards, relations, and `@see` links)
+  - prints errors/warnings and returns non-zero exit code on errors
+  - **CI integration**: run `bunner mcp verify` in CI pipeline to enforce invariants
+
+- `bunner mcp`
+  - start MCP server (stdio / HTTP)
+  - auto-ensure required repo structure/config on startup:
+    - create `.bunner/` structure if missing (including `cards/`, `build/`, `cache/`)
+    - ensure `.bunner/cache/` is gitignored
+    - if `bunner.jsonc` is missing: create it with minimum required fields (`sourceDir`, `entry`, `module.fileName`)
+    - if `bunner.jsonc` exists: never auto-edit it (non-destructive); missing fields are filled by runtime defaults
+  - ensures index is ready (build if missing)
+  - always-on index watch: when cards/code/config change, automatically re-index
+    - `.bunner/cards/**/*.card.md` changes: incremental re-index
+    - code changes under `sourceDir` (`*.ts`, excluding `*.d.ts`): incremental re-index
+    - `bunner.jsonc` changes: full rebuild
+
+### 7.2 Write helpers
+
+- `bunner mcp card create|update|delete|rename|status`
+  - create/modify/delete/rename `.card.md` (frontmatter + body)
+  - `rename` updates all `@see` references + `relations[].target` across codebase
+
+- `bunner mcp link add|remove`
+  - insert/remove `@see {type}::key` annotation using AST (safe edit)
+
+- `bunner mcp relation add|remove`
+  - add/remove `relations[]` entries in card frontmatter
+
+All write helpers use the **shared core logic** (same code as MCP write tools).
+
+---
+
+## 8. MCP Server (Embedded in CLI)
+
+CLI and MCP share the **same core**. MCP is the primary interface for vibe-coding.
+
+### 8.1 Read tools
+
+- `search(query, filters)` — full-text search across cards and code
+- `get_context(target)` — card or code entity with linked entities
+- `get_subgraph(center, hops, filters)` — N-hop graph traversal (visited set cycle prevention)
+- `impact_analysis(card_key)` — cards + code affected by a card change (reverse dependency traversal)
+- `trace_chain(from_key, to_key)` — shortest relation path between two entities
+- `coverage_report(card_key)` — card's linked code status
+- `list_unlinked(status_filter)` — cards with no @see code references (filterable by status)
+- `list_cards(filters)` — card listing by status, type, keywords
+- `get_relations(card_key, direction)` — card's relations (outgoing / incoming / both)
+
+All read tools query SQLite only.
+
+### 8.2 Write tools (required, not deferred)
+
+MCP write tools are **required**. Framework authors use MCP exclusively.
+
+Write tools must:
+
+- modify SSOT files (cards / code annotations) via shared core logic
+- trigger re-index after write
+- never modify SQLite directly as SSOT
+
+Tools:
+
+- `card_create(type, key, summary, body, keywords?)` — create card file
+- `card_update(key, fields)` — update card frontmatter/body
+- `card_delete(key)` — delete card file (rejects deletion if `@see` references still exist in code OR other cards reference this card in `relations[].target`; user must remove all references first)
+- `card_rename(old_key, new_key)` — rename key across all @see + relations
+- `card_update_status(key, status)` — transition card status
+- `link_add(file_path, card_key)` — AST-safe JSDoc @see insertion
+- `link_remove(file_path, card_key)` — AST-safe JSDoc @see removal
+- `relation_add(src_key, dst_key, type)` — add relation to card frontmatter
+- `relation_remove(src_key, dst_key, type)` — remove relation from card frontmatter
+
+---
+
+## 9. Performance Targets (Draft)
+
+Benchmark baseline: **500 cards + 2,000 code files + 10,000 code entities**
+
+On a typical laptop (local SQLite):
+
+| Operation | Target |
+|-----------|--------|
+| `get_context` | < 20ms |
+| `search` (FTS trigram) | < 30ms |
+| `get_subgraph` (hops=2) | < 50ms |
+| `impact_analysis` (depth=3) | < 100ms |
+| incremental index (1 file) | < 200ms |
+| full rebuild | < 10s |
+
+---
+
+## 10. Governance & History (Git-native)
+
+All governance is handled by Git:
+
+- approvals: PR review + commit history
+- rollback: `git revert`
+- history: `git log .bunner/cards/...`
+
+If stronger governance is required later:
+
+- add an optional append-only `.bunner/events.jsonl` (Git-tracked) as a structured audit stream
+
+---
+
+## 11. Invariants (Minimal set)
+
+Hard rules (errors):
+
+1. `card.key` is globally unique in repo
+2. `card.type` must be in `mcp.card.types` (in `bunner.jsonc`)
+3. no duplicate card file defines the same key
+4. every code-referenced `{type}::key` must exist as a card
+5. every `relations[].target` in frontmatter must exist as a card
+6. `@see` type prefix must match the target card's `type` field
+7. card with status `implemented` must have at least one `@see` code reference
+8. every `relations[].target` type prefix must match the target card's `type` field
+9. every `relations[].type` must be in `mcp.card.relations` (in `bunner.jsonc`)
+
+Soft rules (warnings):
+
+1. card with status `accepted` or `implementing` has no `@see` code references
+2. `depends_on` cycles (traversal uses visited set to prevent infinite loops)
+3. references to `deprecated` cards
+
+---
+
+## 12. Resolved Decisions
+
+| # | Decision | Resolution |
+|---|----------|------------|
+| 1 | Card status set | `draft \| accepted \| implementing \| implemented \| deprecated` |
+| 2 | Relation storage | R1 (frontmatter, outgoing only) to start. Reverse edges auto-generated by indexer. Migrate to R2 if merge conflicts become frequent |
+| 3 | AST engine | `oxc-parser` only. No TypeScript Compiler API |
+| 4 | Code relation depth | Call-level included (imports, calls, extends, implements). injects/provides reserved for future |
+| 5 | Link prefix | `{type}::key` (not fixed `card::` or `spec::`) |
+| 6 | Policy/agent rules | Not stored in cards. Out of scope for card model |
+| 7 | `.tsx` support | Not applicable (backend framework) |
+| 8 | In-code ignore tokens | Not applicable (`@see` is optional; no code-level enforcement to bypass) |
+| 9 | MCP write tools | Required (not deferred). Full CRUD for cards, links, relations |
+| 10 | `parent` field | Removed. Graph/web structure only (typed edges) |
+| 11 | Card↔code links | `@see {type}::key` is optional. Verification is card-centric (not code-centric) |
+| 12 | CI enforcement | Mandatory for: invalid @see targets, implemented cards without code links |
+| 13 | @see enforcement | Optional. Card-centric verification, not code-centric |
+| 14 | Reverse relations | Auto-generated by indexer (`is_reverse` flag). SSOT stores outgoing only |
+| 15 | Code identity | Path-based `entity_key` + `fingerprint` (symbol+kind+signature hash) for move tracking |
+| 16 | Status transitions | User-directed. No automatic AC checking. Agent acts on user instruction |
+| 17 | FTS tokenizer | trigram (for CJK/Unicode support) |
+| 18 | Cycle handling | Visited set in traversal tools. `depends_on` cycles are CI warnings (not errors) |
+| 19 | Code relation extractors | Plugin interface ready. Only pure-AST extractors implemented now |
+| 20 | Config format | `bunner.jsonc` (JSONC). Shared with framework config |
+| 21 | Package structure | CLI package (`packages/cli/`). MCP commands as `bunner mcp` subcommand group |
+| 22 | Framework-shipped cards | Deferred. `bunner mcp` auto-creates required empty structure on first run. Content TBD |
+| 23 | Card type registry | `mcp.card.types` in `bunner.jsonc`. Default: `["spec"]` |
+| 24 | `relations[].type` set | `mcp.card.relations` in `bunner.jsonc`. Default: `["depends_on", "references", "related", "extends", "conflicts"]` |
+| 25 | Verification command | `bunner mcp verify` performs full integrity verification; warns about confirmed cards with no code links |
+| 26 | Agent @see insertion rule | Hardcode `@see` insertion rule in agent instruction files (applied during implementation) |
+| 27 | Manifest format | TypeScript: `export const manifest = ${JSON.stringify(data)} as const;`. Frozen at build time, deleted from memory after bootstrap via null assignment + GC |
+| 28 | SQLite ownership | **MCP-exclusive** — MCP domain is the sole owner of all SQLite operations. `bunner build/dev` do not access SQLite. MCP indexer independently parses card files and code AST to populate the index |
+| 29 | `.bunner/` directory | `cards/` + `build/` (Git-tracked) + `cache/` (gitignored: `index.sqlite` + `owner.lock`). No `schema/` directory — schema versioning is handled by `metadata` table in SQLite |
+| 30 | Owner Election | lock file + PID + signal. **MCP processes only** (build/dev do not participate). First `bunner mcp` process = owner (watch + write), subsequent = reader (signal + read only). Owner death → reader promotes |
+| 31 | WAL mode | `PRAGMA journal_mode = WAL` + `PRAGMA busy_timeout = 5000`. Optimal for single-writer + multi-reader (Owner Election + MCP read tools) |
+| 32 | CLI architecture | Domain-oriented vertical slicing: `compiler/`, `mcp/`, `store/`, `watcher/`, `config/`, `diagnostics/`, `shared/`, `errors/`, `bin/`. No horizontal layering |
+| 33 | Angular CLI patterns | All 8 patterns adopted (Bun-native): declareTool factory, Host abstraction, McpToolContext, SQLite schema versioning, FTS5+bm25, domain-vertical dirs, Zod schemas, shouldRegister |
+| 34 | Design principle | Performance, safety, stability over implementation cost. Complexity is acceptable when it serves these goals |
+| 35 | build/dev duplication | Resolved by domain restructuring — compiler domain unifies analyzer + generator + build/dev orchestration |
+| 36 | Build vs Index separation | `bunner build/dev` = manifest only (no SQLite). `bunner mcp rebuild` = SQLite sync. Complete responsibility separation |
+| 37 | `metadata` table | `metadata(key TEXT PK, value TEXT NOT NULL)` in SQLite. Stores `schema_version`. Code constant `SCHEMA_VERSION` compared on open; mismatch → DROP ALL + rebuild |
+| 38 | `.bunner/schema/` removal | Removed. No separate schema directory needed. DB schema version in `metadata` table, card format handled by backward-compatible parser |
+| 39 | FTS5 auto-sync | External content FTS5 (`content='card'`/`content='code_entity'`, `content_rowid='rowid'`). Trigger-based sync using special `VALUES('delete', ...)` syntax. No data duplication, no manual FTS update needed |
+| 40 | `card_code_link.entity_key` | NOT NULL. File-level `@see` maps to the file's `module:` entity. Ensures referential integrity and simpler JOINs |
+| 41 | `code_relation.type` scope | Current: `imports\|calls\|extends\|implements`. `injects\|provides` reserved for future framework-user features |
+| 42 | CLI naming convention | CRUD standard: `create\|update\|delete\|rename\|status`. CLI and MCP tool names aligned (e.g. `card create` / `card_create`) |
+| 43 | Keyword unification | `tags` + `subjects` unified into `keywords`. Single free-form keyword system for search, filter, and categorization. `card.keywords` (space-separated, denormalized for FTS5 external content column name match) + normalized `keyword` + `card_keyword` tables |
+| 44 | Keyword PK strategy | INTEGER PK (`keyword.id`) + `name TEXT UNIQUE`. ID-based FK in `card_keyword` — keyword rename does not cascade to junction table. Chosen because agents frequently rename keywords |
+| 45 | P0 directory restructure | Pure directory move before any new code. `analyzer/+generator/ → compiler/`, `commands/ → bin/`, empty dirs created. File rename/refactor deferred to each Phase. Git history preserved via pure mv |
+
+## 13. Future Discussion (out of current scope)
+
+Items to discuss in later phases. Recorded here for continuity.
+
+### Architecture / Design
+
+1. **Framework user data accumulation**: How to collect and structure data for framework end-users? What data does the MCP expose to users building apps with bunner?
+2. **Framework-shipped cards expansion**: When to scaffold `system::*` / `adapter::*` cards into user repos? Scaffold (A) vs read from package (B)?
+3. **`system` / `adapter` card types**: When to introduce framework-level (`system::`) and adapter-specific (`adapter::`) card types? (Card type and relation type registries are already config-driven via `mcp.card.types` and `mcp.card.relations`)
+
+### Implementation Details
+
+1. **Glossary / term dictionary**: Project-wide term definitions with aliases. Could extend `keyword` table or be separate `term` table
+2. **YAML frontmatter parser**: Bun-compatible library selection for card parsing
+3. **oxc-parser JSDoc @see extraction**: Integration with existing CLI AST pipeline for `@see {type}::key` parsing
+4. **MCP transport protocol**: stdio vs HTTP selection criteria and configuration
+5. **`card_rename` transaction safety**: Atomicity guarantees when renaming across many files
+
+---
+
+## 14. CLI Domain Architecture
+
+The CLI package uses **domain-oriented vertical slicing**. Each domain owns all its code (no horizontal layers splitting domains).
+
+```
+packages/cli/src/
+  compiler/        # AOT build: AST parsing, module graph, manifest, injector, code gen
+                   #   Does NOT access SQLite. Produces only build artifacts.
+                   #   Contains CodeRelationExtractor implementations (reused by MCP indexer)
+  mcp/             # Card system + indexing: card CRUD, indexing, MCP server, verification
+    card/          #   Card parsing (frontmatter+body), CRUD helpers
+    index/         #   Full/incremental indexing (card, code_entity, relations, FTS5)
+    server/        #   MCP server (stdio), tool registry (declareTool pattern)
+    verify/        #   Integrity verification (invariants §11)
+  store/           # SQLite access layer (used by MCP domain only)
+    index-store.ts #   Schema, connection, WAL, metadata, CRUD operations
+    file-state.ts  #   Incremental indexing (file_state table)
+    interfaces.ts  #   Port interfaces
+  watcher/         # File watching + Owner Election (lock+PID+signal)
+  config/          # bunner.jsonc loading, config resolution (currently in common/, migrated in P8)
+  diagnostics/     # Diagnostic message building/reporting
+  shared/          # Pure utilities (codepoint-compare, glob-scan, write-if-changed)
+  errors/          # Error types
+  bin/             # CLI entry points (bunner build, bunner dev, bunner mcp)
+```
+
+### 14.1 Owner Election
+
+- Scope: **MCP processes only** (`bunner mcp` / `bunner mcp rebuild`). `bunner build/dev` do not participate.
+- Lock file: `.bunner/cache/owner.lock` contains owner PID
+- First `bunner mcp` process = **owner** (watch + SQLite write authority)
+- Subsequent `bunner mcp` processes = **reader** (SQLite read only, signal owner for re-index)
+- Owner death detection: reader checks if PID is alive; promotes if dead
+- Single writer eliminates concurrency hazards at the root cause
+
+### 14.2 Manifest Format
+
+- TypeScript: `export const manifest = ${JSON.stringify(data)} as const;`
+- Output: `.bunner/build/runtime.ts` (Git-tracked)
+- Lifecycle: frozen (`Object.freeze` + `Object.seal`) at build time → consumed during bootstrap → deleted from memory (`null` + GC)
+
+### 14.3 Angular CLI Patterns (Bun-adapted)
+
+All patterns adopted from Angular CLI MCP, adapted for Bun runtime:
+
+1. **declareTool factory** — Tool declaration/registration/filtering separation
+2. **Host abstraction** — OS/FS operations behind interface for testability
+3. **McpToolContext** — Shared context injected into all tools
+4. **SQLite schema versioning** — `metadata(key, value)` table with `schema_version`
+5. **FTS5 + bm25 weighted search** — Column-weighted relevance ranking
+6. **Domain-vertical directory organization** — Related files grouped by domain
+7. **Zod input/output schemas** — Type-safe tool I/O validation
+8. **shouldRegister conditional registration** — Runtime condition checks for tool availability
+
+### 14.4 Implementation Order
+
+| Phase | Domain | Content | Depends On |
+|-------|--------|---------|------------|
+| P0 | (all) | **Directory restructure** (pure mv + import path fix, no file rename/refactor). `analyzer/+generator/ → compiler/`, `commands/ → bin/`, empty dirs: `store/`, `shared/`, `mcp/{card,index,server,verify}/`. Git history preserved via pure move. Tests must pass after each commit | — |
+| P1 | `store/` | SQLite schema (§5.2), connection, WAL, file_state, port interfaces | config (done) |
+| P2 | `compiler/` | CodeRelationExtractor implementations for MCP indexer reuse. No SQLite access | P0 |
+| P3 | `mcp/card/` | Card file parsing (frontmatter+body), CRUD helpers | config |
+| P4 | `mcp/index/` | Full/incremental indexing (card, card_relation, card_code_link, code_entity, code_relation), FTS5, file_state | store/, mcp/card/, compiler/ |
+| P5 | `mcp/verify/` | Invariants §11 verification (9 hard + 3 soft rules) | store/, mcp/card/ |
+| P6 | `watcher/` | Owner Election (lock+PID+signal), incremental re-index trigger | store/ |
+| P7 | `mcp/server/` | MCP server (stdio), tool registry (declareTool), read/write tools | store/, mcp/card/, mcp/index/, mcp/verify/ |
+| P8 | `bin/` | CLI entry restructure: `bunner build`, `bunner dev`, `bunner mcp`. `common/ → config/` migration | all |
+
+P0 is a prerequisite for all phases. P1 and P3 are independent and can proceed in parallel after P0. P6 is independent after P1.
+
+Each phase follows **strict TDD**: write ALL tests first → RED → implement → GREEN.
+
+---
+
+## Appendix: Why this aligns with vibe-coding
+
+- Agent reads become deterministic and fast (SQLite index)
+- Human collaboration remains Git-native
+- Complexity is concentrated in the indexer (single place), not in distributed constraints
+- MCP write tools enable fully MCP-driven development (no CLI required)
+- Card type system (`{type}::key`) supports framework rules, adapter rules, and user specs in a unified model
+- Card-centric verification allows exploratory coding (code first, link later) while ensuring confirmed specs have implementations
+
+---
+
+## Appendix: Non-Guarantee Area (Static-only Limits)
+
+이 문서에서 말하는 `compiler/`의 CodeRelationExtractor(= pure AST 기반)는 **정적 분석만으로** 관계를 추출한다. 따라서 아래 케이스들은 “구멍”이 아니라 **정의상 보장 불가 영역**이다.
+
+1. **비리터럴 dynamic import**: `import(expr)`에서 `expr`가 문자열 리터럴이 아니면 대상 모듈을 결정할 수 없다.
+2. **계산된 멤버 접근/호출**: `obj[expr]()` / `obj[expr]`는 `expr` 평가 결과에 따라 대상이 달라져 정적으로 확정 불가.
+3. **런타임 재바인딩/몽키패치**: 함수/메서드가 재할당되거나 프로토타입이 변경되면 “호출 → 실제 대상” 매핑이 런타임에 바뀐다.
+4. **리플렉션/메타프로그래밍**: `Reflect`, `Proxy`, 데코레이터/메타데이터 기반 라우팅 등은 AST만으로 완전 추적 불가.
+5. **FS/툴체인 의존 해석**: `tsconfig paths`, 확장자/인덱스 규칙, 번들러 리졸브 규칙 등은 파일시스템/설정에 의존하므로 P2의 “no FS / no SQLite” 제약 하에서 완전해질 수 없다.
+
+### Guarantee modes
+
+정적 추출 결과의 신뢰도/완전성은 모드로 정의한다.
+
+1. **Sound mode (no false positives)**
+  - 확실히 판별 가능한 관계만 기록한다.
+  - 장점: 잘못된 엣지(거짓 양성)를 최소화.
+  - 단점: 누락(거짓 음성)이 늘 수 있음.
+
+2. **Complete-ish mode (best-effort + meta_json)**
+  - 가능한 많이 엣지를 생성하되, 애매한 경우 `meta_json`에 “best-effort/불확실성”을 명시한다.
+  - 장점: 누락(거짓 음성)을 줄여 탐색/리트리벌에 유리.
+  - 단점: 일부 엣지는 런타임과 불일치할 수 있음(거짓 양성 가능).
+
+현재 계획은 인덱서의 탐색 성능/리트리벌을 우선하여 **Complete-ish**를 기본으로 한다.

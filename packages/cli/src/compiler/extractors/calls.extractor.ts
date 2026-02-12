@@ -1,12 +1,13 @@
 import type { Program } from 'oxc-parser';
 import type { CodeRelation, CodeRelationExtractor } from '../interfaces';
-import { buildImportMap, getQualifiedName, getSymbolEntityKey } from './utils';
+import { buildImportMap, getModuleEntityKey, getQualifiedName, getSymbolEntityKey } from './utils';
 
 export const CallsExtractor: CodeRelationExtractor = {
   name: 'calls',
   extract(ast: Program, filePath: string): CodeRelation[] {
     const relations: CodeRelation[] = [];
     const importMap = buildImportMap(ast, filePath);
+        const moduleKey = getModuleEntityKey(filePath);
         const functionStack: string[] = [];
         const classStack: string[] = [];
 
@@ -41,6 +42,9 @@ export const CallsExtractor: CodeRelationExtractor = {
             const importedNamespace = importMap.get(name.root);
             if (importedNamespace && importedNamespace.importedName === '*') {
                 const last = name.parts[name.parts.length - 1];
+                if (!last) {
+                    return null;
+                }
                 return {
                     dstEntityKey: getSymbolEntityKey(importedNamespace.path, last),
                     meta: { resolution: 'namespace', callee: name.full },
@@ -113,28 +117,40 @@ export const CallsExtractor: CodeRelationExtractor = {
                 }
             }
 
-            const srcKey = currentSrcEntityKey();
+            const symbolSrcKey = currentSrcEntityKey();
+            const srcKey = symbolSrcKey ?? moduleKey;
+            const isModuleScope = symbolSrcKey === null;
 
-            if (node.type === 'CallExpression' && srcKey) {
+            if (node.type === 'CallExpression') {
                 const resolved = resolveCallee(node.callee);
                 if (resolved) {
+                    const meta = {
+                        ...(resolved.meta ?? {}),
+                        ...(isModuleScope ? { scope: 'module' } : {}),
+                    };
+                    const metaJson = Object.keys(meta).length > 0 ? JSON.stringify(meta) : null;
                     relations.push({
                         type: 'calls',
                         srcEntityKey: srcKey,
                         dstEntityKey: resolved.dstEntityKey,
-                        metaJson: resolved.meta ? JSON.stringify(resolved.meta) : undefined,
+                        ...(metaJson ? { metaJson } : {}),
                     });
                 }
             }
 
-            if (node.type === 'NewExpression' && srcKey) {
+            if (node.type === 'NewExpression') {
                 const resolved = resolveCallee(node.callee);
                 if (resolved) {
+                    const meta = {
+                        ...(resolved.meta ?? {}),
+                        isNew: true,
+                        ...(isModuleScope ? { scope: 'module' } : {}),
+                    };
                     relations.push({
                         type: 'calls',
                         srcEntityKey: srcKey,
                         dstEntityKey: resolved.dstEntityKey,
-                        metaJson: JSON.stringify({ ...(resolved.meta ?? {}), isNew: true }),
+                        metaJson: JSON.stringify(meta),
                     });
                 }
             }

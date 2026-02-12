@@ -46,6 +46,9 @@ export const ImplementsExtractor: CodeRelationExtractor = {
                                         const importedNamespace = importMap.get(name.root);
                                         if (importedNamespace && importedNamespace.importedName === '*') {
                                             const last = name.parts[name.parts.length - 1];
+                                            if (!last) {
+                                                continue;
+                                            }
                                             relations.push({
                                                 type: 'implements',
                                                 srcEntityKey: srcKey,
