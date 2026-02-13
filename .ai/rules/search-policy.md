@@ -43,6 +43,23 @@ Any decision based on external information requires **cross-check from ≥ 2 sou
 6. Bun/Node API behavior, options, or defaults
 7. Native library/module selection — Bun alternative check
 
+## Required Output Block (hard gate)
+
+When this rule triggers, the response MUST contain an `[Evidence]` block **before any decision based on external information**.
+Absence of this block = evidence not gathered = decision is **prohibited**.
+
+```
+[Evidence]
+- Question: (what external fact is needed)
+- Source 1: (priority level + URL/tool + result summary)
+- Source 2: (priority level + URL/tool + result summary)
+- Conclusion: (factual answer derived from sources)
+```
+
+- Both sources are mandatory (dual-source rule).
+- If only 1 source is available, state why the second failed and **wait for user guidance**.
+- `Conclusion` must be a factual statement, not inference.
+
 ## On Failure
 
 Lookup failure → report "tool name + information needed" to user and wait.

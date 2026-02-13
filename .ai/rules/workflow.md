@@ -23,6 +23,28 @@ Before modifying code, **assess impact scope first:**
 4. `ㅇㅇ` approval → begin implementation.
 5. Implementation complete → confirm GREEN.
 
+### Stage Gate Blocks
+
+Each stage transition requires its gate block in the response. **No gate block → no transition.**
+
+**After step 3 (RED confirmed):**
+```
+[RED Checkpoint]
+- Test file(s): (paths)
+- Execution result: (fail count + key error messages)
+- Status: RED confirmed
+```
+Without this block → implementation code is **prohibited**.
+
+**After step 5 (GREEN confirmed):**
+```
+[GREEN Checkpoint]
+- Test file(s): (paths)
+- Execution result: (pass count)
+- Status: GREEN confirmed
+```
+Without this block → commit proposal is **prohibited**.
+
 ## Incremental Test Run
 
 - After each file modification, **immediately run related tests.**

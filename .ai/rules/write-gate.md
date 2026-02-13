@@ -38,6 +38,20 @@ Every technical judgment must be backed by one of:
 **Memory, experience, inference, "probably" → prohibited as evidence.**
 If evidence cannot be obtained → report "unknown" and wait.
 
+### Required Output Block (hard gate)
+
+When making a technical judgment, the response MUST contain:
+
+```
+[Judgment Evidence]
+- Claim: (the technical judgment being made)
+- Evidence type: (codebase search / external doc / test result)
+- Evidence detail: (tool used + what was found, or test output summary)
+```
+
+Absence of this block when a technical judgment is made = policy violation.
+This applies to ANY non-trivial technical choice: API selection, architecture decision, "this is safe", "this won't break", etc.
+
 ## No Independent Judgment
 
 Must ask the user when:

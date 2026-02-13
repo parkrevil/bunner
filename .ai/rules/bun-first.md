@@ -21,6 +21,25 @@ No exception for size or perceived importance. A one-liner utility still require
 
 **Selecting Node/npm without search verification is a policy violation.**
 
+## Required Output Block (hard gate)
+
+When this rule triggers, the response MUST contain the following block **before any code that uses the chosen API**.
+Absence of this block = decision not made = code using Node/npm/custom is **prohibited**.
+
+```
+[Bun-first Check]
+- API/module considered: (e.g., node:url fileURLToPath)
+- Bun alternative searched: (yes/no)
+- Source 1: (URL or tool + result summary)
+- Source 2: (URL or tool + result summary)
+- Bun alternative exists: (yes → use it / no → justify)
+- Decision: (Bun API name / Node API name + reason)
+```
+
+- Both `Source 1` and `Source 2` must be filled (dual-source per `search-policy.md`).
+- If Bun alternative exists → `Decision` MUST be the Bun API. No override allowed.
+- If Bun alternative absent → `ㅇㅇ` approval required before proceeding.
+
 ## Node.js Dependency Minimization
 
 - Do not replicate existing Node.js patterns in new code if a Bun alternative exists.

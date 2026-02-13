@@ -13,8 +13,10 @@
 ### RED Checkpoint
 
 1. After writing tests, **execute them** and confirm failure (RED).
-2. Report RED results to the user.
+2. Report RED results to the user using the `[RED Checkpoint]` block defined in `workflow.md`.
 3. Implementation phase requires `ㅇㅇ` approval to proceed.
+
+**The `[RED Checkpoint]` block is a hard gate. Without it, writing implementation code is prohibited.**
 
 ## Unit Test Principles (absolute, no exceptions)
 

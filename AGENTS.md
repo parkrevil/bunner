@@ -30,6 +30,21 @@ Bunner — Bun-based monorepo.
 Code, comments, variable names, commit messages → English allowed.
 Technical terms: English + Korean ("엔티티(entity)", "tombstone", etc.).
 
+## Response Protocol (every response, no exceptions)
+
+Every response MUST begin with a `[Rule Check]` block **before any other content**.
+A response without this block at the top is itself a policy violation.
+
+```
+[Rule Check]
+- Triggers: (list all matching triggers from the routing table below)
+- Rules loaded: (list every rule file actually read)
+- Gates pending: (list any gates that must be passed before acting)
+```
+
+- If `Gates pending` is non-empty, **no action is permitted** until each gate is satisfied (evidence block produced, approval obtained, etc.).
+- After all gates pass, proceed with the response body.
+
 ## Rules Routing
 
 Before acting, identify which triggers apply. Read **every** matching rule file.
@@ -43,3 +58,11 @@ Before acting, identify which triggers apply. Read **every** matching rule file.
 | Choosing runtime, library, or native API | `.ai/rules/bun-first.md` |
 
 Multiple triggers may fire at once — read all applicable files.
+
+## Format Gate Principle
+
+**"No format block → no action."**
+
+Each rule file defines required output blocks (e.g., `[Bun-first Check]`, `[Evidence]`, `[RED Checkpoint]`).
+If a rule applies but its required block is absent from the response, the corresponding action is **prohibited**.
+This is not a suggestion — it is a hard gate.
