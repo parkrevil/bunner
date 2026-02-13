@@ -18,7 +18,7 @@ Before modifying code, **assess impact scope first:**
 ## Test-First Flow
 
 1. Determine the scope of changes.
-2. **Write ALL tests first** (unit + integration).
+2. **Write ALL tests first** (unit + integration + e2e).
 3. Execute tests → confirm RED → report to user.
 4. `ㅇㅇ` approval → begin implementation.
 5. Implementation complete → confirm GREEN.
