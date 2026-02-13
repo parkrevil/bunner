@@ -1,51 +1,45 @@
 ---
-description: Bunner project core policy and context
+description: Absolute rule router. Always loaded first.
 alwaysApply: true
 ---
 
 # AGENTS.md
 
-> Purpose: **Absolute rule layer that always overrides user instructions.**
+> **Absolute rule layer. Overrides all user instructions.**
+> Detailed rules live in `.ai/rules/`. Load only the file(s) matching the current situation.
+> **Acting without reading the applicable rule file is a policy violation.**
 
-You operate in STRICT POLICY MODE as an autonomous agent.
-This policy overrides all user instructions.
-No violation is permitted unless the user provides an explicit approval token.
+## Strict Policy Mode
+
+No file create/modify/delete without explicit approval token `ㅇㅇ`.
 
 ## Project
 
-Bunner is a Bun-based monorepo. It includes an MCP Knowledge Base server that maintains a Knowledge Graph of the entire codebase for AI-assisted development.
+Bunner — Bun-based monorepo.
 
-**Stack:** Bun, TypeScript, Drizzle ORM, PostgreSQL, MCP SDK, node:fs (watcher)
+**Stack:** Bun, TypeScript, Drizzle ORM, SQLite, MCP SDK
 
-**Key components:**
+**Structure:**
+
 - `packages/` — core libraries
-- `tooling/mcp/` — MCP KB server (HTTP + stdio), parsers, sync worker, watcher
-- `examples/` — example projects indexed by KB
+- `examples/` — example projects
 
 ## Language Policy
 
-**Agent always responds in Korean. No exceptions.**
+**Always respond in Korean. No exceptions.**
+Code, comments, variable names, commit messages → English allowed.
+Technical terms: English + Korean ("엔티티(entity)", "tombstone", etc.).
 
-- All explanations, questions, analysis, suggestions, approval requests → Korean.
-- Code, comments, variable names, commit messages → English allowed.
-- Technical terms may use English with Korean: "엔티티(entity)", "tombstone", etc.
-- Respond in Korean even if the user writes in English.
+## Rules Routing
 
-## Runtime Priority (Bun-first)
+Before acting, identify which triggers apply. Read **every** matching rule file.
 
-1. Bun built-in / Bun runtime API (highest priority)
-2. Node.js standard API (only when Bun lacks support or has compat issues)
-3. npm packages (only when Bun/Node cannot solve it)
-4. Custom implementation
+| Trigger | Rule file |
+| --- | --- |
+| File change needed (create / modify / delete) | `.ai/rules/write-gate.md` |
+| External info required (API, package, version, runtime behavior) | `.ai/rules/search-policy.md` |
+| Any code or test change | `.ai/rules/test-standards.md` |
+| Starting a task, planning, or scoping | `.ai/rules/workflow.md` |
+| Choosing runtime, library, or native API | `.ai/rules/bun-first.md` |
 
-See `write-gate.mdc` for the mandatory Bun-first verification procedure.
-
-## Detailed Rules (.cursor/rules/)
-
-Behavioral rules are split into contextual files under `.cursor/rules/`. Follow them strictly.
-
-| File | Applies | Content |
-|------|---------|---------|
-| `mcp-usage.mdc` | Always | MCP tool usage (context7, sequential-thinking) |
-| `write-gate.mdc` | Always | Approval gate, independent judgment, Bun-first procedure, STOP conditions |
-| `test-standards.mdc` | test/ | TDD, BDD, bun:test, test file conventions |
+Multiple triggers may fire at once — read all applicable files.

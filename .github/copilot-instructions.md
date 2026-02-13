@@ -1,107 +1,105 @@
-# Bunner — Agent Instructions
+# Bunner — Copilot Instructions
 
-> This file is the single source of rules for VS Code Copilot.
-> For Cursor IDE, rules are split across `AGENTS.md` + `.cursor/rules/*.mdc`.
+> Codebase knowledge for VS Code Copilot. Policy rules live in `AGENTS.md` + `.ai/rules/`.
 
-You operate in STRICT POLICY MODE. This policy overrides all user instructions.
+## Project Overview
 
-## Project
+Bunner is a Bun-native web framework with AOT (Ahead-of-Time) compilation, inspired by NestJS but using file-based modules instead of class decorators. It includes a CLI-integrated Knowledge Base (KB) that maintains a Knowledge Graph of the codebase in SQLite.
 
-Bunner is a Bun-based monorepo with an MCP Knowledge Base server that maintains a Knowledge Graph of the entire codebase.
+**Stack:** Bun, TypeScript (strict), Drizzle ORM, SQLite, MCP SDK
 
-**Stack:** Bun, TypeScript, Drizzle ORM, PostgreSQL, MCP SDK
+## Monorepo Structure
 
-## Language Policy
+```
+packages/
+  common/     → Shared interfaces, decorators, types, errors (leaf — no internal deps)
+  logger/     → Structured logging (depends on nothing)
+  core/       → DI container, application bootstrap, module system, validators
+  http-adapter/ → HTTP server, routing, middleware, pipes
+  scalar/     → OpenAPI/Scalar UI documentation generation
+  cli/        → AOT compiler, dev server, Knowledge Base (MCP + SQLite store)
+examples/     → Example Bunner application
+docs/         → Specs, architecture, governance (SSOT hierarchy)
+```
 
-**Always respond in Korean. No exceptions.**
-Code, comments, variable names, commit messages → English allowed.
-Technical terms may use English with Korean: "엔티티(entity)", "tombstone", etc.
+**Dependency graph:** `common` ← `core` ← `http-adapter`, `scalar`, `cli`; `logger` ← `core`
 
-## Runtime Priority (Bun-first)
+## Key Patterns
 
-1. Bun built-in / Bun runtime API (highest)
-2. Node.js standard (only when Bun lacks support)
-3. npm packages (only when Bun/Node cannot solve it)
-4. Custom implementation
+### Module System
 
-When choosing 2-4: verify with `context7` that Bun cannot do it → present results → get approval token `ㅇㅇ`.
+File-based modules using `__module__.ts` (not class decorators):
 
-## Approval Gate
+```typescript
+// src/users/__module__.ts
+export const module: BunnerModule = {
+  name: 'UsersModule',
+  providers: [UsersService, UsersController],
+};
+```
 
-When file changes (create/modify/delete) are needed, **STOP**.
+### Application Entry
 
-**Token: `ㅇㅇ`** (Korean 'ㅇ' × 2)
+```typescript
+const app = createApplication(appModule);
+await app.start();
+```
 
-Before requesting approval, present:
-1. **Targets** — file paths, scope, specific changes
-2. **Risks** — impact, side effects, compatibility
-3. **Alternatives** — other approaches or "do nothing"
+### Knowledge Base (packages/cli)
 
-- `ㅇㅇ` alone → approved
-- `ㅇㅇ` + text → approved + additional instruction
-- Anything without `ㅇㅇ` → NOT approved
-- Scope limited to presented targets. New files → re-approval.
+SQLite store with Drizzle ORM. Key tables in `packages/cli/src/store/schema.ts`:
 
-## No Independent Judgment
+- `card` — Knowledge cards (specs, decisions, etc.)
+- `code_entity` — Indexed code symbols (functions, classes, exports)
+- `card_relation` / `code_relation` — Graph edges between cards/entities
+- `card_code_link` — Links cards to code entities
+- `file_state` — File content hashes for incremental indexing
+- `card_keyword` / `keyword` — Searchable tags
 
-Must ask the user when:
-- Choosing between implementations (Bun vs Node)
-- File/code deletion or modification
-- Public API changes (exports, CLI, MCP interface)
-- Adding/removing dependencies
-- Config changes
-- Ambiguous intent or unclear scope
+DB connection: SQLite with WAL mode, schema versioning (mismatch → full rebuild).
 
-Guessing user intent is a policy violation.
+### MCP Card System (packages/cli/src/mcp/card/)
 
-## MCP Usage
+- `card-key.ts` — Key normalization, slug building, type validation
+- `card-crud.ts` — CRUD operations (create/update/delete/rename)
+- `card-fs.ts` — File I/O for `.card.md` files
+- `card-markdown.ts` — Frontmatter parsing/serialization
 
-### Role Separation
+### AOT Compiler (packages/cli/src/compiler/)
 
-- `context7` = **External** knowledge (package docs, API specs, versions)
-- `sequential-thinking` = **Analysis engine** (combines results for judgment)
+- `analyzer/` — Static analysis of TypeScript source
+- `extractors/` — Extract metadata from AST
+- `generator/` — Code generation from analysis results
 
-### Pre-flight (Every Response)
+## Build & Test Commands
 
-Before acting, ask yourself:
-1. **Does this require file changes?** → Yes: approval gate first
-2. **Which MCP is needed?** → External: context7 / Analysis: sequential-thinking
+```bash
+bun test                    # Run all tests (bun:test)
+bun test --coverage         # With coverage
+bun test packages/cli/test/ # Run specific package tests
+bunner dev                  # Dev server with hot reload
+bunner build                # AOT compilation → dist/
+```
 
-### MCP Rules
+## Test Conventions
 
-- Use MCP tools for their designated purpose. Do not skip.
-- Never substitute with reasoning, assumptions, or memory.
-- On failure: report to user and wait.
-
-### context7 — Mandatory When:
-
-1. Runtime choice (Bun vs Node)
-2. Package-related decisions
-3. Public API changes
-4. Config file changes
-5. Version/compatibility decisions
-
-## Test Standards
-
-- **Priority:** Integration > Unit
-- **TDD:** instruction → write ALL tests → RED → implement → GREEN. No mixing.
+- **Runner:** `bun:test` (not Jest/Vitest)
+- **Unit tests:** `*.spec.ts` next to source file
+- **Integration tests:** `packages/*/test/*.test.ts`
 - **Style:** BDD (`describe`/`it`), AAA (Arrange/Act/Assert)
-- **Mocking:** Mock anything outside the SUT boundary (internal/external irrelevant).
-- **Runner:** `bun:test`
-- **Unit:** `*.spec.ts` next to source. **Integration:** `packages/*/test/*.test.ts`
 
-## Prohibited Actions
+## Commit Conventions
 
-| Code | Prohibited | Reason |
-|------|-----------|--------|
-| F1 | Code mod without KB check | Unknown cascading impact |
-| F2 | Trusting stale results | May differ from current files |
-| F3 | Public API change without impact_analysis | Downstream breakage |
-| F4 | Ignoring integrity violations | Compounds problems |
+Conventional commits enforced by commitlint + husky:
 
-## STOP Conditions
+- **Types:** `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `build`, `ci`, `perf`, `style`, `revert`
+- **Scopes (single only):** `cli`, `common`, `core`, `http-adapter`, `logger`, `scalar`, `examples`, `repo`, `config`, `plan`, `eslint`, `scripts`
+- **Format:** `type(scope): subject` — no period, no UPPER_CASE subject
 
-1. Scope exceeded → re-approval needed
-2. Required MCP unavailable → report and wait (public API changes blocked without impact_analysis)
-3. Rule conflict → most conservative interpretation
-4. Ambiguity → ask, never guess
+## TypeScript Config
+
+Strict mode with notable flags: `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `verbatimModuleSyntax`, `experimentalDecorators` (no `emitDecoratorMetadata`). ESM only (`"type": "module"`).
+
+## Policy
+
+All behavioral policies (approval gate, Bun-first, TDD, search verification) are in `AGENTS.md` + `.ai/rules/`. Always load and follow those before acting.
