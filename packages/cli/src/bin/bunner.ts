@@ -5,6 +5,7 @@ import type { CommandOptions } from './types';
 
 import { dev } from './dev.command';
 import { build } from './build.command';
+import { mcp } from './mcp.command';
 import { buildDiagnostic, reportDiagnostics } from '../diagnostics';
 
 const { positionals, values } = parseArgs({
@@ -24,6 +25,7 @@ const printUsage = (): void => {
   console.info('Commands:');
   console.info('  dev    Generate AOT artifacts and watch');
   console.info('  build  Generate build output');
+  console.info('  mcp    MCP tools (verify)');
   console.info('Options:');
   console.info('  --profile <minimal|standard|full>');
 };
@@ -61,6 +63,9 @@ try {
       break;
     case 'build':
       await build(commandOptions);
+      break;
+    case 'mcp':
+      await mcp(positionals.slice(1), commandOptions);
       break;
     case undefined:
       reportInvalidCommand(command);
