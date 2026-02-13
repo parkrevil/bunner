@@ -429,7 +429,8 @@ This prevents ambiguity: any key containing `::` is a card, any key with single 
 **Fingerprint for move tracking**:
 - `fingerprint` = hash of (symbol_name + kind + signature)
 - When a file moves, the indexer matches old entities to new entities by fingerprint
-- Match found → update `entity_key`, preserve `code_relation` edges
+- **Safety-first (zero false positives):** retarget only when fingerprint match is **unique 1:1** (single old ↔ single new). Ambiguous matches are skipped.
+- Match found → retarget `code_relation` (src/dst) and `card_code_link.entity_key` to the new `entity_key`, then delete the old entity row
 - No match → delete old, create new
 
 ---
@@ -457,6 +458,8 @@ The MCP domain is the sole owner of SQLite indexing. `bunner build/dev` produce 
 - If a code file changes: update `code_entity` + `code_relation` + `card_code_link` rows from that file
 - FTS5 external content tables are auto-synchronized via triggers (no manual update needed)
 - File move detection: compare fingerprints of deleted entities with new entities to preserve relations
+  - **Conservative retargeting:** only 1:1 fingerprint matches are retargeted (otherwise skip)
+  - Retarget scope: `code_relation` (src/dst) + `card_code_link.entity_key` (best-effort)
 
 ### 6.3 Data flow
 
