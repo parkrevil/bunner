@@ -2,6 +2,8 @@ import type { ResolvedBunnerConfig } from '../../common/interfaces';
 
 import { join } from 'path';
 
+import { bunnerCardsGlobRel } from '../../common';
+
 import { readCardFile } from '../card/card-fs';
 
 type Severity = 'error' | 'warning';
@@ -93,7 +95,7 @@ export async function verifyProject(input: VerifyProjectInput): Promise<VerifyPr
   const sourceDirRel = normalizeSourceDirRel(config.sourceDir);
   const excludeSet = await buildExcludeSet(projectRoot, config.mcp.exclude);
 
-  const cardPathsRel = (await scanGlobRel(projectRoot, '.bunner/cards/**/*.card.md')).filter((p) => !excludeSet.has(p));
+  const cardPathsRel = (await scanGlobRel(projectRoot, bunnerCardsGlobRel())).filter((p) => !excludeSet.has(p));
   const codePathsRel = (await scanGlobRel(projectRoot, `${sourceDirRel}/**/*.ts`)).filter((p) => !excludeSet.has(p));
 
   const errors: VerifyIssue[] = [];

@@ -6,7 +6,15 @@ import type { CollectedClass, CommandOptions } from './types';
 
 import { AdapterSpecResolver, AstParser, ModuleGraph, type FileAnalysis } from '../compiler/analyzer';
 import { validateCreateApplication } from '../compiler/analyzer/validation';
-import { ConfigLoader, ConfigLoadError, compareCodePoint, scanGlobSorted, writeIfChanged } from '../common';
+import {
+  bunnerDirPath,
+  bunnerTempDirPath,
+  ConfigLoader,
+  ConfigLoadError,
+  compareCodePoint,
+  scanGlobSorted,
+  writeIfChanged,
+} from '../common';
 import { buildDiagnostic, DiagnosticReportError, reportDiagnostics } from '../diagnostics';
 import { EntryGenerator, ManifestGenerator } from '../compiler/generator';
 
@@ -21,8 +29,8 @@ export async function build(commandOptions?: CommandOptions) {
     const projectRoot = process.cwd();
     const srcDir = resolve(projectRoot, config.sourceDir);
     const outDir = resolve(projectRoot, 'dist');
-    const bunnerDir = resolve(projectRoot, '.bunner');
-    const buildTempDir = resolve(outDir, '.bunner-temp');
+    const bunnerDir = bunnerDirPath(projectRoot);
+    const buildTempDir = bunnerTempDirPath(outDir);
 
     console.info(`📂 Project Root: ${projectRoot}`);
     console.info(`📂 Source Dir: ${srcDir}`);
@@ -147,11 +155,8 @@ export async function build(commandOptions?: CommandOptions) {
 
           if (resolvedPath && !visited.has(resolvedPath)) {
             if (!resolvedPath.endsWith('.d.ts') && resolvedPath.endsWith('.ts')) {
-              const nodeModulesSegment = ['node', 'modules'].join('_');
-              const typesSegment = ['@', 'types'].join('');
-              const typesPath = `/${nodeModulesSegment}/${typesSegment}/`;
-
-              if (resolvedPath.includes(typesPath)) {
+              const normalizedPath = resolvedPath.replaceAll('\\', '/');
+              if (normalizedPath.includes('/node_modules/@types/')) {
                 continue;
               }
 

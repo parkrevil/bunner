@@ -6,7 +6,7 @@ import type { CommandOptions } from './types';
 
 import { AdapterSpecResolver, AstParser, ModuleGraph, type FileAnalysis } from '../compiler/analyzer';
 import { validateCreateApplication } from '../compiler/analyzer/validation';
-import { ConfigLoader, ConfigLoadError, scanGlobSorted, writeIfChanged } from '../common';
+import { bunnerDirPath, ConfigLoader, ConfigLoadError, scanGlobSorted, writeIfChanged } from '../common';
 import { buildDiagnostic, DiagnosticReportError, reportDiagnostics } from '../diagnostics';
 import { ManifestGenerator } from '../compiler/generator';
 import { ProjectWatcher } from '../watcher';
@@ -22,7 +22,7 @@ export async function dev(commandOptions?: CommandOptions) {
     const buildProfile = commandOptions?.profile ?? 'full';
     const projectRoot = process.cwd();
     const srcDir = resolve(projectRoot, config.sourceDir);
-    const outDir = resolve(projectRoot, '.bunner');
+    const outDir = bunnerDirPath(projectRoot);
     const parser = new AstParser();
     const adapterSpecResolver = new AdapterSpecResolver();
     const fileCache = new Map<string, FileAnalysis>();
@@ -175,11 +175,10 @@ export async function dev(commandOptions?: CommandOptions) {
 
     const projectWatcher = new ProjectWatcher(srcDir);
 
-    projectWatcher.start(event => {
+    await projectWatcher.start(event => {
       void (async () => {
         const filename = event.filename;
-
-        if (typeof filename !== 'string' || filename.length === 0) {
+        if (!filename) {
           return;
         }
 
@@ -224,7 +223,7 @@ export async function dev(commandOptions?: CommandOptions) {
     });
 
     const onSigint = () => {
-      projectWatcher.close();
+      void projectWatcher.close();
     };
 
     process.on('SIGINT', onSigint);

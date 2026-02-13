@@ -7,6 +7,7 @@ import * as fsp from 'node:fs/promises';
 
 import * as crud from './card-crud';
 import * as fs from './card-fs';
+import { bunnerCardMarkdownPath } from '../../common/bunner-paths';
 
 describe('mcp/card — card CRUD (unit)', () => {
   const config: ResolvedBunnerConfig = {
@@ -52,7 +53,7 @@ describe('mcp/card — card CRUD (unit)', () => {
     renameSpy = spyOn(fsp, 'rename').mockResolvedValue(undefined as any);
 
     readCardFileSpy = spyOn(fs, 'readCardFile').mockResolvedValue({
-      filePath: '/repo/.bunner/cards/auth/login.card.md',
+      filePath: bunnerCardMarkdownPath('/repo', 'auth/login'),
       frontmatter: {
         key: 'spec::auth/login',
         type: 'spec',
@@ -75,7 +76,7 @@ describe('mcp/card — card CRUD (unit)', () => {
 
   it('cardCreate validates type and writes file', async () => {
     // Arrange
-    setExists('/repo/.bunner/cards/auth/login.card.md', false);
+    setExists(bunnerCardMarkdownPath('/repo', 'auth/login'), false);
 
     // Act
     const out = await crud.cardCreate({
@@ -90,7 +91,7 @@ describe('mcp/card — card CRUD (unit)', () => {
 
     // Assert
     expect(out.fullKey).toBe('spec::auth/login');
-    expect(out.filePath).toBe('/repo/.bunner/cards/auth/login.card.md');
+    expect(out.filePath).toBe(bunnerCardMarkdownPath('/repo', 'auth/login'));
     expect(mkdirSpy!).toHaveBeenCalledTimes(1);
     expect(writeCardFileSpy!).toHaveBeenCalledTimes(1);
   });
@@ -111,7 +112,7 @@ describe('mcp/card — card CRUD (unit)', () => {
   it('cardUpdate updates summary/body/keywords', async () => {
     // Arrange
     readCardFileSpy!.mockResolvedValueOnce({
-      filePath: '/repo/.bunner/cards/auth/login.card.md',
+      filePath: bunnerCardMarkdownPath('/repo', 'auth/login'),
       frontmatter: { key: 'spec::auth/login', type: 'spec', summary: 'Old', status: 'draft' },
       body: 'OldBody\n',
     });
@@ -132,24 +133,24 @@ describe('mcp/card — card CRUD (unit)', () => {
 
   it('cardDelete deletes when exists', async () => {
     // Arrange
-    setExists('/repo/.bunner/cards/auth/login.card.md', true);
+    setExists(bunnerCardMarkdownPath('/repo', 'auth/login'), true);
 
     // Act
     const out = await crud.cardDelete('/repo', 'spec::auth/login');
 
     // Assert
-    expect(out.filePath).toBe('/repo/.bunner/cards/auth/login.card.md');
-    expect(bunFileSpy!).toHaveBeenCalledWith('/repo/.bunner/cards/auth/login.card.md');
-    expect(await Bun.file('/repo/.bunner/cards/auth/login.card.md').exists()).toBe(false);
+    expect(out.filePath).toBe(bunnerCardMarkdownPath('/repo', 'auth/login'));
+    expect(bunFileSpy!).toHaveBeenCalledWith(bunnerCardMarkdownPath('/repo', 'auth/login'));
+    expect(await Bun.file(bunnerCardMarkdownPath('/repo', 'auth/login')).exists()).toBe(false);
   });
 
   it('cardRename renames file and updates key', async () => {
     // Arrange
-    setExists('/repo/.bunner/cards/auth/login.card.md', true);
-    setExists('/repo/.bunner/cards/auth/new.card.md', false);
+    setExists(bunnerCardMarkdownPath('/repo', 'auth/login'), true);
+    setExists(bunnerCardMarkdownPath('/repo', 'auth/new'), false);
 
     readCardFileSpy!.mockResolvedValueOnce({
-      filePath: '/repo/.bunner/cards/auth/new.card.md',
+      filePath: bunnerCardMarkdownPath('/repo', 'auth/new'),
       frontmatter: { key: 'spec::auth/login', type: 'spec', summary: 'S', status: 'draft' },
       body: 'Body\n',
     });

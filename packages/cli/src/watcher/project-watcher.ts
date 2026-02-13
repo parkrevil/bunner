@@ -1,46 +1,54 @@
-import { watch } from 'fs';
-import { isAbsolute, relative } from 'path';
+import { relative } from 'path';
+
+import * as watcher from '@parcel/watcher';
+
+import { BUNNER_DIRNAME } from '../common/bunner-paths';
 
 import type { FileChangePayload } from './interfaces';
 
+export const PROJECT_WATCHER_IGNORE_GLOBS: readonly string[] = [
+  '**/.git/**',
+  `**/${BUNNER_DIRNAME}/**`,
+  '**/dist/**',
+  '**/node_modules/**',
+];
+
 export class ProjectWatcher {
-  private watcher: ReturnType<typeof watch> | undefined;
+  private subscription: watcher.AsyncSubscription | undefined;
 
   constructor(private readonly rootPath: string) {}
 
-  start(onChange: (event: FileChangePayload) => void) {
+  async start(onChange: (event: FileChangePayload) => void) {
     console.info(`👁️  Watching for file changes in ${this.rootPath}...`);
 
-    this.watcher = watch(this.rootPath, { recursive: true }, (event, filename) => {
-      if (typeof filename !== 'string' || filename.length === 0) {
-        return;
-      }
+    this.subscription = await watcher.subscribe(
+      this.rootPath,
+      (_err: Error | null, events: Array<watcher.Event>) => {
+        for (const evt of events) {
+          const relativeName = relative(this.rootPath, evt.path).replaceAll('\\', '/');
 
-      const normalized = filename.replaceAll('\\', '/');
-      const relativeName = isAbsolute(normalized) ? relative(this.rootPath, normalized) : normalized;
-      const nodeModulesSegment = ['node', 'modules'].join('_');
+          // Guard: ignore paths outside the watched root.
+          if (relativeName.startsWith('..')) {
+            continue;
+          }
 
-      if (
-        relativeName.length === 0 ||
-        relativeName.includes(nodeModulesSegment) ||
-        relativeName.includes('.git') ||
-        relativeName.includes('.bunner') ||
-        relativeName.includes('dist')
-      ) {
-        return;
-      }
+          if (!relativeName.endsWith('.ts') || relativeName.endsWith('.d.ts')) {
+            continue;
+          }
 
-      if (!relativeName.endsWith('.ts') || relativeName.endsWith('.d.ts')) {
-        return;
-      }
+          const eventType = evt.type === 'update' ? 'change' : 'rename';
 
-      onChange({ eventType: event, filename: relativeName });
-    });
+          onChange({ eventType, filename: relativeName });
+        }
+      },
+      {
+        ignore: [...PROJECT_WATCHER_IGNORE_GLOBS],
+      },
+    );
   }
 
-  close() {
-    if (this.watcher) {
-      this.watcher.close();
-    }
+  async close() {
+    await this.subscription?.unsubscribe();
+    this.subscription = undefined;
   }
 }

@@ -12,6 +12,7 @@
     "drizzle:migrate": "bunx drizzle-kit migrate --config packages/cli/drizzle.config.ts"
   },
   "dependencies": {
+    "@parcel/watcher": "^2.5.6",
     "drizzle-orm": "^0.45.1"
   },
   "devDependencies": {

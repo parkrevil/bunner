@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 
 import { buildFullKey, cardPathFromFullKey, normalizeSlug, parseFullKey } from './card-key';
+import { bunnerCardMarkdownPath } from '../../common/bunner-paths';
 
 describe('mcp/card — card key', () => {
   it('normalizes slug by trimming slashes and backslashes', () => {
@@ -35,7 +36,7 @@ describe('mcp/card — card key', () => {
 
   it('maps fullKey to .bunner/cards path', () => {
     const root = '/repo';
-    expect(cardPathFromFullKey(root, 'spec::auth/login')).toBe('/repo/.bunner/cards/auth/login.card.md');
-    expect(cardPathFromFullKey(root, 'spec::auth')).toBe('/repo/.bunner/cards/auth.card.md');
+    expect(cardPathFromFullKey(root, 'spec::auth/login')).toBe(bunnerCardMarkdownPath(root, 'auth/login'));
+    expect(cardPathFromFullKey(root, 'spec::auth')).toBe(bunnerCardMarkdownPath(root, 'auth'));
   });
 });

@@ -1,4 +1,6 @@
-import { join, normalize, sep } from 'path';
+import { normalize, sep } from 'path';
+
+import { bunnerCardMarkdownPath } from '../../common/bunner-paths';
 
 export interface ParsedCardKey {
   type: string;
@@ -85,5 +87,5 @@ export function assertAllowedType(type: string, allowedTypes: readonly string[])
 
 export function cardPathFromFullKey(projectRoot: string, fullKey: string): string {
   const parsed = parseFullKey(fullKey);
-  return join(projectRoot, '.bunner', 'cards', `${parsed.slug}.card.md`);
+  return bunnerCardMarkdownPath(projectRoot, parsed.slug);
 }

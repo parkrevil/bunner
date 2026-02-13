@@ -21,6 +21,8 @@ import {
 
 import { readCardFile } from '../card/card-fs';
 
+import { bunnerCardsGlobRel, bunnerCardsPrefixRel } from '../../common';
+
 import {
   CallsExtractor,
   ExtendsExtractor,
@@ -146,7 +148,7 @@ async function buildExcludeSet(projectRoot: string, patterns: string[]): Promise
 }
 
 function isCardPath(relPath: string): boolean {
-  return relPath.startsWith('.bunner/cards/') && relPath.endsWith('.card.md');
+  return relPath.startsWith(bunnerCardsPrefixRel()) && relPath.endsWith('.card.md');
 }
 
 function isCodePath(relPath: string, sourceDirRel: string): boolean {
@@ -492,7 +494,7 @@ export async function indexProject(input: IndexProjectInput): Promise<IndexProje
   const { projectRoot, config, db, mode } = input;
 
   const sourceDirRel = normalizeSourceDirRel(config.sourceDir);
-  const cardPathsRel = await scanGlobRel(projectRoot, '.bunner/cards/**/*.card.md');
+  const cardPathsRel = await scanGlobRel(projectRoot, bunnerCardsGlobRel());
   const codePathsRel = await scanGlobRel(projectRoot, `${sourceDirRel}/**/*.ts`);
 
   const excludeSet = await buildExcludeSet(projectRoot, config.mcp.exclude);
