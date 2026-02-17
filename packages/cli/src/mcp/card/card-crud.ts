@@ -1,4 +1,4 @@
-import type { ResolvedBunnerConfig } from '../../common/interfaces';
+import type { ResolvedBunnerConfig } from '../../config';
 import type { CardFile, CardFrontmatter, CardRelation, CardStatus } from './types';
 
 import { dirname } from 'path';

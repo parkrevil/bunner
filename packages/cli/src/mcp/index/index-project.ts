@@ -1,4 +1,4 @@
-import type { ResolvedBunnerConfig } from '../../common/interfaces';
+import type { ResolvedBunnerConfig } from '../../config';
 
 import { parseSync } from 'oxc-parser';
 import type { Program } from 'oxc-parser';

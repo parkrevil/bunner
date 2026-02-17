@@ -4,8 +4,8 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { buildDiagnostic, reportDiagnostics } from '../diagnostics';
-import { ConfigLoader } from '../common/config-loader';
-import type { ResolvedBunnerConfig } from '../common/interfaces';
+import { ConfigLoader } from '../config';
+import type { ResolvedBunnerConfig } from '../config';
 import { bunnerCacheDirPath } from '../common/bunner-paths';
 import { indexProject } from '../mcp/index/index-project';
 import { verifyProject } from '../mcp/verify/verify-project';

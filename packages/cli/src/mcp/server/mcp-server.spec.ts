@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import type { ResolvedBunnerConfig } from '../../common/interfaces';
+import type { ResolvedBunnerConfig } from '../../config';
 
 import { closeDb, createDb } from '../../store/connection';
 import { card, cardKeyword, cardTag, keyword, tag } from '../../store/schema';

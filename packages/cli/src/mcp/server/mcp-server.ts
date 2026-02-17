@@ -1,8 +1,8 @@
-import type { ResolvedBunnerConfig } from '../../common/interfaces';
+import type { ResolvedBunnerConfig } from '../../config';
 
 import { relative } from 'node:path';
 
-import { CARD_RELATION_TYPES } from '../../common/config-loader';
+import { CARD_RELATION_TYPES } from '../../config';
 
 import { declareTool, ToolRegistry } from './tool-registry';
 

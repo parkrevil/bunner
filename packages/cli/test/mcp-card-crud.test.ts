@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 
-import type { ResolvedBunnerConfig } from '../src/common/interfaces';
+import type { ResolvedBunnerConfig } from '../src/config/interfaces';
 
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

@@ -4,7 +4,7 @@ import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'path';
 
-import type { ResolvedBunnerConfig } from '../src/common/interfaces';
+import type { ResolvedBunnerConfig } from '../src/config/interfaces';
 
 import { createDb, closeDb } from '../src/store/connection';
 import { keyword, tag } from '../src/store/schema';

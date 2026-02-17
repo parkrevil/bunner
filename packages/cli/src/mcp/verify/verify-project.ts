@@ -1,4 +1,4 @@
-import type { ResolvedBunnerConfig } from '../../common/interfaces';
+import type { ResolvedBunnerConfig } from '../../config';
 
 import { join } from 'path';
 import { mkdir } from 'node:fs/promises';

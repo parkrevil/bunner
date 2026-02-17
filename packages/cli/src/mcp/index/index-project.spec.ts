@@ -100,7 +100,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import type { ResolvedBunnerConfig } from '../../common/interfaces';
+import type { ResolvedBunnerConfig } from '../../config';
 
 import { createDb, closeDb } from '../../store/connection';
 import { indexProject } from './index-project';

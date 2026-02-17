@@ -9,12 +9,11 @@ import { validateCreateApplication } from '../compiler/analyzer/validation';
 import {
   bunnerDirPath,
   bunnerTempDirPath,
-  ConfigLoader,
-  ConfigLoadError,
   compareCodePoint,
   scanGlobSorted,
   writeIfChanged,
 } from '../common';
+import { ConfigLoader, ConfigLoadError } from '../config';
 import { buildDiagnostic, DiagnosticReportError, reportDiagnostics } from '../diagnostics';
 import { EntryGenerator, ManifestGenerator } from '../compiler/generator';
 

@@ -7,7 +7,7 @@ import { dirname, join } from 'path';
 import { createDb, closeDb } from '../src/store/connection';
 import { card, cardCodeLink, cardRelation, codeEntity, codeRelation } from '../src/store/schema';
 
-import type { ResolvedBunnerConfig } from '../src/common/interfaces';
+import type { ResolvedBunnerConfig } from '../src/config/interfaces';
 
 import { indexProject } from '../src/mcp/index/index-project';
 

@@ -6,7 +6,8 @@ import type { CommandOptions } from './types';
 
 import { AdapterSpecResolver, AstParser, ModuleGraph, type FileAnalysis } from '../compiler/analyzer';
 import { validateCreateApplication } from '../compiler/analyzer/validation';
-import { bunnerDirPath, ConfigLoader, ConfigLoadError, scanGlobSorted, writeIfChanged } from '../common';
+import { ConfigLoader, ConfigLoadError } from '../config';
+import { bunnerDirPath, scanGlobSorted, writeIfChanged } from '../common';
 import { buildDiagnostic, DiagnosticReportError, reportDiagnostics } from '../diagnostics';
 import { ManifestGenerator } from '../compiler/generator';
 import * as watcher from '@parcel/watcher';

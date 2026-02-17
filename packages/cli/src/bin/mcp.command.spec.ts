@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 
 import { __testing__ } from './mcp.command';
-import type { ResolvedBunnerConfig } from '../common/interfaces';
+import type { ResolvedBunnerConfig } from '../config';
 
 const testConfig: ResolvedBunnerConfig = {
   module: { fileName: 'module.ts' },
