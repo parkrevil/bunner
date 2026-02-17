@@ -779,7 +779,7 @@ All patterns adopted from Angular CLI MCP, adapted for Bun runtime:
 | P5 | `mcp/verify/` | Invariants §11 verification (8 hard + 3 soft rules — **no type validation, added keyword/tag registration checks**) | store/, mcp/card/ |
 | P6 | `watcher/` | Owner Election (lock+PID+signal), incremental re-index trigger | store/ |
 | P7 | `mcp/server/` | MCP server (stdio), tool registry (declareTool), read/write tools (**including keyword_create/delete, tag_create/delete**) | store/, mcp/card/, mcp/index/, mcp/verify/ |
-| P8 | `bin/` | CLI entry restructure: `bunner build`, `bunner dev`, `bunner mcp`. `common/ → config/` migration | all |
+| P8 | `bin/` | CLI entry restructure: `bunner build`, `bunner dev`, `bunner mcp`. `config/` 분리 (`common/` 유틸 유지) | all |
 
 P0 is a prerequisite for all phases. P1 and P3 are independent and can proceed in parallel after P0. P6 is independent after P1.
 
