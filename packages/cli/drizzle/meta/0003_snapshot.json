@@ -1,23 +1,23 @@
 {
-  "id": "2a684f75-1bb3-46ea-b88f-24ba03b1c7d9",
-  "prevId": "802354e3-09e1-4421-94fe-7158fc7b34b2",
   "version": "6",
   "dialect": "sqlite",
+  "id": "3e7a28d4-ca51-4ab2-8e97-460bdf65107e",
+  "prevId": "7efab26b-221e-44f8-83b0-e71bc0f21182",
   "tables": {
     "card": {
       "name": "card",
       "columns": {
+        "rowid": {
+          "name": "rowid",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "key": {
           "name": "key",
           "type": "text",
           "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "type": {
-          "name": "type",
-          "type": "text",
-          "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
@@ -33,13 +33,6 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false
-        },
-        "keywords": {
-          "name": "keywords",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
           "autoincrement": false
         },
         "constraints_json": {
@@ -72,13 +65,6 @@
         }
       },
       "indexes": {
-        "idx_card_type": {
-          "name": "idx_card_type",
-          "columns": [
-            "type"
-          ],
-          "isUnique": false
-        },
         "idx_card_status": {
           "name": "idx_card_status",
           "columns": [
@@ -179,30 +165,68 @@
         "card_code_link_card_key_card_key_fk": {
           "name": "card_code_link_card_key_card_key_fk",
           "tableFrom": "card_code_link",
+          "tableTo": "card",
           "columnsFrom": [
             "card_key"
           ],
-          "tableTo": "card",
           "columnsTo": [
             "key"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "card_code_link_entity_key_code_entity_entity_key_fk": {
           "name": "card_code_link_entity_key_code_entity_entity_key_fk",
           "tableFrom": "card_code_link",
+          "tableTo": "code_entity",
           "columnsFrom": [
             "entity_key"
           ],
-          "tableTo": "code_entity",
           "columnsTo": [
             "entity_key"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "card_fts": {
+      "name": "card_fts",
+      "columns": {
+        "rowid": {
+          "name": "rowid",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "summary": {
+          "name": "summary",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "body": {
+          "name": "body",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
@@ -245,28 +269,28 @@
         "card_keyword_card_key_card_key_fk": {
           "name": "card_keyword_card_key_card_key_fk",
           "tableFrom": "card_keyword",
+          "tableTo": "card",
           "columnsFrom": [
             "card_key"
           ],
-          "tableTo": "card",
           "columnsTo": [
             "key"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "card_keyword_keyword_id_keyword_id_fk": {
           "name": "card_keyword_keyword_id_keyword_id_fk",
           "tableFrom": "card_keyword",
+          "tableTo": "keyword",
           "columnsFrom": [
             "keyword_id"
           ],
-          "tableTo": "keyword",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -355,37 +379,118 @@
         "card_relation_src_card_key_card_key_fk": {
           "name": "card_relation_src_card_key_card_key_fk",
           "tableFrom": "card_relation",
+          "tableTo": "card",
           "columnsFrom": [
             "src_card_key"
           ],
-          "tableTo": "card",
           "columnsTo": [
             "key"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "card_relation_dst_card_key_card_key_fk": {
           "name": "card_relation_dst_card_key_card_key_fk",
           "tableFrom": "card_relation",
+          "tableTo": "card",
           "columnsFrom": [
             "dst_card_key"
           ],
-          "tableTo": "card",
           "columnsTo": [
             "key"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "card_tag": {
+      "name": "card_tag",
+      "columns": {
+        "card_key": {
+          "name": "card_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tag_id": {
+          "name": "tag_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_card_tag_card": {
+          "name": "idx_card_tag_card",
+          "columns": [
+            "card_key"
+          ],
+          "isUnique": false
+        },
+        "idx_card_tag_tag": {
+          "name": "idx_card_tag_tag",
+          "columns": [
+            "tag_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "card_tag_card_key_card_key_fk": {
+          "name": "card_tag_card_key_card_key_fk",
+          "tableFrom": "card_tag",
+          "tableTo": "card",
+          "columnsFrom": [
+            "card_key"
+          ],
+          "columnsTo": [
+            "key"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "card_tag_tag_id_tag_id_fk": {
+          "name": "card_tag_tag_id_tag_id_fk",
+          "tableFrom": "card_tag",
+          "tableTo": "tag",
+          "columnsFrom": [
+            "tag_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "card_tag_card_key_tag_id_pk": {
+          "columns": [
+            "card_key",
+            "tag_id"
+          ],
+          "name": "card_tag_card_key_tag_id_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "code_entity": {
       "name": "code_entity",
       "columns": {
+        "rowid": {
+          "name": "rowid",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "entity_key": {
           "name": "entity_key",
           "type": "text",
@@ -464,6 +569,37 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "code_fts": {
+      "name": "code_fts",
+      "columns": {
+        "rowid": {
+          "name": "rowid",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "entity_key": {
+          "name": "entity_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "symbol_name": {
+          "name": "symbol_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "code_relation": {
       "name": "code_relation",
       "columns": {
@@ -530,28 +666,28 @@
         "code_relation_src_entity_key_code_entity_entity_key_fk": {
           "name": "code_relation_src_entity_key_code_entity_entity_key_fk",
           "tableFrom": "code_relation",
+          "tableTo": "code_entity",
           "columnsFrom": [
             "src_entity_key"
           ],
-          "tableTo": "code_entity",
           "columnsTo": [
             "entity_key"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "code_relation_dst_entity_key_code_entity_entity_key_fk": {
           "name": "code_relation_dst_entity_key_code_entity_entity_key_fk",
           "tableFrom": "code_relation",
+          "tableTo": "code_entity",
           "columnsFrom": [
             "dst_entity_key"
           ],
-          "tableTo": "code_entity",
           "columnsTo": [
             "entity_key"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -651,14 +787,46 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
+    },
+    "tag": {
+      "name": "tag",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "tag_name_unique": {
+          "name": "tag_name_unique",
+          "columns": [
+            "name"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
     }
   },
   "views": {},
   "enums": {},
   "_meta": {
-    "columns": {},
     "schemas": {},
-    "tables": {}
+    "tables": {},
+    "columns": {}
   },
   "internal": {
     "indexes": {}

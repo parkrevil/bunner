@@ -1,20 +1,24 @@
 import type { ResolvedBunnerConfig } from '../../common/interfaces';
 
 import { join } from 'path';
+import { mkdir } from 'node:fs/promises';
 
 import { bunnerCardsGlobRel } from '../../common';
+import { bunnerCacheFilePath } from '../../common/bunner-paths';
+import { closeDb, createDb, keyword, tag } from '../../store';
 
 import { readCardFile } from '../card/card-fs';
+import { parseFullKey } from '../card/card-key';
 
 type Severity = 'error' | 'warning';
 
 export type VerifyIssueCode =
   | 'CARD_KEY_DUPLICATE'
-  | 'CARD_TYPE_NOT_ALLOWED'
   | 'SEE_TARGET_MISSING'
-  | 'SEE_TYPE_MISMATCH'
+  | 'SEE_KEY_INVALID'
+  | 'CARD_KEY_INVALID'
+  | 'CARD_CLASSIFICATION_NOT_REGISTERED'
   | 'RELATION_TARGET_MISSING'
-  | 'RELATION_TARGET_TYPE_MISMATCH'
   | 'RELATION_TYPE_NOT_ALLOWED'
   | 'IMPLEMENTED_CARD_NO_CODE_LINKS'
   | 'CONFIRMED_CARD_NO_CODE_LINKS'
@@ -38,6 +42,31 @@ export interface VerifyProjectResult {
   ok: boolean;
   errors: VerifyIssue[];
   warnings: VerifyIssue[];
+}
+
+function normalizeLowerSet(items: string[]): Set<string> {
+  const out = new Set<string>();
+  for (const item of items) {
+    out.add(item.trim().toLowerCase());
+  }
+  return out;
+}
+
+async function loadRegisteredClassification(projectRoot: string): Promise<{ keywords: Set<string>; tags: Set<string> }> {
+  const dbPath = bunnerCacheFilePath(projectRoot, 'index.sqlite');
+  await mkdir(join(projectRoot, '.bunner', 'cache'), { recursive: true });
+
+  const db = createDb(dbPath);
+  try {
+    const keywordRows = db.select({ name: keyword.name }).from(keyword).all() as Array<{ name: string }>;
+    const tagRows = db.select({ name: tag.name }).from(tag).all() as Array<{ name: string }>;
+    return {
+      keywords: normalizeLowerSet(keywordRows.map((r) => r.name)),
+      tags: normalizeLowerSet(tagRows.map((r) => r.name)),
+    };
+  } finally {
+    closeDb(db);
+  }
 }
 
 function toPosixPath(path: string): string {
@@ -72,17 +101,12 @@ async function buildExcludeSet(projectRoot: string, patterns: string[]): Promise
 
 function parseSeeCardKeysFromText(text: string): string[] {
   const out: string[] = [];
-  const re = /@see\s+([a-zA-Z0-9_-]+::[^\s*]+)/g;
+  const re = /@see\s+([^\s*]+)/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text))) {
     out.push(m[1]!);
   }
   return Array.from(new Set(out));
-}
-
-function typePrefixOfKey(fullKey: string): string {
-  const idx = fullKey.indexOf('::');
-  return idx === -1 ? '' : fullKey.slice(0, idx);
 }
 
 function addIssue(issues: VerifyIssue[], issue: VerifyIssue) {
@@ -95,6 +119,8 @@ export async function verifyProject(input: VerifyProjectInput): Promise<VerifyPr
   const sourceDirRel = normalizeSourceDirRel(config.sourceDir);
   const excludeSet = await buildExcludeSet(projectRoot, config.mcp.exclude);
 
+  const registered = await loadRegisteredClassification(projectRoot);
+
   const cardPathsRel = (await scanGlobRel(projectRoot, bunnerCardsGlobRel())).filter((p) => !excludeSet.has(p));
   const codePathsRel = (await scanGlobRel(projectRoot, `${sourceDirRel}/**/*.ts`)).filter((p) => !excludeSet.has(p));
 
@@ -102,14 +128,36 @@ export async function verifyProject(input: VerifyProjectInput): Promise<VerifyPr
   const warnings: VerifyIssue[] = [];
 
   // Parse cards from SSOT files.
-  const cardByKey = new Map<string, { type: string; status: string; filePath: string; relations: Array<{ type: string; target: string }> }>();
+  const cardByKey = new Map<
+    string,
+    {
+      status: string;
+      filePath: string;
+      relations: Array<{ type: string; target: string }>;
+      keywords: string[];
+      tags: string[];
+    }
+  >();
   const duplicateCardKeys = new Map<string, string[]>();
 
   for (const relPath of cardPathsRel) {
     const absPath = join(projectRoot, relPath);
     // eslint-disable-next-line no-await-in-loop
     const parsed = await readCardFile(absPath);
-    const key = parsed.frontmatter.key;
+    let key: string;
+    try {
+      key = parseFullKey(parsed.frontmatter.key);
+    } catch {
+      addIssue(errors, {
+        severity: 'error',
+        code: 'CARD_KEY_INVALID',
+        filePath: relPath,
+        cardKey: parsed.frontmatter.key,
+        message: `Invalid card key: ${parsed.frontmatter.key}`,
+      });
+      continue;
+    }
+
     const existing = cardByKey.get(key);
     if (existing) {
       const arr = duplicateCardKeys.get(key) ?? [existing.filePath];
@@ -119,10 +167,11 @@ export async function verifyProject(input: VerifyProjectInput): Promise<VerifyPr
     }
 
     cardByKey.set(key, {
-      type: parsed.frontmatter.type,
       status: parsed.frontmatter.status,
       filePath: relPath,
       relations: parsed.frontmatter.relations ?? [],
+      keywords: parsed.frontmatter.keywords ?? [],
+      tags: parsed.frontmatter.tags ?? [],
     });
   }
 
@@ -135,17 +184,26 @@ export async function verifyProject(input: VerifyProjectInput): Promise<VerifyPr
     });
   }
 
-  const allowedCardTypes = new Set(config.mcp.card.types);
   const allowedRelationTypes = new Set(config.mcp.card.relations);
 
   for (const [key, c] of cardByKey.entries()) {
-    if (!allowedCardTypes.has(c.type)) {
+    const usedKeywords = c.keywords.map((k) => k.trim()).filter((k) => k.length > 0);
+    const usedTags = c.tags.map((t) => t.trim()).filter((t) => t.length > 0);
+
+    const missingKeywords = usedKeywords.filter((k) => !registered.keywords.has(k.toLowerCase()));
+    const missingTags = usedTags.filter((t) => !registered.tags.has(t.toLowerCase()));
+
+    if (missingKeywords.length > 0 || missingTags.length > 0) {
+      const parts: string[] = [];
+      if (missingKeywords.length > 0) parts.push(`keywords: ${missingKeywords.join(', ')}`);
+      if (missingTags.length > 0) parts.push(`tags: ${missingTags.join(', ')}`);
+
       addIssue(errors, {
         severity: 'error',
-        code: 'CARD_TYPE_NOT_ALLOWED',
+        code: 'CARD_CLASSIFICATION_NOT_REGISTERED',
         cardKey: key,
         filePath: c.filePath,
-        message: `Card type not allowed by config: ${c.type}`,
+        message: `Card uses unregistered classification (${parts.join(' | ')})`,
       });
     }
 
@@ -160,8 +218,10 @@ export async function verifyProject(input: VerifyProjectInput): Promise<VerifyPr
         });
       }
 
-      const target = cardByKey.get(rel.target);
-      if (!target) {
+      let targetKey: string;
+      try {
+        targetKey = parseFullKey(rel.target);
+      } catch {
         addIssue(errors, {
           severity: 'error',
           code: 'RELATION_TARGET_MISSING',
@@ -172,15 +232,16 @@ export async function verifyProject(input: VerifyProjectInput): Promise<VerifyPr
         continue;
       }
 
-      const targetPrefix = typePrefixOfKey(rel.target);
-      if (targetPrefix !== target.type) {
+      const target = cardByKey.get(targetKey);
+      if (!target) {
         addIssue(errors, {
           severity: 'error',
-          code: 'RELATION_TARGET_TYPE_MISMATCH',
+          code: 'RELATION_TARGET_MISSING',
           cardKey: key,
           filePath: c.filePath,
-          message: `Relation target type prefix mismatch: ${rel.target} (expected ${target.type})`,
+          message: `Relation target missing: ${targetKey}`,
         });
+        continue;
       }
     }
   }
@@ -192,35 +253,37 @@ export async function verifyProject(input: VerifyProjectInput): Promise<VerifyPr
     const absPath = join(projectRoot, relPath);
     // eslint-disable-next-line no-await-in-loop
     const text = await Bun.file(absPath).text();
-    const keys = parseSeeCardKeysFromText(text);
+    const rawKeys = parseSeeCardKeysFromText(text);
 
-    for (const fullKey of keys) {
-      const card = cardByKey.get(fullKey);
+    for (const rawKey of rawKeys) {
+      let key: string;
+      try {
+        key = parseFullKey(rawKey);
+      } catch {
+        addIssue(errors, {
+          severity: 'error',
+          code: 'SEE_KEY_INVALID',
+          filePath: relPath,
+          cardKey: rawKey,
+          message: `@see key invalid: ${rawKey}`,
+        });
+        continue;
+      }
+
+      const card = cardByKey.get(key);
       if (!card) {
         addIssue(errors, {
           severity: 'error',
           code: 'SEE_TARGET_MISSING',
           filePath: relPath,
-          message: `@see target card not found: ${fullKey}`,
+          message: `@see target card not found: ${key}`,
         });
         continue;
       }
 
-      const prefix = typePrefixOfKey(fullKey);
-      if (prefix !== card.type) {
-        addIssue(errors, {
-          severity: 'error',
-          code: 'SEE_TYPE_MISMATCH',
-          filePath: relPath,
-          cardKey: fullKey,
-          message: `@see type prefix mismatch: ${fullKey} (expected ${card.type})`,
-        });
-        continue;
-      }
-
-      const set = seeRefsByCardKey.get(fullKey) ?? new Set<string>();
+      const set = seeRefsByCardKey.get(key) ?? new Set<string>();
       set.add(relPath);
-      seeRefsByCardKey.set(fullKey, set);
+      seeRefsByCardKey.set(key, set);
     }
   }
 
@@ -248,10 +311,18 @@ export async function verifyProject(input: VerifyProjectInput): Promise<VerifyPr
     }
   }
 
-  // Soft rule: depends_on cycles.
+  // Soft rule: depends-on cycles.
   const dependsGraph = new Map<string, string[]>();
   for (const [key, c] of cardByKey.entries()) {
-    const deps = c.relations.filter((r) => r.type === 'depends_on').map((r) => r.target);
+    const deps: string[] = [];
+    for (const rel of c.relations) {
+      if (rel.type !== 'depends-on') continue;
+      try {
+        deps.push(parseFullKey(rel.target));
+      } catch {
+        // ignore invalid targets for cycle detection; they are handled as errors elsewhere
+      }
+    }
     dependsGraph.set(key, deps);
   }
 
@@ -285,7 +356,7 @@ export async function verifyProject(input: VerifyProjectInput): Promise<VerifyPr
     addIssue(warnings, {
       severity: 'warning',
       code: 'DEPENDS_ON_CYCLE',
-      message: 'depends_on cycle detected',
+      message: 'depends-on cycle detected',
     });
   }
 

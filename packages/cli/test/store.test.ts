@@ -56,7 +56,9 @@ import {
   metadata,
   card,
   keyword,
+  tag,
   cardKeyword,
+  cardTag,
   codeEntity,
   cardRelation,
   cardCodeLink,
@@ -109,8 +111,7 @@ describe('store', () => {
         const now = new Date().toISOString();
         fileDb.insert(card)
           .values({
-            key: 'spec::wal/test',
-            type: 'spec',
+            key: 'wal/test',
             summary: 'wal',
             status: 'draft',
             filePath: 'a.md',
@@ -156,11 +157,9 @@ describe('store', () => {
       const now = new Date().toISOString();
       db.insert(card)
         .values({
-          key: 'spec::auth/login',
-          type: 'spec',
+          key: 'auth/login',
           summary: 'OAuth login',
           status: 'draft',
-          keywords: 'auth mvp',
           constraintsJson: null,
           body: '# Login spec',
           filePath: '.bunner/cards/auth/login.card.md',
@@ -168,12 +167,10 @@ describe('store', () => {
         })
         .run();
 
-      const rows = db.select().from(card).where(eq(card.key, 'spec::auth/login')).all();
+      const rows = db.select().from(card).where(eq(card.key, 'auth/login')).all();
       expect(rows).toHaveLength(1);
-      expect(rows[0]!.type).toBe('spec');
       expect(rows[0]!.summary).toBe('OAuth login');
       expect(rows[0]!.status).toBe('draft');
-      expect(rows[0]!.keywords).toBe('auth mvp');
       expect(rows[0]!.body).toBe('# Login spec');
     });
 
@@ -193,8 +190,7 @@ describe('store', () => {
     it('card_keyword table maps cards to keywords', () => {
       const now = new Date().toISOString();
       db.insert(card).values({
-        key: 'spec::auth/login',
-        type: 'spec',
+        key: 'auth/login',
         summary: 'OAuth login',
         status: 'draft',
         filePath: '.bunner/cards/auth/login.card.md',
@@ -202,11 +198,42 @@ describe('store', () => {
       }).run();
       db.insert(keyword).values({ id: 1, name: 'auth' }).run();
 
-      db.insert(cardKeyword).values({ cardKey: 'spec::auth/login', keywordId: 1 }).run();
+      db.insert(cardKeyword).values({ cardKey: 'auth/login', keywordId: 1 }).run();
 
       const rows = db.select().from(cardKeyword).all();
       expect(rows).toHaveLength(1);
-      expect(rows[0]).toEqual({ cardKey: 'spec::auth/login', keywordId: 1 });
+      expect(rows[0]).toEqual({ cardKey: 'auth/login', keywordId: 1 });
+    });
+
+    it('tag table stores unique tags', () => {
+      db.insert(tag).values({ name: 'core' }).run();
+      db.insert(tag).values({ name: 'auth-module' }).run();
+
+      const rows = db.select().from(tag).all();
+      expect(rows).toHaveLength(2);
+
+      // UNIQUE constraint on name
+      expect(() => {
+        db.insert(tag).values({ name: 'core' }).run();
+      }).toThrow();
+    });
+
+    it('card_tag table maps cards to tags', () => {
+      const now = new Date().toISOString();
+      db.insert(card).values({
+        key: 'auth/login',
+        summary: 'OAuth login',
+        status: 'draft',
+        filePath: '.bunner/cards/auth/login.card.md',
+        updatedAt: now,
+      }).run();
+      db.insert(tag).values({ id: 1, name: 'core' }).run();
+
+      db.insert(cardTag).values({ cardKey: 'auth/login', tagId: 1 }).run();
+
+      const rows = db.select().from(cardTag).all();
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toEqual({ cardKey: 'auth/login', tagId: 1 });
     });
 
     it('code_entity table stores parsed code entities', () => {
@@ -237,35 +264,32 @@ describe('store', () => {
     it('card_relation table stores typed card edges', () => {
       const now = new Date().toISOString();
       db.insert(card).values({
-        key: 'spec::auth/login',
-        type: 'spec', summary: 'Login', status: 'draft',
+        key: 'auth/login', summary: 'Login', status: 'draft',
         filePath: 'a.md', updatedAt: now,
       }).run();
       db.insert(card).values({
-        key: 'spec::auth/session',
-        type: 'spec', summary: 'Session', status: 'draft',
+        key: 'auth/session', summary: 'Session', status: 'draft',
         filePath: 'b.md', updatedAt: now,
       }).run();
 
       db.insert(cardRelation).values({
-        type: 'depends_on',
-        srcCardKey: 'spec::auth/login',
-        dstCardKey: 'spec::auth/session',
+        type: 'depends-on',
+        srcCardKey: 'auth/login',
+        dstCardKey: 'auth/session',
         isReverse: false,
       }).run();
 
       const rows = db.select().from(cardRelation).all();
       expect(rows).toHaveLength(1);
-      expect(rows[0]!.type).toBe('depends_on');
-      expect(rows[0]!.srcCardKey).toBe('spec::auth/login');
+      expect(rows[0]!.type).toBe('depends-on');
+      expect(rows[0]!.srcCardKey).toBe('auth/login');
       expect(rows[0]!.isReverse).toBe(false);
     });
 
     it('card_code_link table links cards to code entities', () => {
       const now = new Date().toISOString();
       db.insert(card).values({
-        key: 'spec::auth/login',
-        type: 'spec', summary: 'Login', status: 'draft',
+        key: 'auth/login', summary: 'Login', status: 'draft',
         filePath: 'a.md', updatedAt: now,
       }).run();
       db.insert(codeEntity).values({
@@ -276,7 +300,7 @@ describe('store', () => {
 
       db.insert(cardCodeLink).values({
         type: 'see',
-        cardKey: 'spec::auth/login',
+        cardKey: 'auth/login',
         entityKey: 'symbol:src/auth/login.ts#handleOAuth',
         filePath: 'src/auth/login.ts',
         symbolName: 'handleOAuth',
@@ -284,7 +308,7 @@ describe('store', () => {
 
       const rows = db.select().from(cardCodeLink).all();
       expect(rows).toHaveLength(1);
-      expect(rows[0]!.cardKey).toBe('spec::auth/login');
+      expect(rows[0]!.cardKey).toBe('auth/login');
     });
 
     it('code_relation table stores code-to-code edges', () => {
@@ -336,8 +360,8 @@ describe('store', () => {
     it('card.key is PRIMARY KEY (rejects duplicates)', () => {
       const now = new Date().toISOString();
       const row = {
-        key: 'spec::auth/login',
-        type: 'spec', summary: 'Login', status: 'draft',
+        key: 'auth/login',
+        summary: 'Login', status: 'draft',
         filePath: 'a.md', updatedAt: now,
       };
       db.insert(card).values(row).run();
@@ -347,14 +371,14 @@ describe('store', () => {
     it('card_keyword has composite PRIMARY KEY (card_key, keyword_id)', () => {
       const now = new Date().toISOString();
       db.insert(card).values({
-        key: 'spec::a', type: 'spec', summary: 's', status: 'draft',
+        key: 'a', summary: 's', status: 'draft',
         filePath: 'a.md', updatedAt: now,
       }).run();
       db.insert(keyword).values({ id: 1, name: 'auth' }).run();
 
-      db.insert(cardKeyword).values({ cardKey: 'spec::a', keywordId: 1 }).run();
+      db.insert(cardKeyword).values({ cardKey: 'a', keywordId: 1 }).run();
       expect(() =>
-        db.insert(cardKeyword).values({ cardKey: 'spec::a', keywordId: 1 }).run(),
+        db.insert(cardKeyword).values({ cardKey: 'a', keywordId: 1 }).run(),
       ).toThrow();
     });
 
@@ -415,8 +439,7 @@ describe('store', () => {
       const now = new Date().toISOString();
       db.insert(card)
         .values({
-          key: 'spec::auth/login',
-          type: 'spec',
+          key: 'auth/login',
           summary: 'OAuth login',
           status: 'draft',
           keywords: 'auth',
@@ -430,32 +453,32 @@ describe('store', () => {
       const inserted = db
         .select({ key: cardFts.key, summary: cardFts.summary })
         .from(cardFts)
-        .where(eq(cardFts.key, 'spec::auth/login'))
+        .where(eq(cardFts.key, 'auth/login'))
         .limit(1)
         .get();
 
-      expect(inserted).toEqual({ key: 'spec::auth/login', summary: 'OAuth login' });
+      expect(inserted).toEqual({ key: 'auth/login', summary: 'OAuth login' });
 
       db.update(card)
         .set({ summary: 'Updated summary' })
-        .where(eq(card.key, 'spec::auth/login'))
+        .where(eq(card.key, 'auth/login'))
         .run();
 
       const updated = db
         .select({ key: cardFts.key, summary: cardFts.summary })
         .from(cardFts)
-        .where(eq(cardFts.key, 'spec::auth/login'))
+        .where(eq(cardFts.key, 'auth/login'))
         .limit(1)
         .get();
 
-      expect(updated).toEqual({ key: 'spec::auth/login', summary: 'Updated summary' });
+      expect(updated).toEqual({ key: 'auth/login', summary: 'Updated summary' });
 
-      db.delete(card).where(eq(card.key, 'spec::auth/login')).run();
+      db.delete(card).where(eq(card.key, 'auth/login')).run();
 
       const afterDelete = db
         .select({ key: cardFts.key })
         .from(cardFts)
-        .where(eq(cardFts.key, 'spec::auth/login'))
+        .where(eq(cardFts.key, 'auth/login'))
         .all();
 
       expect(afterDelete).toEqual([]);
@@ -522,8 +545,7 @@ describe('store', () => {
       const now = new Date().toISOString();
       db.insert(card)
         .values({
-          key: 'spec::auth/trigram',
-          type: 'spec',
+          key: 'auth/trigram',
           summary: 'Login',
           status: 'draft',
           keywords: 'auth',
@@ -541,7 +563,7 @@ describe('store', () => {
         .limit(1)
         .get();
 
-      expect(row?.key).toBe('spec::auth/trigram');
+      expect(row?.key).toBe('auth/trigram');
     });
 
     it('supports trigram matches for code_fts', () => {

@@ -12,9 +12,9 @@ export interface CardRelation {
 
 export interface CardFrontmatter {
   key: string;
-  type: string;
   summary: string;
   status: CardStatus;
+  tags?: string[];
   keywords?: string[];
   constraints?: unknown;
   relations?: CardRelation[];

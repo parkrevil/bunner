@@ -27,8 +27,8 @@ describe('ConfigLoader', () => {
       textByPath: new Map<string, string>(),
     };
 
-    bunFileSpy = spyOn(Bun, 'file').mockImplementation((path: string) => {
-      return createBunFileStub(setup, path) as any;
+    bunFileSpy = spyOn(Bun, 'file').mockImplementation((path: any) => {
+      return createBunFileStub(setup, String(path)) as any;
     });
 
     consoleInfoSpy = spyOn(console, 'info').mockImplementation(() => {});
@@ -82,6 +82,27 @@ describe('ConfigLoader', () => {
     await expect(ConfigLoader.load(projectRoot)).rejects.toBeInstanceOf(ConfigLoadError);
   });
 
+  it('should reject entry when it points to the sourceDir itself (empty relative path)', async () => {
+    // Arrange
+    setup.existsByPath.set(jsonPath, true);
+    setup.existsByPath.set(jsoncPath, false);
+    setup.textByPath.set(
+      jsonPath,
+      JSON.stringify(
+        {
+          module: { fileName: '__module__.ts' },
+          sourceDir: 'src',
+          entry: 'src',
+        },
+        null,
+        2,
+      ),
+    );
+
+    // Act & Assert
+    await expect(ConfigLoader.load(projectRoot)).rejects.toBeInstanceOf(ConfigLoadError);
+  });
+
   it('should reject module.fileName containing a path when module.fileName is not a single filename', async () => {
     // Arrange
     setup.existsByPath.set(jsonPath, true);
@@ -91,6 +112,27 @@ describe('ConfigLoader', () => {
       JSON.stringify(
         {
           module: { fileName: 'modules/__module__.ts' },
+          sourceDir: 'src',
+          entry: 'src/main.ts',
+        },
+        null,
+        2,
+      ),
+    );
+
+    // Act & Assert
+    await expect(ConfigLoader.load(projectRoot)).rejects.toBeInstanceOf(ConfigLoadError);
+  });
+
+  it('should reject module.fileName containing backslash when module.fileName is not a single filename', async () => {
+    // Arrange
+    setup.existsByPath.set(jsonPath, true);
+    setup.existsByPath.set(jsoncPath, false);
+    setup.textByPath.set(
+      jsonPath,
+      JSON.stringify(
+        {
+          module: { fileName: 'modules\\__module__.ts' },
           sourceDir: 'src',
           entry: 'src/main.ts',
         },
@@ -175,6 +217,142 @@ describe('ConfigLoader', () => {
     await expect(ConfigLoader.load(projectRoot)).rejects.toBeInstanceOf(ConfigLoadError);
   });
 
+  it('should reject config missing module field when module is null', async () => {
+    // Arrange
+    setup.existsByPath.set(jsonPath, true);
+    setup.existsByPath.set(jsoncPath, false);
+    setup.textByPath.set(
+      jsonPath,
+      JSON.stringify(
+        {
+          module: null,
+          sourceDir: 'src',
+          entry: 'src/main.ts',
+        },
+        null,
+        2,
+      ),
+    );
+
+    // Act & Assert
+    await expect(ConfigLoader.load(projectRoot)).rejects.toBeInstanceOf(ConfigLoadError);
+  });
+
+  it('should reject config missing module field when module is an array', async () => {
+    // Arrange
+    setup.existsByPath.set(jsonPath, true);
+    setup.existsByPath.set(jsoncPath, false);
+    setup.textByPath.set(
+      jsonPath,
+      JSON.stringify(
+        {
+          module: [],
+          sourceDir: 'src',
+          entry: 'src/main.ts',
+        },
+        null,
+        2,
+      ),
+    );
+
+    // Act & Assert
+    await expect(ConfigLoader.load(projectRoot)).rejects.toBeInstanceOf(ConfigLoadError);
+  });
+
+  it('should reject config when top-level json is not an object', async () => {
+    // Arrange
+    setup.existsByPath.set(jsonPath, true);
+    setup.existsByPath.set(jsoncPath, false);
+    setup.textByPath.set(jsonPath, JSON.stringify(['not-an-object'], null, 2));
+
+    // Act & Assert
+    await expect(ConfigLoader.load(projectRoot)).rejects.toBeInstanceOf(ConfigLoadError);
+  });
+
+  it('should reject config when module is not an object', async () => {
+    // Arrange
+    setup.existsByPath.set(jsonPath, true);
+    setup.existsByPath.set(jsoncPath, false);
+    setup.textByPath.set(
+      jsonPath,
+      JSON.stringify(
+        {
+          module: 'invalid',
+          sourceDir: 'src',
+          entry: 'src/main.ts',
+        },
+        null,
+        2,
+      ),
+    );
+
+    // Act & Assert
+    await expect(ConfigLoader.load(projectRoot)).rejects.toBeInstanceOf(ConfigLoadError);
+  });
+
+  it('should reject config when module.fileName is not a string', async () => {
+    // Arrange
+    setup.existsByPath.set(jsonPath, true);
+    setup.existsByPath.set(jsoncPath, false);
+    setup.textByPath.set(
+      jsonPath,
+      JSON.stringify(
+        {
+          module: { fileName: 123 },
+          sourceDir: 'src',
+          entry: 'src/main.ts',
+        },
+        null,
+        2,
+      ),
+    );
+
+    // Act & Assert
+    await expect(ConfigLoader.load(projectRoot)).rejects.toBeInstanceOf(ConfigLoadError);
+  });
+
+  it('should reject config when sourceDir is not a string', async () => {
+    // Arrange
+    setup.existsByPath.set(jsonPath, true);
+    setup.existsByPath.set(jsoncPath, false);
+    setup.textByPath.set(
+      jsonPath,
+      JSON.stringify(
+        {
+          module: { fileName: '__module__.ts' },
+          sourceDir: 123,
+          entry: 'src/main.ts',
+        },
+        null,
+        2,
+      ),
+    );
+
+    // Act & Assert
+    await expect(ConfigLoader.load(projectRoot)).rejects.toBeInstanceOf(ConfigLoadError);
+  });
+
+  it('should reject config when entry is not a string', async () => {
+    // Arrange
+    setup.existsByPath.set(jsonPath, true);
+    setup.existsByPath.set(jsoncPath, false);
+    setup.textByPath.set(
+      jsonPath,
+      JSON.stringify(
+        {
+          module: { fileName: '__module__.ts' },
+          sourceDir: 'src',
+          entry: 123,
+        },
+        null,
+        2,
+      ),
+    );
+
+    // Act & Assert
+    await expect(ConfigLoader.load(projectRoot)).rejects.toBeInstanceOf(ConfigLoadError);
+  });
+
   it('should reject config missing sourceDir field when sourceDir is undefined', async () => {
     // Arrange
     setup.existsByPath.set(jsonPath, true);
@@ -246,8 +424,33 @@ describe('ConfigLoader', () => {
     await expect(ConfigLoader.load(projectRoot)).rejects.toBeInstanceOf(ConfigLoadError);
   });
 
+  it('should wrap non-ConfigLoadError exceptions into ConfigLoadError', async () => {
+    // Arrange
+    setup.existsByPath.set(jsonPath, true);
+    setup.existsByPath.set(jsoncPath, false);
+    setup.textByPath.set(
+      jsonPath,
+      JSON.stringify(
+        {
+          module: { fileName: '__module__.ts' },
+          sourceDir: 'src',
+          entry: 'src/main.ts',
+        },
+        null,
+        2,
+      ),
+    );
+
+    consoleInfoSpy!.mockImplementationOnce(() => {
+      throw new Error('console failed');
+    });
+
+    // Act & Assert
+    await expect(ConfigLoader.load(projectRoot)).rejects.toBeInstanceOf(ConfigLoadError);
+  });
+
   describe('mcp config', () => {
-    it('should use default mcp.card.types when mcp is omitted', async () => {
+    it('should call JSON.parse when bunner.json is used', async () => {
       // Arrange
       setup.existsByPath.set(jsonPath, true);
       setup.existsByPath.set(jsoncPath, false);
@@ -265,10 +468,35 @@ describe('ConfigLoader', () => {
       );
 
       // Act
-      const result = await ConfigLoader.load(projectRoot);
+      await ConfigLoader.load(projectRoot);
 
       // Assert
-      expect(result.config.mcp.card.types).toEqual(['spec']);
+      expect(jsonParseSpy).toHaveBeenCalledTimes(1);
+      expect(jsoncParseSpy).toHaveBeenCalledTimes(0);
+    });
+
+    it('should call Bun.JSONC.parse when bunner.jsonc is used', async () => {
+      // Arrange
+      setup.existsByPath.set(jsonPath, false);
+      setup.existsByPath.set(jsoncPath, true);
+      setup.textByPath.set(
+        jsoncPath,
+        [
+          '{',
+          '  // This is a comment',
+          '  "module": { "fileName": "__module__.ts" },',
+          '  "sourceDir": "src",',
+          '  "entry": "src/main.ts"',
+          '}',
+        ].join('\n'),
+      );
+
+      // Act
+      await ConfigLoader.load(projectRoot);
+
+      // Assert
+      expect(jsoncParseSpy).toHaveBeenCalledTimes(1);
+      expect(jsonParseSpy).toHaveBeenCalledTimes(0);
     });
 
     it('should use default mcp.card.relations when mcp is omitted', async () => {
@@ -293,7 +521,7 @@ describe('ConfigLoader', () => {
 
       // Assert
       expect(result.config.mcp.card.relations).toEqual([
-        'depends_on',
+        'depends-on',
         'references',
         'related',
         'extends',
@@ -301,7 +529,7 @@ describe('ConfigLoader', () => {
       ]);
     });
 
-    it('should use custom mcp.card.types when mcp.card.types is provided', async () => {
+    it('should use default mcp.card.relations when mcp is null', async () => {
       // Arrange
       setup.existsByPath.set(jsonPath, true);
       setup.existsByPath.set(jsoncPath, false);
@@ -312,11 +540,7 @@ describe('ConfigLoader', () => {
             module: { fileName: '__module__.ts' },
             sourceDir: 'src',
             entry: 'src/main.ts',
-            mcp: {
-              card: {
-                types: ['spec', 'system'],
-              },
-            },
+            mcp: null,
           },
           null,
           2,
@@ -327,7 +551,98 @@ describe('ConfigLoader', () => {
       const result = await ConfigLoader.load(projectRoot);
 
       // Assert
-      expect(result.config.mcp.card.types).toEqual(['spec', 'system']);
+      expect(result.config.mcp.card.relations).toEqual([
+        'depends-on',
+        'references',
+        'related',
+        'extends',
+        'conflicts',
+      ]);
+    });
+
+    it('should use default mcp config when mcp is an empty object', async () => {
+      // Arrange
+      setup.existsByPath.set(jsonPath, true);
+      setup.existsByPath.set(jsoncPath, false);
+      setup.textByPath.set(
+        jsonPath,
+        JSON.stringify(
+          {
+            module: { fileName: '__module__.ts' },
+            sourceDir: 'src',
+            entry: 'src/main.ts',
+            mcp: {},
+          },
+          null,
+          2,
+        ),
+      );
+
+      // Act
+      const result = await ConfigLoader.load(projectRoot);
+
+      // Assert
+      expect(result.config.mcp.card.relations).toEqual([
+        'depends-on',
+        'references',
+        'related',
+        'extends',
+        'conflicts',
+      ]);
+      expect(result.config.mcp.exclude).toEqual([]);
+    });
+
+    it('should use default mcp.card.relations when mcp.card is an empty object', async () => {
+      // Arrange
+      setup.existsByPath.set(jsonPath, true);
+      setup.existsByPath.set(jsoncPath, false);
+      setup.textByPath.set(
+        jsonPath,
+        JSON.stringify(
+          {
+            module: { fileName: '__module__.ts' },
+            sourceDir: 'src',
+            entry: 'src/main.ts',
+            mcp: { card: {} },
+          },
+          null,
+          2,
+        ),
+      );
+
+      // Act
+      const result = await ConfigLoader.load(projectRoot);
+
+      // Assert
+      expect(result.config.mcp.card.relations).toEqual([
+        'depends-on',
+        'references',
+        'related',
+        'extends',
+        'conflicts',
+      ]);
+    });
+
+    it('should reject mcp when it is an array', async () => {
+      // Arrange
+      setup.existsByPath.set(jsonPath, true);
+      setup.existsByPath.set(jsoncPath, false);
+      setup.textByPath.set(
+        jsonPath,
+        JSON.stringify(
+          {
+            module: { fileName: '__module__.ts' },
+            sourceDir: 'src',
+            entry: 'src/main.ts',
+            mcp: [],
+          },
+          null,
+          2,
+        ),
+      );
+
+      // Act & Assert
+      await expect(ConfigLoader.load(projectRoot)).rejects.toBeInstanceOf(ConfigLoadError);
     });
 
     it('should use custom mcp.card.relations when mcp.card.relations is provided', async () => {
@@ -343,7 +658,7 @@ describe('ConfigLoader', () => {
             entry: 'src/main.ts',
             mcp: {
               card: {
-                relations: ['depends_on', 'references'],
+                relations: ['depends-on', 'references'],
               },
             },
           },
@@ -356,10 +671,43 @@ describe('ConfigLoader', () => {
       const result = await ConfigLoader.load(projectRoot);
 
       // Assert
-      expect(result.config.mcp.card.relations).toEqual(['depends_on', 'references']);
+      expect(result.config.mcp.card.relations).toEqual(['depends-on', 'references']);
     });
 
-    it('should use default mcp.card.relations when only mcp.card.types is provided', async () => {
+    it('should use default mcp.card.relations when mcp.card is null', async () => {
+      // Arrange
+      setup.existsByPath.set(jsonPath, true);
+      setup.existsByPath.set(jsoncPath, false);
+      setup.textByPath.set(
+        jsonPath,
+        JSON.stringify(
+          {
+            module: { fileName: '__module__.ts' },
+            sourceDir: 'src',
+            entry: 'src/main.ts',
+            mcp: {
+              card: null,
+            },
+          },
+          null,
+          2,
+        ),
+      );
+
+      // Act
+      const result = await ConfigLoader.load(projectRoot);
+
+      // Assert
+      expect(result.config.mcp.card.relations).toEqual([
+        'depends-on',
+        'references',
+        'related',
+        'extends',
+        'conflicts',
+      ]);
+    });
+
+    it('should reject mcp.card.types when it is provided (card types are removed)', async () => {
       // Arrange
       setup.existsByPath.set(jsonPath, true);
       setup.existsByPath.set(jsoncPath, false);
@@ -381,17 +729,164 @@ describe('ConfigLoader', () => {
         ),
       );
 
-      // Act
-      const result = await ConfigLoader.load(projectRoot);
+      // Act & Assert
+      await expect(ConfigLoader.load(projectRoot)).rejects.toBeInstanceOf(ConfigLoadError);
+    });
 
-      // Assert
-      expect(result.config.mcp.card.relations).toEqual([
-        'depends_on',
-        'references',
-        'related',
-        'extends',
-        'conflicts',
-      ]);
+    it('should reject mcp.card.types when it is null', async () => {
+      // Arrange
+      setup.existsByPath.set(jsonPath, true);
+      setup.existsByPath.set(jsoncPath, false);
+      setup.textByPath.set(
+        jsonPath,
+        JSON.stringify(
+          {
+            module: { fileName: '__module__.ts' },
+            sourceDir: 'src',
+            entry: 'src/main.ts',
+            mcp: {
+              card: {
+                types: null,
+              },
+            },
+          },
+          null,
+          2,
+        ),
+      );
+
+      // Act & Assert
+      await expect(ConfigLoader.load(projectRoot)).rejects.toBeInstanceOf(ConfigLoadError);
+    });
+
+    it('should reject mcp.card.types when it is a string', async () => {
+      // Arrange
+      setup.existsByPath.set(jsonPath, true);
+      setup.existsByPath.set(jsoncPath, false);
+      setup.textByPath.set(
+        jsonPath,
+        JSON.stringify(
+          {
+            module: { fileName: '__module__.ts' },
+            sourceDir: 'src',
+            entry: 'src/main.ts',
+            mcp: {
+              card: {
+                types: 'spec',
+              },
+            },
+          },
+          null,
+          2,
+        ),
+      );
+
+      // Act & Assert
+      await expect(ConfigLoader.load(projectRoot)).rejects.toBeInstanceOf(ConfigLoadError);
+    });
+
+    it('should reject mcp.card.types when it is an object', async () => {
+      // Arrange
+      setup.existsByPath.set(jsonPath, true);
+      setup.existsByPath.set(jsoncPath, false);
+      setup.textByPath.set(
+        jsonPath,
+        JSON.stringify(
+          {
+            module: { fileName: '__module__.ts' },
+            sourceDir: 'src',
+            entry: 'src/main.ts',
+            mcp: {
+              card: {
+                types: { a: 'spec' },
+              },
+            },
+          },
+          null,
+          2,
+        ),
+      );
+
+      // Act & Assert
+      await expect(ConfigLoader.load(projectRoot)).rejects.toBeInstanceOf(ConfigLoadError);
+    });
+
+    it('should reject unknown relation types in mcp.card.relations', async () => {
+      // Arrange
+      setup.existsByPath.set(jsonPath, true);
+      setup.existsByPath.set(jsoncPath, false);
+      setup.textByPath.set(
+        jsonPath,
+        JSON.stringify(
+          {
+            module: { fileName: '__module__.ts' },
+            sourceDir: 'src',
+            entry: 'src/main.ts',
+            mcp: {
+              card: {
+                relations: ['dependsOn'],
+              },
+            },
+          },
+          null,
+          2,
+        ),
+      );
+
+      // Act & Assert
+      await expect(ConfigLoader.load(projectRoot)).rejects.toBeInstanceOf(ConfigLoadError);
+    });
+
+    it('should reject mcp.card.relations when it contains an empty string', async () => {
+      // Arrange
+      setup.existsByPath.set(jsonPath, true);
+      setup.existsByPath.set(jsoncPath, false);
+      setup.textByPath.set(
+        jsonPath,
+        JSON.stringify(
+          {
+            module: { fileName: '__module__.ts' },
+            sourceDir: 'src',
+            entry: 'src/main.ts',
+            mcp: {
+              card: {
+                relations: ['depends-on', ''],
+              },
+            },
+          },
+          null,
+          2,
+        ),
+      );
+
+      // Act & Assert
+      await expect(ConfigLoader.load(projectRoot)).rejects.toBeInstanceOf(ConfigLoadError);
+    });
+
+    it('should reject mcp.card.relations when it contains whitespace-only string', async () => {
+      // Arrange
+      setup.existsByPath.set(jsonPath, true);
+      setup.existsByPath.set(jsoncPath, false);
+      setup.textByPath.set(
+        jsonPath,
+        JSON.stringify(
+          {
+            module: { fileName: '__module__.ts' },
+            sourceDir: 'src',
+            entry: 'src/main.ts',
+            mcp: {
+              card: {
+                relations: ['depends-on', '   '],
+              },
+            },
+          },
+          null,
+          2,
+        ),
+      );
+
+      // Act & Assert
+      await expect(ConfigLoader.load(projectRoot)).rejects.toBeInstanceOf(ConfigLoadError);
     });
 
     it('should reject mcp.card.types when it is not a string array', async () => {
@@ -610,6 +1105,54 @@ describe('ConfigLoader', () => {
             entry: 'src/main.ts',
             mcp: {
               exclude: [1, 2, 3],
+            },
+          },
+          null,
+          2,
+        ),
+      );
+
+      // Act & Assert
+      await expect(ConfigLoader.load(projectRoot)).rejects.toBeInstanceOf(ConfigLoadError);
+    });
+
+    it('should reject mcp.exclude when it is null', async () => {
+      // Arrange
+      setup.existsByPath.set(jsonPath, true);
+      setup.existsByPath.set(jsoncPath, false);
+      setup.textByPath.set(
+        jsonPath,
+        JSON.stringify(
+          {
+            module: { fileName: '__module__.ts' },
+            sourceDir: 'src',
+            entry: 'src/main.ts',
+            mcp: {
+              exclude: null,
+            },
+          },
+          null,
+          2,
+        ),
+      );
+
+      // Act & Assert
+      await expect(ConfigLoader.load(projectRoot)).rejects.toBeInstanceOf(ConfigLoadError);
+    });
+
+    it('should reject mcp.exclude when it is a string', async () => {
+      // Arrange
+      setup.existsByPath.set(jsonPath, true);
+      setup.existsByPath.set(jsoncPath, false);
+      setup.textByPath.set(
+        jsonPath,
+        JSON.stringify(
+          {
+            module: { fileName: '__module__.ts' },
+            sourceDir: 'src',
+            entry: 'src/main.ts',
+            mcp: {
+              exclude: 'src/**',
             },
           },
           null,

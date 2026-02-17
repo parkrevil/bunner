@@ -98,6 +98,20 @@ describe('ProjectWatcher', () => {
       expect(onChange).toHaveBeenCalledWith({ eventType: 'change', filename: 'feature.ts' });
     });
 
+    it('should emit delete events when a .ts file is deleted', async () => {
+      // Arrange
+      const onChange = mock(() => {});
+
+      await watcher.start(onChange);
+
+      // Act
+      parcelCallback?.(null, [{ type: 'delete', path: `${rootPath}/feature.ts` }]);
+
+      // Assert
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange).toHaveBeenCalledWith({ eventType: 'delete', filename: 'feature.ts' });
+    });
+
     it('should ignore declaration files when path ends with .d.ts', async () => {
       // Arrange
       const onChange = mock(() => {});

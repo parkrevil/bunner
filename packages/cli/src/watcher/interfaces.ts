@@ -1,4 +1,4 @@
 export interface FileChangePayload {
-  eventType: 'change' | 'rename' | 'error';
+  eventType: 'change' | 'rename' | 'delete' | 'error';
   filename: string | null;
 }

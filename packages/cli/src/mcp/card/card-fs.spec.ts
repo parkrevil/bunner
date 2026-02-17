@@ -38,8 +38,7 @@ describe('mcp/card — fs helpers (unit)', () => {
     parseCardMarkdownSpy = spyOn(markdown, 'parseCardMarkdown').mockImplementation((_text: string) => {
       return {
         frontmatter: {
-          key: 'spec::a',
-          type: 'spec',
+          key: 'a',
           summary: 'A',
           status: 'draft',
         },
@@ -62,8 +61,7 @@ describe('mcp/card — fs helpers (unit)', () => {
     setFake(path, { text: 'md' });
     parseCardMarkdownSpy!.mockReturnValueOnce({
       frontmatter: {
-        key: 'spec::x',
-        type: 'spec',
+        key: 'x',
         summary: 'X',
         status: 'draft',
       },
@@ -79,7 +77,7 @@ describe('mcp/card — fs helpers (unit)', () => {
     expect(parseCardMarkdownSpy!).toHaveBeenCalledTimes(1);
     expect(parseCardMarkdownSpy!).toHaveBeenCalledWith('md');
     expect(card.filePath).toBe(path);
-    expect(card.frontmatter.key).toBe('spec::x');
+    expect(card.frontmatter.key).toBe('x');
     expect(card.body).toBe('B\n');
   });
 
@@ -92,8 +90,7 @@ describe('mcp/card — fs helpers (unit)', () => {
     await writeCardFile(path, {
       filePath: path,
       frontmatter: {
-        key: 'spec::a',
-        type: 'spec',
+        key: 'a',
         summary: 'A',
         status: 'draft',
       },

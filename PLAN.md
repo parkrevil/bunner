@@ -1,9 +1,10 @@
 # Card-centric MCP Index Design (Git-first + File SSOT + SQLite Index)
 
 > **Scope**: bunner MCP architecture optimized for vibe-coding agents
-> **Status**: Draft v5.9 — 2026-02-12
+> **Status**: Draft v6.0 — 2026-02-16
 > **Core idea**: **Git is the source of truth** (cards are files with frontmatter metadata + body spec). **SQLite is a disposable local index (gitignored, always rebuildable)** for ultra-fast agent traversal. **SQLite is managed exclusively by the MCP domain** — `bunner build/dev` produce only build artifacts (manifest); `bunner mcp` owns all SQLite indexing.
 > **Where it lives**: bunner **CLI package** — CLI and MCP share the same core logic.
+> **Card = Spec**: Cards are exclusively for specifications. No type field — all cards are specs. Classification via keyword (normalized term dictionary) + tag (free categorization).
 
 **Out of scope**: repository documentation directory (it will be deleted)
 
@@ -44,7 +45,7 @@ And the answer must be:
 
 ### 3.1 Source-of-truth layers
 
-- **SSOT (Git-tracked)**: `.bunner/cards/**/*.card.md` (frontmatter=metadata, body=spec) + **optional** in-code card links (JSDoc `@see {type}::key`)
+- **SSOT (Git-tracked)**: `.bunner/cards/**/*.card.md` (frontmatter=metadata, body=spec) + **optional** in-code card links (JSDoc `@see key`)
 - **Build artifacts (Git-tracked)**: `.bunner/build/` — compiler output (manifest TS, etc.)
 - **Derived local index (gitignored)**: `.bunner/cache/index.sqlite` — managed exclusively by MCP domain
 
@@ -56,8 +57,8 @@ repo/
       runtime.ts           #   manifest (export const manifest = ... as const)
     cache/                 # gitignored: MCP-managed derived data
       index.sqlite         #   project index (code_entity, card, relations, FTS5)
-      owner.lock           #   Owner Election lock file (PID)
-  bunner.jsonc             # Config: source dir, entry, card types, exclusions
+      watcher.owner.lock   #   Owner Election lock file (PID)
+  bunner.jsonc             # Config: source dir, entry, relations, exclusions
   src/
     ...                    # Code SSOT
 ```
@@ -87,19 +88,20 @@ Path convention:
 
 This is a filesystem hierarchy for organization. Logical relationships are stored in frontmatter, not directory structure.
 
-### 4.2 Card types
+### 4.2 Card classification (keyword + tag)
 
-Cards have a `type` field. The type determines the JSDoc link prefix: `@see {type}::key`.
+Cards have no `type` field — all cards are specs. Classification uses two orthogonal mechanisms:
 
-Default type:
+| Mechanism | Purpose | Storage | Constraint |
+|-----------|---------|---------|------------|
+| **keyword** | Normalized term dictionary (search precision) | `keyword` table (PK) + `card_keyword` N:M | Registered terms only |
+| **tag** | Free categorization (grouping/filtering) | `tag` table (PK) + `card_tag` N:M | Registered tags only |
 
-| Type | Purpose |
-|------|---------|
-| `spec` | Feature/requirement specification |
+**keyword** = "이 카드가 무엇에 관한 것인가" (e.g. `authentication`, `jwt`, `UserService`). Normalized PK prevents agents from using inconsistent terms (`auth` vs `authentication` vs `인증`).
 
-Additional types (e.g. `system`, `adapter`) may be added in later phases.
+**tag** = "이 카드를 어떻게 분류할 것인가" (e.g. `auth-module`, `core`, `v2`). PK-managed to prevent duplicate/inconsistent tags.
 
-Card types and relation types are configured in `bunner.jsonc`:
+Relation types are configured in `bunner.jsonc`:
 
 ```jsonc
 {
@@ -108,39 +110,38 @@ Card types and relation types are configured in `bunner.jsonc`:
   "module": { "fileName": "module.ts" },
   "mcp": {
     "card": {
-      "types": ["spec"],
-      "relations": ["depends_on", "references", "related", "extends", "conflicts"]
+      "relations": ["depends-on", "references", "related", "extends", "conflicts"]
     },
     "exclude": []
   }
 }
 ```
 
-- `mcp.card.types`: registered card types. Only these are valid as `@see` prefixes. Default: `["spec"]`.
 - `mcp.card.relations`: allowed `relations[].type` values. Default: 5 types above.
 - `mcp.exclude`: glob patterns excluded from indexing and `@see` verification.
-
-Only registered types are valid. Unregistered type prefixes in `@see` are errors.
+- ~~`mcp.card.types`~~: **Removed**. No type system — all cards are specs.
 
 ### 4.3 Card frontmatter
 
 ```yaml
 ---
-key: spec::auth/login
-type: spec
+key: auth/login
 summary: OAuth login
 status: draft              # draft | accepted | implementing | implemented | deprecated
-keywords: [auth, mvp, authentication]  # optional, free-form tags for search/filter
+tags:                      # registered tags for categorization (PK-managed)
+  - auth-module
+  - user-facing
+keywords:                  # registered terms for search precision (PK-managed)
+  - authentication
+  - jwt
 constraints:               # optional (spec-specific constraints, brief)
   - latency < 200ms
   - PII must be masked
 relations:                 # optional (graph edges to other cards)
-  - type: depends_on
-    target: spec::auth/session
-  - type: references
-    target: system::di/injection
+  - type: depends-on
+    target: auth/session
   - type: related
-    target: spec::auth/token-refresh
+    target: auth/token-refresh
 ---
 ```
 
@@ -154,7 +155,7 @@ relations:                 # optional (graph edges to other cards)
 
 | Type | Meaning |
 |------|---------|
-| `depends_on` | Prerequisite / blocking |
+| `depends-on` | Prerequisite / blocking |
 | `references` | Weak reference / background |
 | `related` | Associated (symmetric — both directions have identical semantics) |
 | `extends` | Refinement / elaboration |
@@ -165,7 +166,7 @@ relations:                 # optional (graph edges to other cards)
 
 ### 4.5 Card↔Code links (card-centric verification)
 
-`@see {type}::key` is an **optional connection mechanism**. Code uses `@see` to declare that it implements a specific card.
+`@see key` is an **optional connection mechanism**. Code uses `@see` to declare that it implements a specific card.
 
 Not every code file needs a card link. Types, interfaces, constants, and utility code may exist without `@see`. Verification is **card-centric**, not code-centric.
 
@@ -173,7 +174,7 @@ Not every code file needs a card link. Types, interfaces, constants, and utility
 
 ```ts
 /**
- * @see spec::auth/login
+ * @see auth/login
  */
 export function handleOAuthCallback() {}
 ```
@@ -182,17 +183,8 @@ Multiple links:
 
 ```ts
 /**
- * @see spec::auth/login
- * @see spec::auth/session
- */
-```
-
-Framework-shipped cards use their type prefix:
-
-```ts
-/**
- * @see system::di/injection
- * @see adapter::express/middleware
+ * @see auth/login
+ * @see auth/session
  */
 ```
 
@@ -220,14 +212,13 @@ When the verification command (`bunner mcp verify`) is executed, it performs ful
 
 Hardcode the following rule into agent instruction files (`.github/copilot-instructions.md`, `AGENTS.md`, `.cursor/rules/`, etc.):
 
-> When writing or modifying implementation code, always insert `@see {type}::key` JSDoc comments if the code relates to a card.
+> When writing or modifying implementation code, always insert `@see key` JSDoc comments if the code relates to a card.
 
 This rule is outside the scope of the card system document, but is stated at the design stage because card-centric verification requires agents to consistently insert `@see` links. Actual instruction file modifications will be done during implementation.
 
 #### Validity rules (always enforced)
 
-- Every `@see {type}::key` in code MUST reference an existing card
-- `@see` type prefix MUST match the target card's `type` field
+- Every `@see key` in code MUST reference an existing card
 - Invalid `@see` references are **errors**
 
 Notes:
@@ -270,28 +261,39 @@ metadata(
 
 -- Card metadata (parsed from frontmatter)
 card(
-  key           TEXT PRIMARY KEY,  -- e.g. 'spec::auth/login'
-  type          TEXT NOT NULL,     -- e.g. 'spec', 'system', 'adapter'
+  key           TEXT PRIMARY KEY,  -- e.g. 'auth/login'
   summary       TEXT NOT NULL,
   status        TEXT NOT NULL,     -- draft|accepted|implementing|implemented|deprecated
-  keywords      TEXT,              -- space-separated keywords (denormalized for FTS5 external content)
   constraints_json TEXT,           -- JSON array
   body          TEXT,              -- raw markdown body
   file_path     TEXT NOT NULL,     -- source .card.md path
   updated_at    TEXT NOT NULL
 )
 
--- Keyword master table (unique keyword registry)
+-- Keyword master table (unique keyword registry / term dictionary)
 keyword(
   id            INTEGER PRIMARY KEY,
-  name          TEXT NOT NULL UNIQUE  -- e.g. 'auth', 'mvp', 'authentication'
+  name          TEXT NOT NULL UNIQUE  -- e.g. 'authentication', 'jwt', 'UserService'
 )
 
--- Card↔Keyword mapping (N:M)
+-- Card↔Keyword mapping (N:M, PK-managed)
 card_keyword(
   card_key      TEXT NOT NULL REFERENCES card(key),
   keyword_id    INTEGER NOT NULL REFERENCES keyword(id),
   PRIMARY KEY (card_key, keyword_id)
+)
+
+-- Tag master table (unique tag registry / categorization)
+tag(
+  id            INTEGER PRIMARY KEY,
+  name          TEXT NOT NULL UNIQUE  -- e.g. 'auth-module', 'core', 'v2'
+)
+
+-- Card↔Tag mapping (N:M, PK-managed)
+card_tag(
+  card_key      TEXT NOT NULL REFERENCES card(key),
+  tag_id        INTEGER NOT NULL REFERENCES tag(id),
+  PRIMARY KEY (card_key, tag_id)
 )
 
 -- Code entities (parsed from AST by MCP indexer)
@@ -310,14 +312,14 @@ code_entity(
 -- Indexer auto-generates reverse edges (is_reverse = true) for bidirectional traversal
 card_relation(
   id            INTEGER PRIMARY KEY,
-  type          TEXT NOT NULL,     -- depends_on|references|related|extends|conflicts
+  type          TEXT NOT NULL,     -- depends-on|references|related|extends|conflicts
   src_card_key  TEXT NOT NULL REFERENCES card(key),
   dst_card_key  TEXT NOT NULL REFERENCES card(key),
   is_reverse    BOOLEAN NOT NULL DEFAULT false,
   meta_json     TEXT
 )
 
--- Card↔Code links (parsed from JSDoc @see {type}::key)
+-- Card↔Code links (parsed from JSDoc @see key)
 -- entity_key is NOT NULL: file-level @see maps to the module entity
 card_code_link(
   id            INTEGER PRIMARY KEY,
@@ -350,7 +352,7 @@ file_state(
 -- External content FTS5: content stored in source table, FTS index auto-synced via triggers
 -- No data duplication — FTS reads from source table on SELECT, only index is stored
 CREATE VIRTUAL TABLE card_fts USING fts5(
-  key, summary, body, keywords,
+  key, summary, body,
   content='card', content_rowid='rowid',
   tokenize='trigram'
 );
@@ -363,18 +365,18 @@ CREATE VIRTUAL TABLE code_fts USING fts5(
 -- FTS external content sync triggers (card_fts)
 -- External content DELETE uses special INSERT INTO fts(fts, ...) VALUES('delete', ...) syntax
 CREATE TRIGGER card_fts_ai AFTER INSERT ON card BEGIN
-  INSERT INTO card_fts(rowid, key, summary, body, keywords)
-    VALUES (new.rowid, new.key, new.summary, new.body, new.keywords);
+  INSERT INTO card_fts(rowid, key, summary, body)
+    VALUES (new.rowid, new.key, new.summary, new.body);
 END;
 CREATE TRIGGER card_fts_au AFTER UPDATE ON card BEGIN
-  INSERT INTO card_fts(card_fts, rowid, key, summary, body, keywords)
-    VALUES('delete', old.rowid, old.key, old.summary, old.body, old.keywords);
-  INSERT INTO card_fts(rowid, key, summary, body, keywords)
-    VALUES (new.rowid, new.key, new.summary, new.body, new.keywords);
+  INSERT INTO card_fts(card_fts, rowid, key, summary, body)
+    VALUES('delete', old.rowid, old.key, old.summary, old.body);
+  INSERT INTO card_fts(rowid, key, summary, body)
+    VALUES (new.rowid, new.key, new.summary, new.body);
 END;
 CREATE TRIGGER card_fts_ad AFTER DELETE ON card BEGIN
-  INSERT INTO card_fts(card_fts, rowid, key, summary, body, keywords)
-    VALUES('delete', old.rowid, old.key, old.summary, old.body, old.keywords);
+  INSERT INTO card_fts(card_fts, rowid, key, summary, body)
+    VALUES('delete', old.rowid, old.key, old.summary, old.body);
 END;
 
 -- FTS external content sync triggers (code_fts)
@@ -394,7 +396,6 @@ CREATE TRIGGER code_fts_ad AFTER DELETE ON code_entity BEGIN
 END;
 
 -- Indexes for query performance (§9 targets)
-CREATE INDEX idx_card_type ON card(type);
 CREATE INDEX idx_card_status ON card(status);
 CREATE INDEX idx_card_file_path ON card(file_path);
 CREATE INDEX idx_code_entity_file_path ON code_entity(file_path);
@@ -410,18 +411,20 @@ CREATE INDEX idx_code_relation_dst ON code_relation(dst_entity_key);
 CREATE INDEX idx_code_relation_type ON code_relation(type);
 CREATE INDEX idx_card_keyword_card ON card_keyword(card_key);
 CREATE INDEX idx_card_keyword_keyword ON card_keyword(keyword_id);
--- Note: keyword.name already has a UNIQUE index (implicit from UNIQUE constraint)
+CREATE INDEX idx_card_tag_card ON card_tag(card_key);
+CREATE INDEX idx_card_tag_tag ON card_tag(tag_id);
+-- Note: keyword.name and tag.name already have UNIQUE indexes (implicit from UNIQUE constraint)
 ```
 
 ### 5.3 Identity strategy
 
 **Namespace separation** (intentional delimiter difference):
-- Card keys use **double colon** `::` — e.g. `spec::auth/login`, `system::di/injection`
+- Card keys use **slash-separated slugs** — e.g. `auth/login`, `auth/session`
 - Code entity keys use **single colon** `:` — e.g. `module:src/auth/login.ts`, `symbol:src/auth/login.ts#handleOAuth`
 
-This prevents ambiguity: any key containing `::` is a card, any key with single `:` is a code entity.
+This prevents ambiguity: any key containing `:` (single colon) is a code entity, keys without colon are cards.
 
-- Cards: identity is `card.key` (e.g. `spec::auth/login`). Key is defined in frontmatter and is immutable by policy. Rename is supported via `card_rename` tool (updates all references).
+- Cards: identity is `card.key` (e.g. `auth/login`). Key is defined in frontmatter and is immutable by policy. Rename is supported via `card_rename` tool (updates all references).
 - Code: identity is `entity_key` derived from AST:
   - module: `module:{relativePath}`
   - symbol: `symbol:{relativePath}#{symbolName}`
@@ -443,10 +446,10 @@ The MCP domain is the sole owner of SQLite indexing. `bunner build/dev` produce 
 
 1. Check `metadata.schema_version` → mismatch with code constant → DROP ALL tables + recreate schema
 2. **Entire rebuild is wrapped in a single SQLite transaction** (atomic: all-or-nothing)
-3. Parse all card files → `card` rows + `card_relation` rows (from frontmatter `relations[]`) + `keyword`/`card_keyword` rows (from frontmatter `keywords[]`)
+3. Parse all card files → `card` rows + `card_relation` rows (from frontmatter `relations[]`) + `keyword`/`card_keyword` rows (from frontmatter `keywords[]`) + `tag`/`card_tag` rows (from frontmatter `tags[]`)
 4. Auto-generate reverse `card_relation` rows (`is_reverse = true`)
 5. Parse code files via `oxc-parser` AST → `code_entity` rows (with fingerprint) + `code_relation` rows (imports, calls, extends, implements)
-6. Parse JSDoc `@see {type}::key` annotations → `card_code_link` rows
+6. Parse JSDoc `@see key` annotations → `card_code_link` rows
 7. FTS5 external content tables are auto-synchronized via triggers (no manual refresh needed)
 8. Update `file_state` for all processed files
 
@@ -454,7 +457,7 @@ The MCP domain is the sole owner of SQLite indexing. `bunner build/dev` produce 
 
 - Use `file_state` to skip unchanged files (content_hash + mtime comparison)
 - Each file update is wrapped in a **SQLite transaction** (atomic per-file: all-or-nothing)
-- If a card file changes: update `card` + `card_relation` + `card_keyword` rows from that file. **Reverse edge scope**: delete only reverse edges where `dst_card_key` is the changed card, then regenerate from the card's current outgoing relations (not full reverse rebuild)
+- If a card file changes: update `card` + `card_relation` + `card_keyword` + `card_tag` rows from that file. **Reverse edge scope**: delete only reverse edges where `dst_card_key` is the changed card, then regenerate from the card's current outgoing relations (not full reverse rebuild)
 - If a code file changes: update `code_entity` + `code_relation` + `card_code_link` rows from that file
 - FTS5 external content tables are auto-synchronized via triggers (no manual update needed)
 - File move detection: compare fingerprints of deleted entities with new entities to preserve relations
@@ -464,7 +467,7 @@ The MCP domain is the sole owner of SQLite indexing. `bunner build/dev` produce 
 ### 6.3 Data flow
 
 ```
-[.card.md frontmatter] ──parse──→ card + card_relation tables (+ reverse edges)
+[.card.md frontmatter] ──parse──→ card + card_relation + card_keyword + card_tag tables (+ reverse edges)
 [.card.md body]        ──parse──→ card.body column
 [*.ts files AST]       ──parse──→ code_entity (with fingerprint) + code_relation tables
 [*.ts JSDoc @see]      ──parse──→ card_code_link table
@@ -529,7 +532,7 @@ interface CodeRelationExtractor {
   - `rename` updates all `@see` references + `relations[].target` across codebase
 
 - `bunner mcp link add|remove`
-  - insert/remove `@see {type}::key` annotation using AST (safe edit)
+  - insert/remove `@see key` annotation using AST (safe edit)
 
 - `bunner mcp relation add|remove`
   - add/remove `relations[]` entries in card frontmatter
@@ -551,7 +554,7 @@ CLI and MCP share the **same core**. MCP is the primary interface for vibe-codin
 - `trace_chain(from_key, to_key)` — shortest relation path between two entities
 - `coverage_report(card_key)` — card's linked code status
 - `list_unlinked(status_filter)` — cards with no @see code references (filterable by status)
-- `list_cards(filters)` — card listing by status, type, keywords
+- `list_cards(filters)` — card listing by status, tags, keywords
 - `get_relations(card_key, direction)` — card's relations (outgoing / incoming / both)
 
 All read tools query SQLite only.
@@ -568,7 +571,7 @@ Write tools must:
 
 Tools:
 
-- `card_create(type, key, summary, body, keywords?)` — create card file
+- `card_create(key, summary, body, keywords?, tags?)` — create card file
 - `card_update(key, fields)` — update card frontmatter/body
 - `card_delete(key)` — delete card file (rejects deletion if `@see` references still exist in code OR other cards reference this card in `relations[].target`; user must remove all references first)
 - `card_rename(old_key, new_key)` — rename key across all @see + relations
@@ -577,6 +580,10 @@ Tools:
 - `link_remove(file_path, card_key)` — AST-safe JSDoc @see removal
 - `relation_add(src_key, dst_key, type)` — add relation to card frontmatter
 - `relation_remove(src_key, dst_key, type)` — remove relation from card frontmatter
+- `keyword_create(name)` — register new keyword in term dictionary
+- `keyword_delete(name)` — remove keyword (unlinks from all cards)
+- `tag_create(name)` — register new tag
+- `tag_delete(name)` — remove tag (unlinks from all cards)
 
 ---
 
@@ -616,19 +623,18 @@ If stronger governance is required later:
 Hard rules (errors):
 
 1. `card.key` is globally unique in repo
-2. `card.type` must be in `mcp.card.types` (in `bunner.jsonc`)
-3. no duplicate card file defines the same key
-4. every code-referenced `{type}::key` must exist as a card
-5. every `relations[].target` in frontmatter must exist as a card
-6. `@see` type prefix must match the target card's `type` field
-7. card with status `implemented` must have at least one `@see` code reference
-8. every `relations[].target` type prefix must match the target card's `type` field
-9. every `relations[].type` must be in `mcp.card.relations` (in `bunner.jsonc`)
+2. no duplicate card file defines the same key
+3. every code-referenced `@see key` must exist as a card
+4. every `relations[].target` in frontmatter must exist as a card
+5. card with status `implemented` must have at least one `@see` code reference
+6. every `relations[].type` must be in `mcp.card.relations` (in `bunner.jsonc`)
+7. every keyword in frontmatter `keywords[]` must be registered in `keyword` table
+8. every tag in frontmatter `tags[]` must be registered in `tag` table
 
 Soft rules (warnings):
 
 1. card with status `accepted` or `implementing` has no `@see` code references
-2. `depends_on` cycles (traversal uses visited set to prevent infinite loops)
+2. `depends-on` cycles (traversal uses visited set to prevent infinite loops)
 3. references to `deprecated` cards
 
 ---
@@ -641,7 +647,7 @@ Soft rules (warnings):
 | 2 | Relation storage | R1 (frontmatter, outgoing only) to start. Reverse edges auto-generated by indexer. Migrate to R2 if merge conflicts become frequent |
 | 3 | AST engine | `oxc-parser` only. No TypeScript Compiler API |
 | 4 | Code relation depth | Call-level included (imports, calls, extends, implements). injects/provides reserved for future |
-| 5 | Link prefix | `{type}::key` (not fixed `card::` or `spec::`) |
+| 5 | Link prefix | `@see key` (slug only, no type prefix). Card = spec, type removed |
 | 6 | Policy/agent rules | Not stored in cards. Out of scope for card model |
 | 7 | `.tsx` support | Not applicable (backend framework) |
 | 8 | In-code ignore tokens | Not applicable (`@see` is optional; no code-level enforcement to bypass) |
@@ -654,18 +660,18 @@ Soft rules (warnings):
 | 15 | Code identity | Path-based `entity_key` + `fingerprint` (symbol+kind+signature hash) for move tracking |
 | 16 | Status transitions | User-directed. No automatic AC checking. Agent acts on user instruction |
 | 17 | FTS tokenizer | trigram (for CJK/Unicode support) |
-| 18 | Cycle handling | Visited set in traversal tools. `depends_on` cycles are CI warnings (not errors) |
+| 18 | Cycle handling | Visited set in traversal tools. `depends-on` cycles are CI warnings (not errors) |
 | 19 | Code relation extractors | Plugin interface ready. Only pure-AST extractors implemented now |
 | 20 | Config format | `bunner.jsonc` (JSONC). Shared with framework config |
 | 21 | Package structure | CLI package (`packages/cli/`). MCP commands as `bunner mcp` subcommand group |
 | 22 | Framework-shipped cards | Deferred. `bunner mcp` auto-creates required empty structure on first run. Content TBD |
-| 23 | Card type registry | `mcp.card.types` in `bunner.jsonc`. Default: `["spec"]` |
-| 24 | `relations[].type` set | `mcp.card.relations` in `bunner.jsonc`. Default: `["depends_on", "references", "related", "extends", "conflicts"]` |
+| 23 | Card type registry | **Removed**. All cards are specs. No `mcp.card.types` config. Classification via keyword (term dict PK) + tag (category PK) |
+| 24 | `relations[].type` set | `mcp.card.relations` in `bunner.jsonc`. Default: `["depends-on", "references", "related", "extends", "conflicts"]` |
 | 25 | Verification command | `bunner mcp verify` performs full integrity verification; warns about confirmed cards with no code links |
 | 26 | Agent @see insertion rule | Hardcode `@see` insertion rule in agent instruction files (applied during implementation) |
 | 27 | Manifest format | TypeScript: `export const manifest = ${JSON.stringify(data)} as const;`. Frozen at build time, deleted from memory after bootstrap via null assignment + GC |
 | 28 | SQLite ownership | **MCP-exclusive** — MCP domain is the sole owner of all SQLite operations. `bunner build/dev` do not access SQLite. MCP indexer independently parses card files and code AST to populate the index |
-| 29 | `.bunner/` directory | `cards/` + `build/` (Git-tracked) + `cache/` (gitignored: `index.sqlite` + `owner.lock`). No `schema/` directory — schema versioning is handled by `metadata` table in SQLite |
+| 29 | `.bunner/` directory | `cards/` + `build/` (Git-tracked) + `cache/` (gitignored: `index.sqlite` + `watcher.owner.lock`). No `schema/` directory — schema versioning is handled by `metadata` table in SQLite |
 | 30 | Owner Election | lock file + PID + signal. **MCP processes only** (build/dev do not participate). First `bunner mcp` process = owner (watch + write), subsequent = reader (signal + read only). Owner death → reader promotes |
 | 31 | WAL mode | `PRAGMA journal_mode = WAL` + `PRAGMA busy_timeout = 5000`. Optimal for single-writer + multi-reader (Owner Election + MCP read tools) |
 | 32 | CLI architecture | Domain-oriented vertical slicing: `compiler/`, `mcp/`, `store/`, `watcher/`, `config/`, `diagnostics/`, `shared/`, `errors/`, `bin/`. No horizontal layering |
@@ -679,9 +685,14 @@ Soft rules (warnings):
 | 40 | `card_code_link.entity_key` | NOT NULL. File-level `@see` maps to the file's `module:` entity. Ensures referential integrity and simpler JOINs |
 | 41 | `code_relation.type` scope | Current: `imports\|calls\|extends\|implements`. `injects\|provides` reserved for future framework-user features |
 | 42 | CLI naming convention | CRUD standard: `create\|update\|delete\|rename\|status`. CLI and MCP tool names aligned (e.g. `card create` / `card_create`) |
-| 43 | Keyword unification | `tags` + `subjects` unified into `keywords`. Single free-form keyword system for search, filter, and categorization. `card.keywords` (space-separated, denormalized for FTS5 external content column name match) + normalized `keyword` + `card_keyword` tables |
+| 43 | Keyword system | Keywords are a **normalized term dictionary** (PK-managed). `keyword` table (id + name UNIQUE) + `card_keyword` N:M. No denormalized TEXT column in card table. FTS searches body/summary only; keyword/tag lookup via JOIN |
 | 44 | Keyword PK strategy | INTEGER PK (`keyword.id`) + `name TEXT UNIQUE`. ID-based FK in `card_keyword` — keyword rename does not cascade to junction table. Chosen because agents frequently rename keywords |
 | 45 | P0 directory restructure | Pure directory move before any new code. `analyzer/+generator/ → compiler/`, `commands/ → bin/`, empty dirs created. File rename/refactor deferred to each Phase. Git history preserved via pure mv |
+| 46 | Card type removal | `card.type` field **removed**. All cards are specs. Key format changed: `spec::auth/login` → `auth/login`. No type prefix in `@see` links. Simplifies schema, config, validation |
+| 47 | Tag system | Tags are **PK-managed categorization**. `tag` table (id + name UNIQUE) + `card_tag` N:M. Same structure as keyword but different purpose: keyword = search precision (what), tag = classification (how to organize) |
+| 48 | Card TEXT columns removed | `card.keywords` TEXT and `card.type` TEXT removed from card table. keyword/tag data lives exclusively in normalized N:M tables. FTS covers only `key`, `summary`, `body` |
+| 49 | Framework doc delivery | **YAGNI**. No MCP tool for framework docs. `.d.ts` JSDoc is the API reference. MCP provides project KB only. Revisit when agent-to-agent workflow is implemented |
+| 50 | Workflow documents | Not part of card system. Plans, reviews, discussions are temporary markdown files managed outside KB. Cards = specs only |
 
 ## 13. Future Discussion (out of current scope)
 
@@ -690,16 +701,15 @@ Items to discuss in later phases. Recorded here for continuity.
 ### Architecture / Design
 
 1. **Framework user data accumulation**: How to collect and structure data for framework end-users? What data does the MCP expose to users building apps with bunner?
-2. **Framework-shipped cards expansion**: When to scaffold `system::*` / `adapter::*` cards into user repos? Scaffold (A) vs read from package (B)?
-3. **`system` / `adapter` card types**: When to introduce framework-level (`system::`) and adapter-specific (`adapter::`) card types? (Card type and relation type registries are already config-driven via `mcp.card.types` and `mcp.card.relations`)
+2. **Agent-to-agent workflow**: Multi-agent orchestration for planning, coding, testing, review. Temporary workflow documents (plans, discussions, reviews) managed outside card system as plain markdown files.
+3. **Framework documentation delivery**: When `.d.ts` JSDoc is insufficient, consider MCP tool for framework docs. Currently YAGNI.
 
 ### Implementation Details
 
-1. **Glossary / term dictionary**: Project-wide term definitions with aliases. Could extend `keyword` table or be separate `term` table
-2. **YAML frontmatter parser**: Bun-compatible library selection for card parsing
-3. **oxc-parser JSDoc @see extraction**: Integration with existing CLI AST pipeline for `@see {type}::key` parsing
-4. **MCP transport protocol**: stdio vs HTTP selection criteria and configuration
-5. **`card_rename` transaction safety**: Atomicity guarantees when renaming across many files
+1. **YAML frontmatter parser**: Bun-compatible library selection for card parsing
+2. **oxc-parser JSDoc @see extraction**: Integration with existing CLI AST pipeline for `@see key` parsing
+3. **MCP transport protocol**: stdio vs HTTP selection criteria and configuration
+4. **`card_rename` transaction safety**: Atomicity guarantees when renaming across many files
 
 ---
 
@@ -732,7 +742,7 @@ packages/cli/src/
 ### 14.1 Owner Election
 
 - Scope: **MCP processes only** (`bunner mcp` / `bunner mcp rebuild`). `bunner build/dev` do not participate.
-- Lock file: `.bunner/cache/owner.lock` contains owner PID
+- Lock file: `.bunner/cache/watcher.owner.lock` contains owner PID
 - First `bunner mcp` process = **owner** (watch + SQLite write authority)
 - Subsequent `bunner mcp` processes = **reader** (SQLite read only, signal owner for re-index)
 - Owner death detection: reader checks if PID is alive; promotes if dead
@@ -762,13 +772,13 @@ All patterns adopted from Angular CLI MCP, adapted for Bun runtime:
 | Phase | Domain | Content | Depends On |
 |-------|--------|---------|------------|
 | P0 | (all) | **Directory restructure** (pure mv + import path fix, no file rename/refactor). `analyzer/+generator/ → compiler/`, `commands/ → bin/`, empty dirs: `store/`, `shared/`, `mcp/{card,index,server,verify}/`. Git history preserved via pure move. Tests must pass after each commit | — |
-| P1 | `store/` | SQLite schema (§5.2), connection, WAL, file_state, port interfaces | config (done) |
+| P1 | `store/` | SQLite schema (§5.2 — card without type/keywords TEXT, keyword, card_keyword, **tag, card_tag**), connection, WAL, file_state, port interfaces | config (done) |
 | P2 | `compiler/` | CodeRelationExtractor implementations for MCP indexer reuse. No SQLite access | P0 |
-| P3 | `mcp/card/` | Card file parsing (frontmatter+body), CRUD helpers | config |
-| P4 | `mcp/index/` | Full/incremental indexing (card, card_relation, card_code_link, code_entity, code_relation), FTS5, file_state | store/, mcp/card/, compiler/ |
-| P5 | `mcp/verify/` | Invariants §11 verification (9 hard + 3 soft rules) | store/, mcp/card/ |
+| P3 | `mcp/card/` | Card file parsing (frontmatter+body — **no type field, with tags[] and keywords[]**), CRUD helpers, key format (slug only, no type prefix) | config |
+| P4 | `mcp/index/` | Full/incremental indexing (card, card_relation, card_code_link, code_entity, code_relation, **card_keyword, card_tag**), FTS5 (key/summary/body only), file_state | store/, mcp/card/, compiler/ |
+| P5 | `mcp/verify/` | Invariants §11 verification (8 hard + 3 soft rules — **no type validation, added keyword/tag registration checks**) | store/, mcp/card/ |
 | P6 | `watcher/` | Owner Election (lock+PID+signal), incremental re-index trigger | store/ |
-| P7 | `mcp/server/` | MCP server (stdio), tool registry (declareTool), read/write tools | store/, mcp/card/, mcp/index/, mcp/verify/ |
+| P7 | `mcp/server/` | MCP server (stdio), tool registry (declareTool), read/write tools (**including keyword_create/delete, tag_create/delete**) | store/, mcp/card/, mcp/index/, mcp/verify/ |
 | P8 | `bin/` | CLI entry restructure: `bunner build`, `bunner dev`, `bunner mcp`. `common/ → config/` migration | all |
 
 P0 is a prerequisite for all phases. P1 and P3 are independent and can proceed in parallel after P0. P6 is independent after P1.
@@ -783,7 +793,7 @@ Each phase follows **strict TDD**: write ALL tests first → RED → implement �
 - Human collaboration remains Git-native
 - Complexity is concentrated in the indexer (single place), not in distributed constraints
 - MCP write tools enable fully MCP-driven development (no CLI required)
-- Card type system (`{type}::key`) supports framework rules, adapter rules, and user specs in a unified model
+- Card = Spec: single purpose simplifies tooling; keyword (term dict) + tag (classification) provide flexible discovery without schema bloat
 - Card-centric verification allows exploratory coding (code first, link later) while ensuring confirmed specs have implementations
 
 ---

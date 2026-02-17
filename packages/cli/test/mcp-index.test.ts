@@ -11,15 +11,15 @@ import type { ResolvedBunnerConfig } from '../src/common/interfaces';
 
 import { indexProject } from '../src/mcp/index/index-project';
 
-const config: ResolvedBunnerConfig = {
+const config = {
   module: { fileName: 'module.ts' },
   sourceDir: './src',
   entry: './src/main.ts',
   mcp: {
-    card: { types: ['spec'], relations: ['depends_on', 'references', 'related', 'extends', 'conflicts'] },
+    card: { relations: ['depends-on', 'references', 'related', 'extends', 'conflicts'] },
     exclude: [],
   },
-};
+} as unknown as ResolvedBunnerConfig;
 
 describe('mcp/index — indexProject (integration)', () => {
   let projectRoot: string | null = null;
@@ -34,12 +34,12 @@ describe('mcp/index — indexProject (integration)', () => {
 
     await writeText(
       join(projectRoot, '.bunner', 'cards', 'auth', 'login.card.md'),
-      `---\nkey: spec::auth/login\ntype: spec\nsummary: Login\nstatus: accepted\nrelations:\n  - type: depends_on\n    target: spec::auth/session\n---\nBody\n`,
+      `---\nkey: auth/login\nsummary: Login\nstatus: accepted\nrelations:\n  - type: depends-on\n    target: auth/session\n---\nBody\n`,
     );
 
     await writeText(
       join(projectRoot, '.bunner', 'cards', 'auth', 'session.card.md'),
-      `---\nkey: spec::auth/session\ntype: spec\nsummary: Session\nstatus: accepted\n---\nBody\n`,
+      `---\nkey: auth/session\nsummary: Session\nstatus: accepted\n---\nBody\n`,
     );
 
     await writeText(
@@ -49,7 +49,7 @@ describe('mcp/index — indexProject (integration)', () => {
 
     await writeText(
       join(projectRoot, 'src', 'auth', 'login.ts'),
-      `/**\n * @see spec::auth/login\n */\nimport { getSession } from './session';\n\nexport function login() {\n  return getSession();\n}\n`,
+      `/**\n * @see auth/login\n */\nimport { getSession } from './session';\n\nexport function login() {\n  return getSession();\n}\n`,
     );
   });
 
@@ -71,10 +71,10 @@ describe('mcp/index — indexProject (integration)', () => {
       expect(cards).toHaveLength(2);
 
       const rels = db.select().from(cardRelation).all();
-      // login depends_on session + reverse
+      // login depends-on session + reverse
       expect(rels).toHaveLength(2);
-      expect(rels.some((r) => r.type === 'depends_on' && r.srcCardKey === 'spec::auth/login' && r.dstCardKey === 'spec::auth/session' && r.isReverse === false)).toBe(true);
-      expect(rels.some((r) => r.type === 'depends_on' && r.srcCardKey === 'spec::auth/session' && r.dstCardKey === 'spec::auth/login' && r.isReverse === true)).toBe(true);
+      expect(rels.some((r) => r.type === 'depends-on' && r.srcCardKey === 'auth/login' && r.dstCardKey === 'auth/session' && r.isReverse === false)).toBe(true);
+      expect(rels.some((r) => r.type === 'depends-on' && r.srcCardKey === 'auth/session' && r.dstCardKey === 'auth/login' && r.isReverse === true)).toBe(true);
 
       const entities = db.select().from(codeEntity).all();
       expect(entities.some((e) => e.entityKey === 'module:src/auth/login.ts')).toBe(true);
@@ -85,7 +85,7 @@ describe('mcp/index — indexProject (integration)', () => {
 
       const links = db.select().from(cardCodeLink).all();
       expect(links).toHaveLength(1);
-      expect(links[0]!.cardKey).toBe('spec::auth/login');
+      expect(links[0]!.cardKey).toBe('auth/login');
       expect(links[0]!.entityKey).toBe('module:src/auth/login.ts');
     } finally {
       closeDb(db);
@@ -114,7 +114,7 @@ describe('mcp/index — indexProject (integration)', () => {
       // Remove the relation from login -> session
       await writeText(
         join(projectRoot!, '.bunner', 'cards', 'auth', 'login.card.md'),
-        `---\nkey: spec::auth/login\ntype: spec\nsummary: Login\nstatus: accepted\n---\nBody\n`,
+        `---\nkey: auth/login\nsummary: Login\nstatus: accepted\n---\nBody\n`,
       );
 
       const res2 = await indexProject({ projectRoot: projectRoot!, config, db, mode: 'incremental' });
@@ -139,7 +139,7 @@ describe('mcp/index — indexProject (integration)', () => {
       // Update login.ts to remove the function call
       await writeText(
         join(projectRoot!, 'src', 'auth', 'login.ts'),
-        `/**\n * @see spec::auth/login\n */\nimport { getSession } from './session';\n\nexport function login() {\n  return 'no-call';\n}\n`,
+        `/**\n * @see auth/login\n */\nimport { getSession } from './session';\n\nexport function login() {\n  return 'no-call';\n}\n`,
       );
 
       await indexProject({ projectRoot: projectRoot!, config, db, mode: 'incremental' });
@@ -155,24 +155,25 @@ describe('mcp/index — indexProject (integration)', () => {
     const db = createDb(':memory:');
     try {
       // Seed a bogus row without any file_state tracking
-      db.insert(card).values({
-        key: 'spec::bogus',
-        type: 'spec',
-        summary: 'Bogus',
-        status: 'draft',
-        keywords: null,
-        constraintsJson: null,
-        body: 'X',
-        filePath: '.bunner/cards/bogus.card.md',
-        updatedAt: new Date().toISOString(),
-      }).run();
+      db.insert(card)
+        .values({
+          key: 'bogus',
+          summary: 'Bogus',
+          status: 'draft',
+          keywords: null,
+          constraintsJson: null,
+          body: 'X',
+          filePath: '.bunner/cards/bogus.card.md',
+          updatedAt: new Date().toISOString(),
+        } as any)
+        .run();
 
-      expect(db.select().from(card).all().some((c) => c.key === 'spec::bogus')).toBe(true);
+      expect(db.select().from(card).all().some((c) => c.key === 'bogus')).toBe(true);
 
       await indexProject({ projectRoot: projectRoot!, config, db, mode: 'full' });
 
       const cards = db.select().from(card).all();
-      expect(cards.some((c) => c.key === 'spec::bogus')).toBe(false);
+      expect(cards.some((c) => c.key === 'bogus')).toBe(false);
       expect(cards).toHaveLength(2);
     } finally {
       closeDb(db);

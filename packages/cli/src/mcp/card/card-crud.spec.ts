@@ -15,10 +15,10 @@ describe('mcp/card — card CRUD (unit)', () => {
     sourceDir: './src',
     entry: './src/main.ts',
     mcp: {
-      card: { types: ['spec'], relations: ['depends_on', 'references', 'related', 'extends', 'conflicts'] },
+      card: { relations: ['depends-on', 'references', 'related', 'extends', 'conflicts'] },
       exclude: [],
     },
-  };
+  } as any;
 
   let bunFileSpy: ReturnType<typeof spyOn> | undefined;
   let mkdirSpy: ReturnType<typeof spyOn> | undefined;
@@ -55,13 +55,12 @@ describe('mcp/card — card CRUD (unit)', () => {
     readCardFileSpy = spyOn(fs, 'readCardFile').mockResolvedValue({
       filePath: bunnerCardMarkdownPath('/repo', 'auth/login'),
       frontmatter: {
-        key: 'spec::auth/login',
-        type: 'spec',
+        key: 'auth/login',
         summary: 'S',
         status: 'draft',
       },
       body: 'Body\n',
-    } satisfies CardFile);
+    } satisfies CardFile as any);
 
     writeCardFileSpy = spyOn(fs, 'writeCardFile').mockResolvedValue();
   });
@@ -74,7 +73,7 @@ describe('mcp/card — card CRUD (unit)', () => {
     writeCardFileSpy?.mockRestore();
   });
 
-  it('cardCreate validates type and writes file', async () => {
+  it('cardCreate writes file with slug-only key', async () => {
     // Arrange
     setExists(bunnerCardMarkdownPath('/repo', 'auth/login'), false);
 
@@ -82,30 +81,49 @@ describe('mcp/card — card CRUD (unit)', () => {
     const out = await crud.cardCreate({
       projectRoot: '/repo',
       config,
-      type: 'spec',
       slug: 'auth/login',
       summary: 'Login',
       body: 'B\n',
       keywords: ['auth'],
-    });
+    } as any);
 
     // Assert
-    expect(out.fullKey).toBe('spec::auth/login');
+    expect(out.fullKey).toBe('auth/login');
     expect(out.filePath).toBe(bunnerCardMarkdownPath('/repo', 'auth/login'));
     expect(mkdirSpy!).toHaveBeenCalledTimes(1);
     expect(writeCardFileSpy!).toHaveBeenCalledTimes(1);
   });
 
-  it('cardCreate rejects unknown types', async () => {
+  it('cardCreate writes tags when provided', async () => {
+    // Arrange
+    setExists(bunnerCardMarkdownPath('/repo', 'auth/login'), false);
+
+    // Act
+    await crud.cardCreate({
+      projectRoot: '/repo',
+      config,
+      slug: 'auth/login',
+      summary: 'Login',
+      body: 'B\n',
+      tags: ['auth-module', 'user-facing'],
+    } as any);
+
+    // Assert
+    expect(writeCardFileSpy!).toHaveBeenCalledTimes(1);
+    const call = (writeCardFileSpy as any).mock.calls[0] as any[];
+    const card = call?.[1];
+    expect(card?.frontmatter?.tags).toEqual(['auth-module', 'user-facing']);
+  });
+
+  it('cardCreate rejects unsafe slugs', async () => {
     await expect(() =>
       crud.cardCreate({
         projectRoot: '/repo',
         config,
-        type: 'unknown',
-        slug: 'a',
+        slug: '../x',
         summary: 'S',
         body: '',
-      }),
+      } as any),
     ).toThrow();
   });
 
@@ -113,16 +131,16 @@ describe('mcp/card — card CRUD (unit)', () => {
     // Arrange
     readCardFileSpy!.mockResolvedValueOnce({
       filePath: bunnerCardMarkdownPath('/repo', 'auth/login'),
-      frontmatter: { key: 'spec::auth/login', type: 'spec', summary: 'Old', status: 'draft' },
+      frontmatter: { key: 'auth/login', summary: 'Old', status: 'draft' },
       body: 'OldBody\n',
-    });
+    } as any);
 
     // Act
-    const out = await crud.cardUpdate('/repo', 'spec::auth/login', {
+    const out = await crud.cardUpdate('/repo', 'auth/login', {
       summary: 'New',
       body: 'NewBody\n',
       keywords: ['k1', 'k2'],
-    });
+    } as any);
 
     // Assert
     expect(out.card.frontmatter.summary).toBe('New');
@@ -131,12 +149,30 @@ describe('mcp/card — card CRUD (unit)', () => {
     expect(writeCardFileSpy!).toHaveBeenCalledTimes(1);
   });
 
+  it('cardUpdate updates tags', async () => {
+    // Arrange
+    readCardFileSpy!.mockResolvedValueOnce({
+      filePath: bunnerCardMarkdownPath('/repo', 'auth/login'),
+      frontmatter: { key: 'auth/login', summary: 'Old', status: 'draft' },
+      body: 'OldBody\n',
+    } as any);
+
+    // Act
+    const out = await crud.cardUpdate('/repo', 'auth/login', {
+      tags: ['t1', 't2'],
+    } as any);
+
+    // Assert
+    expect(out.card.frontmatter.tags).toEqual(['t1', 't2']);
+    expect(writeCardFileSpy!).toHaveBeenCalledTimes(1);
+  });
+
   it('cardDelete deletes when exists', async () => {
     // Arrange
     setExists(bunnerCardMarkdownPath('/repo', 'auth/login'), true);
 
     // Act
-    const out = await crud.cardDelete('/repo', 'spec::auth/login');
+    const out = await crud.cardDelete('/repo', 'auth/login');
 
     // Assert
     expect(out.filePath).toBe(bunnerCardMarkdownPath('/repo', 'auth/login'));
@@ -151,17 +187,17 @@ describe('mcp/card — card CRUD (unit)', () => {
 
     readCardFileSpy!.mockResolvedValueOnce({
       filePath: bunnerCardMarkdownPath('/repo', 'auth/new'),
-      frontmatter: { key: 'spec::auth/login', type: 'spec', summary: 'S', status: 'draft' },
+      frontmatter: { key: 'auth/login', summary: 'S', status: 'draft' },
       body: 'Body\n',
-    });
+    } as any);
 
     // Act
-    const out = await crud.cardRename('/repo', 'spec::auth/login', 'auth/new');
+    const out = await crud.cardRename('/repo', 'auth/login', 'auth/new');
 
     // Assert
-    expect(out.newFullKey).toBe('spec::auth/new');
+    expect(out.newFullKey).toBe('auth/new');
     expect(renameSpy!).toHaveBeenCalledTimes(1);
     expect(writeCardFileSpy!).toHaveBeenCalledTimes(1);
-    expect(out.card.frontmatter.key).toBe('spec::auth/new');
+    expect(out.card.frontmatter.key).toBe('auth/new');
   });
 });

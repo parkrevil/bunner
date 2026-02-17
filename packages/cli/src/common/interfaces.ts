@@ -10,7 +10,6 @@ export interface ResolvedBunnerConfigModule {
 }
 
 export interface ResolvedBunnerConfigCard {
-  types: string[];
   relations: string[];
 }
 

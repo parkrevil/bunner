@@ -36,7 +36,8 @@ export class ProjectWatcher {
             continue;
           }
 
-          const eventType = evt.type === 'update' ? 'change' : 'rename';
+          const eventType =
+            evt.type === 'update' ? 'change' : evt.type === 'delete' ? 'delete' : 'rename';
 
           onChange({ eventType, filename: relativeName });
         }

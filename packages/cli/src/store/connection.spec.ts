@@ -14,8 +14,7 @@ describe('store/connection (unit)', () => {
   beforeEach(() => {
     openDbSpy = spyOn(ops, 'openDb').mockImplementation((_path: string) => {
       return {
-        run: mock((_q: any) => {}),
-        $client: { close: mock(() => {}) },
+        $client: { close: mock(() => {}), run: mock((_q: any) => {}) },
       } as any;
     });
 
@@ -50,14 +49,29 @@ describe('store/connection (unit)', () => {
     expect(db).toBeDefined();
   });
 
+  it('configures PRAGMA settings on open', () => {
+    // Arrange
+    const runSpy = mock((_q: any) => {});
+    openDbSpy!.mockReturnValueOnce({ $client: { close: mock(() => {}), run: runSpy } } as any);
+    readExistingSchemaVersionSpy!.mockReturnValueOnce(SCHEMA_VERSION);
+
+    // Act
+    createDb('/tmp/pragma.sqlite');
+
+    // Assert
+    expect(runSpy).toHaveBeenCalledTimes(2);
+    expect(runSpy).toHaveBeenNthCalledWith(1, expect.anything());
+    expect(runSpy).toHaveBeenNthCalledWith(2, expect.anything());
+  });
+
   it('rebuilds when schema_version mismatches', () => {
     // Arrange
     readExistingSchemaVersionSpy!.mockReturnValueOnce(SCHEMA_VERSION + 1);
     const closeSpy = mock(() => {});
 
     openDbSpy!
-      .mockReturnValueOnce({ run: mock(() => {}), $client: { close: closeSpy } } as any)
-      .mockReturnValueOnce({ run: mock(() => {}), $client: { close: mock(() => {}) } } as any);
+      .mockReturnValueOnce({ $client: { close: closeSpy, run: mock(() => {}) } } as any)
+      .mockReturnValueOnce({ $client: { close: mock(() => {}), run: mock(() => {}) } } as any);
 
     // Act
     createDb('/tmp/b.sqlite');
@@ -76,8 +90,8 @@ describe('store/connection (unit)', () => {
 
     const closeSpy = mock(() => {});
     openDbSpy!
-      .mockReturnValueOnce({ run: mock(() => {}), $client: { close: closeSpy } } as any)
-      .mockReturnValueOnce({ run: mock(() => {}), $client: { close: mock(() => {}) } } as any);
+      .mockReturnValueOnce({ $client: { close: closeSpy, run: mock(() => {}) } } as any)
+      .mockReturnValueOnce({ $client: { close: mock(() => {}), run: mock(() => {}) } } as any);
 
     // Act
     createDb('/tmp/c.sqlite');
@@ -95,8 +109,8 @@ describe('store/connection (unit)', () => {
     const closeSpy = mock(() => {});
 
     openDbSpy!
-      .mockReturnValueOnce({ run: mock(() => {}), $client: { close: closeSpy } } as any)
-      .mockReturnValueOnce({ run: mock(() => {}), $client: { close: mock(() => {}) } } as any);
+      .mockReturnValueOnce({ $client: { close: closeSpy, run: mock(() => {}) } } as any)
+      .mockReturnValueOnce({ $client: { close: mock(() => {}), run: mock(() => {}) } } as any);
 
     runMigrationsSpy!
       .mockImplementationOnce(() => {

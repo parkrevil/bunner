@@ -20,18 +20,16 @@ export const metadata = sqliteTable('metadata', {
 export const card = sqliteTable(
   'card',
   {
+    rowid: integer('rowid'),
     key: text('key').primaryKey(),
-    type: text('type').notNull(),
     summary: text('summary').notNull(),
     status: text('status').notNull(),
-    keywords: text('keywords'),
     constraintsJson: text('constraints_json'),
     body: text('body'),
     filePath: text('file_path').notNull(),
     updatedAt: text('updated_at').notNull(),
   },
   (table) => [
-    index('idx_card_type').on(table.type),
     index('idx_card_status').on(table.status),
     index('idx_card_file_path').on(table.filePath),
   ],
@@ -41,6 +39,14 @@ export const card = sqliteTable(
 // keyword
 // ---------------------------------------------------------------------------
 export const keyword = sqliteTable('keyword', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull().unique(),
+});
+
+// ---------------------------------------------------------------------------
+// tag
+// ---------------------------------------------------------------------------
+export const tag = sqliteTable('tag', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   name: text('name').notNull().unique(),
 });
@@ -66,11 +72,32 @@ export const cardKeyword = sqliteTable(
 );
 
 // ---------------------------------------------------------------------------
+// card_tag (N:M)
+// ---------------------------------------------------------------------------
+export const cardTag = sqliteTable(
+  'card_tag',
+  {
+    cardKey: text('card_key')
+      .notNull()
+      .references(() => card.key),
+    tagId: integer('tag_id')
+      .notNull()
+      .references(() => tag.id),
+  },
+  (table) => [
+    primaryKey({ columns: [table.cardKey, table.tagId] }),
+    index('idx_card_tag_card').on(table.cardKey),
+    index('idx_card_tag_tag').on(table.tagId),
+  ],
+);
+
+// ---------------------------------------------------------------------------
 // code_entity
 // ---------------------------------------------------------------------------
 export const codeEntity = sqliteTable(
   'code_entity',
   {
+    rowid: integer('rowid'),
     entityKey: text('entity_key').primaryKey(),
     filePath: text('file_path').notNull(),
     symbolName: text('symbol_name'),
@@ -166,4 +193,21 @@ export const fileState = sqliteTable('file_state', {
   contentHash: text('content_hash').notNull(),
   mtime: text('mtime').notNull(),
   lastIndexedAt: text('last_indexed_at').notNull(),
+});
+
+// ---------------------------------------------------------------------------
+// FTS5 (virtual tables; created by SQL migrations)
+// ---------------------------------------------------------------------------
+
+export const cardFts = sqliteTable('card_fts', {
+  rowid: integer('rowid'),
+  key: text('key'),
+  summary: text('summary'),
+  body: text('body'),
+});
+
+export const codeFts = sqliteTable('code_fts', {
+  rowid: integer('rowid'),
+  entityKey: text('entity_key'),
+  symbolName: text('symbol_name'),
 });

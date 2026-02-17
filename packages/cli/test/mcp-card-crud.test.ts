@@ -13,10 +13,10 @@ const config: ResolvedBunnerConfig = {
   sourceDir: './src',
   entry: './src/main.ts',
   mcp: {
-    card: { types: ['spec'], relations: ['depends_on', 'references', 'related', 'extends', 'conflicts'] },
+    card: { relations: ['depends-on', 'references', 'related', 'extends', 'conflicts'] },
     exclude: [],
   },
-};
+} as any;
 
 describe('mcp/card — card CRUD (integration)', () => {
   let root: string | null = null;
@@ -40,32 +40,31 @@ describe('mcp/card — card CRUD (integration)', () => {
     const created = await cardCreate({
       projectRoot,
       config,
-      type: 'spec',
       slug: 'auth/login',
       summary: 'Login',
       body: 'Body\n',
       keywords: ['auth', 'mvp'],
-    });
+    } as any);
 
     const createdText = await Bun.file(created.filePath).text();
-    expect(createdText).toContain('key: spec::auth/login');
-    expect(createdText).toContain('type: spec');
+    expect(createdText).toContain('key: auth/login');
+    expect(createdText).not.toContain('type:');
 
-    const updated = await cardUpdate(projectRoot, 'spec::auth/login', {
+    const updated = await cardUpdate(projectRoot, 'auth/login', {
       summary: 'Login2',
       body: 'Body2\n',
       keywords: ['auth'],
-    });
+    } as any);
 
     const updatedText = await Bun.file(updated.filePath).text();
     expect(updatedText).toContain('summary: Login2');
     expect(updatedText).toContain('Body2');
 
-    await cardUpdateStatus(projectRoot, 'spec::auth/login', 'accepted');
+    await cardUpdateStatus(projectRoot, 'auth/login', 'accepted');
     const statusText = await Bun.file(updated.filePath).text();
     expect(statusText).toContain('status: accepted');
 
-    await cardDelete(projectRoot, 'spec::auth/login');
+    await cardDelete(projectRoot, 'auth/login');
     const exists = await Bun.file(updated.filePath).exists();
     expect(exists).toBe(false);
   });
@@ -76,13 +75,12 @@ describe('mcp/card — card CRUD (integration)', () => {
     const created = await cardCreate({
       projectRoot,
       config,
-      type: 'spec',
       slug: 'auth/login',
       summary: 'Login',
       body: 'Body\n',
-    });
+    } as any);
 
-    const renamed = await cardRename(projectRoot, 'spec::auth/login', 'auth/new-login');
+    const renamed = await cardRename(projectRoot, 'auth/login', 'auth/new-login');
 
     expect(renamed.oldFilePath).toBe(created.filePath);
     expect(renamed.newFilePath).toBe(join(projectRoot, '.bunner', 'cards', 'auth/new-login.card.md'));
@@ -91,6 +89,6 @@ describe('mcp/card — card CRUD (integration)', () => {
     expect(oldExists).toBe(false);
 
     const newText = await Bun.file(renamed.newFilePath).text();
-    expect(newText).toContain('key: spec::auth/new-login');
+    expect(newText).toContain('key: auth/new-login');
   });
 });

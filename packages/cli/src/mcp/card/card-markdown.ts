@@ -43,6 +43,23 @@ function normalizeKeywords(value: unknown): string[] | undefined {
   throw new Error('Invalid frontmatter field: keywords');
 }
 
+function normalizeTags(value: unknown): string[] | undefined {
+  if (value == null) return undefined;
+  if (!Array.isArray(value)) {
+    throw new Error('Invalid frontmatter field: tags');
+  }
+
+  const out: string[] = [];
+  for (const item of value) {
+    if (typeof item !== 'string' || item.length === 0) {
+      throw new Error('Invalid frontmatter field: tags');
+    }
+    out.push(item);
+  }
+
+  return out;
+}
+
 function normalizeRelations(value: unknown): CardRelation[] | undefined {
   if (value == null) return undefined;
   if (!Array.isArray(value)) {
@@ -55,8 +72,9 @@ function normalizeRelations(value: unknown): CardRelation[] | undefined {
       throw new Error('Invalid frontmatter field: relations');
     }
     const rel = item as Record<string, unknown>;
+    const type = asString(rel.type, 'relations[].type');
     out.push({
-      type: asString(rel.type, 'relations[].type'),
+      type,
       target: asString(rel.target, 'relations[].target'),
     });
   }
@@ -69,6 +87,11 @@ function coerceFrontmatter(doc: unknown): CardFrontmatter {
   }
 
   const fm = doc as Record<string, unknown>;
+
+  if (fm.type !== undefined) {
+    throw new Error('Invalid frontmatter field: type');
+  }
+
   const status = fm.status;
   if (!isCardStatus(status)) {
     throw new Error('Invalid frontmatter field: status');
@@ -76,10 +99,14 @@ function coerceFrontmatter(doc: unknown): CardFrontmatter {
 
   const out: CardFrontmatter = {
     key: asString(fm.key, 'key'),
-    type: asString(fm.type, 'type'),
     summary: asString(fm.summary, 'summary'),
     status,
   };
+
+  const tags = normalizeTags(fm.tags);
+  if (tags !== undefined) {
+    out.tags = tags;
+  }
 
   const keywords = normalizeKeywords(fm.keywords);
   if (keywords !== undefined) {

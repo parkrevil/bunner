@@ -9,7 +9,10 @@ import { validateCreateApplication } from '../compiler/analyzer/validation';
 import { bunnerDirPath, ConfigLoader, ConfigLoadError, scanGlobSorted, writeIfChanged } from '../common';
 import { buildDiagnostic, DiagnosticReportError, reportDiagnostics } from '../diagnostics';
 import { ManifestGenerator } from '../compiler/generator';
-import { ProjectWatcher } from '../watcher';
+import * as watcher from '@parcel/watcher';
+
+import { ChangesetWriter, OwnerElection, ProjectWatcher } from '../watcher';
+import { bunnerCacheDirPath } from '../common/bunner-paths';
 import { buildDevIncrementalImpactLog } from './dev-incremental-impact';
 
 export async function dev(commandOptions?: CommandOptions) {
@@ -173,60 +176,129 @@ export async function dev(commandOptions?: CommandOptions) {
     console.info('🛠️  AOT artifacts generated.');
     console.info(`   Manifest: ${join(outDir, 'manifest.json')}`);
 
-    const projectWatcher = new ProjectWatcher(srcDir);
+    const election = new OwnerElection({ projectRoot, pid: process.pid });
+    const electionRes = election.acquire();
 
-    await projectWatcher.start(event => {
-      void (async () => {
-        const filename = event.filename;
-        if (!filename) {
-          return;
-        }
+    if (electionRes.role === 'owner') {
+      const changesetWriter = new ChangesetWriter({ projectRoot, nowMs: () => Date.now() });
+      const projectWatcher = new ProjectWatcher(srcDir);
 
-        const fullPath = join(srcDir, filename);
-
-        if (!shouldAnalyzeFile(fullPath)) {
-          return;
-        }
-
-        const previousFileMap = new Map(fileCache.entries());
-        const isDeleted = event.eventType === 'rename' && !(await Bun.file(fullPath).exists());
-
-        if (isDeleted) {
-          console.info(`🗑️ File deleted: ${filename}`);
-
-          fileCache.delete(fullPath);
-        } else {
-          await analyzeFile(fullPath);
-        }
-
-        const impactLog = buildDevIncrementalImpactLog({
-          previousFileMap,
-          nextFileMap: new Map(fileCache.entries()),
-          moduleFileName,
-          changedFilePath: fullPath,
-          isDeleted,
-          toProjectRelativePath,
-        });
-
-        console.info(impactLog.logLine);
-
-        try {
-          await rebuild();
-        } catch (error) {
-          if (error instanceof DiagnosticReportError) {
-            reportDiagnostics({ diagnostics: [error.diagnostic] });
+      await projectWatcher.start(event => {
+        void (async () => {
+          const filename = event.filename;
+          if (!filename) {
+            return;
           }
 
-          return;
-        }
-      })();
-    });
+          const fullPath = join(srcDir, filename);
 
-    const onSigint = () => {
-      void projectWatcher.close();
-    };
+          if (!shouldAnalyzeFile(fullPath)) {
+            return;
+          }
 
-    process.on('SIGINT', onSigint);
+          const previousFileMap = new Map(fileCache.entries());
+
+          const exists = await Bun.file(fullPath).exists();
+          const isDeleted = event.eventType === 'delete' || (event.eventType === 'rename' && !exists);
+
+          const changesetEvent: 'change' | 'rename' | 'delete' =
+            event.eventType === 'change' ? 'change' : isDeleted ? 'delete' : 'rename';
+
+          await changesetWriter.append({
+            event: changesetEvent,
+            file: toProjectRelativePath(fullPath).replaceAll('\\', '/'),
+          });
+
+          if (isDeleted) {
+            console.info(`🗑️ File deleted: ${filename}`);
+            fileCache.delete(fullPath);
+          } else {
+            await analyzeFile(fullPath);
+          }
+
+          const impactLog = buildDevIncrementalImpactLog({
+            previousFileMap,
+            nextFileMap: new Map(fileCache.entries()),
+            moduleFileName,
+            changedFilePath: fullPath,
+            isDeleted,
+            toProjectRelativePath,
+          });
+
+          console.info(impactLog.logLine);
+
+          try {
+            await rebuild();
+          } catch (error) {
+            if (error instanceof DiagnosticReportError) {
+              reportDiagnostics({ diagnostics: [error.diagnostic] });
+            }
+
+            return;
+          }
+        })();
+      });
+
+      const onSigint = () => {
+        void projectWatcher.close();
+        election.release();
+      };
+
+      process.on('SIGINT', onSigint);
+    } else {
+      console.info(`👁️  Watcher owner detected (pid=${electionRes.ownerPid}). Running in reader mode.`);
+
+      const cacheDir = bunnerCacheDirPath(projectRoot);
+
+      const subscription = await watcher.subscribe(cacheDir, (_err, events) => {
+        void (async () => {
+          const hasChangesetEvent = events.some(
+            evt => evt.path.endsWith('changeset.jsonl') || evt.path.endsWith('changeset.jsonl.1'),
+          );
+          if (!hasChangesetEvent) {
+            return;
+          }
+
+          const previousFileMap = new Map(fileCache.entries());
+
+          // Safe fallback: re-scan & re-analyze all source files.
+          fileCache.clear();
+          const rescanFiles = await scanGlobSorted({ glob: new Glob('**/*.ts'), baseDir: srcDir });
+          for (const file of rescanFiles) {
+            const fullPath = join(srcDir, file);
+            if (!shouldAnalyzeFile(fullPath)) {
+              continue;
+            }
+            await analyzeFile(fullPath);
+          }
+
+          const impactLog = buildDevIncrementalImpactLog({
+            previousFileMap,
+            nextFileMap: new Map(fileCache.entries()),
+            moduleFileName,
+            changedFilePath: srcDir,
+            isDeleted: false,
+            toProjectRelativePath,
+          });
+
+          console.info(impactLog.logLine);
+
+          try {
+            await rebuild();
+          } catch (error) {
+            if (error instanceof DiagnosticReportError) {
+              reportDiagnostics({ diagnostics: [error.diagnostic] });
+            }
+          }
+        })();
+      });
+
+      const onSigint = () => {
+        void subscription.unsubscribe();
+      };
+
+      process.on('SIGINT', onSigint);
+    }
   } catch (error) {
     if (error instanceof DiagnosticReportError) {
       reportDiagnostics({ diagnostics: [error.diagnostic] });

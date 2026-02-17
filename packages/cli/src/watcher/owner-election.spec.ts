@@ -97,7 +97,7 @@ const { bunnerCacheDirPath, bunnerCacheFilePath } = require('../common/bunner-pa
 
 describe('OwnerElection', () => {
   const projectRoot = '/repo';
-  const lockPath = bunnerCacheFilePath(projectRoot, 'owner.lock');
+  const lockPath = bunnerCacheFilePath(projectRoot, 'watcher.owner.lock');
   const lockDir = bunnerCacheDirPath(projectRoot);
 
   beforeEach(() => {

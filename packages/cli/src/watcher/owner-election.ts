@@ -53,7 +53,7 @@ export class OwnerElection {
   private readonly lockPath: string;
 
   constructor(private readonly input: OwnerElectionInput) {
-    this.lockPath = bunnerCacheFilePath(input.projectRoot, 'owner.lock');
+    this.lockPath = bunnerCacheFilePath(input.projectRoot, 'watcher.owner.lock');
   }
 
   acquire(): OwnerElectionAcquireResult {

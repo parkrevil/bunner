@@ -1,16 +1,14 @@
 CREATE TABLE `card` (
+	`rowid` integer,
 	`key` text PRIMARY KEY NOT NULL,
-	`type` text NOT NULL,
 	`summary` text NOT NULL,
 	`status` text NOT NULL,
-	`keywords` text,
 	`constraints_json` text,
 	`body` text,
 	`file_path` text NOT NULL,
 	`updated_at` text NOT NULL
 );
 --> statement-breakpoint
-CREATE INDEX `idx_card_type` ON `card` (`type`);--> statement-breakpoint
 CREATE INDEX `idx_card_status` ON `card` (`status`);--> statement-breakpoint
 CREATE INDEX `idx_card_file_path` ON `card` (`file_path`);--> statement-breakpoint
 CREATE TABLE `card_code_link` (
@@ -28,6 +26,13 @@ CREATE TABLE `card_code_link` (
 CREATE INDEX `idx_card_code_link_card` ON `card_code_link` (`card_key`);--> statement-breakpoint
 CREATE INDEX `idx_card_code_link_entity` ON `card_code_link` (`entity_key`);--> statement-breakpoint
 CREATE INDEX `idx_card_code_link_file` ON `card_code_link` (`file_path`);--> statement-breakpoint
+CREATE TABLE `card_fts` (
+	`rowid` integer,
+	`key` text,
+	`summary` text,
+	`body` text
+);
+--> statement-breakpoint
 CREATE TABLE `card_keyword` (
 	`card_key` text NOT NULL,
 	`keyword_id` integer NOT NULL,
@@ -52,7 +57,18 @@ CREATE TABLE `card_relation` (
 CREATE INDEX `idx_card_relation_src` ON `card_relation` (`src_card_key`);--> statement-breakpoint
 CREATE INDEX `idx_card_relation_dst` ON `card_relation` (`dst_card_key`);--> statement-breakpoint
 CREATE INDEX `idx_card_relation_type` ON `card_relation` (`type`);--> statement-breakpoint
+CREATE TABLE `card_tag` (
+	`card_key` text NOT NULL,
+	`tag_id` integer NOT NULL,
+	PRIMARY KEY(`card_key`, `tag_id`),
+	FOREIGN KEY (`card_key`) REFERENCES `card`(`key`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`tag_id`) REFERENCES `tag`(`id`) ON UPDATE no action ON DELETE no action
+);
+--> statement-breakpoint
+CREATE INDEX `idx_card_tag_card` ON `card_tag` (`card_key`);--> statement-breakpoint
+CREATE INDEX `idx_card_tag_tag` ON `card_tag` (`tag_id`);--> statement-breakpoint
 CREATE TABLE `code_entity` (
+	`rowid` integer,
 	`entity_key` text PRIMARY KEY NOT NULL,
 	`file_path` text NOT NULL,
 	`symbol_name` text,
@@ -65,6 +81,12 @@ CREATE TABLE `code_entity` (
 --> statement-breakpoint
 CREATE INDEX `idx_code_entity_file_path` ON `code_entity` (`file_path`);--> statement-breakpoint
 CREATE INDEX `idx_code_entity_kind` ON `code_entity` (`kind`);--> statement-breakpoint
+CREATE TABLE `code_fts` (
+	`rowid` integer,
+	`entity_key` text,
+	`symbol_name` text
+);
+--> statement-breakpoint
 CREATE TABLE `code_relation` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`type` text NOT NULL,
@@ -95,3 +117,10 @@ CREATE TABLE `metadata` (
 	`key` text PRIMARY KEY NOT NULL,
 	`value` text NOT NULL
 );
+--> statement-breakpoint
+CREATE TABLE `tag` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`name` text NOT NULL
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `tag_name_unique` ON `tag` (`name`);

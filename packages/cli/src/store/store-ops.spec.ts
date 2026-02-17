@@ -1,80 +1,71 @@
-import { afterAll, beforeEach, describe, expect, it, mock } from 'bun:test';
-import { createRequire } from 'node:module';
+import { describe, expect, it, mock } from 'bun:test';
+import { existsSync, writeFileSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
-const rmSyncMock = mock((_path: string, _opts?: unknown) => {});
-const drizzleMock = mock((..._args: any[]) => ({ __db: true }));
-const migrateMock = mock((_db: any, _opts: any) => {});
-
-mock.module('node:fs', () => {
-  return { rmSync: rmSyncMock };
-});
-
-mock.module('drizzle-orm/bun-sqlite', () => {
-  return { drizzle: drizzleMock };
-});
-
-mock.module('drizzle-orm/bun-sqlite/migrator', () => {
-  return { migrate: migrateMock };
-});
-
-afterAll(() => {
-  mock.restore();
-  mock.clearAllMocks();
-});
-
-const require = createRequire(import.meta.url);
-// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-const ops = require('./store-ops') as typeof import('./store-ops');
+import * as ops from './store-ops';
+import * as schema from './schema';
 
 describe('store/store-ops (unit)', () => {
-  beforeEach(() => {
-    rmSyncMock.mockClear();
-    drizzleMock.mockClear();
-    migrateMock.mockClear();
-  });
-
   describe('deleteSqliteFilesSync', () => {
     it('deletes base, -wal, -shm files with force: true', () => {
-      const path = '/tmp/a.sqlite';
+      const dir = join(tmpdir(), `bunner_store_ops_${Date.now()}`);
+      mkdirSync(dir, { recursive: true });
+
+      const path = join(dir, 'a.sqlite');
+      const wal = `${path}-wal`;
+      const shm = `${path}-shm`;
+
+      writeFileSync(path, 'x');
+      writeFileSync(wal, 'x');
+      writeFileSync(shm, 'x');
+
+      expect(existsSync(path)).toBe(true);
+      expect(existsSync(wal)).toBe(true);
+      expect(existsSync(shm)).toBe(true);
 
       ops.deleteSqliteFilesSync(path);
 
-      expect(rmSyncMock).toHaveBeenCalledTimes(3);
-      expect(rmSyncMock).toHaveBeenNthCalledWith(1, path, { force: true });
-      expect(rmSyncMock).toHaveBeenNthCalledWith(2, `${path}-wal`, { force: true });
-      expect(rmSyncMock).toHaveBeenNthCalledWith(3, `${path}-shm`, { force: true });
+      expect(existsSync(path)).toBe(false);
+      expect(existsSync(wal)).toBe(false);
+      expect(existsSync(shm)).toBe(false);
     });
   });
 
   describe('openDb', () => {
-    it('opens in-memory db via drizzle({ schema })', () => {
-      ops.openDb(':memory:');
+    it('opens in-memory db via bun:sqlite Database client', () => {
+      const db = ops.openDb(':memory:') as any;
 
-      expect(drizzleMock).toHaveBeenCalledTimes(1);
-      const call = drizzleMock.mock.calls[0]!;
-      expect(call).toHaveLength(1);
-      expect(typeof call[0]).toBe('object');
-      expect(call[0]).toHaveProperty('schema');
+      expect(db).toBeDefined();
+      expect(typeof db.select).toBe('function');
+      expect(db.$client).toBeDefined();
+      expect(typeof db.$client.run).toBe('function');
     });
 
-    it('opens file db via drizzle(path, { schema })', () => {
-      ops.openDb('/tmp/x.sqlite');
+    it('opens file db via bun:sqlite Database client', () => {
+      const dir = join(tmpdir(), `bunner_store_ops_${Date.now()}`);
+      mkdirSync(dir, { recursive: true });
+      const path = join(dir, 'x.sqlite');
 
-      expect(drizzleMock).toHaveBeenCalledTimes(1);
-      const call = drizzleMock.mock.calls[0]!;
-      expect(call).toHaveLength(2);
-      expect(call[0]).toBe('/tmp/x.sqlite');
-      expect(call[1]).toHaveProperty('schema');
+      const db = ops.openDb(path) as any;
+      expect(db).toBeDefined();
+      expect(typeof db.select).toBe('function');
+      expect(db.$client).toBeDefined();
+      expect(db.$client.filename).toBe(path);
+      db.$client.close();
     });
   });
 
   describe('runMigrations', () => {
-    it('forwards to migrate(db, { migrationsFolder })', () => {
-      const db = { __db: true };
-      ops.runMigrations(db, '/migrations');
+    it('runs migrations on an empty in-memory db', () => {
+      const db = ops.openDb(':memory:') as any;
+      ops.runMigrations(db, join(import.meta.dir, '../../drizzle'));
 
-      expect(migrateMock).toHaveBeenCalledTimes(1);
-      expect(migrateMock).toHaveBeenCalledWith(db, { migrationsFolder: '/migrations' });
+      // sanity: a migrated DB should allow selecting from metadata
+      const rows = db.select().from(schema.metadata).all();
+      expect(Array.isArray(rows)).toBe(true);
+      db.$client.close();
     });
   });
 

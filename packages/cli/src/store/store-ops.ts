@@ -2,7 +2,9 @@ import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
 import { eq, notLike } from 'drizzle-orm';
 import { sqliteTable, text } from 'drizzle-orm/sqlite-core';
-import { rmSync } from 'node:fs';
+import { mkdirSync, rmSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { Database } from 'bun:sqlite';
 
 import * as schema from './schema';
 
@@ -11,7 +13,11 @@ const sqliteMaster = sqliteTable('sqlite_master', {
 });
 
 export function openDb(path: string) {
-  return path === ':memory:' ? drizzle({ schema }) : drizzle(path, { schema });
+  if (path !== ':memory:') {
+    mkdirSync(dirname(path), { recursive: true });
+  }
+  const client = new Database(path);
+  return drizzle(client, { schema, casing: 'snake_case' });
 }
 
 export function runMigrations(db: any, migrationsFolder: string) {

@@ -88,7 +88,6 @@ describe('cli — bunner mcp verify', () => {
   });
 
   function defaultConfigJson(overrides?: {
-    types?: string[];
     relations?: string[];
     exclude?: string[];
   }): string {
@@ -100,8 +99,7 @@ describe('cli — bunner mcp verify', () => {
           entry: './src/main.ts',
           mcp: {
             card: {
-              types: overrides?.types ?? ['spec'],
-              relations: overrides?.relations ?? ['depends_on', 'references', 'related', 'extends', 'conflicts'],
+              relations: overrides?.relations ?? ['depends-on', 'references', 'related', 'extends', 'conflicts'],
             },
             exclude: overrides?.exclude ?? [],
           },
@@ -115,12 +113,12 @@ describe('cli — bunner mcp verify', () => {
   it('exits 1 and reports SEE_TARGET_MISSING when code @see points to a missing card', async () => {
     await writeText(
       join(projectRoot!, '.bunner', 'cards', 'a.card.md'),
-      `---\nkey: spec::a\ntype: spec\nsummary: A\nstatus: draft\n---\nBody\n`,
+      `---\nkey: a\nsummary: A\nstatus: draft\n---\nBody\n`,
     );
 
     await writeText(
       join(projectRoot!, 'src', 'x.ts'),
-      `/**\n * @see spec::missing\n */\nexport function x() {}\n`,
+      `/**\n * @see missing\n */\nexport function x() {}\n`,
     );
 
     const { exitCode, stdout, diagnostics } = await runVerify(projectRoot!);
@@ -131,15 +129,15 @@ describe('cli — bunner mcp verify', () => {
     expectNotHasCode(diagnostics, 'INVALID_COMMAND');
   });
 
-  it('exits 0 and reports DEPENDS_ON_CYCLE when card depends_on cycle is detected', async () => {
+  it('exits 0 and reports DEPENDS_ON_CYCLE when card depends-on cycle is detected', async () => {
     await writeText(
       join(projectRoot!, '.bunner', 'cards', 'a.card.md'),
-      `---\nkey: spec::a\ntype: spec\nsummary: A\nstatus: draft\nrelations:\n  - type: depends_on\n    target: spec::b\n---\nBody\n`,
+      `---\nkey: a\nsummary: A\nstatus: draft\nrelations:\n  - type: depends-on\n    target: b\n---\nBody\n`,
     );
 
     await writeText(
       join(projectRoot!, '.bunner', 'cards', 'b.card.md'),
-      `---\nkey: spec::b\ntype: spec\nsummary: B\nstatus: draft\nrelations:\n  - type: depends_on\n    target: spec::a\n---\nBody\n`,
+      `---\nkey: b\nsummary: B\nstatus: draft\nrelations:\n  - type: depends-on\n    target: a\n---\nBody\n`,
     );
 
     const { exitCode, diagnostics } = await runVerify(projectRoot!);
@@ -152,12 +150,12 @@ describe('cli — bunner mcp verify', () => {
   it('exits 0 and prints no diagnostics when verify passes', async () => {
     await writeText(
       join(projectRoot!, '.bunner', 'cards', 'a.card.md'),
-      `---\nkey: spec::a\ntype: spec\nsummary: A\nstatus: draft\n---\nBody\n`,
+      `---\nkey: a\nsummary: A\nstatus: draft\n---\nBody\n`,
     );
 
     await writeText(
       join(projectRoot!, 'src', 'a.ts'),
-      `/**\n * @see spec::a\n */\nexport function a() {}\n`,
+      `/**\n * @see a\n */\nexport function a() {}\n`,
     );
 
     const { exitCode, diagnostics } = await runVerify(projectRoot!);
@@ -169,12 +167,12 @@ describe('cli — bunner mcp verify', () => {
   it('exits 1 and reports CARD_KEY_DUPLICATE when two card files declare the same key', async () => {
     await writeText(
       join(projectRoot!, '.bunner', 'cards', 'a.card.md'),
-      `---\nkey: spec::dup\ntype: spec\nsummary: A\nstatus: draft\n---\nBody\n`,
+      `---\nkey: dup\nsummary: A\nstatus: draft\n---\nBody\n`,
     );
 
     await writeText(
       join(projectRoot!, '.bunner', 'cards', 'b.card.md'),
-      `---\nkey: spec::dup\ntype: spec\nsummary: B\nstatus: draft\n---\nBody\n`,
+      `---\nkey: dup\nsummary: B\nstatus: draft\n---\nBody\n`,
     );
 
     const { exitCode, diagnostics } = await runVerify(projectRoot!);
@@ -183,24 +181,22 @@ describe('cli — bunner mcp verify', () => {
     expectHasCode(diagnostics, 'MCP_VERIFY_CARD_KEY_DUPLICATE');
   });
 
-  it('exits 1 and reports CARD_TYPE_NOT_ALLOWED when card.type is not allowed by config', async () => {
-    await writeText(join(projectRoot!, 'bunner.json'), defaultConfigJson({ types: ['spec'] }));
-
+  it('exits 1 and reports CARD_KEY_INVALID when a card uses an invalid key', async () => {
     await writeText(
       join(projectRoot!, '.bunner', 'cards', 'a.card.md'),
-      `---\nkey: spec::a\ntype: system\nsummary: A\nstatus: draft\n---\nBody\n`,
+      `---\nkey: a::b\nsummary: A\nstatus: draft\n---\nBody\n`,
     );
 
     const { exitCode, diagnostics } = await runVerify(projectRoot!);
 
     expect(exitCode).toBe(1);
-    expectHasCode(diagnostics, 'MCP_VERIFY_CARD_TYPE_NOT_ALLOWED');
+    expectHasCode(diagnostics, 'MCP_VERIFY_CARD_KEY_INVALID');
   });
 
   it('exits 1 and reports RELATION_TARGET_MISSING when a relation points to a missing card', async () => {
     await writeText(
       join(projectRoot!, '.bunner', 'cards', 'a.card.md'),
-      `---\nkey: spec::a\ntype: spec\nsummary: A\nstatus: draft\nrelations:\n  - type: depends_on\n    target: spec::missing\n---\nBody\n`,
+      `---\nkey: a\nsummary: A\nstatus: draft\nrelations:\n  - type: depends-on\n    target: missing\n---\nBody\n`,
     );
 
     const { exitCode, diagnostics } = await runVerify(projectRoot!);
@@ -210,15 +206,15 @@ describe('cli — bunner mcp verify', () => {
   });
 
   it('exits 1 and reports RELATION_TYPE_NOT_ALLOWED when a relation type is not allowed by config', async () => {
-    await writeText(join(projectRoot!, 'bunner.json'), defaultConfigJson({ relations: ['depends_on'] }));
+    await writeText(join(projectRoot!, 'bunner.json'), defaultConfigJson({ relations: ['depends-on'] }));
 
     await writeText(
       join(projectRoot!, '.bunner', 'cards', 'a.card.md'),
-      `---\nkey: spec::a\ntype: spec\nsummary: A\nstatus: draft\nrelations:\n  - type: references\n    target: spec::b\n---\nBody\n`,
+      `---\nkey: a\nsummary: A\nstatus: draft\nrelations:\n  - type: references\n    target: b\n---\nBody\n`,
     );
     await writeText(
       join(projectRoot!, '.bunner', 'cards', 'b.card.md'),
-      `---\nkey: spec::b\ntype: spec\nsummary: B\nstatus: draft\n---\nBody\n`,
+      `---\nkey: b\nsummary: B\nstatus: draft\n---\nBody\n`,
     );
 
     const { exitCode, diagnostics } = await runVerify(projectRoot!);
@@ -227,46 +223,26 @@ describe('cli — bunner mcp verify', () => {
     expectHasCode(diagnostics, 'MCP_VERIFY_RELATION_TYPE_NOT_ALLOWED');
   });
 
-  it('exits 1 and reports RELATION_TARGET_TYPE_MISMATCH when relation target prefix mismatches target card.type', async () => {
-    await writeText(join(projectRoot!, 'bunner.json'), defaultConfigJson({ types: ['spec', 'system'] }));
-
+  it('exits 1 and reports SEE_KEY_INVALID when @see uses an invalid key', async () => {
     await writeText(
       join(projectRoot!, '.bunner', 'cards', 'a.card.md'),
-      `---\nkey: spec::a\ntype: spec\nsummary: A\nstatus: draft\nrelations:\n  - type: depends_on\n    target: spec::b\n---\nBody\n`,
-    );
-    await writeText(
-      join(projectRoot!, '.bunner', 'cards', 'b.card.md'),
-      `---\nkey: spec::b\ntype: system\nsummary: B\nstatus: draft\n---\nBody\n`,
-    );
-
-    const { exitCode, diagnostics } = await runVerify(projectRoot!);
-
-    expect(exitCode).toBe(1);
-    expectHasCode(diagnostics, 'MCP_VERIFY_RELATION_TARGET_TYPE_MISMATCH');
-  });
-
-  it('exits 1 and reports SEE_TYPE_MISMATCH when @see prefix mismatches target card.type', async () => {
-    await writeText(join(projectRoot!, 'bunner.json'), defaultConfigJson({ types: ['spec', 'system'] }));
-
-    await writeText(
-      join(projectRoot!, '.bunner', 'cards', 'a.card.md'),
-      `---\nkey: spec::a\ntype: system\nsummary: A\nstatus: draft\n---\nBody\n`,
+      `---\nkey: a\nsummary: A\nstatus: draft\n---\nBody\n`,
     );
     await writeText(
       join(projectRoot!, 'src', 'x.ts'),
-      `/**\n * @see spec::a\n */\nexport function x() {}\n`,
+      `/**\n * @see a::b\n */\nexport function x() {}\n`,
     );
 
     const { exitCode, diagnostics } = await runVerify(projectRoot!);
 
     expect(exitCode).toBe(1);
-    expectHasCode(diagnostics, 'MCP_VERIFY_SEE_TYPE_MISMATCH');
+    expectHasCode(diagnostics, 'MCP_VERIFY_SEE_KEY_INVALID');
   });
 
   it('exits 1 and reports IMPLEMENTED_CARD_NO_CODE_LINKS when status=implemented has no @see references', async () => {
     await writeText(
       join(projectRoot!, '.bunner', 'cards', 'a.card.md'),
-      `---\nkey: spec::a\ntype: spec\nsummary: A\nstatus: implemented\n---\nBody\n`,
+      `---\nkey: a\nsummary: A\nstatus: implemented\n---\nBody\n`,
     );
 
     const { exitCode, diagnostics } = await runVerify(projectRoot!);
@@ -278,7 +254,7 @@ describe('cli — bunner mcp verify', () => {
   it('exits 0 and reports CONFIRMED_CARD_NO_CODE_LINKS when status=accepted has no @see references', async () => {
     await writeText(
       join(projectRoot!, '.bunner', 'cards', 'a.card.md'),
-      `---\nkey: spec::a\ntype: spec\nsummary: A\nstatus: accepted\n---\nBody\n`,
+      `---\nkey: a\nsummary: A\nstatus: accepted\n---\nBody\n`,
     );
 
     const { exitCode, diagnostics } = await runVerify(projectRoot!);
@@ -290,11 +266,11 @@ describe('cli — bunner mcp verify', () => {
   it('exits 0 and reports REFERENCES_DEPRECATED_CARD when a deprecated card is referenced', async () => {
     await writeText(
       join(projectRoot!, '.bunner', 'cards', 'a.card.md'),
-      `---\nkey: spec::a\ntype: spec\nsummary: A\nstatus: draft\nrelations:\n  - type: references\n    target: spec::b\n---\nBody\n`,
+      `---\nkey: a\nsummary: A\nstatus: draft\nrelations:\n  - type: references\n    target: b\n---\nBody\n`,
     );
     await writeText(
       join(projectRoot!, '.bunner', 'cards', 'b.card.md'),
-      `---\nkey: spec::b\ntype: spec\nsummary: B\nstatus: deprecated\n---\nBody\n`,
+      `---\nkey: b\nsummary: B\nstatus: deprecated\n---\nBody\n`,
     );
 
     const { exitCode, diagnostics } = await runVerify(projectRoot!);
@@ -308,11 +284,11 @@ describe('cli — bunner mcp verify', () => {
 
     await writeText(
       join(projectRoot!, '.bunner', 'cards', 'a.card.md'),
-      `---\nkey: spec::a\ntype: spec\nsummary: A\nstatus: draft\n---\nBody\n`,
+      `---\nkey: a\nsummary: A\nstatus: draft\n---\nBody\n`,
     );
     await writeText(
       join(projectRoot!, 'src', 'excluded', 'x.ts'),
-      `/**\n * @see spec::missing\n */\nexport function x() {}\n`,
+      `/**\n * @see missing\n */\nexport function x() {}\n`,
     );
 
     const { exitCode, diagnostics } = await runVerify(projectRoot!);

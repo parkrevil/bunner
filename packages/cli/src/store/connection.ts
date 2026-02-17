@@ -1,4 +1,3 @@
-import { sql } from 'drizzle-orm';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
 
@@ -8,13 +7,20 @@ import * as ops from './store-ops';
  * Current schema version. Compared against metadata.schema_version on open.
  * Mismatch → DROP ALL + rebuild (disposable DB).
  */
-export const SCHEMA_VERSION = 2;
+// NOTE: bumped after removing card.type (PLAN v6.0)
+// NOTE: bumped after adding tag/card_tag tables
+// NOTE: bumped after enforcing card_relation.type CHECK constraint
+// NOTE: bumped after removing denormalized card.keywords (classification is via keyword/tag registry + mapping tables)
+export const SCHEMA_VERSION = 6;
 
 export type StoreDb = ReturnType<typeof createDb>;
 
 function configureConnection(db: any) {
-  db.run(sql`PRAGMA journal_mode = WAL`);
-  db.run(sql`PRAGMA busy_timeout = 5000`);
+  const client = db?.$client;
+  if (client?.run) {
+    client.run('PRAGMA journal_mode = WAL');
+    client.run('PRAGMA busy_timeout = 5000');
+  }
 }
 
 function canDeleteDbFiles(path: string): boolean {

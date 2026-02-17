@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'bun:test';
 
-import { buildFullKey, cardPathFromFullKey, normalizeSlug, parseFullKey } from './card-key';
+import { cardPathFromFullKey, normalizeSlug, parseFullKey } from './card-key';
 import { bunnerCardMarkdownPath } from '../../common/bunner-paths';
 
 describe('mcp/card — card key', () => {
   it('normalizes slug by trimming slashes and backslashes', () => {
     expect(normalizeSlug('/auth/login/')).toBe('auth/login');
     expect(normalizeSlug('auth\\login')).toBe('auth/login');
+    expect(normalizeSlug('\\auth\\login\\')).toBe('auth/login');
+    expect(normalizeSlug('auth/login/')).toBe('auth/login');
   });
 
   it('rejects unsafe slugs', () => {
@@ -16,27 +18,42 @@ describe('mcp/card — card key', () => {
     expect(() => normalizeSlug('./a')).toThrow();
     expect(() => normalizeSlug('a//b')).toThrow();
     expect(() => normalizeSlug('a::b')).toThrow();
+    expect(() => normalizeSlug('a/.')).toThrow();
+    expect(() => normalizeSlug('a/..')).toThrow();
+    expect(() => normalizeSlug('a/./b')).toThrow();
+    expect(() => normalizeSlug('C:/x')).toThrow();
+    expect(() => normalizeSlug('C:\\x')).toThrow();
   });
 
-  it('builds and parses full keys', () => {
-    const key = buildFullKey('spec', 'auth/login');
-    expect(key).toBe('spec::auth/login');
-
-    const parsed = parseFullKey('spec::auth/login');
-    expect(parsed).toEqual({ type: 'spec', slug: 'auth/login' });
+  it('parses keys as slug-only (no type prefix)', () => {
+    const parsed = parseFullKey('auth/login');
+    expect(parsed).toBe('auth/login');
   });
 
-  it('rejects invalid full keys', () => {
+  it('normalizes keys when parsing slug-only keys', () => {
+    // Arrange
+    const inputs = ['/auth/login/', 'auth\\login', '\\auth\\login\\'];
+
+    // Act
+    const parsed = inputs.map((k) => parseFullKey(k));
+
+    // Assert
+    expect(parsed).toEqual(['auth/login', 'auth/login', 'auth/login']);
+  });
+
+  it('rejects invalid keys', () => {
     expect(() => parseFullKey('')).toThrow();
-    expect(() => parseFullKey('spec')).toThrow();
-    expect(() => parseFullKey('spec::')).toThrow();
     expect(() => parseFullKey('::auth/login')).toThrow();
     expect(() => parseFullKey('a::b::c')).toThrow();
+    expect(() => parseFullKey('auth//login')).toThrow();
+    expect(() => parseFullKey('auth/./login')).toThrow();
+    expect(() => parseFullKey('auth/../login')).toThrow();
   });
 
-  it('maps fullKey to .bunner/cards path', () => {
+  it('maps key to .bunner/cards path', () => {
     const root = '/repo';
-    expect(cardPathFromFullKey(root, 'spec::auth/login')).toBe(bunnerCardMarkdownPath(root, 'auth/login'));
-    expect(cardPathFromFullKey(root, 'spec::auth')).toBe(bunnerCardMarkdownPath(root, 'auth'));
+    expect(cardPathFromFullKey(root, 'auth/login')).toBe(bunnerCardMarkdownPath(root, 'auth/login'));
+    expect(cardPathFromFullKey(root, 'auth')).toBe(bunnerCardMarkdownPath(root, 'auth'));
+    expect(cardPathFromFullKey(root, '/auth/login/')).toBe(bunnerCardMarkdownPath(root, 'auth/login'));
   });
 });

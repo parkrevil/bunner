@@ -22,8 +22,7 @@ describe('mcp/card — fs helpers (integration)', () => {
       await writeCardFile(path, {
         filePath: path,
         frontmatter: {
-          key: 'spec::a',
-          type: 'spec',
+          key: 'a',
           summary: 'A',
           status: 'draft',
         },
@@ -32,7 +31,7 @@ describe('mcp/card — fs helpers (integration)', () => {
 
       const card = await readCardFile(path);
       expect(card.filePath).toBe(path);
-      expect(card.frontmatter.key).toBe('spec::a');
+      expect(card.frontmatter.key).toBe('a');
       expect(card.body).toBe('Body\n');
     } finally {
       await deleteCardFile(path);

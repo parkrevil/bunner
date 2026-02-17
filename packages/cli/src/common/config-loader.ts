@@ -4,6 +4,15 @@ import type { ConfigLoadResult, JsonRecord, JsonValue, ResolvedBunnerConfig, Res
 
 import { ConfigLoadError } from './errors';
 
+export const CARD_RELATION_TYPES = ['depends-on', 'references', 'related', 'extends', 'conflicts'] as const;
+export type CardRelationType = (typeof CARD_RELATION_TYPES)[number];
+
+const CARD_RELATION_TYPE_SET: ReadonlySet<string> = new Set(CARD_RELATION_TYPES);
+
+function isCardRelationType(value: string): value is CardRelationType {
+  return CARD_RELATION_TYPE_SET.has(value);
+}
+
 export class ConfigLoader {
   static async load(cwd: string = process.cwd()): Promise<ConfigLoadResult> {
     const jsonPath = join(cwd, 'bunner.json');
@@ -73,6 +82,21 @@ export class ConfigLoader {
     return Array.isArray(value) && value.length > 0 && value.every((item) => typeof item === 'string');
   }
 
+  private static normalizeRelationTypes(value: string[], sourcePath: string): string[] {
+    const out: string[] = [];
+    for (const raw of value) {
+      const trimmed = raw.trim();
+      if (trimmed.length === 0) {
+        throw new ConfigLoadError('Invalid bunner config: mcp.card.relations must be a non-empty string array.', sourcePath);
+      }
+      if (!isCardRelationType(trimmed)) {
+        throw new ConfigLoadError(`Invalid bunner config: mcp.card.relations contains unknown relation type: ${trimmed}`, sourcePath);
+      }
+      out.push(trimmed);
+    }
+    return out;
+  }
+
   private static toResolvedConfig(value: JsonValue, sourcePath: string, projectRoot: string): ResolvedBunnerConfig {
     if (!this.isRecord(value)) {
       throw new ConfigLoadError('Invalid bunner config: must be an object.', sourcePath);
@@ -126,8 +150,7 @@ export class ConfigLoader {
     if (value === undefined || value === null) {
       return {
         card: {
-          types: ['spec'],
-          relations: ['depends_on', 'references', 'related', 'extends', 'conflicts'],
+          relations: [...CARD_RELATION_TYPES],
         },
         exclude: [],
       };
@@ -138,8 +161,7 @@ export class ConfigLoader {
     }
 
     const cardValue = value.card;
-    let types: string[] = ['spec'];
-    let relations: string[] = ['depends_on', 'references', 'related', 'extends', 'conflicts'];
+    let relations: string[] = [...CARD_RELATION_TYPES];
 
     if (cardValue !== undefined && cardValue !== null) {
       if (!this.isRecord(cardValue)) {
@@ -147,11 +169,7 @@ export class ConfigLoader {
       }
 
       if (cardValue.types !== undefined) {
-        if (!this.isNonEmptyStringArray(cardValue.types)) {
-          throw new ConfigLoadError('Invalid bunner config: mcp.card.types must be a non-empty string array.', sourcePath);
-        }
-
-        types = cardValue.types;
+        throw new ConfigLoadError('Invalid bunner config: mcp.card.types is removed.', sourcePath);
       }
 
       if (cardValue.relations !== undefined) {
@@ -159,7 +177,7 @@ export class ConfigLoader {
           throw new ConfigLoadError('Invalid bunner config: mcp.card.relations must be a non-empty string array.', sourcePath);
         }
 
-        relations = cardValue.relations;
+        relations = this.normalizeRelationTypes(cardValue.relations, sourcePath);
       }
     }
 
@@ -174,7 +192,7 @@ export class ConfigLoader {
     }
 
     return {
-      card: { types, relations },
+      card: { relations },
       exclude,
     };
   }
@@ -189,7 +207,7 @@ export class ConfigLoader {
     let parsed: JsonValue;
 
     try {
-      parsed = format === 'jsonc' ? Bun.JSONC.parse(rawText) : JSON.parse(rawText);
+      parsed = (format === 'jsonc' ? Bun.JSONC.parse(rawText) : JSON.parse(rawText)) as JsonValue;
     } catch (_error) {
       throw new ConfigLoadError('Invalid bunner config: failed to parse json/jsonc.', sourcePath);
     }

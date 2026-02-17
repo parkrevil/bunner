@@ -4,23 +4,24 @@ import type { CardFile, CardFrontmatter, CardRelation, CardStatus } from './type
 import { dirname } from 'path';
 import * as fsp from 'node:fs/promises';
 
-import { parseFullKey, buildFullKey, assertAllowedType, cardPathFromFullKey, normalizeSlug } from './card-key';
+import { parseFullKey, cardPathFromFullKey, normalizeSlug } from './card-key';
 import { readCardFile, writeCardFile } from './card-fs';
 
 export interface CardCreateInput {
   projectRoot: string;
   config: ResolvedBunnerConfig;
-  type: string;
   slug: string;
   summary: string;
   body: string;
   keywords?: string[];
+  tags?: string[];
 }
 
 export interface CardUpdateFields {
   summary?: string;
   body?: string;
   keywords?: string[] | null;
+  tags?: string[] | null;
   constraints?: unknown;
   relations?: CardRelation[] | null;
 }
@@ -55,31 +56,52 @@ function normalizeKeywordsInput(keywords: string[] | undefined): string[] | unde
   return out.length > 0 ? out : undefined;
 }
 
+function normalizeTagsInput(tags: string[] | undefined): string[] | undefined {
+  if (tags === undefined) {
+    return undefined;
+  }
+
+  if (!Array.isArray(tags)) {
+    throw new Error('Invalid tags');
+  }
+
+  const out: string[] = [];
+  for (const item of tags) {
+    if (!isNonEmptyString(item)) {
+      throw new Error('Invalid tags');
+    }
+    out.push(item);
+  }
+
+  return out.length > 0 ? out : undefined;
+}
+
 export async function cardCreate(input: CardCreateInput): Promise<{ filePath: string; fullKey: string; card: CardFile }> {
-  const { projectRoot, config, type, slug, summary, body } = input;
+  const { projectRoot, slug, summary, body } = input;
 
   assertNonEmptyString(projectRoot, 'projectRoot');
-  assertNonEmptyString(type, 'type');
   assertNonEmptyString(slug, 'slug');
   assertNonEmptyString(summary, 'summary');
 
-  assertAllowedType(type, config.mcp.card.types);
-
   const normalizedSlug = normalizeSlug(slug);
-  const fullKey = buildFullKey(type, normalizedSlug);
+  const fullKey = normalizedSlug;
   const filePath = cardPathFromFullKey(projectRoot, fullKey);
 
   const keywords = normalizeKeywordsInput(input.keywords);
+  const tags = normalizeTagsInput(input.tags);
 
   const frontmatter: CardFrontmatter = {
     key: fullKey,
-    type,
     summary,
     status: 'draft',
   };
 
   if (keywords !== undefined) {
     frontmatter.keywords = keywords;
+  }
+
+  if (tags !== undefined) {
+    frontmatter.tags = tags;
   }
 
   const exists = await Bun.file(filePath).exists();
@@ -131,6 +153,19 @@ export async function cardUpdate(
         delete nextFrontmatter.keywords;
       } else {
         nextFrontmatter.keywords = normalized;
+      }
+    }
+  }
+
+  if (fields.tags !== undefined) {
+    if (fields.tags === null || fields.tags.length === 0) {
+      delete nextFrontmatter.tags;
+    } else {
+      const normalized = normalizeTagsInput(fields.tags);
+      if (normalized === undefined) {
+        delete nextFrontmatter.tags;
+      } else {
+        nextFrontmatter.tags = normalized;
       }
     }
   }
@@ -211,9 +246,10 @@ export async function cardRename(
   assertNonEmptyString(fullKey, 'fullKey');
   assertNonEmptyString(newSlug, 'newSlug');
 
-  const parsed = parseFullKey(fullKey);
+  // Validate current key and normalize the target slug.
+  parseFullKey(fullKey);
   const normalizedNewSlug = normalizeSlug(newSlug);
-  const newFullKey = buildFullKey(parsed.type, normalizedNewSlug);
+  const newFullKey = normalizedNewSlug;
 
   const oldFilePath = cardPathFromFullKey(projectRoot, fullKey);
   const newFilePath = cardPathFromFullKey(projectRoot, newFullKey);
@@ -241,7 +277,6 @@ export async function cardRename(
     frontmatter: {
       ...current.frontmatter,
       key: newFullKey,
-      type: parsed.type,
     },
     body: current.body,
   };
